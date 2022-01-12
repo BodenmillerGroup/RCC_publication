@@ -90,7 +90,7 @@ kable(Meta_2[1:10,],align = "c")
 ### Print heatmap based overview
 based on the [ComplexHeatmap](https://bioconductor.org/packages/release/bioc/html/ComplexHeatmap.html) package and the implemented `HeatmapAnnotation` function  
 
-```{r }
+```{r viz, message=F, fig.width=15, fig.height=10, fig.align='center'}
 #Convert NAs for easier handling with ComplexHeatmap package
 Meta_2[is.na(Meta_2)] <- "Unknown"
 
@@ -147,9 +147,7 @@ sample_anno = HeatmapAnnotation(PID = Meta_2$PID,
                                 show_legend = c(PID = FALSE)
                                 #annotation_label = c("PID (n=367)","Gender","Subtype","pT","pN")
 )%v%NULL
-```
 
-```{r viz, message=F, fig.width=15, fig.height=10, fig.align='center'}
 draw(sample_anno)
 ```
 
