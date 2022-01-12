@@ -467,16 +467,16 @@ This reproducible <a href="https://rmarkdown.rstudio.com">R Markdown</a> analysi
 <div class="panel panel-default">
 <div class="panel-heading">
 <p class="panel-title">
-<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongRepositoryversionstrongahrefhttpsgithubcomBodenmillerGroupRCCtree7008ac4241a722206a1b8e5b4eafd151f8ca7c6btargetblank7008ac4a"> <span class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> <strong>Repository version:</strong> <a href="https://github.com/BodenmillerGroup/RCC/tree/7008ac4241a722206a1b8e5b4eafd151f8ca7c6b" target="_blank">7008ac4</a> </a>
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongRepositoryversionstrongahrefhttpsgithubcomBodenmillerGroupRCCtreefc4d8e379e85d9300b4914cf1dad6e493be33449targetblankfc4d8e3a"> <span class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> <strong>Repository version:</strong> <a href="https://github.com/BodenmillerGroup/RCC/tree/fc4d8e379e85d9300b4914cf1dad6e493be33449" target="_blank">fc4d8e3</a> </a>
 </p>
 </div>
-<div id="strongRepositoryversionstrongahrefhttpsgithubcomBodenmillerGroupRCCtree7008ac4241a722206a1b8e5b4eafd151f8ca7c6btargetblank7008ac4a" class="panel-collapse collapse">
+<div id="strongRepositoryversionstrongahrefhttpsgithubcomBodenmillerGroupRCCtreefc4d8e379e85d9300b4914cf1dad6e493be33449targetblankfc4d8e3a" class="panel-collapse collapse">
 <div class="panel-body">
 <p>
 Great! You are using Git for version control. Tracking code development and connecting the code version to the results is critical for reproducibility.
 </p>
 <p>
-The results in this page were generated with repository version <a href="https://github.com/BodenmillerGroup/RCC/tree/7008ac4241a722206a1b8e5b4eafd151f8ca7c6b" target="_blank">7008ac4</a>. See the <em>Past versions</em> tab to see a history of the changes made to the R Markdown and HTML files.
+The results in this page were generated with repository version <a href="https://github.com/BodenmillerGroup/RCC/tree/fc4d8e379e85d9300b4914cf1dad6e493be33449" target="_blank">fc4d8e3</a>. See the <em>Past versions</em> tab to see a history of the changes made to the R Markdown and HTML files.
 </p>
 <p>
 Note that you need to be careful to ensure that all relevant files for the analysis have been committed to Git prior to generating the results (you can use <code>wflow_publish</code> or <code>wflow_git_commit</code>). workflowr only checks the R Markdown file, but you know if there are other scripts or data files that it depends on. Below is the status of the Git repository when the results were generated:
@@ -485,7 +485,14 @@ Note that you need to be careful to ensure that all relevant files for the analy
 Ignored files:
     Ignored:    .DS_Store
     Ignored:    Non_IMC/.DS_Store
+    Ignored:    Non_IMC/.Rhistory
     Ignored:    Non_IMC/.Rproj.user/
+    Ignored:    Non_IMC/analysis/.RData
+    Ignored:    Non_IMC/analysis/.Rhistory
+    Ignored:    Non_IMC/data/.DS_Store
+
+Unstaged changes:
+    Deleted:    Non_IMC/data/Metadata_combined_RCC.csv
 
 </code></pre>
 <p>
@@ -524,6 +531,40 @@ Message
 </tr>
 </thead>
 <tbody>
+<tr>
+<td>
+Rmd
+</td>
+<td>
+<a href="https://github.com/BodenmillerGroup/RCC/blob/fc4d8e379e85d9300b4914cf1dad6e493be33449/Non_IMC/analysis/Metadata_Update.Rmd" target="_blank">fc4d8e3</a>
+</td>
+<td>
+lassedochreden
+</td>
+<td>
+2022-01-12
+</td>
+<td>
+wflow_publish("analysis/Metadata_Update.Rmd")
+</td>
+</tr>
+<tr>
+<td>
+html
+</td>
+<td>
+<a href="https://rawcdn.githack.com/BodenmillerGroup/RCC/3b5cdfdcba21f86409d5fa83f0dc66ad665c7318/Non_IMC/docs/Metadata_Update.html" target="_blank">3b5cdfd</a>
+</td>
+<td>
+lassedochreden
+</td>
+<td>
+2022-01-12
+</td>
+<td>
+Build site.
+</td>
+</tr>
 <tr>
 <td>
 Rmd
@@ -681,7 +722,7 @@ Meta$PID &lt;- str_replace_all(Meta$PID,&quot; &quot;, &quot;&quot;)
 #double-check that entries are distinct
 #dim(distinct(Meta)) == dim(Meta)
 
-write.csv(Meta, file = &quot;data/Metadata_combined_RCC.csv&quot;, row.names = F)
+write.csv(Meta, file = &quot;/Users/lasmey/Desktop/ccRCC project/Metadaten_RCC/Metadata_combined_RCC.csv&quot;, row.names = F)
 
 #duplicated PID from primary samples (normal samples often have a match)
 dup = Meta %&gt;% 
