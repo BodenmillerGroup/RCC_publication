@@ -46,7 +46,7 @@ Meta$PID <- str_replace_all(Meta$PID," ", "")
 #double-check that entries are distinct
 #dim(distinct(Meta)) == dim(Meta)
 
-write.csv(Meta, file = "data/Metadata_combined_RCC.csv", row.names = F)
+write.csv(Meta, file = "/Users/lasmey/Desktop/ccRCC project/Metadaten_RCC/Metadata_combined_RCC.csv", row.names = F)
 
 #duplicated PID from primary samples (normal samples often have a match)
 dup = Meta %>% 
