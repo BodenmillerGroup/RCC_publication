@@ -1,0 +1,769 @@
+"PID","gender","type","subtype","pT_stadium","pT_simple","pT12/34","pN","pM","ISUP_grade","necrose","lymphocytes","survival_months","censor_dead_0_alive_1","file","age"
+"B2003.00190","m","Primary","clear cell RCC","pT2,pNx,pMx","2","1","X",NA,"3","1","3","118","0","ZTMA224",NA
+"B2003.19339","m","Primary","clear cell RCC","pT2","2","1",NA,NA,"2","0","0","15","0","ZTMA224",NA
+"B2003.21234","w","Primary","papillary RCC","pT1b","1","1",NA,NA,"2","0","0","82","1","ZTMA224",NA
+"B2003.21574","m","Primary","papillary RCC",NA,NA,NA,NA,NA,"3","1","1","80","1","ZTMA224",NA
+"B2004.01704","m","Primary","papillary RCC",NA,NA,NA,NA,NA,"2","0","0","39",NA,"ZTMA224",NA
+"B2004.05653","w","Primary","clear cell RCC","pT2","2","1",NA,NA,"2","0","0","89","1","ZTMA224",NA
+"B2004.07482","m","Primary","papillary RCC","pT1b","1","1",NA,NA,"2","0","1","88","1","ZTMA224",NA
+"B2004.10441","m","Primary","clear cell RCC","pT2","2","1",NA,NA,"4","1","2","8","0","ZTMA224",NA
+"B2004.13044","w","Primary","clear cell RCC","pT2","2","1",NA,NA,"3","0","1","78","0","ZTMA224",NA
+"B2004.13977","m","Primary","clear cell RCC","pT1a","1","1",NA,NA,"2","0","2","138","1","ZTMA224",NA
+"B2004.14786","m","Primary","clear cell RCC","pT3","3","2",NA,NA,"3","1","1","96","1","ZTMA224",NA
+"B2004.18173","m","Primary","clear cell RCC","pT1","1","1",NA,NA,"2","0","1","6","0","ZTMA224",NA
+"B2004.18773","m","Primary","clear cell RCC","pT1b, G3","1","1",NA,NA,"4","1","1","34","0","ZTMA224",NA
+"B2004.19101-02","w","Primary","clear cell RCC","pT1a","1","1",NA,NA,"4","1","2","85","1","ZTMA224",NA
+"B2004.19338","w","Primary","clear cell RCC","pT1","1","1",NA,NA,"2","0","1","96","1","ZTMA224",NA
+"B2004.19943","m","Primary","clear cell RCC","pT3, G3, cM1, R1","3","2",NA,"1","4","0","2","0.5","0","ZTMA224",NA
+"B2004.20407","m","Primary","clear cell RCC","pT1b","1","1",NA,NA,"2","0","2",NA,NA,"ZTMA224",NA
+"B2004.21097-98","m","Primary","papillary RCC","pT1b, G2","1","1",NA,NA,"2","0","1","6","0","ZTMA224",NA
+"B2004.21298","m","Primary","papillary RCC",NA,NA,NA,NA,NA,"2","0","1","121","1","ZTMA224",NA
+"B2004.25000","m","Primary","clear cell RCC","pT1b","1","1",NA,NA,"2","0","1",NA,NA,"ZTMA224",NA
+"B2004.26355","w","Primary","clear cell papillary RCC","pT1a","1","1",NA,NA,"2","0","1","83","1","ZTMA224",NA
+"B2004.26735","m","Primary","clear cell RCC","pT1a, pNx, G2","1","1","X",NA,"2","0","1","30","0","ZTMA224",NA
+"B2004.28679-80","m","Primary","clear cell RCC","pT3","3","2",NA,NA,"2","0","1",NA,NA,"ZTMA224",NA
+"B2004.29153","m","Primary","clear cell RCC","pT1b","1","1",NA,NA,"3","0","2","82","1","ZTMA224",NA
+"B2004.30602","w","Primary","chromophobe RCC","pT1a","1","1",NA,NA,NA,"0","0","82","1","ZTMA224",NA
+"B2004.31330","m","Primary","clear cell RCC","pT1a","1","1",NA,NA,"2","0","0","92","1","ZTMA224",NA
+"B2004.32783","w","Primary","clear cell RCC","pT2","2","1",NA,NA,"3","1","2","86","1","ZTMA224",NA
+"B2004.33591","w","Primary","chromophobe RCC","pT1b","1","1",NA,NA,NA,"0","2","81","1","ZTMA224",NA
+"B2004.35890-91","w","Primary","chromophobe RCC","pT1a","1","1",NA,NA,NA,"0","0","85","1","ZTMA224",NA
+"B2004.35912","m","Primary","clear cell RCC","pT1a, G1","1","1",NA,NA,"1","0","0","30","0","ZTMA224",NA
+"B2004.36157","w","Primary","clear cell RCC","pT1b","1","1",NA,NA,"2","0","1","52","0","ZTMA224",NA
+"B2004.39483","m","Primary","papillary RCC","pT1b","1","1",NA,NA,"2","0","1",NA,NA,"ZTMA224",NA
+"B2004.40089","m","Primary","clear cell RCC","pT3b","3","2",NA,NA,"2","0","1","32","0","ZTMA224",NA
+"B2004.40186","m","Primary","papillary RCC","pT1b","1","1",NA,NA,"2","1","1","52","0","ZTMA224",NA
+"B2004.40359","m","Primary","clear cell RCC","pT1a","1","1",NA,NA,"2","0","1","19","0","ZTMA224",NA
+"B2004.40418","w","Primary","clear cell RCC","pT1","1","1",NA,NA,"2","0","1","77","1","ZTMA224",NA
+"B2004.40929","m","Primary","chromophobe RCC","pT3, pNx","3","2","X",NA,NA,"0","1","80","1","ZTMA224",NA
+"B2004.41180","m","Primary","clear cell RCC","pT2","2","1",NA,NA,"2","0","2","49","0","ZTMA224",NA
+"B2005.00469","w","Primary","clear cell RCC","pT3b","3","2",NA,NA,"3","0","2",NA,NA,"ZTMA224",NA
+"B2005.00861","w","Primary","clear cell papillary RCC","pT1a","1","1",NA,NA,"2","0","0","83","1","ZTMA224",NA
+"B2005.04743-44","m","Primary","clear cell RCC","pT3a, G3","3","2",NA,NA,"3","0","2","103","1","ZTMA224",NA
+"B2005.05411-12","m","Primary","Collecting duct carcinoma","pT3a, N0","3","2","0",NA,"3","0","2","88","0","ZTMA224",NA
+"B2005.06628","m","Primary","clear cell RCC","pT1a","1","1",NA,NA,"2","0","1","103","1","ZTMA224",NA
+"B2005.08527-28","m","Primary","clear cell RCC","pT3","3","2",NA,NA,"4","1","1","4","0","ZTMA224",NA
+"B2005.09965","w","Primary","TFE3-translocation RCC","pT1a, G1","1","1",NA,NA,"2","0","1","81","1","ZTMA224",NA
+"B2005.14666","w","Primary","clear cell papillary RCC","pT1a","1","1",NA,NA,"2","0","1","79","1","ZTMA224",NA
+"B2005.16289","m","Primary","papillary RCC","pT3, G2","3","2",NA,NA,"2","0","1","101","1","ZTMA224",NA
+"B2005.16469","w","Primary","papillary RCC","pT3a","3","2",NA,NA,"3","1","1","3","0","ZTMA224",NA
+"B2005.18523","w","Primary","chromophobe RCC","pT1b","1","1",NA,NA,NA,"0","1","78","1","ZTMA224",NA
+"B2005.23360","m","Primary","clear cell RCC","pT1a","1","1",NA,NA,"2","0","1","77","1","ZTMA224",NA
+"B2005.24848","w","Primary","papillary RCC","pT3a","3","2",NA,NA,"3","1","2","13","0","ZTMA224",NA
+"B2005.25280","m","Primary","clear cell RCC","pT1, G2","1","1",NA,NA,"2","0","1","48","0","ZTMA224",NA
+"B2005.29393","w","Primary","clear cell RCC","pT1b","1","1",NA,NA,"2","0","1","98","1","ZTMA224",NA
+"B2005.29411","w","Primary","papillary RCC","pT1a","1","1",NA,NA,"2","0","1","83","0","ZTMA224",NA
+"B2005.30631","m","Primary","clear cell RCC","pT3b, G3","3","2",NA,NA,"4","1","2","37","0","ZTMA224",NA
+"B2005.32828-29","w","Primary","clear cell RCC","mind.pT3b, N1(1/1), G3","3","2","1",NA,"4","1","2","11","0","ZTMA224",NA
+"B2005.34474","m","Primary","clear cell RCC","pT1a","1","1",NA,NA,"2","1","2","74","1","ZTMA224",NA
+"B2005.36033","w","Primary","papillary RCC","pT1a","1","1",NA,NA,"2","0","0","72","1","ZTMA224",NA
+"B2005.37195","w","Primary","clear cell RCC","pT1","1","1",NA,NA,"2","0","1","73","1","ZTMA224",NA
+"B2005.39273","w","Primary","papillary RCC","pT1","1","1",NA,NA,"2","0","0","97","1","ZTMA224",NA
+"B2005.41409","m","Primary","clear cell RCC","pT3a, pN0 (0/1), G2","3","2","0",NA,"2","0","0","102","1","ZTMA224",NA
+"B2005.44210-11","m","Primary","clear cell RCC","pT3b","3","2",NA,NA,"2","1","1","84","0","ZTMA224",NA
+"B2006.00547","m","Primary","clear cell RCC","pT1b","1","1",NA,NA,"2","0","0","9","0","ZTMA224",NA
+"B2006.01194","m","Primary","papillary RCC","pT1a","1","1",NA,NA,"1","0","1","86","1","ZTMA224",NA
+"B2006.03263-3265","m","Primary","clear cell RCC","pT1b, G3","1","1",NA,NA,"2","0","0","108","1","ZTMA224",NA
+"B2006.03654-3655","m","Primary","clear cell RCC","pT3b, G4","3","2",NA,NA,"4","1","1","10","0","ZTMA224",NA
+"B2006.03802","m","Primary","clear cell RCC","pT2, G3","2","1",NA,NA,"3","1","2","61","1","ZTMA224",NA
+"B2006.05834","w","Primary","papillary RCC","pT1a","1","1",NA,NA,"3","0","1",NA,NA,"ZTMA224",NA
+"B2006.06006-6007","m","Primary","clear cell RCC","pT1","1","1",NA,NA,"3","0","2","58","0","ZTMA224",NA
+"B2006.07103","m","Primary","chromophobe RCC","pT2, pN0 (0/5)","2","1","0",NA,NA,"0","1","70","0","ZTMA224",NA
+"B2006.07975","m","Primary","clear cell RCC","pT3b","3","2",NA,NA,"3","0","1","84","1","ZTMA224",NA
+"B2006.08704","m","Primary","papillary RCC","pT2","2","1",NA,NA,"2","1","1","87","1","ZTMA224",NA
+"B2006.12868","m","Primary","clear cell RCC","pT3a","3","2",NA,NA,"2","0","1","83","1","ZTMA224",NA
+"B2006.13851","m","Primary","papillary RCC","pT1b, G2","1","1",NA,NA,"3","1","1","52","0","ZTMA224",NA
+"B2006.15596","m","Primary","clear cell RCC","pT3b","3","2",NA,NA,"2","0","1","99","1","ZTMA224",NA
+"B2006.15660","w","Primary","clear cell RCC","pT3a NX","3","2","X",NA,"2","0","1","56","0","ZTMA224",NA
+"B2006.18696","m","Primary","clear cell RCC","pT1b","1","1",NA,NA,"2","0","1",NA,NA,"ZTMA224",NA
+"B2006.20938","w","Primary","clear cell RCC","pT1a, N0 (0/3)","1","1","0",NA,"2","0","1","80","1","ZTMA224",NA
+"B2006.22841","m","Primary","clear cell RCC","pT3b","3","2",NA,NA,"3","0","2","89","1","ZTMA224",NA
+"B2006.24329-24330","m","Primary","papillary RCC","pT1a","1","1",NA,NA,"2","1","2","56","0","ZTMA224",NA
+"B2006.24784","w","Primary","clear cell RCC","pT3","3","2",NA,NA,"3","0","2","85","1","ZTMA224",NA
+"B2006.26026","m","Primary","clear cell RCC","pT2","2","1",NA,NA,"4","1","2",NA,NA,"ZTMA224",NA
+"B2006.26653","m","Primary","papillary RCC","pT1a","1","1",NA,NA,"2","0","1","100","1","ZTMA224",NA
+"B2006.28204-28205","w","Primary","papillary RCC","pT1b","1","1",NA,NA,"2","0","1","72","1","ZTMA224",NA
+"B2006.29854","m","Primary","clear cell RCC","pT3b,pNx, G2","3","2","X",NA,"3","0","2",NA,NA,"ZTMA224",NA
+"B2006.31677","w","Primary","clear cell RCC","pT2","2","1",NA,NA,"2","0","2","79","1","ZTMA224",NA
+"B2006.32657-32659","m","Primary","clear cell RCC","pT1","1","1",NA,NA,"2","0","2","63","1","ZTMA224",NA
+"B2006.33283-33284","m","Primary","papillary RCC",NA,NA,NA,NA,NA,"1","0","0","63","1","ZTMA224",NA
+"B2006.34359","w","Primary","clear cell RCC","pT1a, G1","1","1",NA,NA,"1","0","0","64","1","ZTMA224",NA
+"B2006.36398","w","Primary","clear cell RCC","pT1b","1","1",NA,NA,"2","0","1","79","1","ZTMA224",NA
+"B2006.36692-36693","m","Primary","clear cell RCC","pT3pNo","3","2","0",NA,"4","0","2","91","1","ZTMA224",NA
+"B2006.38971","w","Primary","papillary RCC","pT1b","1","1",NA,NA,"1","0","0","62","1","ZTMA224",NA
+"B2006.42525","w","Primary","papillary RCC","pT1","1","1",NA,NA,"2","0","0","87","1","ZTMA224",NA
+"B2006.43742","w","Primary","clear cell RCC","pT3","3","2",NA,NA,"2","0","0","75","1","ZTMA224",NA
+"B2006.46795-46796","w","Primary","papillary RCC","pT4","4","2",NA,NA,"4","1","1","0","0","ZTMA224",NA
+"B2007.03902","m","Primary","clear cell RCC","pT1b","1","1",NA,NA,"3","0","2","48","0","ZTMA224",NA
+"B2007.07376","m","Primary","papillary RCC","pT2","2","1",NA,NA,"2","1","2","14","0","ZTMA224",NA
+"B2007.07847","m","Primary","papillary RCC",NA,NA,NA,NA,NA,"2","0","2","74","1","ZTMA224",NA
+"B2007.08246-47","m","Primary","clear cell RCC or unclassified RCC","pT1a, G4,pNx,pM1","1","1","X","1","3","0","2","37","0","ZTMA224",NA
+"B2007.09966","w","Primary","TFE3-translocation RCC","pT1b,pN2 (5/5)","1","1","2",NA,NA,NA,NA,"70","1","ZTMA224",NA
+"B2007.10046","m","Primary","papillary RCC","pT2","2","1",NA,NA,"2","0","1","91","1","ZTMA224",NA
+"B2007.10051/52","m","Primary","chromophobe RCC","pT3b, pN0 (0/11)","3","2","0",NA,NA,"0","0","78","1","ZTMA224",NA
+"B2007.12895","m","Primary","clear cell RCC","pT1,G2","1","1",NA,NA,"2","0","1","76","1","ZTMA224",NA
+"B2007.13124","w","Primary","clear cell RCC","pT1b, G2","1","1",NA,NA,"2","0","2","73","1","ZTMA224",NA
+"B2007.14441-14442","m","Primary","clear cell RCC",NA,NA,NA,NA,NA,"2","0","1","70","1","ZTMA224",NA
+"B2007.15865-15866","m","Primary","clear cell RCC","pT3b pM1","3","2",NA,"1","2","0","1","51","0","ZTMA224",NA
+"B2007.20518-20519","m","Primary","clear cell RCC","pT1a","1","1",NA,NA,"3","0","2","4","0","ZTMA224",NA
+"B2007.20685","m","Primary","clear cell RCC","pT1a, G2","1","1",NA,NA,"2","0","1","70","1","ZTMA224",NA
+"B2007.21077","m","Primary","clear cell RCC","pT2","2","1",NA,NA,"3","1","2","88","1","ZTMA224",NA
+"B2007.21905","m","Primary","papillary RCC","pT1a","1","1",NA,NA,"3","0","2","74","1","ZTMA224",NA
+"B2007.22392-22393","m","Primary","clear cell RCC","pT4","4","2",NA,NA,"4","0","2","52","0","ZTMA224",NA
+"B2007.23362-23363","m","Primary","clear cell RCC","pT1","1","1",NA,NA,"1","0","0","71","1","ZTMA224",NA
+"B2007.23669-23670","m","Primary","clear cell RCC","li:pT1a,pNx,G3.Re:pT3,pNx,G3 und pT1a,pNx,G1","1","1","X",NA,"3","0","0","67","1","ZTMA224",NA
+"B2007.24318-24319","m","Primary","clear cell RCC","pT3b,pNx, M1, R2","3","2","X","1","3","0","2","85","1","ZTMA224",NA
+"B2007.24668-24669","w","Primary","papillary RCC","pT1a, G1","1","1",NA,NA,"1","0","1","36","0","ZTMA224",NA
+"B2007.27406","w","Primary","clear cell RCC","pT1a, G1","1","1",NA,NA,"1","0","0",NA,NA,"ZTMA224",NA
+"B2007.28129","w","Primary","papillary RCC","pT1a","1","1",NA,NA,"2","0","1",NA,NA,"ZTMA224",NA
+"B2007.28330","w","Primary","clear cell RCC","pT1b, G1","1","1",NA,NA,"2","0","0","12",NA,"ZTMA224",NA
+"B2007.29279","w","Primary","clear cell RCC","pT1","1","1",NA,NA,"3","0","1","66","1","ZTMA224",NA
+"B2007.30439","m","Primary","papillary RCC","pT1a","1","1",NA,NA,"2","0","1","69","1","ZTMA224",NA
+"B2007.30549-30550","m","Primary","clear cell RCC","pT1a","1","1",NA,NA,"2","0","1","69","1","ZTMA224",NA
+"B2007.30616","m","Primary","clear cell RCC","pT3b","3","2",NA,NA,"4","1","2","13","0","ZTMA224",NA
+"B2007.30770","m","Primary","clear cell RCC","pT3a","3","2",NA,NA,"4","0","2","70","1","ZTMA224",NA
+"B2007.32389","m","Primary","clear cell RCC","pT3,G3","3","2",NA,NA,"4","0","2","26","0","ZTMA224",NA
+"B2007.32467","m","Primary","clear cell RCC","pT1a","1","1",NA,NA,"2","0","2","78","0","ZTMA224",NA
+"B2007.33310","m","Primary","papillary RCC","pT2","2","1",NA,NA,"3","0","1",NA,NA,"ZTMA224",NA
+"B2007.34562-34563","m","Primary","clear cell RCC","pT3a","3","2",NA,NA,"4","0","1","48","0","ZTMA224",NA
+"B2007.35027","w","Primary","clear cell RCC","pT1b","1","1",NA,NA,"3","0","2","72","1","ZTMA224",NA
+"B2007.36669","m","Primary","clear cell RCC","pT3b,pN0 (0/1),G3,V1","3","2","0",NA,"4","0","2",NA,NA,"ZTMA224",NA
+"B2007.37054","m","Primary","clear cell RCC","pT1a, G2","1","1",NA,NA,"2","0","2","73","1","ZTMA224",NA
+"B2007.39419","m","Primary","clear cell RCC","pT2","2","1",NA,NA,"2","0","1","85","1","ZTMA224",NA
+"B2007.41845","w","Primary","chromophobe RCC","T1a",NA,NA,NA,NA,NA,"0","1","78","1","ZTMA224",NA
+"B2007.43426","m","Primary","clear cell RCC","pT1a","1","1",NA,NA,"2","0","1","72","1","ZTMA224",NA
+"B2007.43797","m","Primary","clear cell RCC","pT1, R1","1","1",NA,NA,"2","0","2","88","1","ZTMA224",NA
+"B2007.47957","m","Primary","clear cell RCC","pT3b, G2","3","2",NA,NA,"2","0","2","12","0","ZTMA224",NA
+"B2007.49274","m","Primary","clear cell RCC","pT1b","1","1",NA,NA,"2","0","2","64","1","ZTMA224",NA
+"B2008.03767","w","Primary","clear cell RCC","pT1, G2","1","1",NA,NA,"2","0","2","72","1","ZTMA224",NA
+"B2008.05075","m","Primary","clear cell RCC","pT1a","1","1",NA,NA,"2","0","1","77","1","ZTMA224",NA
+"B2008.05110","m","Primary","clear cell RCC","pT1a, G3","1","1",NA,NA,"3","0","2","74","1","ZTMA224",NA
+"B2008.09455-9456","m","Primary","clear cell RCC","pT1a","1","1",NA,NA,"2","0","1","78","1","ZTMA224",NA
+"B2008.10946","m","Primary","papillary RCC","pT1, G2, R0","1","1",NA,NA,"3","0","1","82","1","ZTMA224",NA
+"B2008.11592-11593","w","Primary","clear cell RCC","pT4a, G3","4","2",NA,NA,"4","1","1","33","0","ZTMA224",NA
+"B2008.12670","m","Primary","clear cell RCC","pT1b","1","1",NA,NA,"2","0","1","76","0","ZTMA224",NA
+"B2008.13283","m","Primary","clear cell RCC","pT1a, G2","1","1",NA,NA,"2","0","1","73","1","ZTMA224",NA
+"B2008.13725","m","Primary","chromophobe RCC","pT3a, pNo, V1","3","2","0",NA,NA,"0","1","9","0","ZTMA224",NA
+"B2008.13802","m","Primary","clear cell RCC","pT1, G2","1","1",NA,NA,"3","0","2","78","1","ZTMA224",NA
+"B2008.16308-09","m","Primary","papillary RCC","pT1a, G2","1","1",NA,NA,"2","0","1",NA,NA,"ZTMA224",NA
+"B2008.17304","m","Primary","clear cell RCC","pT1a","1","1",NA,NA,"2","0","1","72","1","ZTMA224",NA
+"B2008.18603-04","m","Primary","papillary RCC","pT3a","3","2",NA,NA,"3","1","1","70","1","ZTMA224",NA
+"B2008.21454","m","Primary","clear cell RCC","pT1a,pN0,G1","1","1","0",NA,"2","0","1","75","1","ZTMA224",NA
+"B2008.22361","w","Primary","clear cell RCC","pT1a","1","1",NA,NA,"4","0","2","74","1","ZTMA224",NA
+"B2008.23188","m","Primary","clear cell RCC","pT1a","1","1",NA,NA,"3","0","2",NA,NA,"ZTMA224",NA
+"B2008.23723","m","Primary","chromophobe RCC","pT2,G2,pN0, R0","2","1","0",NA,NA,"0","0","65","0","ZTMA224",NA
+"B2008.24301-24302","w","Primary","clear cell RCC","pT1a,R0","1","1",NA,NA,"2","0","2","49","0","ZTMA224",NA
+"B2008.26880","m","Primary","papillary RCC","pT1a, G2","1","1",NA,NA,"3","1","1","75","1","ZTMA224",NA
+"B2008.28756","m","Primary","clear cell RCC","pT1a","1","1",NA,NA,"2","0","1","30","0","ZTMA224",NA
+"B2008.32351","w","Primary","papillary RCC","pT1a, G2","1","1",NA,NA,"2","0","1","73","1","ZTMA224",NA
+"B2008.34210","m","Primary","clear cell RCC","pT3b","3","2",NA,NA,"4","1","2","35","0","ZTMA224",NA
+"B2008.36841","w","Primary","clear cell RCC","pT3a,G2","3","2",NA,NA,"3","0","2","67","1","ZTMA224",NA
+"B2008.38129-38130","m","Primary","papillary RCC","pT1b, G2","1","1",NA,NA,"2","0","1",NA,NA,"ZTMA224",NA
+"B2008.39336","m","Primary","papillary RCC","pT2a","2","1",NA,NA,"2","1","1","64","1","ZTMA224",NA
+"B2008.40220","m","Primary","clear cell RCC","pT1b, G3, R0","1","1",NA,NA,"4","1","1","70","1","ZTMA224",NA
+"B2008.40431","m","Primary","papillary RCC","pT1a,G3","1","1",NA,NA,"3","0","1",NA,NA,"ZTMA224",NA
+"B2008.41492-93","m","Primary","chromophobe RCC","pT1a","1","1",NA,NA,NA,"0","1",NA,NA,"ZTMA224",NA
+"B2008.42837-38","m","Primary","clear cell RCC","pT1a","1","1",NA,NA,"2","0","0","71","1","ZTMA224",NA
+"B2008.42981-42982","m","Primary","chromophobe RCC","pT1, G2","1","1",NA,NA,NA,"0","1","71","1","ZTMA224",NA
+"B2008.43439","w","Primary","clear cell RCC","pT2","2","1",NA,NA,"2","0","2","71","1","ZTMA224",NA
+"B2008.47404","m","Primary","clear cell RCC","pT3a,G2","3","2",NA,NA,"3","0","2","69","1","ZTMA224",NA
+"B2008.50915-16","m","Primary","papillary RCC","pT1b,G1","1","1",NA,NA,"2","0","1",NA,NA,"ZTMA224",NA
+"B2008.51955","w","Primary","papillary RCC","pT2","2","1",NA,NA,"2","0","1","69","1","ZTMA224",NA
+"B2008.53623","w","Primary","papillary RCC","pT2","2","1",NA,NA,"3","0","1","61","1","ZTMA224",NA
+"B2009.00452","w","Primary","clear cell RCC","pT2N1","2","1","1",NA,"4","0","2","21","0","ZTMA224",NA
+"B2009.01915","w","Primary","clear cell RCC",NA,NA,NA,NA,NA,"2","1","1","8","0","ZTMA224",NA
+"B2009.08341","m","Primary","clear cell RCC","pT1a, G2","1","1",NA,NA,"3","0","1","74","1","ZTMA224",NA
+"B2009.08727","m","Primary","clear cell RCC","pT3b, N0(0/2)","3","2","0",NA,"4","1","2","75","1","ZTMA224",NA
+"B2009.10338","w","Primary","chromophobe RCC","pT2,pN0(0/2),G2","2","1","0",NA,NA,"1","1","77","1","ZTMA224",NA
+"B2009.11140","w","Primary","clear cell RCC","pT3c, G2","3","2",NA,NA,"2","0","1","77","1","ZTMA224",NA
+"B2009.16455","m","Primary","chromophobe RCC","pT1b","1","1",NA,NA,NA,"0","1","73","1","ZTMA224",NA
+"B2009.16825","m","Primary","clear cell RCC","pT3b","3","2",NA,NA,"4","0","1","18","0","ZTMA224",NA
+"B2009.16924","m","Primary","clear cell RCC","pT2","2","1",NA,NA,"2","0","1","19","0","ZTMA224",NA
+"B2009.25415-16","w","Primary","clear cell RCC","pT3a,G3, V2","3","2",NA,NA,"4","0","2","70","1","ZTMA224",NA
+"B2009.25631","m","Primary","clear cell RCC","pT1a","1","1",NA,NA,"3","0","1",NA,NA,"ZTMA224",NA
+"B2009.29976","w","Primary","clear cell RCC","pT1b","1","1",NA,NA,"3","0","1","54","0","ZTMA224",NA
+"B2009.30478-30479","m","Primary","clear cell RCC","pT1b, G2","1","1",NA,NA,"3","0","2","70","1","ZTMA224",NA
+"B2009.30855","w","Primary","clear cell RCC","pT3, G3","3","2",NA,NA,"4","1","2","3","0","ZTMA224",NA
+"B2009.32050","w","Primary","papillary RCC","pT2, G2","2","1",NA,NA,"2","1","0","72","1","ZTMA224",NA
+"B2009.32623","m","Primary","papillary RCC","pT2, pN0(0/4), G3, R0","2","1","0",NA,"3","0","1","69","1","ZTMA224",NA
+"B2009.32705","m","Primary","clear cell RCC","pT1b, G2, V1, R0","1","1",NA,NA,"3","0","2","74","1","ZTMA224",NA
+"B2009.34683","w","Primary","papillary RCC","pT2, g2, R0, V1","2","1",NA,NA,"2","1","1",NA,NA,"ZTMA224",NA
+"B2009.37211","m","Primary","clear cell RCC","pT3b","3","2",NA,NA,"4","0","2","45","1","ZTMA224",NA
+"B2009.37704","m","Primary","clear cell RCC","pT3","3","2",NA,NA,"3","0","2","70","1","ZTMA224",NA
+"B2009.38285-38268","m","Primary","clear cell RCC","pT3aNxM1G3","3","2","X","1","4","1","2","68","1","ZTMA224",NA
+"B2009.40369","m","Primary","clear cell RCC","pT1, L0,V0,G2","1","1",NA,NA,"2","0","2",NA,NA,"ZTMA224",NA
+"B2009.42978","w","Primary","papillary RCC","pT1a","1","1",NA,NA,"3","1","1","70","1","ZTMA224",NA
+"B2009.47401","m","Primary","papillary RCC","pT1a","1","1",NA,NA,"2","0","0","66","1","ZTMA224",NA
+"B2009.47977","m","Primary","papillary RCC","pT3a,G2","3","2",NA,NA,"2","0","1","69","1","ZTMA224",NA
+"B2009.50870-71","m","Primary","clear cell RCC","pT3a, G3","3","2",NA,NA,"4","1","2","57","0","ZTMA224",NA
+"B2009.51172","w","Primary","chromophobe RCC","pT2, pN0(0/1)","2","1","0",NA,NA,"0","1","67","1","ZTMA224",NA
+"B2009.51185-86","m","Primary","chromophobe RCC","pT1b","1","1",NA,NA,NA,"0","0","65","1","ZTMA224",NA
+"B2009.51698","m","Primary","Unclassified chromophobe-like RCC","pT3a,pN2","3","2","2",NA,NA,"0","0","67","1","ZTMA224",NA
+"B2009.52371-72","w","Primary","clear cell RCC","pT1b G2, R0, V1","1","1",NA,NA,"2","0","0","33",NA,"ZTMA224",NA
+"B2009.55192-55194","m","Primary","clear cell RCC",NA,NA,NA,NA,NA,"3","0","1","65","1","ZTMA224",NA
+"B2010.02707","m","Primary","SDHB-deficient RCC","pT1a","1","1",NA,NA,"2","0","1","3","0","ZTMA224",NA
+"B2010.05464","w","Primary","clear cell RCC","pT1a,pN0 (0/1), G2","1","1","0",NA,"3","0","1","38","1","ZTMA224",NA
+"B2010.06739","m","Primary","clear cell RCC","pT3b, pNx, G3, V1","3","2","X",NA,"4","1","2",NA,NA,"ZTMA224",NA
+"B2010.07121","w","Primary","clear cell RCC",NA,NA,NA,NA,NA,"2","0","1","37","1","ZTMA224",NA
+"B2010.08372","w","Primary","clear cell RCC",NA,NA,NA,NA,NA,"3","0","1","26","1","ZTMA224",NA
+"B2010.11721","w","Primary","clear cell RCC","pT1a, No (0/2), G2","1","1","0",NA,"2","0","1","25","1","ZTMA224",NA
+"B2010.1197-1199","m","Primary","clear cell RCC",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA224",NA
+"B2010.11978","m","Primary","papillary RCC",NA,NA,NA,NA,NA,"2","0","1","43","1","ZTMA224",NA
+"B2010.13872","w","Primary","chromophobe RCC","pT1a, G2","1","1",NA,NA,NA,"0","0","38","1","ZTMA224",NA
+"B2010.14244","w","Primary","clear cell RCC","pT1a, G1","1","1",NA,NA,"1","0","0","39","1","ZTMA224",NA
+"B2010.14661","m","Primary","clear cell RCC","pT1a, G3","1","1",NA,NA,"3","0","2",NA,NA,"ZTMA224",NA
+"B2010.14750-14751","m","Primary","clear cell RCC","pT3a,pN2(4/4),G3, V1","3","2","2",NA,"2","0","1","32","1","ZTMA224",NA
+"B2010.16971","m","Primary","clear cell RCC","pT1b","1","1",NA,NA,"2","0","2","30","1","ZTMA224",NA
+"B2010.18103-04","w","Primary","clear cell RCC","pT1a","1","1",NA,NA,"1","0","1","37","1","ZTMA224",NA
+"B2010.18385","m","Primary","clear cell RCC","pT3a,R0","3","2",NA,NA,"4","0","2","23","1","ZTMA224",NA
+"B2010.20363","m","Primary","chromophobe RCC","pT1a","1","1",NA,NA,NA,"0","1","55","1","ZTMA224",NA
+"B2010.20515","m","Primary","chromophobe RCC",NA,NA,NA,NA,NA,NA,"0","0","51","1","ZTMA224",NA
+"B2010.23498","m","Primary","clear cell RCC","pT1a, G3,V1","1","1",NA,NA,"3","0","1",NA,NA,"ZTMA224",NA
+"B2010.24179","m","Primary","papillary RCC",NA,NA,NA,NA,NA,"2","0","1","47","1","ZTMA224",NA
+"B2010.24519","m","Primary","clear cell papillary RCC","pT1a","1","1",NA,NA,"2","0","1","41","1","ZTMA224",NA
+"B2010.24686-87","m","Primary","papillary RCC",NA,NA,NA,NA,NA,NA,NA,NA,"52","1","ZTMA224",NA
+"B2010.25423","m","Primary","chromophobe RCC","pT1a","1","1",NA,NA,NA,"0","1","35","1","ZTMA224",NA
+"B2010.25693","m","Primary","clear cell RCC","pT3a, G3","3","2",NA,NA,"4","1","1","22","0","ZTMA224",NA
+"B2010.25971","w","Primary","clear cell RCC","pT1b, G2","1","1",NA,NA,"2","0","1",NA,NA,"ZTMA224",NA
+"B2010.27794","m","Primary","clear cell RCC","pT1a, G2, R0","1","1",NA,NA,"4","1","2","46","1","ZTMA224",NA
+"B2010.31447","m","Primary","Unclassified RCC","pT1a","1","1",NA,NA,NA,NA,NA,"49","1","ZTMA224",NA
+"B2010.31978","m","Primary","clear cell RCC","pT1a, G1","1","1",NA,NA,"2","0","0","30","1","ZTMA224",NA
+"B2010.33551","w","Primary","clear cell RCC","pT1a","1","1",NA,NA,"2","0","1",NA,NA,"ZTMA224",NA
+"B2010.34185","m","Primary","papillary RCC","pT1b","1","1",NA,NA,"2","0","0","27","1","ZTMA224",NA
+"B2010.34594","m","Primary","papillary RCC","pT3a, G3","3","2",NA,NA,"4","1","0","32","0","ZTMA224",NA
+"B2010.35303","w","Primary","clear cell RCC","pT1a, G3","1","1",NA,NA,"3","0","1","39","1","ZTMA224",NA
+"B2010.36685","m","Primary","clear cell RCC","pT1a","1","1",NA,NA,"2","0","2",NA,NA,"ZTMA224",NA
+"B2010.36693","w","Primary","clear cell RCC","pT1a","1","1",NA,NA,"2","0","1",NA,NA,"ZTMA224",NA
+"B2010.36999","m","Primary","clear cell RCC","pT1b","1","1",NA,NA,"4","1","2",NA,NA,"ZTMA224",NA
+"B2010.37676","m","Primary","clear cell RCC","pT3a","3","2",NA,NA,"4","1","2",NA,NA,"ZTMA224",NA
+"B2010.37677","w","Primary","clear cell RCC","pT1a, G2","1","1",NA,NA,"2","0","1","50","1","ZTMA224",NA
+"B2010.39494","m","Primary","clear cell RCC",NA,NA,NA,NA,NA,NA,NA,NA,"19","0","ZTMA224",NA
+"B2010.42518","w","Primary","clear cell RCC","pT3a","3","2",NA,NA,"4","1","1","13","0","ZTMA224",NA
+"B2010.45743","m","Primary","Invasive urothelial carcinoma","pT3a, N0(0/0), G4, V1","3","2","0",NA,"4","1","2","6","0","ZTMA224",NA
+"B2010.46497","w","Primary","Unclassified RCC",NA,NA,NA,NA,NA,"4","1","2","8","0","ZTMA224",NA
+"B2010.51677","m","Primary","clear cell RCC",NA,NA,NA,NA,NA,"3","0","2","39","1","ZTMA224",NA
+"B2010.51933","m","Primary","clear cell RCC","pT1b","1","1",NA,NA,"3","0","2","17","1","ZTMA224",NA
+"B2010.52542","w","Primary","clear cell RCC","pT1a, pM1, G3","1","1",NA,"1","4","1","2",NA,NA,"ZTMA224",NA
+"B2010.55425","m","Primary","clear cell RCC","pT1a","1","1",NA,NA,"2","0","1",NA,NA,"ZTMA224",NA
+"B2010.56407","m","Primary","chromophobe RCC","pT1a","1","1",NA,NA,NA,"0","0","38","1","ZTMA224",NA
+"B2010.57919-20","w","Primary","chromophobe RCC","pT1a, pN0 (0/1)","1","1","0",NA,NA,"0","0",NA,NA,"ZTMA224",NA
+"B2010.61416","m","Primary","clear cell RCC","pT3a","3","2",NA,NA,"4",NA,NA,"19","0","ZTMA224",NA
+"B2011.00057","m","Primary","papillary RCC","pT1a","1","1",NA,NA,"3","0","1","34","1","ZTMA224",NA
+"B2011.01413","m","Primary","papillary RCC","pT1b","1","1",NA,NA,"3","1","2","0","0","ZTMA224",NA
+"B2011.01525-26","m","Primary","clear cell RCC","pT1b","1","1",NA,NA,"2","0","1","28","1","ZTMA224",NA
+"B2011.01970","w","Primary","clear cell RCC","pT3, G4","3","2",NA,NA,"4","1","2","24","1","ZTMA224",NA
+"B2011.03095","w","Primary","chromophobe RCC","pT1b","1","1",NA,NA,NA,"0","1","26","1","ZTMA224",NA
+"B2011.03451","w","Primary","clear cell RCC","pT1b, L0,V0, G3","1","1",NA,NA,"3","1","1","24","1","ZTMA224",NA
+"B2011.05480","m","Primary","clear cell RCC","pT1b, pN0,V0","1","1","0",NA,"3","0","1",NA,NA,"ZTMA224",NA
+"B2011.08179","w","Primary","papillary RCC","pT3a, V1, G3, R0","3","2",NA,NA,"4","0","1",NA,NA,"ZTMA224",NA
+"B2011.08306","m","Primary","clear cell RCC","mpT2a, G3","2","1",NA,NA,"3","1","2","43","1","ZTMA224",NA
+"B2011.11598","m","Primary","papillary RCC","pT2a, G2","2","1",NA,NA,"3","1","1","30","1","ZTMA224",NA
+"B2011.12007","m","Primary","clear cell RCC","pT1a, G2","1","1",NA,NA,"3","0","1",NA,NA,"ZTMA224",NA
+"B2011.12101","m","Primary","clear cell RCC","pT1a, G2, L0, V0","1","1",NA,NA,"3","0","1","34","1","ZTMA224",NA
+"B2011.13002","m","Primary","clear cell RCC","pT1b, G3","1","1",NA,NA,"4","1","2","11","0","ZTMA224",NA
+"B2011.14529","m","Primary","papillary RCC","mpT1a, G2","1","1",NA,NA,"2","0","0","42","1","ZTMA224",NA
+"B2011.14530","w","Primary","chromophobe RCC","pT3a, V1, G2","3","2",NA,NA,NA,"0","1","38","1","ZTMA224",NA
+"B2011.16162","m","Primary","chromophobe RCC","pT1a, G1, R0","1","1",NA,NA,NA,"0","0","29","1","ZTMA224",NA
+"B2011.16882","m","Primary","clear cell RCC","pT3a","3","2",NA,NA,"4","1","2","21","0","ZTMA224",NA
+"B2011.21686","m","Primary","clear cell RCC","pT1a","1","1",NA,NA,"3","0","2",NA,NA,"ZTMA224",NA
+"B2011.23424","m","Primary","clear cell RCC","pT1a, R0","1","1",NA,NA,"3","0","2","20","1","ZTMA224",NA
+"B2011.24348","m","Primary","clear cell RCC","pT1a","1","1",NA,NA,"4","0","2",NA,NA,"ZTMA224",NA
+"B2011.25532","m","Primary","clear cell RCC","pT3a, G3, V1","3","2",NA,NA,"4","1","2",NA,NA,"ZTMA224",NA
+"B2011.26006","m","Primary","clear cell RCC","pT1a, G2, L0, V0","1","1",NA,NA,"3","0","2","43","1","ZTMA224",NA
+"B2011.26332-33","w","Primary","clear cell RCC","pT1b, pM1 (oss)","1","1",NA,"1","4","1","2",NA,NA,"ZTMA224",NA
+"B2011.29675","m","Primary","papillary RCC","pT2b","2","1",NA,NA,"3","1","2","21","1","ZTMA224",NA
+"B2011.30056","m","Primary","clear cell RCC","pT3a, V1","3","2",NA,NA,"4","1","2","29","1","ZTMA224",NA
+"B2011.30720","m","Primary","clear cell RCC","pT1a, G2","1","1",NA,NA,"2","0","1","25","1","ZTMA224",NA
+"B2011.34680","m","Primary","clear cell RCC","pT1b, G2, L0, Vo","1","1",NA,NA,"2","0","1","20","1","ZTMA224",NA
+"B2011.34764","m","Primary","clear cell RCC","pT1b, G2, V0, R0","1","1",NA,NA,"3","0","2","23","1","ZTMA224",NA
+"B2011.35906","m","Primary","chromophobe RCC","pT2b, pN0 (0/2)","2","1","0",NA,NA,"1","1","25","1","ZTMA224",NA
+"B2011.40102","m","Primary","clear cell RCC","pT3a, V1","3","2",NA,NA,"2","0","1","19","1","ZTMA224",NA
+"B2011.40159","m","Primary","clear cell RCC","pT3a, L0, V2,G3,R0","3","2",NA,NA,"3","0","2","21","1","ZTMA224",NA
+"B2011.41448-41450","m","Primary","clear cell RCC","pT3","3","2",NA,NA,"2","0","1",NA,NA,"ZTMA224",NA
+"B2011.43439","m","Primary","clear cell RCC","pT1b, R0","1","1",NA,NA,"2","0","2","24","1","ZTMA224",NA
+"B2011.44164","m","Primary","clear cell RCC","pT1a, R0","1","1",NA,NA,"3","0","2",NA,NA,"ZTMA224",NA
+"B2011.44682","w","Primary","papillary RCC","pT1a, G2","1","1",NA,NA,"1","0","0","35","1","ZTMA224",NA
+"B2011.46315","w","Primary","clear cell RCC","pT1b, V1","1","1",NA,NA,"4","1","1","38","1","ZTMA224",NA
+"B2011.46759","m","Primary","clear cell RCC","pT3a","3","2",NA,NA,"3","1","1","13","0","ZTMA224",NA
+"B2011.48698","m","Primary","clear cell RCC","pT1a","1","1",NA,NA,"2","0","2","20","1","ZTMA224",NA
+"B2011.54740","m","Primary","clear cell RCC","pT1a, G2","1","1",NA,NA,"1","0","1","20","1","ZTMA224",NA
+"B2011.55535","m","Primary","clear cell RCC","pT3a G2","3","2",NA,NA,"1","0","1","16","1","ZTMA224",NA
+"B2011.57663","m","Primary","papillary RCC","pT1a, G2","1","1",NA,NA,"3","1","2","16","1","ZTMA224",NA
+"B2011.57800","m","Primary","clear cell RCC","pT1a, G1","1","1",NA,NA,"3","0","1","39","1","ZTMA224",NA
+"B2011.61759","w","Primary","clear cell RCC","pT1b","1","1",NA,NA,"2","0","1",NA,NA,"ZTMA224",NA
+"B2011.62139","w","Primary","papillary RCC","pT1a","1","1",NA,NA,"2","0","1","17","1","ZTMA224",NA
+"B2012.04958-59","m","Primary","clear cell RCC","pT3a,V1","3","2",NA,NA,"2","0","0","29","1","ZTMA224",NA
+"B2012.05847","w","Primary","clear cell RCC","pT1b","1","1",NA,NA,"3","0","1",NA,NA,"ZTMA224",NA
+"B2012.06212-13","m","Primary","clear cell RCC","pT1","1","1",NA,NA,"2","0","0","30","1","ZTMA224",NA
+"B2012.06340","m","Primary","clear cell RCC","pT3a, G1","3","2",NA,NA,"2","0","2",NA,NA,"ZTMA224",NA
+"B2012.06409","m","Primary","chromophobe RCC","pT1, G1","1","1",NA,NA,NA,"0","0","30","1","ZTMA224",NA
+"B2012.08355","w","Primary","clear cell RCC","pT1b","1","1",NA,NA,"2","0","2",NA,NA,"ZTMA224",NA
+"B2012.08617","w","Primary","papillary RCC","pT1a, G2","1","1",NA,NA,"1","0","0","32","1","ZTMA224",NA
+"B2012.11400","m","Primary","papillary RCC","pT1a, G2","1","1",NA,NA,"1","0","0","27","1","ZTMA224",NA
+"B2012.12842","m","Primary","multilocular cystic renal neoplasm of low malignant potential","pT3a","3","2",NA,NA,"1","0","0","6","1","ZTMA224",NA
+"B2012.13211","m","Primary","papillary RCC","pT1a","1","1",NA,NA,"2","0","0","15","0","ZTMA224",NA
+"B2012.13234","m","Primary","clear cell RCC","pT3aNo(0/1),G2","3","2","0",NA,"2","0","1","10","1","ZTMA224",NA
+"B2012.13433","m","Primary","clear cell RCC","pT1a","1","1",NA,NA,"3","0","1",NA,NA,"ZTMA224",NA
+"B2012.13863","w","Primary","chromophobe RCC","pT1b,V1,CTG2 chromophober Tumorgrad2","1","1",NA,NA,NA,"0","0","31","1","ZTMA224",NA
+"B2012.16685","m","Primary","clear cell RCC","pT2a, G3","2","1",NA,NA,"3","0","2","10","1","ZTMA224",NA
+"B2012.20227","m","Primary","clear cell RCC","pT1a, G3","1","1",NA,NA,"3","0","2","23","1","ZTMA224",NA
+"B2012.21273","w","Primary","clear cell RCC","pT1b, L0, V0, G2, R0","1","1",NA,NA,"2","0","1","29","1","ZTMA224",NA
+"B2012.22193","m","Primary","papillary RCC","pT1a, G3","1","1",NA,NA,"3","0","1","14","0","ZTMA224",NA
+"B2012.23807","w","Primary","papillary RCC","pT1a","1","1",NA,NA,"2","0","2","29","1","ZTMA224",NA
+"B2012.24728","m","Primary","chromophobe RCC","pT1a","1","1",NA,NA,NA,"0","0","8","1","ZTMA224",NA
+"B2012.28827","m","Primary","clear cell RCC","pT1a","1","1",NA,NA,"2","0","1","28","1","ZTMA224",NA
+"B2012.31422","m","Primary","clear cell RCC","pT3a","3","2",NA,NA,"4","1","2","9","1","ZTMA224",NA
+"B2012.38304","w","Primary","clear cell RCC","pT3a, pN0n(0/1)","3","2","0",NA,"2","0","2","26","1","ZTMA224",NA
+"B2012.42351-53","m","Primary","clear cell RCC","pT1a","1","1",NA,NA,"2","0","1","0","1","ZTMA224",NA
+"B2012.46997","m","Primary","papillary RCC","pT2b","2","1",NA,NA,"2","1","2","21","1","ZTMA224",NA
+"B2012.47041","m","Primary","chromophobe RCC","pT1a","1","1",NA,NA,NA,"0","0","11","1","ZTMA224",NA
+"B2012.47514","m","Primary","chromophobe RCC","pT1b","1","1",NA,NA,NA,NA,NA,NA,NA,"ZTMA224",NA
+"B2012.50344","m","Primary","clear cell RCC","pT1a, g2","1","1",NA,NA,"2","0","1","18","1","ZTMA224",NA
+"B2012.52085","m","Primary","clear cell RCC","pT1a","1","1",NA,NA,"3","0","2",NA,NA,"ZTMA224",NA
+"B2012.53696-97","m","Primary","chromophobe RCC","pT1, G1","1","1",NA,NA,NA,"0","1","15","1","ZTMA224",NA
+"B2012.57110","m","Primary","clear cell RCC","pT1b","1","1",NA,NA,"2","0","2",NA,NA,"ZTMA224",NA
+"B2012.58226","m","Primary","papillary RCC","pT1a","1","1",NA,NA,"3","0","1",NA,NA,"ZTMA224",NA
+"B2012.58827","w","Primary","clear cell RCC","pT1a","1","1",NA,NA,"2","0","1",NA,NA,"ZTMA224",NA
+"B2012.59545","w","Primary","clear cell RCC","pT1a, G2","1","1",NA,NA,"1","0","1","26","1","ZTMA224",NA
+"B2012.62396","w","Primary","clear cell RCC","pT1a, R1","1","1",NA,NA,"2","0","2","7","1","ZTMA224",NA
+"B2013.02197","m","Primary","clear cell RCC",NA,NA,NA,NA,NA,"2","0","0","5","1","ZTMA224",NA
+"B2013.10294","w","Primary","clear cell RCC","pT1a","1","1",NA,NA,"2","0","1","28","1","ZTMA224",NA
+"B2013.13246","m","Primary","clear cell RCC","pT1b","1","1",NA,NA,"2","0","1","24","1","ZTMA224",NA
+"B2013.14521","w","Primary","clear cell RCC","pT1b, pN0 (0/2), R0","1","1","0",NA,"1","0","1","24","1","ZTMA224",NA
+"B2013.14538","w","Primary","clear cell RCC","pT2b","2","1",NA,NA,"2","1","1","28","1","ZTMA224",NA
+"B2013.15712","w","Primary","clear cell RCC",NA,NA,NA,NA,NA,"2","0","0",NA,NA,"ZTMA224",NA
+"B2013.16760","m","Primary","clear cell RCC","pT1a","1","1",NA,NA,"2","0","1","24","1","ZTMA224",NA
+"B2013.19996","m","Primary","clear cell RCC","pT1a","1","1",NA,NA,"2","0","1",NA,NA,"ZTMA224",NA
+"B2013.21198","m","Primary","clear cell RCC","pT3a","3","2",NA,NA,"4","1","2","27","1","ZTMA224",NA
+"B2013.21321","m","Primary","clear cell RCC","pT1b","1","1",NA,NA,"2","0","1","23","1","ZTMA224",NA
+"B2013.21535","m","Primary","clear cell RCC","pT1a","1","1",NA,NA,"1","0","1","24","1","ZTMA224",NA
+"B2013.22827","m","Primary","clear cell RCC",NA,NA,NA,NA,NA,"3","0","2","27","1","ZTMA224",NA
+"B2013.22942","w","Primary","clear cell RCC","pT3a","3","2",NA,NA,"2","0","1","24","1","ZTMA224",NA
+"B2013.23880","w","Primary","clear cell RCC","pT1b","1","1",NA,NA,"4","1","1","24","1","ZTMA224",NA
+"B2013.26617","m","Primary","clear cell RCC","pT1a","1","1",NA,NA,"3","0","1","24","1","ZTMA224",NA
+"B2013.28923","m","Primary","clear cell RCC","pT3a","3","2",NA,NA,"2","0","1","3","0","ZTMA224",NA
+"B2013.29406","m","Primary","clear cell papillary RCC","pT1a","1","1",NA,NA,"1","0","0","7","0","ZTMA224",NA
+"B2013.30301","m","Primary","papillary RCC","pT1a","1","1",NA,NA,"2","0","1","27","1","ZTMA224",NA
+"B2013.30389-30390","m","Primary","clear cell RCC","Niere li und re pT1a","1","1",NA,NA,"2","0","1",NA,NA,"ZTMA224",NA
+"B2013.30839","m","Primary","clear cell RCC","pT1b","1","1",NA,NA,"2","0","1","21","1","ZTMA224",NA
+"B2013.34409","w","Primary","papillary RCC","pT1a","1","1",NA,NA,"3","0","1","21","1","ZTMA224",NA
+"B2013.36986","w","Primary","clear cell RCC","pT1a, G2","1","1",NA,NA,"2","0","0","22","1","ZTMA224",NA
+"B2013.39662","m","Primary","chromophobe RCC","pT1b","1","1",NA,NA,"2","0","0","10","1","ZTMA224",NA
+"B2013.40711","m","Primary","Unclassified RCC","pT1a","1","1",NA,NA,"2","0","1",NA,NA,"ZTMA224",NA
+"B2013.42237","m","Primary","clear cell RCC","pT3a, V1","3","2",NA,NA,"4","0","2","68","0","ZTMA224",NA
+"B2013.43265","w","Primary","clear cell RCC","pT3a","3","2",NA,NA,"2","0","1","21","1","ZTMA224",NA
+"B2013.44804","m","Primary","clear cell RCC","pT1a, R1","1","1",NA,NA,"2","0","1","20","1","ZTMA224",NA
+"B2013.48159-48160","m","Primary","clear cell RCC","pT1b","1","1",NA,NA,"3","0","1","16","1","ZTMA224",NA
+"B2013.49934","m","Primary","clear cell RCC","pT1a","1","1",NA,NA,"3","0","1",NA,NA,"ZTMA224",NA
+"B2013.50475","w","Primary","mucinous tubular and spindle cell carcinoma","pT1a","1","1",NA,NA,"2","0","0","17","1","ZTMA224",NA
+"B2013.51031","m","Primary","papillary RCC","pT1a","1","1",NA,NA,"1","0","1",NA,NA,"ZTMA224",NA
+"B2013.51052","m","Primary","papillary RCC","pT1a","1","1",NA,NA,"1","0","0","20","1","ZTMA224",NA
+"B2013.53286-53287","w","Primary","clear cell RCC","pT1b","1","1",NA,NA,"2","0","0","19","1","ZTMA224",NA
+"B2013.53511","m","Primary","clear cell RCC","pT3c","3","2",NA,NA,"4","1","2","22","1","ZTMA224",NA
+"B2013.54303","w","Primary","clear cell RCC","pT2b","2","1",NA,NA,"4?","?","?","12","0","ZTMA224",NA
+"B2013.55164","w","Primary","Oncocytoma maybe","pT1a, G2","1","1",NA,NA,NA,"0","0",NA,NA,"ZTMA224",NA
+"B2013.56480","m","Primary","clear cell RCC","pT3a","3","2",NA,NA,"4","1","2",NA,NA,"ZTMA224",NA
+"B2013.57098-57099","m","Primary","clear cell RCC","pT1a, Ro","1","1",NA,NA,"2","0","1","16","1","ZTMA224",NA
+"B2013.58923","m","Primary","clear cell RCC","pT1a","1","1",NA,NA,"3","1","2","18","1","ZTMA224",NA
+"B2013.59176","m","Primary","clear cell RCC","pT1b","1","1",NA,NA,"2","0","1",NA,NA,"ZTMA224",NA
+"B2003.21574",NA,"Normal","Normal",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA224",NA
+"B2004.14786",NA,"Normal","Normal",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA224",NA
+"B2005.23360",NA,"Normal","Normal",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA224",NA
+"B2006.22841",NA,"Normal","Normal",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA224",NA
+"B2007.20518",NA,"Normal","Normal",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA224",NA
+"B2008.12670",NA,"Normal","Normal",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA224",NA
+"B2008.41493",NA,"Normal","Normal",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA224",NA
+"B2009.32705",NA,"Normal","Normal",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA224",NA
+"B2009.37211",NA,"Normal","Normal",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA224",NA
+"B2010.18103",NA,"Normal","Normal",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA224",NA
+"B2011.1970",NA,"Normal","Normal",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA224",NA
+"B2011.14529",NA,"Normal","Normal",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA224",NA
+"B2012.6212",NA,"Normal","Normal",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA224",NA
+"B2012.8355",NA,"Normal","Normal",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA224",NA
+"B2013.16760",NA,"Normal","Normal",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA224",NA
+"B2013.298923",NA,"Normal","Normal",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA224",NA
+"B2007.49274",NA,"Normal","Normal",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA224",NA
+"B1993.01979","w","Primary",NA,NA,"2","1","0",NA,NA,NA,"0","120","1","ZTMA20","52"
+"B1993.02020","w","Primary",NA,NA,"1","1","X",NA,"2",NA,"0","69","0","ZTMA20","86"
+"B1993.02803","w","Primary",NA,NA,"3","2","X",NA,"4",NA,"2",NA,NA,"ZTMA20","76"
+"B1993.02929","w","Primary",NA,NA,"3","2","1",NA,"4",NA,"2",NA,NA,"ZTMA20","72"
+"B1993.04960","m","Primary",NA,NA,"3","2","2",NA,"3",NA,"2",NA,NA,"ZTMA20","69"
+"B1993.07547","m","Primary",NA,NA,"1","1","X",NA,"2",NA,"0","140","1","ZTMA20","46"
+"B1993.08372","w","Primary",NA,NA,"1","1","0",NA,"3",NA,"2","139","1","ZTMA20","61"
+"B1993.08905","w","Primary",NA,NA,"1","1","X",NA,"2",NA,"2","118","0","ZTMA20","81"
+"B1993.10878","w","Primary",NA,NA,"3","2","X",NA,"4",NA,"2","0.5","0","ZTMA20","83"
+"B1993.11206","w","Primary",NA,NA,"1","1","0",NA,"2",NA,"1",NA,NA,"ZTMA20","61"
+"B1993.14664","w","Primary",NA,NA,"1","1","X",NA,"3",NA,"1","12","0","ZTMA20","79"
+"B1993.15096","w","Primary",NA,NA,"1","1","X",NA,"3",NA,"2",NA,NA,"ZTMA20","81"
+"B1993.16595","m","Primary",NA,NA,"3","2","0",NA,"3",NA,"1","15","0","ZTMA20","53"
+"B1993.17139","m","Primary",NA,NA,NA,NA,NA,NA,NA,NA,NA,"136","1","ZTMA20","33"
+"B1993.19866","w","Primary",NA,NA,"1","1","0",NA,"2",NA,"1","135","1","ZTMA20","48"
+"B1993.20272","m","Primary",NA,NA,"1","1","X",NA,"2",NA,"1","8","0","ZTMA20","58"
+"B1993.22750","m","Primary",NA,NA,"3","2","1",NA,"4",NA,"2","21","0","ZTMA20","63"
+"B1993.24118","m","Primary",NA,NA,"2","1","X",NA,NA,NA,"0","134","1","ZTMA20","62"
+"B1993.25328","m","Primary",NA,NA,"1","1","0",NA,"2",NA,"0","133","1","ZTMA20","43"
+"B1993.25661","m","Primary",NA,NA,"3","2","X",NA,"2",NA,"0","120","0","ZTMA20","72"
+"B1993.26148","m","Primary",NA,NA,"3","2","X",NA,"4",NA,"1","24","0","ZTMA20","77"
+"B1993.26680","m","Primary",NA,NA,"3","2","X",NA,"3",NA,"2","132","1","ZTMA20","67"
+"B1993.26828","w","Primary",NA,NA,"1","1","0",NA,"3",NA,"0","132","1","ZTMA20","72"
+"B1993.27254","w","Primary",NA,NA,"3","2","0",NA,"3",NA,"1","64","0","ZTMA20","54"
+"B1993.27284","w","Primary",NA,NA,"3","2","0",NA,NA,NA,"1","29","0","ZTMA20","82"
+"B1993.27842","m","Primary",NA,NA,"3","2","1",NA,"3",NA,"2","132","1","ZTMA20","64"
+"B1993.29589","m","Primary",NA,NA,"2","1","X",NA,NA,NA,"1","123","0","ZTMA20","64"
+"B1993.30093","m","Primary",NA,NA,NA,NA,NA,NA,NA,NA,NA,"131",NA,"ZTMA20","74"
+"B1993.31842","w","Primary",NA,NA,"1","1","0",NA,"3",NA,"2","131","1","ZTMA20","54"
+"B1993.33330","w","Primary",NA,NA,"4","2","X",NA,"4",NA,"2","1.5","0","ZTMA20","66"
+"B1994.00314","w","Primary",NA,NA,"2","1","X",NA,"2",NA,"1","130","1","ZTMA20","58"
+"B1994.01147","m","Primary",NA,NA,"1","1","X",NA,"4",NA,"1","130","1","ZTMA20","43"
+"B1994.01148","m","Primary",NA,NA,"3","2","X",NA,"4",NA,"1","46","0","ZTMA20","61"
+"B1994.01311","w","Primary",NA,NA,"3","2","X",NA,"4",NA,"1","24","0","ZTMA20","76"
+"B1994.02207","m","Primary",NA,NA,NA,NA,NA,NA,NA,NA,NA,"106","0","ZTMA20","66"
+"B1994.05948","m","Primary",NA,NA,"1","1","X",NA,NA,NA,"2","80","0","ZTMA20","66"
+"B1994.06177","m","Primary",NA,NA,"1","1","X",NA,"3",NA,"1","4","0","ZTMA20","40"
+"B1994.06680","m","Primary",NA,NA,"1","1","X",NA,"3",NA,"0",NA,NA,"ZTMA20","44"
+"B1994.09393","m","Primary",NA,NA,"3","2","X",NA,"3",NA,"2","47","0","ZTMA20","79"
+"B1994.11662","m","Primary",NA,NA,"3","2","X",NA,"2",NA,"1","21","0","ZTMA20","73"
+"B1994.12308","m","Primary",NA,NA,"3","2","X",NA,"4",NA,"2","126","1","ZTMA20","57"
+"B1994.15511","w","Primary",NA,NA,NA,NA,"0",NA,NA,NA,NA,"124","1","ZTMA20","27"
+"B1994.15973","m","Primary",NA,NA,"3","2","X",NA,"4",NA,"2","6","0","ZTMA20","52"
+"B1994.16364","w","Primary",NA,NA,NA,NA,NA,NA,NA,NA,NA,"124",NA,"ZTMA20","72"
+"B1994.17368","w","Primary",NA,NA,"3","2","X",NA,"4",NA,"2","3.5","0","ZTMA20","64"
+"B1994.18172","m","Primary",NA,NA,"3","2","X",NA,"4",NA,"1","38","0","ZTMA20","69"
+"B1994.18357","m","Primary",NA,NA,"2","1","0",NA,"2",NA,"0","72.5","1","ZTMA20","62"
+"B1994.23745","m","Primary",NA,NA,"2","1","X",NA,"2",NA,"0","122","1","ZTMA20","59"
+"B1994.23887","m","Primary",NA,NA,"1","1","X",NA,"3",NA,"0",NA,NA,"ZTMA20","69"
+"B1994.24176","w","Primary",NA,NA,"1","1","X",NA,"2",NA,"1","72","0","ZTMA20","86"
+"B1994.25370","m","Primary",NA,NA,"1","1","X",NA,"4",NA,"1","40","0","ZTMA20","77"
+"B1994.26901","w","Primary",NA,NA,"2","1","1",NA,"3",NA,"1","24","0","ZTMA20","48"
+"B1994.27042","w","Primary",NA,NA,"3","2","0",NA,"2",NA,"0","120","1","ZTMA20","57"
+"B1994.27651","m","Primary",NA,NA,"2","1","X",NA,NA,NA,"1","120","1","ZTMA20","46"
+"B1994.28622","m","Primary",NA,NA,"3","2","0",NA,"4",NA,"1","120","1","ZTMA20","49"
+"B1994.29493","m","Primary",NA,NA,"2","1","0",NA,"3",NA,"1","36","0","ZTMA20","65"
+"B1994.29949","m","Primary",NA,NA,"3","2","X",NA,"4",NA,"2",NA,NA,"ZTMA20","68"
+"B1994.30531","m","Primary",NA,NA,"1","1","X",NA,"2",NA,"0","119","1","ZTMA20","62"
+"B1994.31932","w","Primary",NA,NA,"3","2","1",NA,"4",NA,"2","3","0","ZTMA20","70"
+"B1995.00092","w","Primary",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA20","73"
+"B1995.00644","w","Primary",NA,NA,"3","2","0",NA,"4",NA,"2","66","0","ZTMA20","85"
+"B1995.00966","w","Primary",NA,NA,"2","1","X",NA,"4",NA,"2","1","0","ZTMA20","76"
+"B1995.01921","m","Primary",NA,NA,"3","2","0",NA,"4",NA,"1","117","1","ZTMA20","71"
+"B1995.02073","w","Primary",NA,NA,"3","2","X",NA,"4",NA,"2","84","0","ZTMA20","61"
+"B1995.02845","m","Primary",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA20","59"
+"B1995.03609","m","Primary",NA,NA,"3","2","1",NA,"2",NA,"2","47","0","ZTMA20","60"
+"B1995.03916","m","Primary",NA,NA,"3","2","0",NA,"3",NA,"1","117","1","ZTMA20","58"
+"B1995.06238","m","Primary",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA20","81"
+"B1995.06372","w","Primary",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA20","56"
+"B1995.06619","w","Primary",NA,NA,"1","1","X",NA,"2",NA,"1","116","1","ZTMA20","68"
+"B1995.06620","m","Primary",NA,NA,"3","2","0",NA,"2",NA,"2","11","0","ZTMA20","88"
+"B1995.07876","m","Primary",NA,NA,"4","2","2",NA,"4",NA,"1","4.5","0","ZTMA20","62"
+"B1995.09977","w","Primary",NA,NA,"1","1","X",NA,"3",NA,"1",NA,NA,"ZTMA20","42"
+"B1995.10087","m","Primary",NA,NA,"3","2","1",NA,"4",NA,"1","0.1","0","ZTMA20","72"
+"B1995.11576","m","Primary",NA,NA,"1","1","X",NA,"3",NA,"1","34","0","ZTMA20","57"
+"B1995.12360","w","Primary",NA,NA,"1","1","X",NA,"2",NA,"1","114","1","ZTMA20","79"
+"B1995.13039","m","Primary",NA,NA,"1","1","0",NA,"3",NA,"2","48","0","ZTMA20","67"
+"B1995.13539","m","Primary",NA,NA,"1","1","0",NA,"3",NA,"1","113","1","ZTMA20","47"
+"B1995.13928","m","Primary",NA,NA,"3","2","X",NA,"4",NA,"2","9","0","ZTMA20","58"
+"B1995.15187","m","Primary",NA,NA,"1","1","X",NA,"3",NA,"1","46","0","ZTMA20","82"
+"B1995.15445","w","Primary",NA,NA,"3","2","1",NA,"4",NA,"1","0.6","0","ZTMA20","45"
+"B1995.15627","m","Primary",NA,NA,NA,NA,NA,NA,NA,NA,NA,"36","0","ZTMA20","76"
+"B1995.18069","w","Primary",NA,NA,"1","1","X",NA,"3",NA,"1","111","1","ZTMA20","62"
+"B1995.18221","m","Primary",NA,NA,"3","2","0",NA,"4",NA,"1","84","0","ZTMA20","69"
+"B1995.18826","w","Primary",NA,NA,"3","2","X",NA,"4",NA,"2","0.5","0","ZTMA20","61"
+"B1995.19627","w","Primary",NA,NA,"1","1","X",NA,"2",NA,"2","98","1","ZTMA20","59"
+"B1995.20102","m","Primary",NA,NA,"3","2","1",NA,"4",NA,"1","24","0","ZTMA20","65"
+"B1995.20979","m","Primary",NA,NA,"1","1","0",NA,"2",NA,"0",NA,NA,"ZTMA20","56"
+"B1995.21436","m","Primary",NA,NA,"1","1","X",NA,"3",NA,"1","110","1","ZTMA20","59"
+"B1995.23383","w","Primary",NA,NA,NA,NA,NA,NA,NA,NA,NA,"110","1","ZTMA20","79"
+"B1995.24081","m","Primary",NA,NA,"1","1","0",NA,NA,NA,"1","110","1","ZTMA20","43"
+"B1995.24778","m","Primary",NA,NA,"1","1","X",NA,"2",NA,"2","14.5","0","ZTMA20","53"
+"B1995.24849","m","Primary",NA,NA,"2","1","0",NA,"3",NA,"1","30","0","ZTMA20","42"
+"B1995.25462","m","Primary",NA,NA,"2","1","0",NA,"4",NA,"2","109","1","ZTMA20","46"
+"B1995.26592","m","Primary",NA,NA,"3","2","X",NA,NA,NA,NA,"13.5","0","ZTMA20","62"
+"B1995.26751","m","Primary",NA,NA,"4","2","2",NA,"4",NA,"2","0.6","0","ZTMA20","76"
+"B1995.28781","w","Primary",NA,NA,"2","1","X",NA,"2",NA,"1",NA,NA,"ZTMA20","50"
+"B1995.33035","m","Primary",NA,NA,"1","1","X",NA,"4",NA,"2","107","1","ZTMA20","61"
+"B1996.05381","w","Primary",NA,NA,"1","1","X",NA,"4",NA,"1","105","1","ZTMA20","70"
+"B1996.06296","m","Primary",NA,NA,"1","1","X",NA,"4",NA,"2","105","1","ZTMA20","60"
+"B1996.06406","m","Primary",NA,NA,"1","1","0",NA,"2",NA,"0","102","1","ZTMA20","76"
+"B1996.07068","m","Primary",NA,NA,"3","2","1",NA,"2",NA,"1","50","0","ZTMA20","71"
+"B1996.07746","w","Primary",NA,NA,"1","1","X",NA,"2",NA,"1","40","0","ZTMA20","52"
+"B1996.09298","m","Primary",NA,NA,"4","2","X",NA,"4",NA,"2","88.5","0","ZTMA20","66"
+"B1996.09446","w","Primary",NA,NA,"3","2","0",NA,"4",NA,"2","93","0","ZTMA20","74"
+"B1996.10705","w","Primary",NA,NA,"2","1","X",NA,NA,NA,"0","102","1","ZTMA20","59"
+"B1996.11451","m","Primary",NA,NA,"3","2","0",NA,"3",NA,"1","34","0","ZTMA20","72"
+"B1996.12152","w","Primary",NA,NA,"3","2","X",NA,"4",NA,"0","19.5","0","ZTMA20","69"
+"B1996.12864","m","Primary",NA,NA,"3","2","X",NA,"2",NA,"0","74","0","ZTMA20","56"
+"B1996.14286","w","Primary",NA,NA,"1","1","0",NA,"3",NA,"0","101","1","ZTMA20","61"
+"B1996.14287","w","Primary",NA,NA,"3","2","1",NA,"3",NA,"0","6.5","0","ZTMA20","43"
+"B1996.14584","m","Primary",NA,NA,"3","2","X",NA,"2",NA,"0","101","1","ZTMA20","54"
+"B1996.15030","m","Primary",NA,NA,"1","1","0",NA,"2",NA,"0","101","1","ZTMA20","59"
+"B1996.16833","w","Primary",NA,NA,"3","2","0",NA,"4",NA,"1","42","0","ZTMA20","72"
+"B1996.17547","m","Primary",NA,NA,"1","1","0",NA,"4",NA,"0","94","0","ZTMA20","64"
+"B1996.18116","m","Primary",NA,NA,"3","2","0",NA,"3",NA,"2",NA,NA,"ZTMA20","55"
+"B1996.18382","w","Primary",NA,NA,"3","2","X",NA,"4",NA,"1","10","0","ZTMA20","54"
+"B1996.19575","m","Primary",NA,NA,"3","2","X",NA,"3",NA,"1","4","0","ZTMA20","74"
+"B1996.20362","w","Primary",NA,NA,"3","2","1",NA,"4",NA,"1","76","0","ZTMA20","78"
+"B1996.20988","m","Primary",NA,NA,"2","1","X",NA,"3",NA,"2","97.5","1","ZTMA20","66"
+"B1996.22082","m","Primary",NA,NA,"3","2","X",NA,"4",NA,"2","57","0","ZTMA20","74"
+"B1996.23569","w","Primary",NA,NA,"2","1","X",NA,"2",NA,"1","96","0","ZTMA20","60"
+"B1996.24667","m","Primary",NA,NA,"2","1","0",NA,"4",NA,"2","16.5","0","ZTMA20","63"
+"B1996.25662","m","Primary",NA,NA,"4","2","X",NA,"4",NA,"1","3","0","ZTMA20","84"
+"B1996.25787","m","Primary",NA,NA,"1","1","X",NA,"3",NA,"1","0.1","0","ZTMA20","77"
+"B1996.26620","m","Primary",NA,NA,NA,NA,"0",NA,"2",NA,"1","96","1","ZTMA20","47"
+"B1996.29041","w","Primary",NA,NA,"1","1","0",NA,"3",NA,"0","96","1","ZTMA20","58"
+"B1996.29468","w","Primary",NA,NA,"1","1","X",NA,"2",NA,"0","96","1","ZTMA20","48"
+"B1996.30066","m","Primary",NA,NA,"3","2","X",NA,"4",NA,"2","84","0","ZTMA20","70"
+"B1996.30085","w","Primary",NA,NA,NA,NA,NA,NA,NA,NA,NA,"96",NA,"ZTMA20","60"
+"B1996.30487","w","Primary",NA,NA,"2","1","0",NA,"2",NA,"0","96","1","ZTMA20","69"
+"B1996.30624","w","Primary",NA,NA,"4","2","X",NA,"4",NA,"1","5","0","ZTMA20","58"
+"B1996.30826","m","Primary",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA20","70"
+"B1996.30901","m","Primary",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA20","70"
+"B1996.31219","m","Primary",NA,NA,"2","1","X",NA,NA,NA,"0","9","0","ZTMA20","87"
+"B1996.32113","m","Primary",NA,NA,"3","2","X",NA,"3",NA,"1","12","0","ZTMA20","58"
+"B1996.32614","w","Primary",NA,NA,"3","2","0",NA,"4",NA,"2","95","1","ZTMA20","54"
+"B1997.01637","m","Primary",NA,NA,"2","1","X",NA,"2",NA,"1","94","1","ZTMA20","52"
+"B1997.03071","w","Primary",NA,NA,NA,NA,NA,NA,NA,NA,NA,"93",NA,"ZTMA20","60"
+"B1997.04112","w","Primary",NA,NA,"1","1","0",NA,"2",NA,"0",NA,NA,"ZTMA20","63"
+"B1997.04538","w","Primary",NA,NA,"3","2","X",NA,"2",NA,"0","9","0","ZTMA20","76"
+"B1997.04640","m","Primary",NA,NA,"1","1","X",NA,"3",NA,"1",NA,NA,"ZTMA20","41"
+"B1997.06533","w","Primary",NA,NA,"3","2","X",NA,"3",NA,"0","2.5","0","ZTMA20","41"
+"B1997.06824","m","Primary",NA,NA,"3","2","0",NA,"2",NA,"0","91.5","1","ZTMA20","63"
+"B1997.10345","m","Primary",NA,NA,"1","1","0",NA,"2",NA,"0","91","1","ZTMA20","48"
+"B1997.11312","m","Primary",NA,NA,"2","1","0",NA,"4",NA,"1","90","1","ZTMA20","57"
+"B1997.11775","m","Primary",NA,NA,"1","1","0",NA,"3",NA,"1","90","1","ZTMA20","54"
+"B1997.12619","w","Primary",NA,NA,"3","2","X",NA,"2",NA,"0","44","0","ZTMA20","66"
+"B1997.14048","w","Primary",NA,NA,"3","2","X",NA,"4",NA,"2","89","1","ZTMA20","76"
+"B1997.15210","m","Primary",NA,NA,"4","2","1",NA,"4",NA,"1","2.5","0","ZTMA20","63"
+"B1997.15906","m","Primary",NA,NA,"3","2","X",NA,"4",NA,"2","8","0","ZTMA20","66"
+"B1997.16439","w","Primary",NA,NA,"1","1","X",NA,"3",NA,"1","88.5","1","ZTMA20","65"
+"B1997.16781","m","Primary",NA,NA,"3","2","1",NA,"3",NA,"1","44","0","ZTMA20","64"
+"B1997.18284","m","Primary",NA,NA,"2","1","X",NA,"3",NA,"2",NA,NA,"ZTMA20","46"
+"B1997.20330","m","Primary",NA,NA,"3","2","X",NA,"4",NA,"1","24","0","ZTMA20","59"
+"B1997.20337","w","Primary",NA,NA,"1","1","X",NA,"2",NA,"0","87","1","ZTMA20","77"
+"B1997.22168","w","Primary",NA,NA,"1","1","X",NA,"3",NA,"0","86","1","ZTMA20","70"
+"B1997.22311","w","Primary",NA,NA,"3","2","0",NA,"3",NA,"1","16","0","ZTMA20","72"
+"B1997.22610","w","Primary",NA,NA,"1","1","0",NA,"2",NA,"0","12","0","ZTMA20","63"
+"B1997.23548","m","Primary",NA,NA,"1","1","X",NA,"3",NA,"1",NA,NA,"ZTMA20","42"
+"B1997.23862","m","Primary",NA,NA,"1","1","X",NA,"2",NA,"0",NA,NA,"ZTMA20","33"
+"B1997.23862","m","Primary",NA,NA,"1","1","X",NA,"3",NA,"2",NA,NA,"ZTMA20","33"
+"B1997.24542","w","Primary",NA,NA,"1","1","1",NA,"4",NA,"2","6","0","ZTMA20","62"
+"B1997.25984","m","Primary",NA,NA,"2","1","0",NA,"2",NA,"0","84.5","1","ZTMA20","69"
+"B1997.26168","w","Primary",NA,NA,"1","1","X",NA,"3",NA,"1","83","0","ZTMA20","73"
+"B1997.27241","w","Primary",NA,NA,"3","2","0",NA,"3",NA,"1","84","1","ZTMA20","64"
+"B1997.28921","m","Primary",NA,NA,"3","2","X",NA,"2",NA,"0","40","0","ZTMA20","60"
+"B1997.28921","m","Primary",NA,NA,"1","1","X",NA,"2",NA,"0","40","0","ZTMA20","60"
+"B1997.29687","m","Primary",NA,NA,"1","1","0",NA,"4",NA,"0","26","0","ZTMA20","55"
+"B1997.29774","w","Primary",NA,NA,"3","2","X",NA,"4",NA,"1","4","0","ZTMA20","52"
+"B1997.29875","w","Primary",NA,NA,"1","1","X",NA,"2",NA,"0","83","1","ZTMA20","65"
+"B1997.30795","m","Primary",NA,NA,"3","2","X",NA,"4",NA,"2","82","1","ZTMA20","65"
+"B1997.30961","m","Primary",NA,NA,"2","1","0",NA,"4",NA,"1","82","1","ZTMA20","83"
+"B1997.31157","m","Primary",NA,NA,"1","1","0",NA,"2",NA,"1","82","1","ZTMA20","67"
+"B1997.31375","w","Primary",NA,NA,"3","2","X",NA,"2",NA,"0","30","0","ZTMA20","67"
+"B1997.31505","m","Primary",NA,NA,NA,NA,"X",NA,"2",NA,"0",NA,NA,"ZTMA20",NA
+"B1998.00053","m","Primary",NA,NA,"2","1","X",NA,"2",NA,"1","82","1","ZTMA20","68"
+"B1998.01416","m","Primary",NA,NA,"3","2","X",NA,"4",NA,"2","0.2","0","ZTMA20","66"
+"B1998.01683","w","Primary",NA,NA,"2","1","X",NA,"2",NA,"1","81","1","ZTMA20","74"
+"B1998.01873","m","Primary",NA,NA,"3","2","0",NA,"3",NA,"1","8","0","ZTMA20","71"
+"B1998.05274","m","Primary",NA,NA,"1","1","X",NA,"4",NA,"1","79","1","ZTMA20","68"
+"B1998.10458","m","Primary",NA,NA,"1","1","X",NA,"2",NA,"0","77","1","ZTMA20","71"
+"B1998.11553","m","Primary",NA,NA,"3","2","0",NA,"3",NA,"1","58","0","ZTMA20","75"
+"B1998.12350","w","Primary",NA,NA,"3","2","X",NA,"3",NA,"1","73","1","ZTMA20","61"
+"B1998.14150","m","Primary",NA,NA,"1","1","0",NA,"1",NA,"0","77","1","ZTMA20","54"
+"B1998.15681","m","Primary",NA,NA,"1","1","0",NA,"3",NA,"2","62","0","ZTMA20","46"
+"B1998.16079","m","Primary",NA,NA,"1","1","0",NA,"3",NA,"1",NA,NA,"ZTMA20","52"
+"B1998.17323","m","Primary",NA,NA,"1","1","0",NA,"3",NA,"0","41","0","ZTMA20","80"
+"B1998.17578","w","Primary",NA,NA,"3","2","0",NA,"4",NA,"1","78","1","ZTMA20","69"
+"B1998.21090","m","Primary",NA,NA,"3","2","X",NA,"4",NA,"2","7.5","0","ZTMA20","66"
+"B1998.21944","m","Primary",NA,NA,"1","1","X",NA,NA,NA,"0","74","1","ZTMA20","49"
+"B1998.22456","m","Primary",NA,NA,NA,NA,NA,NA,NA,NA,NA,"9","0","ZTMA20","78"
+"B1998.23188","m","Primary",NA,NA,"3","2","X",NA,"4",NA,"1","2.5","0","ZTMA20","52"
+"B1998.23551","w","Primary",NA,NA,"2","1","0",NA,"3",NA,"1","60","0","ZTMA20","83"
+"B1998.24257","w","Primary",NA,NA,"3","2","1",NA,"4",NA,"2","9","0","ZTMA20","70"
+"B1998.27655","m","Primary",NA,NA,"3","2","X",NA,"4",NA,"2","3","0","ZTMA20","63"
+"B1998.28635","m","Primary",NA,NA,NA,NA,"X",NA,"3",NA,"1","72","1","ZTMA20","58"
+"B1998.29106","m","Primary",NA,NA,"3","2","X",NA,"3",NA,"2","72","1","ZTMA20","66"
+"B1998.29812","m","Primary",NA,NA,"3","2","X",NA,"4",NA,"2","71","1","ZTMA20","63"
+"B1998.30519","m","Primary",NA,NA,"1","1","0",NA,"3",NA,"1","29","0","ZTMA20","55"
+"B1998.31994","w","Primary",NA,NA,"2","1","X",NA,"3",NA,"1","77","1","ZTMA20","83"
+"B1999.00091","w","Primary",NA,NA,"3","2","X",NA,"4",NA,"2","1.5","0","ZTMA20","82"
+"B1999.03430","w","Primary",NA,NA,"3","2","X",NA,"3",NA,"0","69","1","ZTMA20","71"
+"B1999.03634","w","Primary",NA,NA,"3","2","X",NA,"3",NA,"1","69","1","ZTMA20","74"
+"B1999.05048","m","Primary",NA,NA,"3","2","X",NA,"4",NA,"1","68","1","ZTMA20","57"
+"B1999.05952","m","Primary",NA,NA,"3","2","0",NA,"4",NA,"1","5","0","ZTMA20","80"
+"B1999.06578","m","Primary",NA,NA,"3","2","X",NA,"4",NA,"1","12","0","ZTMA20","68"
+"B1999.06933","m","Primary",NA,NA,"1","1","0",NA,"2",NA,"1","68","1","ZTMA20","50"
+"B1999.07827","m","Primary",NA,NA,"1","1","X",NA,"2",NA,"0","67","1","ZTMA20","71"
+"B1999.09263","w","Primary",NA,NA,"2","1","0",NA,"4",NA,"1","67","1","ZTMA20","61"
+"B1999.09308","m","Primary",NA,NA,"2","1","X",NA,"3",NA,"2","67","1","ZTMA20","66"
+"B1999.11227","w","Primary",NA,NA,"2","1","X",NA,"4",NA,"1","66","1","ZTMA20","57"
+"B1999.13996","m","Primary",NA,NA,"1","1","0",NA,"3",NA,"1","44","0","ZTMA20","40"
+"B1999.22897","m","Primary",NA,NA,"1","1","X",NA,"4",NA,"1","12","0","ZTMA20","71"
+"B1999.27119","m","Primary",NA,NA,"1","1","0",NA,"3",NA,"1","37","0","ZTMA20","68"
+"B1999.28777","m","Primary",NA,NA,"3","2","0",NA,"3",NA,"1","60","1","ZTMA20","53"
+"B1999.29269","m","Primary",NA,NA,"1","1","0",NA,"2",NA,"1","60","1","ZTMA20","59"
+"B1999.29555","m","Primary",NA,NA,"3","2","X",NA,"4",NA,"1","60","1","ZTMA20","62"
+"B1999.30164","m","Primary",NA,NA,"1","1","X",NA,"4",NA,"1","8","0","ZTMA20","71"
+"B1999.30865","w","Primary",NA,NA,"1","1","0",NA,"2",NA,"1","60","1","ZTMA20","62"
+"B1999.31150","m","Primary",NA,NA,"1","1","X",NA,"4",NA,"1","60","1","ZTMA20","83"
+"B1999.34961","m","Primary",NA,NA,"1","1","0",NA,"3",NA,"1","59","1","ZTMA20","73"
+"B1999.36067","w","Primary",NA,NA,"1","1","X",NA,"3",NA,"1","58","1","ZTMA20","45"
+"B1999.36222","m","Primary",NA,NA,"1","1","0",NA,"3",NA,"2","58","1","ZTMA20","56"
+"B2000.00062","m","Primary",NA,NA,"3","2","X",NA,"4",NA,"2","58","1","ZTMA20","77"
+"B2000.00849","m","Primary",NA,NA,"3","2","X",NA,"3",NA,"1","17.5","0","ZTMA20","71"
+"B2000.03811","m","Primary",NA,NA,"1","1","X",NA,"4",NA,"2","6","0","ZTMA20","71"
+"B2000.03972","m","Primary",NA,NA,"3","2","0",NA,"3",NA,"1","57","1","ZTMA20","72"
+"B2000.04072","m","Primary",NA,NA,"3","2","X",NA,NA,NA,"0","57","1","ZTMA20","52"
+"B2000.07056","w","Primary",NA,NA,"3","2","1",NA,NA,NA,"2","17","0","ZTMA20","59"
+"B2000.07583","m","Primary",NA,NA,"3","2","X",NA,"4",NA,"1","3","0","ZTMA20","63"
+"B2000.08653","m","Primary",NA,NA,"1","1","X",NA,"2",NA,"1","55","1","ZTMA20","63"
+"B2000.08665","w","Primary",NA,NA,"1","1","X",NA,"3",NA,"1",NA,NA,"ZTMA20","67"
+"B2000.10134","w","Primary",NA,NA,NA,NA,NA,NA,NA,NA,NA,"55",NA,"ZTMA20","76"
+"B2000.12766","m","Primary",NA,NA,NA,NA,NA,NA,NA,NA,NA,"54",NA,"ZTMA20","73"
+"B2000.14766","m","Primary",NA,NA,"1","1","X",NA,"4",NA,"1","53","1","ZTMA20","44"
+"B2000.15799","m","Primary",NA,NA,"1","1","X",NA,"2",NA,"0","53","1","ZTMA20","29"
+"B2000.16646","w","Primary",NA,NA,"3","2","0",NA,"3",NA,"2","48","0","ZTMA20","79"
+"B2000.16648","w","Primary",NA,NA,"1","1","0",NA,"2",NA,"1","50",NA,"ZTMA20","53"
+"B2000.16663","w","Primary",NA,NA,"3","2","X",NA,"3",NA,"2","11","0","ZTMA20","65"
+"B2000.17533","w","Primary",NA,NA,"3","2","X",NA,"4",NA,"2","32","0","ZTMA20","82"
+"B2000.19104","m","Primary",NA,NA,"1","1","0",NA,"3",NA,"0","55","1","ZTMA20","77"
+"B2000.19273","m","Primary",NA,NA,"3","2","X",NA,"4",NA,"2","52","1","ZTMA20","74"
+"B2000.21479","m","Primary",NA,NA,"3","2","X",NA,"3",NA,"2","17","0","ZTMA20","78"
+"B2000.23360","w","Primary",NA,NA,"3","2","0",NA,"4",NA,"1","40","0","ZTMA20","74"
+"B2000.24065","m","Primary",NA,NA,NA,NA,"0",NA,NA,NA,"1","51","1","ZTMA20","62"
+"B2000.24709","w","Primary",NA,NA,"1","1","X",NA,"2",NA,"1","51","1","ZTMA20","71"
+"B2000.25227","m","Primary",NA,NA,"3","2","0",NA,"3",NA,"1","50","1","ZTMA20","76"
+"B2000.27109","w","Primary",NA,NA,"4","2","X",NA,"3",NA,"1","6","0","ZTMA20","70"
+"B2000.27876","m","Primary",NA,NA,"3","2","0",NA,"4",NA,"1","7","0","ZTMA20","57"
+"B2000.28945","m","Primary",NA,NA,"2","1","X",NA,"3",NA,"2","49","1","ZTMA20","50"
+"B2000.29899","w","Primary",NA,NA,"1","1","X",NA,"2",NA,"1","49","1","ZTMA20","66"
+"B2000.30056","w","Primary",NA,NA,"3","2","X",NA,"2",NA,"0","49","1","ZTMA20","43"
+"B2000.30571","w","Primary",NA,NA,"2","1","2",NA,"4",NA,"1","6","0","ZTMA20","58"
+"B2000.35726","m","Primary",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA20","58"
+"B2000.35726","m","Primary",NA,NA,"3","2","X",NA,"4",NA,"2",NA,NA,"ZTMA20","58"
+"B2000.36627","w","Primary",NA,NA,"3","2","X",NA,"3",NA,"1",NA,NA,"ZTMA20","64"
+"B2000.37486","w","Primary",NA,NA,"1","1","X",NA,"2",NA,"2","47","1","ZTMA20","60"
+"B2000.38238","m","Primary",NA,NA,NA,NA,NA,NA,NA,NA,NA,"47",NA,"ZTMA20","77"
+"B2000.38459","w","Primary",NA,NA,"3","2","X",NA,"2",NA,"1","47","1","ZTMA20","75"
+"B2001.00696","m","Primary",NA,NA,"1","1","0",NA,"3",NA,"1","46","1","ZTMA20","70"
+"B2001.00870","m","Primary",NA,NA,"3","2","X",NA,"2",NA,"0","46","1","ZTMA20","73"
+"B2001.01029","m","Primary",NA,NA,"3","2","X",NA,"2",NA,"0","23","0","ZTMA20","58"
+"B2001.01485","m","Primary",NA,NA,"1","1","X",NA,"1",NA,"0","46","1","ZTMA20","50"
+"B2001.04424","m","Primary",NA,NA,"3","2","X",NA,"4",NA,"2","17","0","ZTMA20","46"
+"B2001.06793","m","Primary",NA,NA,"3","2","X",NA,"3",NA,"1","44","1","ZTMA20","79"
+"B2001.07569","m","Primary",NA,NA,"1","1","0",NA,"3",NA,"1",NA,NA,"ZTMA20","57"
+"B2001.09035","m","Primary",NA,NA,"1","1","0",NA,"3",NA,"2","43","1","ZTMA20","70"
+"B2001.09123","m","Primary",NA,NA,"3","2","0",NA,"4",NA,"2","43","1","ZTMA20","65"
+"B2001.13830","m","Primary",NA,NA,"1","1","0",NA,"4",NA,"0","42","1","ZTMA20","31"
+"B2001.13947","w","Primary",NA,NA,"2","1","0",NA,NA,NA,"0","42","1","ZTMA20","48"
+"B2001.14638","m","Primary",NA,NA,"3","2","0",NA,"3",NA,"2","42","1","ZTMA20","70"
+"B2001.20464","w","Primary",NA,NA,"1","1","0",NA,"2",NA,"1","20","0","ZTMA20","83"
+"B2001.21599","m","Primary",NA,NA,"3","2","0",NA,"3",NA,"1","39","1","ZTMA20","66"
+"B2001.21729","m","Primary",NA,NA,"1","1","0",NA,"2",NA,"2","39","1","ZTMA20","54"
+"B2001.23655","m","Primary",NA,NA,"2","1","X",NA,"4",NA,"1","39","1","ZTMA20","71"
+"B2001.24193","m","Primary",NA,NA,"3","2","X",NA,"3",NA,"1","8","0","ZTMA20","63"
+"B2001.29757","m","Primary",NA,NA,NA,NA,"X",NA,NA,NA,"1","37","1","ZTMA20","59"
+"B2001.31683","m","Primary",NA,NA,"1","1","X",NA,"3",NA,"2","36","1","ZTMA20","75"
+"B2001.33078","m","Primary",NA,NA,"2","1","X",NA,"4",NA,"2","36","1","ZTMA20","70"
+"B2001.34294","m","Primary",NA,NA,NA,NA,NA,NA,NA,NA,NA,"36",NA,"ZTMA20","44"
+"B2001.36170","w","Primary",NA,NA,"1","1","X",NA,"2",NA,"1","35","1","ZTMA20","70"
+"B2001.36324","m","Primary",NA,NA,"3","2","X",NA,"4",NA,"2",NA,NA,"ZTMA20","68"
+"B2001.37399","m","Primary",NA,NA,"3","2","0",NA,"2",NA,"1","35","1","ZTMA20","65"
+"B2001.38837","w","Primary",NA,NA,"3","2","X",NA,"3",NA,"1","26","0","ZTMA20","70"
+"B2002.01532","w","Primary",NA,NA,"3","2","X",NA,"4",NA,"2",NA,NA,"ZTMA20","60"
+"B2002.01948","w","Primary",NA,NA,"3","2","X",NA,"4",NA,"1","8","0","ZTMA20","75"
+"B2002.03667","m","Primary",NA,NA,"1","1","0",NA,"2",NA,"0","33","1","ZTMA20","71"
+"B2002.04481","m","Primary",NA,NA,"1","1","0",NA,"2",NA,"0","33","1","ZTMA20","77"
+"B2002.04518","m","Primary",NA,NA,"1","1","X",NA,"3",NA,"0","33","1","ZTMA20","62"
+"B2002.04589","m","Primary",NA,NA,"3","2","0",NA,"4",NA,"2","33","1","ZTMA20","50"
+"B2002.06739","m","Primary",NA,NA,"1","1","0",NA,"2",NA,"0","31","1","ZTMA20","67"
+"B2002.09913","m","Primary",NA,NA,"3","2","0",NA,"4",NA,"1","1.5","0","ZTMA20","72"
+"B2002.11575","m","Primary",NA,NA,"1","1","0",NA,"2",NA,"0","30","1","ZTMA20","31"
+"B2002.12085","m","Primary",NA,NA,"1","1","0",NA,"4",NA,"2","12","0","ZTMA20","70"
+"B2002.12352","m","Primary",NA,NA,"3","2","2",NA,"3",NA,"0","12","0","ZTMA20","44"
+"B2002.12492","m","Primary",NA,NA,"3","2","0",NA,"4",NA,"1","5","0","ZTMA20","57"
+"B2002.12883","m","Primary",NA,NA,"3","2","X",NA,"4",NA,"1","30","1","ZTMA20","73"
+"B2002.13495","m","Primary",NA,NA,"1","1","X",NA,"3",NA,"1","30","1","ZTMA20","83"
+"B2002.14429","m","Primary",NA,NA,"1","1","0",NA,"3",NA,"0","29","1","ZTMA20","67"
+"B2002.14433","m","Primary",NA,NA,"3","2","0",NA,"4",NA,"1","29","1","ZTMA20","67"
+"B2002.16409","m","Primary",NA,NA,"1","1","X",NA,"4",NA,"2","29","1","ZTMA20","59"
+"B2002.16816","w","Primary",NA,NA,"3","2","X",NA,"4",NA,"2","10","0","ZTMA20","78"
+"B2002.17356","w","Primary",NA,NA,"3","2","X",NA,"3",NA,"1","29","1","ZTMA20","75"
+"B2002.18799","m","Primary",NA,NA,"1","1","X",NA,"2",NA,"1","28","1","ZTMA20","79"
+"B2002.21263","w","Primary",NA,NA,"3","2","0",NA,"2",NA,"1","27","1","ZTMA20","61"
+"B2002.21551","m","Primary",NA,NA,"3","2","X",NA,"3",NA,"1","12","0","ZTMA20","79"
+"B2002.21637","w","Primary",NA,NA,"1","1","0",NA,"2",NA,"0","27","1","ZTMA20","60"
+"B2002.22084","m","Primary",NA,NA,"3","2","X",NA,"4",NA,"2","27","1","ZTMA20","65"
+"B2002.23840","m","Primary",NA,NA,"1","1","X",NA,"2",NA,"0","26","1","ZTMA20","53"
+"B2002.24648","m","Primary",NA,NA,"3","2","X",NA,"2",NA,"1","26","1","ZTMA20","66"
+"B2002.25514","w","Primary",NA,NA,"1","1","X",NA,"2",NA,"0","26","1","ZTMA20","68"
+"B2002.26125","w","Primary",NA,NA,"1","1","X",NA,"1",NA,"0",NA,NA,"ZTMA20","45"
+"B2002.27276","w","Primary",NA,NA,"2","1","0",NA,"1",NA,"0","25","1","ZTMA20","63"
+"B2002.29510","m","Primary",NA,NA,"1","1","0",NA,"3",NA,"2","25","1","ZTMA20","72"
+"B2002.29514","m","Primary",NA,NA,"3","2","X",NA,"2",NA,"0","25","1","ZTMA20","60"
+"B2002.30521","m","Primary",NA,NA,"2","1","X",NA,NA,NA,"0","24","1","ZTMA20","66"
+"B2002.31168","m","Primary",NA,NA,"1","1","X",NA,"3",NA,"1","24","1","ZTMA20","73"
+"B2002.32631","w","Primary",NA,NA,"1","1","0",NA,"3",NA,"1","24","1","ZTMA20","46"
+"B2002.33019","m","Primary",NA,NA,"2","1","X",NA,"4",NA,"2","24","1","ZTMA20","82"
+"B2002.33181","w","Primary",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA20","63"
+"B2002.34060","w","Primary",NA,NA,"1","1","X",NA,"2",NA,"0","23","1","ZTMA20","58"
+"B2002.35412","m","Primary",NA,NA,"2","1","0",NA,"4",NA,"2","23","1","ZTMA20","49"
+"B2002.36086","m","Primary",NA,NA,"1","1","X",NA,"3",NA,"1","23","1","ZTMA20","58"
+"B2002.36805","m","Primary",NA,NA,"3","2","X",NA,"3",NA,"1","23","1","ZTMA20","69"
+"B2003.00571","m","Primary",NA,NA,"1","1","0",NA,"2",NA,"1","22","1","ZTMA20","39"
+"B2003.02978","m","Primary",NA,NA,"1","1","0",NA,"3",NA,"1","21","1","ZTMA20","70"
+"B2003.03992","m","Primary",NA,NA,"3","2","0",NA,"3",NA,"1","21","1","ZTMA20","71"
+"B2003.05664","m","Primary",NA,NA,"3","2","0",NA,"1",NA,"0","20","1","ZTMA20","70"
+"B2003.08158","m","Primary",NA,NA,"3","2","X",NA,"3",NA,"1","9","0","ZTMA20","62"
+"B2003.08826","m","Primary",NA,NA,"3","2","X",NA,"4",NA,"1",NA,NA,"ZTMA20","76"
+"B2003.08886","m","Primary",NA,NA,"3","2","1",NA,"3",NA,"2","19","1","ZTMA20","58"
+"B2003.09186","m","Primary",NA,NA,"3","2","X",NA,"3",NA,"1","19","1","ZTMA20","80"
+"B2003.09579","w","Primary",NA,NA,NA,NA,NA,NA,NA,NA,NA,"19",NA,"ZTMA20","72"
+"B2003.09952","m","Primary",NA,NA,NA,NA,"0",NA,"3",NA,"1","13","0","ZTMA20","81"
+"B2003.11643","w","Primary",NA,NA,"1","1","X",NA,"3",NA,"1",NA,NA,"ZTMA20","63"
+"B2003.13901","m","Primary",NA,NA,"1","1","X",NA,"2",NA,"1","18","1","ZTMA20","55"
+"B2003.14856","m","Primary",NA,NA,"1","1","0",NA,"3",NA,"0","17","1","ZTMA20","69"
+"B2003.15892","m","Primary",NA,NA,"1","1","0",NA,"2",NA,"1","17","1","ZTMA20","37"
+"B2003.16379","m","Primary",NA,NA,"1","1","X",NA,NA,NA,"0",NA,NA,"ZTMA20","78"
+"B2003.16408","w","Primary",NA,NA,"3","2","X",NA,"4",NA,"2","5","0","ZTMA20","49"
+"B2003.18739","m","Primary",NA,NA,"3","2","X",NA,"3",NA,"1","16","1","ZTMA20","71"
+"B2003.19896","w","Primary",NA,NA,"1","1","X",NA,"2",NA,"1","16","1","ZTMA20","67"
+"B2003.21906","m","Primary",NA,NA,"1","1","0",NA,"3",NA,"2","15","1","ZTMA20","51"
+"B2003.24426","m","Primary",NA,NA,"1","1","0",NA,"2",NA,"1","14","1","ZTMA20","62"
+"B2003.25163","m","Primary",NA,NA,"1","1","X",NA,"3",NA,"0","14","1","ZTMA20","68"
+"B2003.26008","m","Primary",NA,NA,"1","1","0",NA,"3",NA,"2","14","1","ZTMA20","37"
+"B2003.26194","m","Primary",NA,NA,"3","2","0",NA,"4",NA,"1","14","1","ZTMA20","58"
+"B2003.32737","w","Primary",NA,NA,"1","1","0",NA,"2",NA,"1","12","1","ZTMA20","56"
+"B2003.33008","w","Primary",NA,NA,"1","1","X",NA,"2",NA,"1","12","1","ZTMA20","65"
+"B2003.34766","m","Primary",NA,NA,"3","2","0",NA,"2",NA,"0","11","1","ZTMA20","64"
+"B2003.34943","w","Primary",NA,NA,"1","1","X",NA,"1",NA,"0","11","1","ZTMA20","66"
+"B2003.36264","m","Primary",NA,NA,"1","1","X",NA,"2",NA,"0","8","0","ZTMA20","65"
+"B2003.37010","m","Primary",NA,NA,"1","1","0",NA,"4",NA,"2","11","1","ZTMA20","75"
+"B2003.38849","w","Primary",NA,NA,"3","2","0",NA,"3",NA,"1","6","0","ZTMA20","57"
+"B1997.03071",NA,"Normal",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA20",NA
+"B1997.10345",NA,"Normal",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA20",NA
+"B1997.11312",NA,"Normal",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA20",NA
+"B1997.11775",NA,"Normal",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA20",NA
+"B1997.22168",NA,"Normal",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA20",NA
+"B1997.28921",NA,"Normal",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA20",NA
+"B1997.31157",NA,"Normal",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA20",NA
+"B1998.00053",NA,"Normal",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA20",NA
+"B1998.01683",NA,"Normal",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA20",NA
+"B1998.05274",NA,"Normal",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA20",NA
+"B1998.11553",NA,"Normal",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA20",NA
+"B1998.14150",NA,"Normal",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA20",NA
+"B1998.30519",NA,"Normal",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA20",NA
+"B2000.16648",NA,"Normal",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA20",NA
+"B2001.20464",NA,"Normal",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA20",NA
+"B2001.36170",NA,"Normal",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA20",NA
+"B2001.37399",NA,"Normal",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA20",NA
+"B2002.11575",NA,"Normal",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA20",NA
+"B2002.17356",NA,"Normal",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA20",NA
+"B2002.26125",NA,"Normal",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA20",NA
+"B2002.29514",NA,"Normal",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA20",NA
+"B2002.36086",NA,"Normal",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA20",NA
+"B2002.36805",NA,"Normal",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA20",NA
+"B2003.02978",NA,"Normal",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA20",NA
+"B2003.05664",NA,"Normal",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA20",NA
+"B2003.08158",NA,"Normal",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA20",NA
+"B2003.13901",NA,"Normal",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA20",NA
+"B2003.16379",NA,"Normal",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA20",NA
+"B2003.25163",NA,"Normal",NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,"ZTMA20",NA

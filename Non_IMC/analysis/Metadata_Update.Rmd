@@ -1,0 +1,156 @@
+---
+title: "ccRCC_Metadata_Update"
+author: "Lasse Meyer"
+date: "1/7/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+**Aim: Create updated metasheet for RCC cohort and visualize a cohort heatmap**
+
+Load necessary packages
+
+```{r message = FALSE}
+library(readr)
+library(readxl)
+library(tidyverse)
+library(foreach)
+library(ggpubr)
+library(conflicted)
+library(ggsci)
+library(ComplexHeatmap)
+library(RColorBrewer)
+library(knitr)
+library(conflicted)
+
+conflict_prefer("select", "dplyr")
+conflict_prefer("filter", "dplyr")
+conflict_prefer("desc", "dplyr")
+```
+
+### Load metadata csv files
+
+```{r load and combine meta}
+Meta_A = as.data.frame(read_xls("/Users/lasmey/Desktop/ccRCC project/Metadaten_RCC/ZTMA224_RCC_LM.xls",col_names = T))
+Meta_B = as.data.frame(read_xls("/Users/lasmey/Desktop/ccRCC project/Metadaten_RCC/ZTMA20_LM.xls",col_names = T))
+
+Meta_A = Meta_A %>% mutate_all(as.character)
+Meta_B = Meta_B %>% mutate_all(as.character)
+
+Meta = bind_rows(Meta_A,Meta_B)
+Meta$PID <- str_replace_all(Meta$PID," ", "")
+
+#double-check that entries are distinct
+#dim(distinct(Meta)) == dim(Meta)
+
+write.csv(Meta, file = "data/Metadata_combined_RCC.csv", row.names = F)
+
+#duplicated PID from primary samples (normal samples often have a match)
+dup = Meta %>% 
+  filter(type == "Primary") %>%
+  count(PID) %>% 
+  filter(n>1) %>% 
+  pull(PID)
+
+Meta_PID_dup <- Meta %>% filter(PID %in% dup) %>% arrange(PID)
+
+kable(Meta_PID_dup, align = "c")
+```
+### Tidy up data for processing and display
+
+```{r tidy}
+Meta_1 = Meta %>% select(PID, gender, age, type, subtype, pT_simple, ISUP_grade, necrose, lymphocytes, survival_months, censor_dead_0_alive_1)
+
+Meta_1$gender <- str_replace_all(Meta_1$gender,"w","f")
+Meta_1$subtype <- str_replace_all(Meta_1$subtype," ", "_")
+Meta_1$necrose <- str_replace(Meta_1$necrose, "\\?", "")
+Meta_1$lymphocytes <- str_replace(Meta_1$lymphocytes, "\\?", "")
+#Note: Converted ISUP grade 4? into 4 (Patient: B2013.54303)
+Meta_1$ISUP_grade <- str_replace(Meta_1$ISUP_grade, "\\?", "")
+
+#Age bin for patients (five groups)
+Meta_2 <- Meta_1
+Meta_2$age <- as.numeric(Meta_2$age)
+Meta_2 <- Meta_2 %>% mutate(age_bin = ifelse(age <= 40, "27-40", 
+                                   ifelse(40<age & age<=55, "41-55",
+                                          ifelse(55<age & age<=70, "56-70",
+                                                 ifelse(70<age & age<=85, "71-85",
+                                                        ifelse(85<age & age<=90, "85-88",NA))))))
+#Survival data availability
+Meta_2 <- Meta_2 %>% mutate(survival_data = ifelse(!is.na(survival_months),TRUE,FALSE))
+
+#Show overview of updated and processed metadata-table
+kable(Meta_2[1:10,],align = "c")
+```
+
+
+### Print heatmap based overview
+based on the [ComplexHeatmap](https://bioconductor.org/packages/release/bioc/html/ComplexHeatmap.html) package and the implemented `HeatmapAnnotation` function  
+
+```{r }
+#Convert NAs for easier handling with ComplexHeatmap package
+Meta_2[is.na(Meta_2)] <- "Unknown"
+
+Meta_2 = Meta_2 %>% arrange(desc(type),subtype, desc(ISUP_grade))
+
+#Color scheme
+#colnames(Meta_2)
+col = list(PID = colorRampPalette(brewer.pal(9, "Set1"))(length(unique(Meta_2$PID))),
+           gender = c("#7FC97F", "#BEAED4", "black"),
+           age_bin = c(colorRampPalette(brewer.pal(9, "Greens"))(length(unique(Meta_2$age_bin))-1),"black"),
+           type = c("#E41A1C", "#377EB8"),
+           subtype = c(colorRampPalette(brewer.pal(12, "Paired"))(length(unique(Meta_2$subtype))-1),"black"),
+           pT_simple = c(colorRampPalette(brewer.pal(9, "Blues"))(length(unique(Meta_2$pT_simple))-1),"black"),
+           ISUP_grade = c(colorRampPalette(brewer.pal(9, "Reds"))(length(unique(Meta_2$ISUP_grade))-1),"black"),
+           necrose = c(colorRampPalette(brewer.pal(9, "Purples"))(length(unique(Meta_2$necrose))-1),"black"),
+           lymphocytes = c(colorRampPalette(brewer.pal(9, "Greens"))(length(unique(Meta_2$lymphocytes))-1),"black"),
+           survival_data = c("black","grey")
+)
+
+col_list_1 = foreach(i=1:10, .packages="foreach") %do% {
+  color= col[[i]]
+  names(color)= sort(unique(Meta_2[,names(col)[i]]))
+  color
+}
+
+names(col_list_1) <- c(names(col))
+
+#Heatmap Annotation
+sample_anno = HeatmapAnnotation(PID = Meta_2$PID,
+                                gender = Meta_2$gender,
+                                age_bin = Meta_2$age_bin,
+                                type = Meta_2$type,
+                                subtype = Meta_2$subtype,
+                                ISUP_grade = Meta_2$ISUP_grade,
+                                pT_simple = Meta_2$pT_simple,
+                                necrose = Meta_2$necrose,
+                                lymphocytes = Meta_2$lymphocytes,
+                                survival_data = Meta_2$survival_data,
+                                col = list(PID = col_list_1[["PID"]],
+                                           gender = col_list_1[["gender"]],
+                                           age_bin = col_list_1[["age_bin"]],
+                                           type = col_list_1[["type"]],
+                                           subtype = col_list_1[["subtype"]],
+                                           ISUP_grade = col_list_1[["ISUP_grade"]],
+                                           pT_simple = col_list_1[["pT_simple"]],
+                                           necrose = col_list_1[["necrose"]],
+                                           lymphocytes = col_list_1[["lymphocytes"]],
+                                           survival_data = col_list_1[["survival_data"]]
+                                ),
+                                border = T,
+                                na_col = "black",
+                                gap = unit(5, "points"),
+                                show_annotation_name = T,
+                                show_legend = c(PID = FALSE)
+                                #annotation_label = c("PID (n=367)","Gender","Subtype","pT","pN")
+)%v%NULL
+```
+
+```{r viz, message=F, fig.width=15, fig.height=10, fig.align='center'}
+draw(sample_anno)
+```
+
+
