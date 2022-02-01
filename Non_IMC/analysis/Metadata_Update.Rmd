@@ -13,7 +13,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ### Load metadata csv files
 
-```{r load and combine meta}
+```{r load and combine meta, message=FALSE,warning=FALSE}
 library(tidyverse)
 library(readxl)
 library(knitr)

@@ -82,7 +82,7 @@ Meta_2 <- Meta_ccRCC %>% select(PID, gender, age_bin, subtype, ISUP, pT_simple, 
 #Convert empty columns and NAs for easier handling with ComplexHeatmap package
 Meta_2[is.na(Meta_2)] <- "Unknown"
 
-Meta_2 = Meta_2 %>% arrange(sequencing_data, desc(ISUP), desc(pT_simple))
+Meta_2 = Meta_2 %>% arrange(sequencing_data,desc(ISUP), desc(pT_simple))
 
 
 #Color scheme
@@ -131,7 +131,55 @@ sample_anno = HeatmapAnnotation(subtype = Meta_2$subtype,
 draw(sample_anno)
 ```
 
+### Reproduce findings from Bihr et al. (2019)
 
+see [here](https://www.zora.uzh.ch/id/eprint/171731/1/Bihr_Neoplasia_2019.pdf) for the full publication.
+
+Contingency table analysis and Pearson's chi-square tests were used to analyze the associations between PBRM1, BAP1 and SETD2 expression patterns, gene mutations and pathological parameters.
+
+
+```{r reproduce birch}
+library(sjPlot)
+
+#Groupings in Bihr et al. 
+#T1/T2 (organ-confined) vs. T3/T4 (advanced)
+Meta_3 <- Meta_2 %>% 
+  mutate(pT_comb = ifelse(pT_simple == 1|pT_simple == 2, "1/2", 
+                  ifelse(pT_simple == 3|pT_simple == 4, "3/4", NA))) %>%
+  mutate(ISUP_comb = ifelse(ISUP == 1|ISUP == 2, "1/2", 
+                  ifelse(ISUP == 3, "3", 
+                         ifelse(ISUP == 4, "4", NA)))) %>%
+  na_if("Unknown")
+  
+
+#Perform Chi-Square test and visualize
+plot_xtab(Meta_3$BAP1_IHC,Meta_3$ISUP_comb, bar.pos = "stack", margin = "row",show.prc = FALSE,vjust = +0.5, geom.colors = "Reds")+
+  theme_classic()+
+  xlab("BAP1 IHC")+
+  ylab("Fraction [%]")+
+  ggtitle(paste0("P=",chisq.test(table(Meta_3$BAP1_IHC,Meta_3$ISUP_comb))$p.value," [Chi-squared]"))
+
+plot_xtab(Meta_3$BAP1_IHC,Meta_3$pT_comb, bar.pos = "stack", margin = "row",show.prc = FALSE,vjust = +0.5, geom.colors = "Blues")+
+  theme_classic()+
+  xlab("BAP1 IHC")+
+  ylab("Fraction [%]")+
+  ggtitle(paste0("P=",chisq.test(table(Meta_3$BAP1_IHC,Meta_3$pT_comb))$p.value," [Chi-squared]"))
+
+plot_xtab(Meta_3$BAP1_IHC,Meta_3$necrose, bar.pos = "stack", margin = "row",show.prc = FALSE,vjust = +0.5, geom.colors = unname(col_list_1[["necrose"]]))+
+  theme_classic()+
+  xlab("BAP1 IHC")+
+  ylab("Fraction [%]")+
+  ggtitle(paste0("P=",chisq.test(table(Meta_3$BAP1_IHC,Meta_3$necrose))$p.value," [Chi-squared]"))
+
+
+plot_xtab(Meta_3$BAP1_IHC,Meta_3$lymphocytes, bar.pos = "stack", margin = "row",show.prc = FALSE,vjust = +0.5, geom.colors = unname(col_list_1[["lymphocytes"]]))+
+  theme_classic()+
+  xlab("BAP1 IHC")+
+  ylab("Fraction [%]")+
+  ggtitle(paste0("P=",chisq.test(table(Meta_3$BAP1_IHC,Meta_3$lymphocytes))$p.value," [Chi-squared]"))
+
+#Results are reproducible
+```
 
 
 
