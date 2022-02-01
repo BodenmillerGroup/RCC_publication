@@ -468,16 +468,16 @@ This reproducible <a href="https://rmarkdown.rstudio.com">R Markdown</a> analysi
 <div class="panel panel-default">
 <div class="panel-heading">
 <p class="panel-title">
-<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongRepositoryversionstrongahrefhttpsgithubcomBodenmillerGroupRCCtreedde0f8097debbc0c19cd0066bda2e4e9d6682672targetblankdde0f80a"> <span class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> <strong>Repository version:</strong> <a href="https://github.com/BodenmillerGroup/RCC/tree/dde0f8097debbc0c19cd0066bda2e4e9d6682672" target="_blank">dde0f80</a> </a>
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongRepositoryversionstrongahrefhttpsgithubcomBodenmillerGroupRCCtree1092e11b6e98c67fd88df6f1c61baff2925ecaf2targetblank1092e11a"> <span class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> <strong>Repository version:</strong> <a href="https://github.com/BodenmillerGroup/RCC/tree/1092e11b6e98c67fd88df6f1c61baff2925ecaf2" target="_blank">1092e11</a> </a>
 </p>
 </div>
-<div id="strongRepositoryversionstrongahrefhttpsgithubcomBodenmillerGroupRCCtreedde0f8097debbc0c19cd0066bda2e4e9d6682672targetblankdde0f80a" class="panel-collapse collapse">
+<div id="strongRepositoryversionstrongahrefhttpsgithubcomBodenmillerGroupRCCtree1092e11b6e98c67fd88df6f1c61baff2925ecaf2targetblank1092e11a" class="panel-collapse collapse">
 <div class="panel-body">
 <p>
 Great! You are using Git for version control. Tracking code development and connecting the code version to the results is critical for reproducibility.
 </p>
 <p>
-The results in this page were generated with repository version <a href="https://github.com/BodenmillerGroup/RCC/tree/dde0f8097debbc0c19cd0066bda2e4e9d6682672" target="_blank">dde0f80</a>. See the <em>Past versions</em> tab to see a history of the changes made to the R Markdown and HTML files.
+The results in this page were generated with repository version <a href="https://github.com/BodenmillerGroup/RCC/tree/1092e11b6e98c67fd88df6f1c61baff2925ecaf2" target="_blank">1092e11</a>. See the <em>Past versions</em> tab to see a history of the changes made to the R Markdown and HTML files.
 </p>
 <p>
 Note that you need to be careful to ensure that all relevant files for the analysis have been committed to Git prior to generating the results (you can use <code>wflow_publish</code> or <code>wflow_git_commit</code>). workflowr only checks the R Markdown file, but you know if there are other scripts or data files that it depends on. Below is the status of the Git repository when the results were generated:
@@ -538,6 +538,40 @@ Message
 </tr>
 </thead>
 <tbody>
+<tr>
+<td>
+Rmd
+</td>
+<td>
+<a href="https://github.com/BodenmillerGroup/RCC/blob/1092e11b6e98c67fd88df6f1c61baff2925ecaf2/Non_IMC/analysis/Metadata_ccRCC.Rmd" target="_blank">1092e11</a>
+</td>
+<td>
+lassedochreden
+</td>
+<td>
+2022-02-01
+</td>
+<td>
+wflow_publish(c("analysis/index.Rmd", "analysis/Metadata_ccRCC.Rmd",
+</td>
+</tr>
+<tr>
+<td>
+html
+</td>
+<td>
+<a href="https://rawcdn.githack.com/BodenmillerGroup/RCC/ab5bae0c9e470fd66f3a86929c028e8f6ca84c7b/Non_IMC/docs/Metadata_ccRCC.html" target="_blank">ab5bae0</a>
+</td>
+<td>
+lassedochreden
+</td>
+<td>
+2022-02-01
+</td>
+<td>
+Build site.
+</td>
+</tr>
 <tr>
 <td>
 Rmd
@@ -629,7 +663,7 @@ Meta_2 &lt;- Meta_ccRCC %&gt;% select(PID, gender, age_bin, subtype, ISUP, pT_si
 #Convert empty columns and NAs for easier handling with ComplexHeatmap package
 Meta_2[is.na(Meta_2)] &lt;- &quot;Unknown&quot;
 
-Meta_2 = Meta_2 %&gt;% arrange(sequencing_data, desc(ISUP), desc(pT_simple))
+Meta_2 = Meta_2 %&gt;% arrange(sequencing_data,desc(ISUP), desc(pT_simple))
 
 
 #Color scheme
@@ -677,6 +711,93 @@ sample_anno = HeatmapAnnotation(subtype = Meta_2$subtype,
 #Display plot
 draw(sample_anno)</code></pre>
 <p><img src="figure/Metadata_ccRCC.Rmd/viz-1.png" width="960" style="display: block; margin: auto;" /></p>
+<p>
+<button type="button" class="btn btn-default btn-xs btn-workflowr btn-workflowr-fig" data-toggle="collapse" data-target="#fig-viz-1">
+Past versions of viz-1.png
+</button>
+</p>
+<div id="fig-viz-1" class="collapse">
+<div class="table-responsive">
+<table class="table table-condensed table-hover">
+<thead>
+<tr>
+<th>
+Version
+</th>
+<th>
+Author
+</th>
+<th>
+Date
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<a href="https://github.com/BodenmillerGroup/RCC/blob/ab5bae0c9e470fd66f3a86929c028e8f6ca84c7b/Non_IMC/docs/figure/Metadata_ccRCC.Rmd/viz-1.png" target="_blank">ab5bae0</a>
+</td>
+<td>
+lassedochreden
+</td>
+<td>
+2022-02-01
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+<div id="reproduce-findings-from-bihr-et-al.-2019" class="section level3">
+<h3>Reproduce findings from Bihr et al. (2019)</h3>
+<p>see <a href="https://www.zora.uzh.ch/id/eprint/171731/1/Bihr_Neoplasia_2019.pdf">here</a> for the full publication.</p>
+<p>Contingency table analysis and Pearson’s chi-square tests were used to analyze the associations between PBRM1, BAP1 and SETD2 expression patterns, gene mutations and pathological parameters.</p>
+<pre class="r"><code>library(sjPlot)
+
+#Groupings in Bihr et al. 
+#T1/T2 (organ-confined) vs. T3/T4 (advanced)
+Meta_3 &lt;- Meta_2 %&gt;% 
+  mutate(pT_comb = ifelse(pT_simple == 1|pT_simple == 2, &quot;1/2&quot;, 
+                  ifelse(pT_simple == 3|pT_simple == 4, &quot;3/4&quot;, NA))) %&gt;%
+  mutate(ISUP_comb = ifelse(ISUP == 1|ISUP == 2, &quot;1/2&quot;, 
+                  ifelse(ISUP == 3, &quot;3&quot;, 
+                         ifelse(ISUP == 4, &quot;4&quot;, NA)))) %&gt;%
+  na_if(&quot;Unknown&quot;)
+  
+
+#Perform Chi-Square test and visualize
+plot_xtab(Meta_3$BAP1_IHC,Meta_3$ISUP_comb, bar.pos = &quot;stack&quot;, margin = &quot;row&quot;,show.prc = FALSE,vjust = +0.5, geom.colors = &quot;Reds&quot;)+
+  theme_classic()+
+  xlab(&quot;BAP1 IHC&quot;)+
+  ylab(&quot;Fraction [%]&quot;)+
+  ggtitle(paste0(&quot;P=&quot;,chisq.test(table(Meta_3$BAP1_IHC,Meta_3$ISUP_comb))$p.value,&quot; [Chi-squared]&quot;))</code></pre>
+<p><img src="figure/Metadata_ccRCC.Rmd/reproduce%20birch-1.png" width="672" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>plot_xtab(Meta_3$BAP1_IHC,Meta_3$pT_comb, bar.pos = &quot;stack&quot;, margin = &quot;row&quot;,show.prc = FALSE,vjust = +0.5, geom.colors = &quot;Blues&quot;)+
+  theme_classic()+
+  xlab(&quot;BAP1 IHC&quot;)+
+  ylab(&quot;Fraction [%]&quot;)+
+  ggtitle(paste0(&quot;P=&quot;,chisq.test(table(Meta_3$BAP1_IHC,Meta_3$pT_comb))$p.value,&quot; [Chi-squared]&quot;))</code></pre>
+<p><img src="figure/Metadata_ccRCC.Rmd/reproduce%20birch-2.png" width="672" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>plot_xtab(Meta_3$BAP1_IHC,Meta_3$necrose, bar.pos = &quot;stack&quot;, margin = &quot;row&quot;,show.prc = FALSE,vjust = +0.5, geom.colors = unname(col_list_1[[&quot;necrose&quot;]]))+
+  theme_classic()+
+  xlab(&quot;BAP1 IHC&quot;)+
+  ylab(&quot;Fraction [%]&quot;)+
+  ggtitle(paste0(&quot;P=&quot;,chisq.test(table(Meta_3$BAP1_IHC,Meta_3$necrose))$p.value,&quot; [Chi-squared]&quot;))</code></pre>
+<pre><code>Warning in sj.setGeomColors(baseplot, geom.colors, length(legend.labels), : More
+colors provided than needed. Shortening color palette.</code></pre>
+<p><img src="figure/Metadata_ccRCC.Rmd/reproduce%20birch-3.png" width="672" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>plot_xtab(Meta_3$BAP1_IHC,Meta_3$lymphocytes, bar.pos = &quot;stack&quot;, margin = &quot;row&quot;,show.prc = FALSE,vjust = +0.5, geom.colors = unname(col_list_1[[&quot;lymphocytes&quot;]]))+
+  theme_classic()+
+  xlab(&quot;BAP1 IHC&quot;)+
+  ylab(&quot;Fraction [%]&quot;)+
+  ggtitle(paste0(&quot;P=&quot;,chisq.test(table(Meta_3$BAP1_IHC,Meta_3$lymphocytes))$p.value,&quot; [Chi-squared]&quot;))</code></pre>
+<pre><code>Warning in sj.setGeomColors(baseplot, geom.colors, length(legend.labels), : More
+colors provided than needed. Shortening color palette.</code></pre>
+<pre><code>Warning in chisq.test(table(Meta_3$BAP1_IHC, Meta_3$lymphocytes)): Chi-squared
+approximation may be incorrect</code></pre>
+<p><img src="figure/Metadata_ccRCC.Rmd/reproduce%20birch-4.png" width="672" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>#Results are reproducible</code></pre>
 <br>
 <p>
 <button type="button" class="btn btn-default btn-workflowr btn-workflowr-sessioninfo" data-toggle="collapse" data-target="#workflowr-sessioninfo" style="display: block;">
@@ -701,42 +822,52 @@ attached base packages:
 [8] base     
 
 other attached packages:
- [1] RColorBrewer_1.1-2    ggsci_2.9             foreach_1.5.1        
- [4] ComplexHeatmap_2.10.0 knitr_1.37            readxl_1.3.1         
- [7] forcats_0.5.1         stringr_1.4.0         dplyr_1.0.7          
-[10] purrr_0.3.4           readr_2.1.1           tidyr_1.1.4          
-[13] tibble_3.1.6          ggplot2_3.3.5         tidyverse_1.3.1      
-[16] workflowr_1.7.0      
+ [1] sjPlot_2.8.10         RColorBrewer_1.1-2    ggsci_2.9            
+ [4] foreach_1.5.1         ComplexHeatmap_2.10.0 knitr_1.37           
+ [7] readxl_1.3.1          forcats_0.5.1         stringr_1.4.0        
+[10] dplyr_1.0.7           purrr_0.3.4           readr_2.1.1          
+[13] tidyr_1.1.4           tibble_3.1.6          ggplot2_3.3.5        
+[16] tidyverse_1.3.1       workflowr_1.7.0      
 
 loaded via a namespace (and not attached):
- [1] matrixStats_0.61.0  fs_1.5.2            lubridate_1.8.0    
- [4] bit64_4.0.5         doParallel_1.0.16   httr_1.4.2         
- [7] rprojroot_2.0.2     tools_4.1.2         backports_1.4.1    
-[10] bslib_0.3.1         utf8_1.2.2          R6_2.5.1           
-[13] DBI_1.1.2           BiocGenerics_0.40.0 colorspace_2.0-2   
-[16] GetoptLong_1.0.5    withr_2.4.3         tidyselect_1.1.1   
-[19] processx_3.5.2      bit_4.0.4           compiler_4.1.2     
-[22] git2r_0.29.0        cli_3.1.1           rvest_1.0.2        
-[25] xml2_1.3.3          sass_0.4.0          scales_1.1.1       
-[28] callr_3.7.0         digest_0.6.29       rmarkdown_2.11     
-[31] pkgconfig_2.0.3     htmltools_0.5.2     highr_0.9          
-[34] dbplyr_2.1.1        fastmap_1.1.0       rlang_0.4.12       
-[37] GlobalOptions_0.1.2 rstudioapi_0.13     shape_1.4.6        
-[40] jquerylib_0.1.4     generics_0.1.1      jsonlite_1.7.3     
-[43] vroom_1.5.7         magrittr_2.0.1      Rcpp_1.0.8         
-[46] munsell_0.5.0       S4Vectors_0.32.3    fansi_1.0.2        
-[49] lifecycle_1.0.1     stringi_1.7.6       whisker_0.4        
-[52] yaml_2.2.2          parallel_4.1.2      promises_1.2.0.1   
-[55] crayon_1.4.2        haven_2.4.3         circlize_0.4.13    
-[58] hms_1.1.1           magick_2.7.3        ps_1.6.0           
-[61] pillar_1.6.5        rjson_0.2.21        codetools_0.2-18   
-[64] stats4_4.1.2        reprex_2.0.1        glue_1.6.1         
-[67] evaluate_0.14       getPass_0.2-2       modelr_0.1.8       
-[70] vctrs_0.3.8         png_0.1-7           tzdb_0.2.0         
-[73] httpuv_1.6.5        cellranger_1.1.0    gtable_0.3.0       
-[76] clue_0.3-60         assertthat_0.2.1    xfun_0.29          
-[79] broom_0.7.11        later_1.3.0         iterators_1.0.13   
-[82] IRanges_2.28.0      cluster_2.1.2       ellipsis_0.3.2     </code></pre>
+  [1] minqa_1.2.4         TH.data_1.1-0       colorspace_2.0-2   
+  [4] rjson_0.2.21        ellipsis_0.3.2      sjlabelled_1.1.8   
+  [7] rprojroot_2.0.2     snakecase_0.11.0    estimability_1.3   
+ [10] circlize_0.4.13     parameters_0.16.0   GlobalOptions_0.1.2
+ [13] fs_1.5.2            clue_0.3-60         rstudioapi_0.13    
+ [16] farver_2.1.0        bit64_4.0.5         fansi_1.0.2        
+ [19] mvtnorm_1.1-3       lubridate_1.8.0     xml2_1.3.3         
+ [22] splines_4.1.2       codetools_0.2-18    doParallel_1.0.16  
+ [25] sjmisc_2.8.9        jsonlite_1.7.3      nloptr_1.2.2.3     
+ [28] ggeffects_1.1.1     broom_0.7.11        cluster_2.1.2      
+ [31] dbplyr_2.1.1        png_0.1-7           effectsize_0.6.0.1 
+ [34] compiler_4.1.2      httr_1.4.2          sjstats_0.18.1     
+ [37] emmeans_1.7.2       backports_1.4.1     Matrix_1.3-4       
+ [40] assertthat_0.2.1    fastmap_1.1.0       cli_3.1.1          
+ [43] later_1.3.0         htmltools_0.5.2     tools_4.1.2        
+ [46] gtable_0.3.0        glue_1.6.1          Rcpp_1.0.8         
+ [49] cellranger_1.1.0    jquerylib_0.1.4     vctrs_0.3.8        
+ [52] nlme_3.1-153        iterators_1.0.13    insight_0.15.0     
+ [55] xfun_0.29           ps_1.6.0            lme4_1.1-27.1      
+ [58] rvest_1.0.2         lifecycle_1.0.1     getPass_0.2-2      
+ [61] MASS_7.3-54         zoo_1.8-9           scales_1.1.1       
+ [64] vroom_1.5.7         hms_1.1.1           promises_1.2.0.1   
+ [67] parallel_4.1.2      sandwich_3.0-1      yaml_2.2.2         
+ [70] sass_0.4.0          stringi_1.7.6       highr_0.9          
+ [73] bayestestR_0.11.5   S4Vectors_0.32.3    BiocGenerics_0.40.0
+ [76] boot_1.3-28         shape_1.4.6         rlang_0.4.12       
+ [79] pkgconfig_2.0.3     matrixStats_0.61.0  evaluate_0.14      
+ [82] lattice_0.20-45     bit_4.0.4           processx_3.5.2     
+ [85] tidyselect_1.1.1    magrittr_2.0.1      R6_2.5.1           
+ [88] IRanges_2.28.0      magick_2.7.3        generics_0.1.1     
+ [91] multcomp_1.4-18     DBI_1.1.2           pillar_1.6.5       
+ [94] haven_2.4.3         whisker_0.4         withr_2.4.3        
+ [97] survival_3.2-13     datawizard_0.2.3    performance_0.8.0  
+[100] modelr_0.1.8        crayon_1.4.2        utf8_1.2.2         
+[103] tzdb_0.2.0          rmarkdown_2.11      GetoptLong_1.0.5   
+[106] callr_3.7.0         git2r_0.29.0        reprex_2.0.1       
+[109] digest_0.6.29       xtable_1.8-4        httpuv_1.6.5       
+[112] stats4_4.1.2        munsell_0.5.0       bslib_0.3.1        </code></pre>
 </div>
 </div>
 
