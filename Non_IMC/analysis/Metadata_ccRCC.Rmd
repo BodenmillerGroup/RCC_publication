@@ -1,0 +1,139 @@
+---
+title: "Metadata_ccRCC"
+author: "Lasse Meyer"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+**Aim: Create updated metasheet for ccRCC cohort including IHC and Mutation status data**
+
+### Load metadata csv files
+
+```{r load and filter meta, message = FALSE, warning=FALSE}
+library(tidyverse)
+library(readxl)
+library(knitr)
+
+as.data.frame(read_xlsx("/Users/lasmey/Desktop/ccRCC/Metadaten_RCC/TMA1+2_ccRCC_IHCMut_LM.xlsx",col_names = T)) %>% mutate_all(as.character) -> Meta_ccRCC 
+
+#Filter data
+Meta_ccRCC$PID <- str_replace_all(Meta_ccRCC$PID," ", "")
+Meta_ccRCC <- Meta_ccRCC %>% mutate(gender = ifelse(gender == 0,"f","m"))
+Meta_ccRCC$subtype <- str_replace_all(Meta_ccRCC$subtype," ", "_")
+Meta_ccRCC$necrose <- str_replace(Meta_ccRCC$necrose, "\\?", "")
+Meta_ccRCC$lymphocytes <- str_replace(Meta_ccRCC$lymphocytes, "\\?", "")
+#Note: Converted ISUP grade 4? into 4 (Patient: B2013.54303)
+Meta_ccRCC$ISUP <- str_replace(Meta_ccRCC$ISUP, "\\?", "")
+Meta_ccRCC[Meta_ccRCC== ""] <- NA
+
+#Age bin for patients (five groups)
+Meta_ccRCC$age <- as.numeric(Meta_ccRCC$age)
+Meta_ccRCC <- Meta_ccRCC %>% mutate(age_bin = ifelse(age <= 40, "27-40", 
+                                   ifelse(40<age & age<=55, "41-55",
+                                          ifelse(55<age & age<=70, "56-70",
+                                                 ifelse(70<age & age<=85, "71-85",
+                                                        ifelse(85<age & age<=90, "85-88",NA))))))
+#Survival and sequencing data availability
+Meta_ccRCC <- Meta_ccRCC %>% mutate(survival_data = ifelse(!is.na(survival_months),TRUE,FALSE))
+Meta_ccRCC <- Meta_ccRCC %>% mutate(sequencing_data = ifelse(!is.na(BAP1_mut),TRUE,FALSE))
+
+#Save filtered metadata as csv
+write.csv(Meta_ccRCC, file = "/Users/lasmey/Desktop/ccRCC/Metadaten_RCC/Metadata_ccRCC_IHCMut.csv", row.names = F)
+```
+
+### Quality control
+
+```{r QC}
+#1. double-check that PID identifiers are distinct
+Meta_ccRCC %>% 
+  count(PID) %>% 
+  filter(n>1) %>% 
+  pull(PID) %>% is_empty()
+
+#2. compare ccRCC metadata from separate excel files that were provided by Prof. Schraml
+as.data.frame(read_csv("/Users/lasmey/Desktop/ccRCC/Metadaten_RCC/Metadata_combined_RCC.csv",col_names = T,
+                       col_types ="ccnccccccccl")) %>% filter(subtype == "clear_cell_RCC") %>% arrange(desc(PID)) -> com_1
+
+Meta_ccRCC %>% filter(subtype == "clear_cell_RCC") %>% select(one_of(colnames(com_1))) %>% filter(PID %in% com_1$PID) %>% arrange(desc(PID)) -> com_2
+
+all_equal(com_1,com_2, ignore_row_order = TRUE, ignore_col_order = TRUE)
+
+unequal <- rbind(com_1[c(85,115,169,225,239),],com_2[c(85,115,169,225,239),]) %>% arrange(PID)
+
+#Save unmatched metadata as csv
+write.csv(unequal, file = "/Users/lasmey/Desktop/ccRCC/Metadaten_RCC/Metadata_ccRCC_unequal.csv", row.names = F)
+```
+
+### Print heatmap based overview
+based on the [ComplexHeatmap](https://bioconductor.org/packages/release/bioc/html/ComplexHeatmap.html) package and the implemented `HeatmapAnnotation` function  
+
+```{r viz, message=F, fig.width=10, fig.height=8, fig.align='center'}
+library(ComplexHeatmap)
+library(foreach)
+library(ggsci)
+library(RColorBrewer)
+
+Meta_2 <- Meta_ccRCC %>% select(PID, gender, age_bin, subtype, ISUP, pT_simple, necrose, lymphocytes,survival_data, BAP1_IHC, PBRM1_IHC, H3K36me_IHC, sequencing_data)
+
+#Convert empty columns and NAs for easier handling with ComplexHeatmap package
+Meta_2[is.na(Meta_2)] <- "Unknown"
+
+Meta_2 = Meta_2 %>% arrange(sequencing_data, desc(ISUP), desc(pT_simple))
+
+
+#Color scheme
+#colnames(Meta_2)
+col = list(subtype = c("#63A8A0"),
+           pT_simple = c(colorRampPalette(brewer.pal(9, "Blues"))(length(unique(Meta_2$pT_simple))-1),"black"),
+           ISUP = c(colorRampPalette(brewer.pal(9, "Reds"))(length(unique(Meta_2$ISUP))-1),"black"),
+           necrose = c(colorRampPalette(brewer.pal(9, "Purples"))(length(unique(Meta_2$necrose))-1),"black"),
+           lymphocytes = c(colorRampPalette(brewer.pal(9, "Greens"))(length(unique(Meta_2$lymphocytes))-1),"black"),
+           survival_data = c("black","grey"),
+           sequencing_data = c("black","grey"),
+           BAP1_IHC = c(colorRampPalette(brewer.pal(9, "Oranges"))(length(unique(Meta_2$BAP1_IHC))-1),"black"),
+           PBRM1_IHC = c(colorRampPalette(brewer.pal(9, "Oranges"))(length(unique(Meta_2$PBRM1_IHC))-1),"black"),
+           H3K36me_IHC = c(colorRampPalette(brewer.pal(9, "Oranges"))(length(unique(Meta_2$H3K36me_IHC))-1),"black")
+)
+
+col_list_1 = foreach(i=1:10) %do% {
+  color= col[[i]]
+  names(color)= sort(unique(Meta_2[,names(col)[i]]))
+  color
+}
+names(col_list_1) <- c(names(col))
+
+
+#Heatmap Annotation
+sample_anno = HeatmapAnnotation(subtype = Meta_2$subtype,
+                                ISUP = Meta_2$ISUP,
+                                pT_simple = Meta_2$pT_simple,
+                                necrose = Meta_2$necrose,
+                                lymphocytes = Meta_2$lymphocytes,
+                                survival_data = Meta_2$survival_data,
+                                BAP1_IHC = Meta_2$BAP1_IHC,
+                                PBRM1_IHC = Meta_2$PBRM1_IHC,
+                                H3K36me_IHC = Meta_2$H3K36me_IHC,
+                                sequencing_data = Meta_2$sequencing_data,
+                                col = col_list_1,
+                                border = T,
+                                na_col = "black",
+                                gap = unit(5, "points"),
+                                show_annotation_name = T,
+                                show_legend = T
+                                #annotation_label = c("PID (n=367)","Gender","Subtype","pT","pN")
+)%v%NULL
+
+#Display plot
+draw(sample_anno)
+```
+
+
+
+
+
+
+
