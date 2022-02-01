@@ -11,6 +11,7 @@
 
 <meta name="author" content="Lasse Meyer" />
 
+<meta name="date" content="2022-02-01" />
 
 <title>ccRCC_Metadata_Update</title>
 
@@ -351,7 +352,7 @@ div.tocify {
 
 <h1 class="title toc-ignore">ccRCC_Metadata_Update</h1>
 <h4 class="author">Lasse Meyer</h4>
-<h4 class="date">1/7/2022</h4>
+<h4 class="date">2022-02-01</h4>
 
 </div>
 
@@ -376,7 +377,7 @@ div.tocify {
 <div class="tab-content">
 <div id="summary" class="tab-pane fade in active">
 <p>
-<strong>Last updated:</strong> 2022-01-12
+<strong>Last updated:</strong> 2022-02-01
 </p>
 <p>
 <strong>Checks:</strong> <span class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> 7 <span class="glyphicon glyphicon-exclamation-sign text-danger" aria-hidden="true"></span> 0
@@ -467,16 +468,16 @@ This reproducible <a href="https://rmarkdown.rstudio.com">R Markdown</a> analysi
 <div class="panel panel-default">
 <div class="panel-heading">
 <p class="panel-title">
-<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongRepositoryversionstrongahrefhttpsgithubcomBodenmillerGroupRCCtreefc4d8e379e85d9300b4914cf1dad6e493be33449targetblankfc4d8e3a"> <span class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> <strong>Repository version:</strong> <a href="https://github.com/BodenmillerGroup/RCC/tree/fc4d8e379e85d9300b4914cf1dad6e493be33449" target="_blank">fc4d8e3</a> </a>
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongRepositoryversionstrongahrefhttpsgithubcomBodenmillerGroupRCCtreedde0f8097debbc0c19cd0066bda2e4e9d6682672targetblankdde0f80a"> <span class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> <strong>Repository version:</strong> <a href="https://github.com/BodenmillerGroup/RCC/tree/dde0f8097debbc0c19cd0066bda2e4e9d6682672" target="_blank">dde0f80</a> </a>
 </p>
 </div>
-<div id="strongRepositoryversionstrongahrefhttpsgithubcomBodenmillerGroupRCCtreefc4d8e379e85d9300b4914cf1dad6e493be33449targetblankfc4d8e3a" class="panel-collapse collapse">
+<div id="strongRepositoryversionstrongahrefhttpsgithubcomBodenmillerGroupRCCtreedde0f8097debbc0c19cd0066bda2e4e9d6682672targetblankdde0f80a" class="panel-collapse collapse">
 <div class="panel-body">
 <p>
 Great! You are using Git for version control. Tracking code development and connecting the code version to the results is critical for reproducibility.
 </p>
 <p>
-The results in this page were generated with repository version <a href="https://github.com/BodenmillerGroup/RCC/tree/fc4d8e379e85d9300b4914cf1dad6e493be33449" target="_blank">fc4d8e3</a>. See the <em>Past versions</em> tab to see a history of the changes made to the R Markdown and HTML files.
+The results in this page were generated with repository version <a href="https://github.com/BodenmillerGroup/RCC/tree/dde0f8097debbc0c19cd0066bda2e4e9d6682672" target="_blank">dde0f80</a>. See the <em>Past versions</em> tab to see a history of the changes made to the R Markdown and HTML files.
 </p>
 <p>
 Note that you need to be careful to ensure that all relevant files for the analysis have been committed to Git prior to generating the results (you can use <code>wflow_publish</code> or <code>wflow_git_commit</code>). workflowr only checks the R Markdown file, but you know if there are other scripts or data files that it depends on. Below is the status of the Git repository when the results were generated:
@@ -484,6 +485,9 @@ Note that you need to be careful to ensure that all relevant files for the analy
 <pre><code>
 Ignored files:
     Ignored:    .DS_Store
+    Ignored:    IMC/.DS_Store
+    Ignored:    IMC/.Rhistory
+    Ignored:    IMC/.Rproj.user/
     Ignored:    Non_IMC/.DS_Store
     Ignored:    Non_IMC/.Rhistory
     Ignored:    Non_IMC/.Rproj.user/
@@ -491,8 +495,11 @@ Ignored files:
     Ignored:    Non_IMC/analysis/.Rhistory
     Ignored:    Non_IMC/data/.DS_Store
 
-Unstaged changes:
-    Deleted:    Non_IMC/data/Metadata_combined_RCC.csv
+Untracked files:
+    Untracked:  IMC/analysis/01_lib_read_data.Rmd
+    Untracked:  IMC/analysis/02_spillover_correction.Rmd
+    Untracked:  IMC/analysis/03_QC.Rmd
+    Untracked:  IMC/analysis/04_singlecell_analysis.Rmd
 
 </code></pre>
 <p>
@@ -531,6 +538,40 @@ Message
 </tr>
 </thead>
 <tbody>
+<tr>
+<td>
+Rmd
+</td>
+<td>
+<a href="https://github.com/BodenmillerGroup/RCC/blob/dde0f8097debbc0c19cd0066bda2e4e9d6682672/Non_IMC/analysis/Metadata_Update.Rmd" target="_blank">dde0f80</a>
+</td>
+<td>
+lassedochreden
+</td>
+<td>
+2022-02-01
+</td>
+<td>
+wflow_publish(c("analysis/Metadata_Update.Rmd", "analysis/Metadata_ccRCC.Rmd"))
+</td>
+</tr>
+<tr>
+<td>
+html
+</td>
+<td>
+<a href="https://rawcdn.githack.com/BodenmillerGroup/RCC/21c6d2aa622dbd6549699491c1856d9e5e7d2da9/Non_IMC/docs/Metadata_Update.html" target="_blank">21c6d2a</a>
+</td>
+<td>
+lassedochreden
+</td>
+<td>
+2022-01-12
+</td>
+<td>
+Build site.
+</td>
+</tr>
 <tr>
 <td>
 Rmd
@@ -691,452 +732,106 @@ Build site.
 </div>
 </div>
 </div>
-<p><strong>Aim: Create updated metasheet for RCC cohort and visualize a cohort heatmap</strong></p>
-<p>Load necessary packages</p>
-<pre class="r"><code>library(readr)
-library(readxl)
-library(tidyverse)
-library(foreach)
-library(ggpubr)
-library(conflicted)
-library(ggsci)
-library(ComplexHeatmap)
-library(RColorBrewer)
-library(knitr)
-library(conflicted)
-
-conflict_prefer(&quot;select&quot;, &quot;dplyr&quot;)
-conflict_prefer(&quot;filter&quot;, &quot;dplyr&quot;)
-conflict_prefer(&quot;desc&quot;, &quot;dplyr&quot;)</code></pre>
+<p><strong>Aim: Create updated metasheet for full RCC cohort and visualize a cohort heatmap</strong></p>
 <div id="load-metadata-csv-files" class="section level3">
 <h3>Load metadata csv files</h3>
-<pre class="r"><code>Meta_A = as.data.frame(read_xls(&quot;/Users/lasmey/Desktop/ccRCC project/Metadaten_RCC/ZTMA224_RCC_LM.xls&quot;,col_names = T))
-Meta_B = as.data.frame(read_xls(&quot;/Users/lasmey/Desktop/ccRCC project/Metadaten_RCC/ZTMA20_LM.xls&quot;,col_names = T))
+<pre class="r"><code>library(tidyverse)</code></pre>
+<pre><code>── Attaching packages ─────────────────────────────────────── tidyverse 1.3.1 ──</code></pre>
+<pre><code>✓ ggplot2 3.3.5     ✓ purrr   0.3.4
+✓ tibble  3.1.6     ✓ dplyr   1.0.7
+✓ tidyr   1.1.4     ✓ stringr 1.4.0
+✓ readr   2.1.1     ✓ forcats 0.5.1</code></pre>
+<pre><code>── Conflicts ────────────────────────────────────────── tidyverse_conflicts() ──
+x dplyr::filter() masks stats::filter()
+x dplyr::lag()    masks stats::lag()</code></pre>
+<pre class="r"><code>library(readxl)
+library(knitr)
 
-Meta_A = Meta_A %&gt;% mutate_all(as.character)
-Meta_B = Meta_B %&gt;% mutate_all(as.character)
+Meta_A &lt;- as.data.frame(read_xls(&quot;/Users/lasmey/Desktop/ccRCC/Metadaten_RCC/TMA224_update_LM.xls&quot;,col_names = T))
+Meta_B &lt;- as.data.frame(read_xls(&quot;/Users/lasmey/Desktop/ccRCC/Metadaten_RCC/ZTMA20_update_LM.xls&quot;,col_names = T))
 
-Meta = bind_rows(Meta_A,Meta_B)
+Meta_A &lt;- Meta_A %&gt;% mutate_all(as.character)
+Meta_B &lt;- Meta_B %&gt;% mutate_all(as.character)
+
+Meta &lt;- bind_rows(Meta_A,Meta_B)
 Meta$PID &lt;- str_replace_all(Meta$PID,&quot; &quot;, &quot;&quot;)
+Meta$subtype &lt;- str_replace_all(Meta$subtype,&quot; &quot;, &quot;_&quot;)
 
-#double-check that entries are distinct
-#dim(distinct(Meta)) == dim(Meta)
 
-write.csv(Meta, file = &quot;/Users/lasmey/Desktop/ccRCC project/Metadaten_RCC/Metadata_combined_RCC.csv&quot;, row.names = F)
-
+##double-check that entries are distinct
 #duplicated PID from primary samples (normal samples often have a match)
-dup = Meta %&gt;% 
-  filter(type == &quot;Primary&quot;) %&gt;%
+#different tumors from the same patient for B1997.28921 and B2000.35726
+#two replicates for B1997.23862 (internal control?)
+dup &lt;- Meta %&gt;% 
+  filter(type == &quot;primary&quot;) %&gt;%
   count(PID) %&gt;% 
   filter(n&gt;1) %&gt;% 
   pull(PID)
 
 Meta_PID_dup &lt;- Meta %&gt;% filter(PID %in% dup) %&gt;% arrange(PID)
 
-kable(Meta_PID_dup, align = &quot;c&quot;)</code></pre>
-<table>
-<colgroup>
-<col width="7%" />
-<col width="4%" />
-<col width="5%" />
-<col width="5%" />
-<col width="7%" />
-<col width="6%" />
-<col width="5%" />
-<col width="2%" />
-<col width="2%" />
-<col width="7%" />
-<col width="5%" />
-<col width="7%" />
-<col width="10%" />
-<col width="13%" />
-<col width="4%" />
-<col width="3%" />
-</colgroup>
-<thead>
-<tr class="header">
-<th align="center">PID</th>
-<th align="center">gender</th>
-<th align="center">type</th>
-<th align="center">subtype</th>
-<th align="center">pT_stadium</th>
-<th align="center">pT_simple</th>
-<th align="center">pT12/34</th>
-<th align="center">pN</th>
-<th align="center">pM</th>
-<th align="center">ISUP_grade</th>
-<th align="center">necrose</th>
-<th align="center">lymphocytes</th>
-<th align="center">survival_months</th>
-<th align="center">censor_dead_0_alive_1</th>
-<th align="center">file</th>
-<th align="center">age</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td align="center">B1997.23862</td>
-<td align="center">m</td>
-<td align="center">Primary</td>
-<td align="center">NA</td>
-<td align="center">NA</td>
-<td align="center">1</td>
-<td align="center">1</td>
-<td align="center">X</td>
-<td align="center">NA</td>
-<td align="center">2</td>
-<td align="center">NA</td>
-<td align="center">0</td>
-<td align="center">NA</td>
-<td align="center">NA</td>
-<td align="center">ZTMA20</td>
-<td align="center">33</td>
-</tr>
-<tr class="even">
-<td align="center">B1997.23862</td>
-<td align="center">m</td>
-<td align="center">Primary</td>
-<td align="center">NA</td>
-<td align="center">NA</td>
-<td align="center">1</td>
-<td align="center">1</td>
-<td align="center">X</td>
-<td align="center">NA</td>
-<td align="center">3</td>
-<td align="center">NA</td>
-<td align="center">2</td>
-<td align="center">NA</td>
-<td align="center">NA</td>
-<td align="center">ZTMA20</td>
-<td align="center">33</td>
-</tr>
-<tr class="odd">
-<td align="center">B1997.28921</td>
-<td align="center">m</td>
-<td align="center">Primary</td>
-<td align="center">NA</td>
-<td align="center">NA</td>
-<td align="center">3</td>
-<td align="center">2</td>
-<td align="center">X</td>
-<td align="center">NA</td>
-<td align="center">2</td>
-<td align="center">NA</td>
-<td align="center">0</td>
-<td align="center">40</td>
-<td align="center">0</td>
-<td align="center">ZTMA20</td>
-<td align="center">60</td>
-</tr>
-<tr class="even">
-<td align="center">B1997.28921</td>
-<td align="center">m</td>
-<td align="center">Primary</td>
-<td align="center">NA</td>
-<td align="center">NA</td>
-<td align="center">1</td>
-<td align="center">1</td>
-<td align="center">X</td>
-<td align="center">NA</td>
-<td align="center">2</td>
-<td align="center">NA</td>
-<td align="center">0</td>
-<td align="center">40</td>
-<td align="center">0</td>
-<td align="center">ZTMA20</td>
-<td align="center">60</td>
-</tr>
-<tr class="odd">
-<td align="center">B1997.28921</td>
-<td align="center">NA</td>
-<td align="center">Normal</td>
-<td align="center">NA</td>
-<td align="center">NA</td>
-<td align="center">NA</td>
-<td align="center">NA</td>
-<td align="center">NA</td>
-<td align="center">NA</td>
-<td align="center">NA</td>
-<td align="center">NA</td>
-<td align="center">NA</td>
-<td align="center">NA</td>
-<td align="center">NA</td>
-<td align="center">ZTMA20</td>
-<td align="center">NA</td>
-</tr>
-<tr class="even">
-<td align="center">B2000.35726</td>
-<td align="center">m</td>
-<td align="center">Primary</td>
-<td align="center">NA</td>
-<td align="center">NA</td>
-<td align="center">NA</td>
-<td align="center">NA</td>
-<td align="center">NA</td>
-<td align="center">NA</td>
-<td align="center">NA</td>
-<td align="center">NA</td>
-<td align="center">NA</td>
-<td align="center">NA</td>
-<td align="center">NA</td>
-<td align="center">ZTMA20</td>
-<td align="center">58</td>
-</tr>
-<tr class="odd">
-<td align="center">B2000.35726</td>
-<td align="center">m</td>
-<td align="center">Primary</td>
-<td align="center">NA</td>
-<td align="center">NA</td>
-<td align="center">3</td>
-<td align="center">2</td>
-<td align="center">X</td>
-<td align="center">NA</td>
-<td align="center">4</td>
-<td align="center">NA</td>
-<td align="center">2</td>
-<td align="center">NA</td>
-<td align="center">NA</td>
-<td align="center">ZTMA20</td>
-<td align="center">58</td>
-</tr>
-</tbody>
-</table>
+#kable(Meta_PID_dup, align = &quot;c&quot;)</code></pre>
 </div>
 <div id="tidy-up-data-for-processing-and-display" class="section level3">
 <h3>Tidy up data for processing and display</h3>
-<pre class="r"><code>Meta_1 = Meta %&gt;% select(PID, gender, age, type, subtype, pT_simple, ISUP_grade, necrose, lymphocytes, survival_months, censor_dead_0_alive_1)
+<pre class="r"><code>#Filter data for primary tumors
+Meta_1 &lt;- Meta %&gt;% filter(type == &quot;primary&quot;) %&gt;% select(PID, gender, age, subtype, pT_simple, ISUP, necrose, lymphocytes, survival_months, censor_dead_0_alive_1)
 
 Meta_1$gender &lt;- str_replace_all(Meta_1$gender,&quot;w&quot;,&quot;f&quot;)
 Meta_1$subtype &lt;- str_replace_all(Meta_1$subtype,&quot; &quot;, &quot;_&quot;)
 Meta_1$necrose &lt;- str_replace(Meta_1$necrose, &quot;\\?&quot;, &quot;&quot;)
 Meta_1$lymphocytes &lt;- str_replace(Meta_1$lymphocytes, &quot;\\?&quot;, &quot;&quot;)
 #Note: Converted ISUP grade 4? into 4 (Patient: B2013.54303)
-Meta_1$ISUP_grade &lt;- str_replace(Meta_1$ISUP_grade, &quot;\\?&quot;, &quot;&quot;)
+Meta_1$ISUP &lt;- str_replace(Meta_1$ISUP, &quot;\\?&quot;, &quot;&quot;)
+
+Meta_1[Meta_1== &quot;&quot;] &lt;- NA
 
 #Age bin for patients (five groups)
-Meta_2 &lt;- Meta_1
-Meta_2$age &lt;- as.numeric(Meta_2$age)
-Meta_2 &lt;- Meta_2 %&gt;% mutate(age_bin = ifelse(age &lt;= 40, &quot;27-40&quot;, 
+Meta_1$age &lt;- as.numeric(Meta_1$age)
+Meta_1 &lt;- Meta_1 %&gt;% mutate(age_bin = ifelse(age &lt;= 40, &quot;27-40&quot;, 
                                    ifelse(40&lt;age &amp; age&lt;=55, &quot;41-55&quot;,
                                           ifelse(55&lt;age &amp; age&lt;=70, &quot;56-70&quot;,
                                                  ifelse(70&lt;age &amp; age&lt;=85, &quot;71-85&quot;,
                                                         ifelse(85&lt;age &amp; age&lt;=90, &quot;85-88&quot;,NA))))))
 #Survival data availability
-Meta_2 &lt;- Meta_2 %&gt;% mutate(survival_data = ifelse(!is.na(survival_months),TRUE,FALSE))
+Meta_1 &lt;- Meta_1 %&gt;% mutate(survival_data = ifelse(!is.na(survival_months),TRUE,FALSE))
+
+#Save filtered metadata as csv
+write.csv(Meta_1, file = &quot;/Users/lasmey/Desktop/ccRCC/Metadaten_RCC/Metadata_combined_RCC.csv&quot;, row.names = F)
 
 #Show overview of updated and processed metadata-table
-kable(Meta_2[1:10,],align = &quot;c&quot;)</code></pre>
-<table style="width:100%;">
-<colgroup>
-<col width="8%" />
-<col width="5%" />
-<col width="3%" />
-<col width="5%" />
-<col width="10%" />
-<col width="6%" />
-<col width="7%" />
-<col width="5%" />
-<col width="8%" />
-<col width="10%" />
-<col width="14%" />
-<col width="5%" />
-<col width="9%" />
-</colgroup>
-<thead>
-<tr class="header">
-<th align="center">PID</th>
-<th align="center">gender</th>
-<th align="center">age</th>
-<th align="center">type</th>
-<th align="center">subtype</th>
-<th align="center">pT_simple</th>
-<th align="center">ISUP_grade</th>
-<th align="center">necrose</th>
-<th align="center">lymphocytes</th>
-<th align="center">survival_months</th>
-<th align="center">censor_dead_0_alive_1</th>
-<th align="center">age_bin</th>
-<th align="center">survival_data</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td align="center">B2003.00190</td>
-<td align="center">m</td>
-<td align="center">NA</td>
-<td align="center">Primary</td>
-<td align="center">clear_cell_RCC</td>
-<td align="center">2</td>
-<td align="center">3</td>
-<td align="center">1</td>
-<td align="center">3</td>
-<td align="center">118</td>
-<td align="center">0</td>
-<td align="center">NA</td>
-<td align="center">TRUE</td>
-</tr>
-<tr class="even">
-<td align="center">B2003.19339</td>
-<td align="center">m</td>
-<td align="center">NA</td>
-<td align="center">Primary</td>
-<td align="center">clear_cell_RCC</td>
-<td align="center">2</td>
-<td align="center">2</td>
-<td align="center">0</td>
-<td align="center">0</td>
-<td align="center">15</td>
-<td align="center">0</td>
-<td align="center">NA</td>
-<td align="center">TRUE</td>
-</tr>
-<tr class="odd">
-<td align="center">B2003.21234</td>
-<td align="center">f</td>
-<td align="center">NA</td>
-<td align="center">Primary</td>
-<td align="center">papillary_RCC</td>
-<td align="center">1</td>
-<td align="center">2</td>
-<td align="center">0</td>
-<td align="center">0</td>
-<td align="center">82</td>
-<td align="center">1</td>
-<td align="center">NA</td>
-<td align="center">TRUE</td>
-</tr>
-<tr class="even">
-<td align="center">B2003.21574</td>
-<td align="center">m</td>
-<td align="center">NA</td>
-<td align="center">Primary</td>
-<td align="center">papillary_RCC</td>
-<td align="center">NA</td>
-<td align="center">3</td>
-<td align="center">1</td>
-<td align="center">1</td>
-<td align="center">80</td>
-<td align="center">1</td>
-<td align="center">NA</td>
-<td align="center">TRUE</td>
-</tr>
-<tr class="odd">
-<td align="center">B2004.01704</td>
-<td align="center">m</td>
-<td align="center">NA</td>
-<td align="center">Primary</td>
-<td align="center">papillary_RCC</td>
-<td align="center">NA</td>
-<td align="center">2</td>
-<td align="center">0</td>
-<td align="center">0</td>
-<td align="center">39</td>
-<td align="center">NA</td>
-<td align="center">NA</td>
-<td align="center">TRUE</td>
-</tr>
-<tr class="even">
-<td align="center">B2004.05653</td>
-<td align="center">f</td>
-<td align="center">NA</td>
-<td align="center">Primary</td>
-<td align="center">clear_cell_RCC</td>
-<td align="center">2</td>
-<td align="center">2</td>
-<td align="center">0</td>
-<td align="center">0</td>
-<td align="center">89</td>
-<td align="center">1</td>
-<td align="center">NA</td>
-<td align="center">TRUE</td>
-</tr>
-<tr class="odd">
-<td align="center">B2004.07482</td>
-<td align="center">m</td>
-<td align="center">NA</td>
-<td align="center">Primary</td>
-<td align="center">papillary_RCC</td>
-<td align="center">1</td>
-<td align="center">2</td>
-<td align="center">0</td>
-<td align="center">1</td>
-<td align="center">88</td>
-<td align="center">1</td>
-<td align="center">NA</td>
-<td align="center">TRUE</td>
-</tr>
-<tr class="even">
-<td align="center">B2004.10441</td>
-<td align="center">m</td>
-<td align="center">NA</td>
-<td align="center">Primary</td>
-<td align="center">clear_cell_RCC</td>
-<td align="center">2</td>
-<td align="center">4</td>
-<td align="center">1</td>
-<td align="center">2</td>
-<td align="center">8</td>
-<td align="center">0</td>
-<td align="center">NA</td>
-<td align="center">TRUE</td>
-</tr>
-<tr class="odd">
-<td align="center">B2004.13044</td>
-<td align="center">f</td>
-<td align="center">NA</td>
-<td align="center">Primary</td>
-<td align="center">clear_cell_RCC</td>
-<td align="center">2</td>
-<td align="center">3</td>
-<td align="center">0</td>
-<td align="center">1</td>
-<td align="center">78</td>
-<td align="center">0</td>
-<td align="center">NA</td>
-<td align="center">TRUE</td>
-</tr>
-<tr class="even">
-<td align="center">B2004.13977</td>
-<td align="center">m</td>
-<td align="center">NA</td>
-<td align="center">Primary</td>
-<td align="center">clear_cell_RCC</td>
-<td align="center">1</td>
-<td align="center">2</td>
-<td align="center">0</td>
-<td align="center">2</td>
-<td align="center">138</td>
-<td align="center">1</td>
-<td align="center">NA</td>
-<td align="center">TRUE</td>
-</tr>
-</tbody>
-</table>
+#kable(Meta_1[1:10,],align = &quot;c&quot;)</code></pre>
 </div>
 <div id="print-heatmap-based-overview" class="section level3">
 <h3>Print heatmap based overview</h3>
 <p>based on the <a href="https://bioconductor.org/packages/release/bioc/html/ComplexHeatmap.html">ComplexHeatmap</a> package and the implemented <code>HeatmapAnnotation</code> function</p>
-<pre class="r"><code>#Convert NAs for easier handling with ComplexHeatmap package
+<pre class="r"><code>library(ComplexHeatmap)
+library(foreach)
+library(ggsci)
+library(RColorBrewer)
+
+Meta_2 &lt;- Meta_1
+
+#Convert empty columns and NAs for easier handling with ComplexHeatmap package
 Meta_2[is.na(Meta_2)] &lt;- &quot;Unknown&quot;
 
-Meta_2 = Meta_2 %&gt;% arrange(desc(type),subtype, desc(ISUP_grade))
+Meta_2 &lt;- Meta_2 %&gt;% arrange(subtype, desc(ISUP), desc(pT_simple))
 
 #Color scheme
 #colnames(Meta_2)
-col = list(PID = colorRampPalette(brewer.pal(9, &quot;Set1&quot;))(length(unique(Meta_2$PID))),
-           gender = c(&quot;#7FC97F&quot;, &quot;#BEAED4&quot;, &quot;black&quot;),
+col &lt;- list(PID = colorRampPalette(brewer.pal(9, &quot;Set1&quot;))(length(unique(Meta_2$PID))),
+           gender = c(&quot;#7FC97F&quot;, &quot;#BEAED4&quot;),
            age_bin = c(colorRampPalette(brewer.pal(9, &quot;Greens&quot;))(length(unique(Meta_2$age_bin))-1),&quot;black&quot;),
-           type = c(&quot;#E41A1C&quot;, &quot;#377EB8&quot;),
+           #type = c(&quot;#E41A1C&quot;, &quot;#377EB8&quot;),
            subtype = c(colorRampPalette(brewer.pal(12, &quot;Paired&quot;))(length(unique(Meta_2$subtype))-1),&quot;black&quot;),
            pT_simple = c(colorRampPalette(brewer.pal(9, &quot;Blues&quot;))(length(unique(Meta_2$pT_simple))-1),&quot;black&quot;),
-           ISUP_grade = c(colorRampPalette(brewer.pal(9, &quot;Reds&quot;))(length(unique(Meta_2$ISUP_grade))-1),&quot;black&quot;),
+           ISUP = c(colorRampPalette(brewer.pal(9, &quot;Reds&quot;))(length(unique(Meta_2$ISUP))-1),&quot;black&quot;),
            necrose = c(colorRampPalette(brewer.pal(9, &quot;Purples&quot;))(length(unique(Meta_2$necrose))-1),&quot;black&quot;),
            lymphocytes = c(colorRampPalette(brewer.pal(9, &quot;Greens&quot;))(length(unique(Meta_2$lymphocytes))-1),&quot;black&quot;),
            survival_data = c(&quot;black&quot;,&quot;grey&quot;)
 )
 
-col_list_1 = foreach(i=1:10, .packages=&quot;foreach&quot;) %do% {
+col_list_1 &lt;- foreach(i=1:9, .packages=&quot;foreach&quot;) %do% {
   color= col[[i]]
   names(color)= sort(unique(Meta_2[,names(col)[i]]))
   color
@@ -1145,27 +840,17 @@ col_list_1 = foreach(i=1:10, .packages=&quot;foreach&quot;) %do% {
 names(col_list_1) &lt;- c(names(col))
 
 #Heatmap Annotation
-sample_anno = HeatmapAnnotation(PID = Meta_2$PID,
+sample_anno &lt;- HeatmapAnnotation(PID = Meta_2$PID,
                                 gender = Meta_2$gender,
                                 age_bin = Meta_2$age_bin,
-                                type = Meta_2$type,
+                                #type = Meta_2$type,
                                 subtype = Meta_2$subtype,
-                                ISUP_grade = Meta_2$ISUP_grade,
+                                ISUP = Meta_2$ISUP,
                                 pT_simple = Meta_2$pT_simple,
                                 necrose = Meta_2$necrose,
                                 lymphocytes = Meta_2$lymphocytes,
                                 survival_data = Meta_2$survival_data,
-                                col = list(PID = col_list_1[[&quot;PID&quot;]],
-                                           gender = col_list_1[[&quot;gender&quot;]],
-                                           age_bin = col_list_1[[&quot;age_bin&quot;]],
-                                           type = col_list_1[[&quot;type&quot;]],
-                                           subtype = col_list_1[[&quot;subtype&quot;]],
-                                           ISUP_grade = col_list_1[[&quot;ISUP_grade&quot;]],
-                                           pT_simple = col_list_1[[&quot;pT_simple&quot;]],
-                                           necrose = col_list_1[[&quot;necrose&quot;]],
-                                           lymphocytes = col_list_1[[&quot;lymphocytes&quot;]],
-                                           survival_data = col_list_1[[&quot;survival_data&quot;]]
-                                ),
+                                col = col_list_1,
                                 border = T,
                                 na_col = &quot;black&quot;,
                                 gap = unit(5, &quot;points&quot;),
@@ -1176,7 +861,7 @@ sample_anno = HeatmapAnnotation(PID = Meta_2$PID,
 
 #Display plot
 draw(sample_anno)</code></pre>
-<p><img src="figure/Metadata_Update.Rmd/viz-1.png" width="1440" style="display: block; margin: auto;" /></p>
+<p><img src="figure/Metadata_Update.Rmd/viz-1.png" width="960" style="display: block; margin: auto;" /></p>
 <p>
 <button type="button" class="btn btn-default btn-xs btn-workflowr btn-workflowr-fig" data-toggle="collapse" data-target="#fig-viz-1">
 Past versions of viz-1.png
@@ -1214,6 +899,35 @@ lassedochreden
 </table>
 </div>
 </div>
+<p>###More visualization options</p>
+<pre class="r"><code>#Number of subtypes in dataset
+Meta_2 %&gt;% 
+  count(subtype) %&gt;%
+  arrange(desc(n)) %&gt;%
+  ggplot()+
+  geom_bar(stat=&quot;identity&quot;,aes(reorder(subtype,desc(n)),n,fill=subtype))+
+  geom_text(aes(subtype,n,label=n,vjust = -1))+
+  theme_classic(base_size = 12, base_line_size = 0.5)+
+  theme(axis.text.x = element_blank(),axis.ticks.x = element_blank())+
+  scale_fill_manual(values = col_list_1[[&quot;subtype&quot;]])+
+  xlab(&quot;subtype&quot;)</code></pre>
+<p><img src="figure/Metadata_Update.Rmd/more-viz-1.png" width="768" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>#Relationsship of ISUP, pT_simple,necrose,lymphocytes 
+#Perform chi-square test
+
+#library(corrplot)
+#cor &lt;- Meta_1 %&gt;% select(ISUP, pT_simple,necrose,lymphocytes) %&gt;% sapply(as.numeric) %&gt;% as.data.frame()
+#cor &lt;- cor %&gt;% filter(complete.cases(cor))
+
+#corrplot(cor(cor, method = &quot;pearson&quot;), method=&quot;color&quot;, col=brewer.pal(n=8, name=&quot;RdBu&quot;),  
+#         type=&quot;upper&quot;, #order=&quot;hclust&quot;,hclust.method = &quot;ward.D2&quot;, 
+#         addCoef.col = &quot;black&quot;, addCoefasPercent = F,# Add coefficient of correlation
+#         tl.col=&quot;black&quot;, tl.srt=40, #Text label color and rotation
+#         # Combine with significance
+#         #p.mat = p.mat, sig.level = 0.01, insig = &quot;blank&quot;, 
+#         # hide correlation coefficient on the principal diagonal
+#         diag=T 
+#)</code></pre>
 <br>
 <p>
 <button type="button" class="btn btn-default btn-workflowr btn-workflowr-sessioninfo" data-toggle="collapse" data-target="#workflowr-sessioninfo" style="display: block;">
@@ -1238,43 +952,42 @@ attached base packages:
 [8] base     
 
 other attached packages:
- [1] knitr_1.37            RColorBrewer_1.1-2    ComplexHeatmap_2.10.0
- [4] ggsci_2.9             conflicted_1.1.0.9000 ggpubr_0.4.0         
- [7] foreach_1.5.1         forcats_0.5.1         stringr_1.4.0        
-[10] dplyr_1.0.7           purrr_0.3.4           tidyr_1.1.4          
+ [1] RColorBrewer_1.1-2    ggsci_2.9             foreach_1.5.1        
+ [4] ComplexHeatmap_2.10.0 knitr_1.37            readxl_1.3.1         
+ [7] forcats_0.5.1         stringr_1.4.0         dplyr_1.0.7          
+[10] purrr_0.3.4           readr_2.1.1           tidyr_1.1.4          
 [13] tibble_3.1.6          ggplot2_3.3.5         tidyverse_1.3.1      
-[16] readxl_1.3.1          readr_2.1.1           workflowr_1.7.0      
+[16] workflowr_1.7.0      
 
 loaded via a namespace (and not attached):
  [1] matrixStats_0.61.0  fs_1.5.2            lubridate_1.8.0    
  [4] doParallel_1.0.16   httr_1.4.2          rprojroot_2.0.2    
  [7] tools_4.1.2         backports_1.4.1     bslib_0.3.1        
-[10] utf8_1.2.2          R6_2.5.1            BiocGenerics_0.40.0
-[13] DBI_1.1.2           colorspace_2.0-2    GetoptLong_1.0.5   
+[10] utf8_1.2.2          R6_2.5.1            DBI_1.1.2          
+[13] BiocGenerics_0.40.0 colorspace_2.0-2    GetoptLong_1.0.5   
 [16] withr_2.4.3         tidyselect_1.1.1    processx_3.5.2     
-[19] compiler_4.1.2      git2r_0.29.0        cli_3.1.0          
-[22] rvest_1.0.2         xml2_1.3.3          sass_0.4.0         
-[25] scales_1.1.1        callr_3.7.0         digest_0.6.29      
-[28] rmarkdown_2.11      pkgconfig_2.0.3     htmltools_0.5.2    
-[31] highr_0.9           dbplyr_2.1.1        fastmap_1.1.0      
-[34] GlobalOptions_0.1.2 rlang_0.4.12        rstudioapi_0.13    
-[37] shape_1.4.6         jquerylib_0.1.4     generics_0.1.1     
-[40] jsonlite_1.7.2      car_3.0-12          magrittr_2.0.1     
-[43] S4Vectors_0.32.3    Rcpp_1.0.7          munsell_0.5.0      
-[46] fansi_1.0.0         abind_1.4-5         lifecycle_1.0.1    
-[49] stringi_1.7.6       whisker_0.4         yaml_2.2.1         
-[52] carData_3.0-5       parallel_4.1.2      promises_1.2.0.1   
-[55] crayon_1.4.2        haven_2.4.3         circlize_0.4.13    
-[58] hms_1.1.1           ps_1.6.0            pillar_1.6.4       
-[61] rjson_0.2.21        ggsignif_0.6.3      stats4_4.1.2       
-[64] codetools_0.2-18    reprex_2.0.1        glue_1.6.0         
-[67] evaluate_0.14       getPass_0.2-2       modelr_0.1.8       
-[70] png_0.1-7           vctrs_0.3.8         tzdb_0.2.0         
-[73] httpuv_1.6.5        cellranger_1.1.0    gtable_0.3.0       
-[76] clue_0.3-60         assertthat_0.2.1    cachem_1.0.6       
-[79] xfun_0.29           broom_0.7.11        rstatix_0.7.0      
-[82] later_1.3.0         iterators_1.0.13    IRanges_2.28.0     
-[85] memoise_2.0.1       cluster_2.1.2       ellipsis_0.3.2     </code></pre>
+[19] compiler_4.1.2      git2r_0.29.0        cli_3.1.1          
+[22] rvest_1.0.2         xml2_1.3.3          labeling_0.4.2     
+[25] sass_0.4.0          scales_1.1.1        callr_3.7.0        
+[28] digest_0.6.29       rmarkdown_2.11      pkgconfig_2.0.3    
+[31] htmltools_0.5.2     highr_0.9           dbplyr_2.1.1       
+[34] fastmap_1.1.0       rlang_0.4.12        GlobalOptions_0.1.2
+[37] rstudioapi_0.13     farver_2.1.0        shape_1.4.6        
+[40] jquerylib_0.1.4     generics_0.1.1      jsonlite_1.7.3     
+[43] magrittr_2.0.1      Rcpp_1.0.8          munsell_0.5.0      
+[46] S4Vectors_0.32.3    fansi_1.0.2         lifecycle_1.0.1    
+[49] stringi_1.7.6       whisker_0.4         yaml_2.2.2         
+[52] parallel_4.1.2      promises_1.2.0.1    crayon_1.4.2       
+[55] haven_2.4.3         circlize_0.4.13     hms_1.1.1          
+[58] magick_2.7.3        ps_1.6.0            pillar_1.6.5       
+[61] rjson_0.2.21        codetools_0.2-18    stats4_4.1.2       
+[64] reprex_2.0.1        glue_1.6.1          evaluate_0.14      
+[67] getPass_0.2-2       modelr_0.1.8        png_0.1-7          
+[70] vctrs_0.3.8         tzdb_0.2.0          httpuv_1.6.5       
+[73] cellranger_1.1.0    gtable_0.3.0        clue_0.3-60        
+[76] assertthat_0.2.1    xfun_0.29           broom_0.7.11       
+[79] later_1.3.0         iterators_1.0.13    IRanges_2.28.0     
+[82] cluster_2.1.2       ellipsis_0.3.2     </code></pre>
 </div>
 </div>
 
