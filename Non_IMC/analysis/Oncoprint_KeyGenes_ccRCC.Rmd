@@ -12,7 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 # Create Oncoprint for Targeted Sequencing data 
 based on `Oncoprint` from the [ComplexHeatmap](https://bioconductor.org/packages/release/bioc/html/ComplexHeatmap.html) package.
 
-### 1. Select genes of interest for heatmap visualization
+### 1. Select genes of interest for visualization
 Can be selected for various reasons e.g. frequency, GOI
 ```{r GOI}
 ```
