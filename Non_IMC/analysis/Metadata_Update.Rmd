@@ -80,7 +80,7 @@ write.csv(Meta_1, file = "/Users/lasmey/Desktop/ccRCC/Metadaten_RCC/Metadata_com
 ### Print heatmap based overview
 based on the [ComplexHeatmap](https://bioconductor.org/packages/release/bioc/html/ComplexHeatmap.html) package and the implemented `HeatmapAnnotation` function  
 
-```{r viz, message=F, fig.width=10, fig.height=8, fig.align='center'}
+```{r viz, message=F, fig.width=14, fig.height=8, fig.align='center'}
 library(ComplexHeatmap)
 library(foreach)
 library(ggsci)
