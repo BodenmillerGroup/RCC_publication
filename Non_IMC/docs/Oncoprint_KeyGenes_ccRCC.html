@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+
+<meta name="author" content="Lasse Meyer" />
+
+<meta name="date" content="2022-02-02" />
+
+<title>Oncoprint_KeyGenes_ccRCC</title>
+
+<script src="site_libs/header-attrs-2.11/header-attrs.js"></script>
+<script src="site_libs/jquery-3.6.0/jquery-3.6.0.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="site_libs/bootstrap-3.3.5/css/cosmo.min.css" rel="stylesheet" />
+<script src="site_libs/bootstrap-3.3.5/js/bootstrap.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/html5shiv.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/respond.min.js"></script>
+<style>h1 {font-size: 34px;}
+       h1.title {font-size: 38px;}
+       h2 {font-size: 30px;}
+       h3 {font-size: 24px;}
+       h4 {font-size: 18px;}
+       h5 {font-size: 16px;}
+       h6 {font-size: 12px;}
+       code {color: inherit; background-color: rgba(0, 0, 0, 0.04);}
+       pre:not([class]) { background-color: white }</style>
+<script src="site_libs/jqueryui-1.11.4/jquery-ui.min.js"></script>
+<link href="site_libs/tocify-1.9.1/jquery.tocify.css" rel="stylesheet" />
+<script src="site_libs/tocify-1.9.1/jquery.tocify.js"></script>
+<script src="site_libs/navigation-1.1/tabsets.js"></script>
+<link href="site_libs/highlightjs-9.12.0/textmate.css" rel="stylesheet" />
+<script src="site_libs/highlightjs-9.12.0/highlight.js"></script>
+
+<link rel="icon" href="https://github.com/workflowr/workflowr-assets/raw/main/img/reproducible.png">
+<!-- Add a small amount of space between sections. -->
+<style type="text/css">
+div.section {
+  padding-top: 12px;
+}
+</style>
+
+
+
+<style type="text/css">
+  code{white-space: pre-wrap;}
+  span.smallcaps{font-variant: small-caps;}
+  span.underline{text-decoration: underline;}
+  div.column{display: inline-block; vertical-align: top; width: 50%;}
+  div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+  ul.task-list{list-style: none;}
+    </style>
+
+<style type="text/css">code{white-space: pre;}</style>
+<script type="text/javascript">
+if (window.hljs) {
+  hljs.configure({languages: []});
+  hljs.initHighlightingOnLoad();
+  if (document.readyState && document.readyState === "complete") {
+    window.setTimeout(function() { hljs.initHighlighting(); }, 0);
+  }
+}
+</script>
+
+
+
+
+
+
+
+
+<style type = "text/css">
+.main-container {
+  max-width: 940px;
+  margin-left: auto;
+  margin-right: auto;
+}
+img {
+  max-width:100%;
+}
+.tabbed-pane {
+  padding-top: 12px;
+}
+.html-widget {
+  margin-bottom: 20px;
+}
+button.code-folding-btn:focus {
+  outline: none;
+}
+summary {
+  display: list-item;
+}
+pre code {
+  padding: 0;
+}
+</style>
+
+
+<style type="text/css">
+.dropdown-submenu {
+  position: relative;
+}
+.dropdown-submenu>.dropdown-menu {
+  top: 0;
+  left: 100%;
+  margin-top: -6px;
+  margin-left: -1px;
+  border-radius: 0 6px 6px 6px;
+}
+.dropdown-submenu:hover>.dropdown-menu {
+  display: block;
+}
+.dropdown-submenu>a:after {
+  display: block;
+  content: " ";
+  float: right;
+  width: 0;
+  height: 0;
+  border-color: transparent;
+  border-style: solid;
+  border-width: 5px 0 5px 5px;
+  border-left-color: #cccccc;
+  margin-top: 5px;
+  margin-right: -10px;
+}
+.dropdown-submenu:hover>a:after {
+  border-left-color: #adb5bd;
+}
+.dropdown-submenu.pull-left {
+  float: none;
+}
+.dropdown-submenu.pull-left>.dropdown-menu {
+  left: -100%;
+  margin-left: 10px;
+  border-radius: 6px 0 6px 6px;
+}
+</style>
+
+<script type="text/javascript">
+// manage active state of menu based on current page
+$(document).ready(function () {
+  // active menu anchor
+  href = window.location.pathname
+  href = href.substr(href.lastIndexOf('/') + 1)
+  if (href === "")
+    href = "index.html";
+  var menuAnchor = $('a[href="' + href + '"]');
+
+  // mark it active
+  menuAnchor.tab('show');
+
+  // if it's got a parent navbar menu mark it active as well
+  menuAnchor.closest('li.dropdown').addClass('active');
+
+  // Navbar adjustments
+  var navHeight = $(".navbar").first().height() + 15;
+  var style = document.createElement('style');
+  var pt = "padding-top: " + navHeight + "px; ";
+  var mt = "margin-top: -" + navHeight + "px; ";
+  var css = "";
+  // offset scroll position for anchor links (for fixed navbar)
+  for (var i = 1; i <= 6; i++) {
+    css += ".section h" + i + "{ " + pt + mt + "}\n";
+  }
+  style.innerHTML = "body {" + pt + "padding-bottom: 40px; }\n" + css;
+  document.head.appendChild(style);
+});
+</script>
+
+<!-- tabsets -->
+
+<style type="text/css">
+.tabset-dropdown > .nav-tabs {
+  display: inline-table;
+  max-height: 500px;
+  min-height: 44px;
+  overflow-y: auto;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.tabset-dropdown > .nav-tabs > li.active:before {
+  content: "";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li.active:before {
+  content: "&#xe258;";
+  border: none;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open:before {
+  content: "";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs > li.active {
+  display: block;
+}
+
+.tabset-dropdown > .nav-tabs > li > a,
+.tabset-dropdown > .nav-tabs > li > a:focus,
+.tabset-dropdown > .nav-tabs > li > a:hover {
+  border: none;
+  display: inline-block;
+  border-radius: 4px;
+  background-color: transparent;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li {
+  display: block;
+  float: none;
+}
+
+.tabset-dropdown > .nav-tabs > li {
+  display: none;
+}
+</style>
+
+<!-- code folding -->
+
+
+
+<style type="text/css">
+
+#TOC {
+  margin: 25px 0px 20px 0px;
+}
+@media (max-width: 768px) {
+#TOC {
+  position: relative;
+  width: 100%;
+}
+}
+
+@media print {
+.toc-content {
+  /* see https://github.com/w3c/csswg-drafts/issues/4434 */
+  float: right;
+}
+}
+
+.toc-content {
+  padding-left: 30px;
+  padding-right: 40px;
+}
+
+div.main-container {
+  max-width: 1200px;
+}
+
+div.tocify {
+  width: 20%;
+  max-width: 260px;
+  max-height: 85%;
+}
+
+@media (min-width: 768px) and (max-width: 991px) {
+  div.tocify {
+    width: 25%;
+  }
+}
+
+@media (max-width: 767px) {
+  div.tocify {
+    width: 100%;
+    max-width: none;
+  }
+}
+
+.tocify ul, .tocify li {
+  line-height: 20px;
+}
+
+.tocify-subheader .tocify-item {
+  font-size: 0.90em;
+}
+
+.tocify .list-group-item {
+  border-radius: 0px;
+}
+
+
+</style>
+
+
+
+</head>
+
+<body>
+
+
+<div class="container-fluid main-container">
+
+
+<!-- setup 3col/9col grid for toc_float and main content  -->
+<div class="row">
+<div class="col-xs-12 col-sm-4 col-md-3">
+<div id="TOC" class="tocify">
+</div>
+</div>
+
+<div class="toc-content col-xs-12 col-sm-8 col-md-9">
+
+
+
+
+<div class="navbar navbar-default  navbar-fixed-top" role="navigation">
+  <div class="container">
+    <div class="navbar-header">
+      <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar">
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+      </button>
+      <a class="navbar-brand" href="index.html">Non_IMC</a>
+    </div>
+    <div id="navbar" class="navbar-collapse collapse">
+      <ul class="nav navbar-nav">
+        <li>
+  <a href="index.html">Home</a>
+</li>
+<li>
+  <a href="about.html">About</a>
+</li>
+<li>
+  <a href="license.html">License</a>
+</li>
+      </ul>
+      <ul class="nav navbar-nav navbar-right">
+        
+      </ul>
+    </div><!--/.nav-collapse -->
+  </div><!--/.container -->
+</div><!--/.navbar -->
+
+<div id="header">
+
+
+
+<h1 class="title toc-ignore">Oncoprint_KeyGenes_ccRCC</h1>
+<h4 class="author">Lasse Meyer</h4>
+<h4 class="date">2022-02-02</h4>
+
+</div>
+
+
+<p>
+<button type="button" class="btn btn-default btn-workflowr btn-workflowr-report" data-toggle="collapse" data-target="#workflowr-report">
+<span class="glyphicon glyphicon-list" aria-hidden="true"></span> workflowr <span class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span>
+</button>
+</p>
+<div id="workflowr-report" class="collapse">
+<ul class="nav nav-tabs">
+<li class="active">
+<a data-toggle="tab" href="#summary">Summary</a>
+</li>
+<li>
+<a data-toggle="tab" href="#checks"> Checks <span class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> </a>
+</li>
+<li>
+<a data-toggle="tab" href="#versions">Past versions</a>
+</li>
+</ul>
+<div class="tab-content">
+<div id="summary" class="tab-pane fade in active">
+<p>
+<strong>Last updated:</strong> 2022-02-02
+</p>
+<p>
+<strong>Checks:</strong> <span class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> 7 <span class="glyphicon glyphicon-exclamation-sign text-danger" aria-hidden="true"></span> 0
+</p>
+<p>
+<strong>Knit directory:</strong> <code>Non_IMC/</code> <span class="glyphicon glyphicon-question-sign" aria-hidden="true" title="This is the local directory in which the code in this file was executed."> </span>
+</p>
+<p>
+This reproducible <a href="https://rmarkdown.rstudio.com">R Markdown</a> analysis was created with <a
+  href="https://github.com/workflowr/workflowr">workflowr</a> (version 1.7.0). The <em>Checks</em> tab describes the reproducibility checks that were applied when the results were created. The <em>Past versions</em> tab lists the development history.
+</p>
+<hr>
+</div>
+<div id="checks" class="tab-pane fade">
+<div id="workflowr-checks" class="panel-group">
+<div class="panel panel-default">
+<div class="panel-heading">
+<p class="panel-title">
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongRMarkdownfilestronguptodate"> <span class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> <strong>R Markdown file:</strong> up-to-date </a>
+</p>
+</div>
+<div id="strongRMarkdownfilestronguptodate" class="panel-collapse collapse">
+<div class="panel-body">
+<p>Great! Since the R Markdown file has been committed to the Git repository, you know the exact version of the code that produced these results.</p>
+</div>
+</div>
+</div>
+<div class="panel panel-default">
+<div class="panel-heading">
+<p class="panel-title">
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongEnvironmentstrongempty"> <span class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> <strong>Environment:</strong> empty </a>
+</p>
+</div>
+<div id="strongEnvironmentstrongempty" class="panel-collapse collapse">
+<div class="panel-body">
+<p>Great job! The global environment was empty. Objects defined in the global environment can affect the analysis in your R Markdown file in unknown ways. For reproduciblity it’s best to always run the code in an empty environment.</p>
+</div>
+</div>
+</div>
+<div class="panel panel-default">
+<div class="panel-heading">
+<p class="panel-title">
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongSeedstrongcodesetseed20220112code"> <span class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> <strong>Seed:</strong> <code>set.seed(20220112)</code> </a>
+</p>
+</div>
+<div id="strongSeedstrongcodesetseed20220112code" class="panel-collapse collapse">
+<div class="panel-body">
+<p>The command <code>set.seed(20220112)</code> was run prior to running the code in the R Markdown file. Setting a seed ensures that any results that rely on randomness, e.g. subsampling or permutations, are reproducible.</p>
+</div>
+</div>
+</div>
+<div class="panel panel-default">
+<div class="panel-heading">
+<p class="panel-title">
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongSessioninformationstrongrecorded"> <span class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> <strong>Session information:</strong> recorded </a>
+</p>
+</div>
+<div id="strongSessioninformationstrongrecorded" class="panel-collapse collapse">
+<div class="panel-body">
+<p>Great job! Recording the operating system, R version, and package versions is critical for reproducibility.</p>
+</div>
+</div>
+</div>
+<div class="panel panel-default">
+<div class="panel-heading">
+<p class="panel-title">
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongCachestrongnone"> <span class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> <strong>Cache:</strong> none </a>
+</p>
+</div>
+<div id="strongCachestrongnone" class="panel-collapse collapse">
+<div class="panel-body">
+<p>Nice! There were no cached chunks for this analysis, so you can be confident that you successfully produced the results during this run.</p>
+</div>
+</div>
+</div>
+<div class="panel panel-default">
+<div class="panel-heading">
+<p class="panel-title">
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongFilepathsstrongrelative"> <span class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> <strong>File paths:</strong> relative </a>
+</p>
+</div>
+<div id="strongFilepathsstrongrelative" class="panel-collapse collapse">
+<div class="panel-body">
+<p>Great job! Using relative paths to the files within your workflowr project makes it easier to run your code on other machines.</p>
+</div>
+</div>
+</div>
+<div class="panel panel-default">
+<div class="panel-heading">
+<p class="panel-title">
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongRepositoryversionstrongahrefhttpsgithubcomBodenmillerGroupRCCtreef3dfefe179ec4335624bec01c8bfc4178dcc1637targetblankf3dfefea"> <span class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> <strong>Repository version:</strong> <a href="https://github.com/BodenmillerGroup/RCC/tree/f3dfefe179ec4335624bec01c8bfc4178dcc1637" target="_blank">f3dfefe</a> </a>
+</p>
+</div>
+<div id="strongRepositoryversionstrongahrefhttpsgithubcomBodenmillerGroupRCCtreef3dfefe179ec4335624bec01c8bfc4178dcc1637targetblankf3dfefea" class="panel-collapse collapse">
+<div class="panel-body">
+<p>
+Great! You are using Git for version control. Tracking code development and connecting the code version to the results is critical for reproducibility.
+</p>
+<p>
+The results in this page were generated with repository version <a href="https://github.com/BodenmillerGroup/RCC/tree/f3dfefe179ec4335624bec01c8bfc4178dcc1637" target="_blank">f3dfefe</a>. See the <em>Past versions</em> tab to see a history of the changes made to the R Markdown and HTML files.
+</p>
+<p>
+Note that you need to be careful to ensure that all relevant files for the analysis have been committed to Git prior to generating the results (you can use <code>wflow_publish</code> or <code>wflow_git_commit</code>). workflowr only checks the R Markdown file, but you know if there are other scripts or data files that it depends on. Below is the status of the Git repository when the results were generated:
+</p>
+<pre><code>
+Ignored files:
+    Ignored:    .DS_Store
+    Ignored:    IMC/.DS_Store
+    Ignored:    IMC/.Rhistory
+    Ignored:    IMC/.Rproj.user/
+    Ignored:    Non_IMC/.DS_Store
+    Ignored:    Non_IMC/.Rhistory
+    Ignored:    Non_IMC/.Rproj.user/
+    Ignored:    Non_IMC/analysis/.RData
+    Ignored:    Non_IMC/analysis/.Rhistory
+    Ignored:    Non_IMC/data/.DS_Store
+
+Untracked files:
+    Untracked:  IMC/analysis/01_lib_read_data.Rmd
+    Untracked:  IMC/analysis/02_spillover_correction.Rmd
+    Untracked:  IMC/analysis/03_QC.Rmd
+    Untracked:  IMC/analysis/04_singlecell_analysis.Rmd
+
+</code></pre>
+<p>
+Note that any generated files, e.g. HTML, png, CSS, etc., are not included in this status report because it is ok for generated content to have uncommitted changes.
+</p>
+</div>
+</div>
+</div>
+</div>
+<hr>
+</div>
+<div id="versions" class="tab-pane fade">
+
+<p>
+These are the previous versions of the repository in which changes were made to the R Markdown (<code>Non_IMC/analysis/Oncoprint_KeyGenes_ccRCC.Rmd</code>) and HTML (<code>Non_IMC/docs/Oncoprint_KeyGenes_ccRCC.html</code>) files. If you’ve configured a remote Git repository (see <code>?wflow_git_remote</code>), click on the hyperlinks in the table below to view the files as they were in that past version.
+</p>
+<div class="table-responsive">
+<table class="table table-condensed table-hover">
+<thead>
+<tr>
+<th>
+File
+</th>
+<th>
+Version
+</th>
+<th>
+Author
+</th>
+<th>
+Date
+</th>
+<th>
+Message
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+Rmd
+</td>
+<td>
+<a href="https://github.com/BodenmillerGroup/RCC/blob/f3dfefe179ec4335624bec01c8bfc4178dcc1637/Non_IMC/analysis/Oncoprint_KeyGenes_ccRCC.Rmd" target="_blank">f3dfefe</a>
+</td>
+<td>
+lassedochreden
+</td>
+<td>
+2022-02-02
+</td>
+<td>
+wflow_publish("analysis/Oncoprint_KeyGenes_ccRCC.Rmd")
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<hr>
+</div>
+</div>
+</div>
+<div id="create-oncoprint-for-targeted-sequencing-data" class="section level1">
+<h1>Create Oncoprint for Targeted Sequencing data</h1>
+<p>based on <code>Oncoprint</code> from the <a href="https://bioconductor.org/packages/release/bioc/html/ComplexHeatmap.html">ComplexHeatmap</a> package.</p>
+<div id="select-genes-of-interest-for-heatmap-visualization" class="section level3">
+<h3>1. Select genes of interest for heatmap visualization</h3>
+<p>Can be selected by various reasons e.g. frequency, GOI</p>
+</div>
+<div id="create-annotation-for-oncoprint-visualization" class="section level3">
+<h3>2. Create annotation for oncoprint visualization</h3>
+<pre class="r"><code>library(tidyverse)
+library(readxl)
+library(RColorBrewer)
+library(foreach)
+library(circlize)
+library(ComplexHeatmap)
+
+anno &lt;- as.data.frame(read_xlsx(&quot;/Users/lasmey/Desktop/ccRCC/Metadaten_RCC/04_ccRCC_IHC_Mut/PBRM1_BAP1_SETD2_mutations_ccRCC_panel.xlsx&quot;)) 
+anno &lt;- anno %&gt;% select(Tumor,Chromosome) %&gt;% distinct()
+
+#continous scales 
+#col_TVF = circlize::colorRamp2(c(0, 50, 100), c(&quot;#A50026&quot;,&quot;#FFFFBF&quot;, &quot;#006837&quot;))
+
+#discrete scales
+col = list(Chromosome = c(&quot;#EFC000FF&quot;)
+)
+
+col_list_1 = foreach(i=1:1) %do% {
+  color= col[[i]]
+  names(color)= sort(unique(anno[,names(col)[i]]))
+  color
+}
+
+names(col_list_1) &lt;- c(names(col))
+
+ha = HeatmapAnnotation(#Tumor = anno$Tumor,
+                       Chromosome = anno$Chromosome,
+                       #TVF = anno$TumorVariantFrequency,
+                       col = col_list_1
+                       )</code></pre>
+</div>
+<div id="matrix-for-each-alteration-type-and-combine-in-binary-list" class="section level3">
+<h3>3. Matrix for each alteration type and combine in binary list</h3>
+<p>Prepare a list of binary matrices. Each matrix is named like the genomic alteration rows = gene in gene list, columns = patients/samples, value = 1 -&gt; mutation is present</p>
+<pre class="r"><code>#Load processed data file and select columns of interest
+snv &lt;- read_xlsx(&quot;/Users/lasmey/Desktop/ccRCC/Metadaten_RCC/04_ccRCC_IHC_Mut/PBRM1_BAP1_SETD2_mutations_ccRCC_panel.xlsx&quot;) 
+snv &lt;- snv %&gt;% select(Tumor, Gene) %&gt;% mutate(mut_level = str_split(snv$SnpEff_Annotation,&quot;\\|&quot;,simplify = T)[,2]) 
+snv &lt;- snv %&gt;% mutate(mut_level = str_split(snv$mut_level,&quot;&amp;&quot;,simplify = T)[,1])
+
+mut_levels_for_matrix = snv %&gt;% pull(mut_level) %&gt;% unique()
+gene_list = snv %&gt;% pull(Gene) %&gt;% unique()
+
+#Placeholders 
+mut_list_new = list()
+placeholder_gene = gene_list[1]
+pids = unique(snv$Tumor)
+placeholder_pid = pids[1]
+
+for(mut in mut_levels_for_matrix){
+  
+  #select all SNVs/Indels of the mut_level
+  x = snv %&gt;%
+    dplyr::filter(mut_level==mut,
+                  Gene %in% gene_list | 
+                    grepl(paste0(paste0(&quot;^&quot;, gene_list, &quot;[,;]&quot;), collapse=&quot;|&quot;), Gene) |       #allow for multi-gene mutations
+                    grepl(paste0(paste0(&quot;[,;]&quot;, gene_list, &quot;$&quot;), collapse=&quot;|&quot;), Gene) ) %&gt;%  
+    dplyr::select(Tumor, Gene) %&gt;%
+    dplyr::mutate(value=1) %&gt;%
+    dplyr::distinct()
+  
+  
+  if(dim(x)[1]!=0){
+    x = x %&gt;%
+      tidyr::spread(Gene, value)
+    
+    #transpose
+    y = dplyr::select(x, -Tumor) 
+    
+    rownames(y) = x$Tumor
+    y = t(y)
+    
+    #replace NA by 0
+    y[is.na(y)] = 0
+  }else{
+    y = tibble(0)
+    colnames(y) = placeholder_pid
+    row.names(y) = placeholder_gene
+  }
+  
+  mut_list_new[[mut]] = as.matrix(y)
+}
+
+#Unify matrices
+mut_list2 = unify_mat_list(mut_list_new)</code></pre>
+</div>
+<div id="print-oncoprint" class="section level3">
+<h3>4. Print Oncoprint</h3>
+<pre class="r"><code># keep the order of annotation and mutation list
+ord= anno$Tumor
+
+# show every gene and patient
+# blank for patients  and.or genes missing 
+for (i in seq_along(mut_list2)){
+  dif_gen= setdiff(gene_list,rownames(mut_list2[[i]]))
+  dif_pat= setdiff(pids,colnames(mut_list2[[i]]))
+  
+  blank= matrix(ncol=length(dif_pat),nrow=length(rownames(mut_list2[[i]])),0)
+  colnames(blank)=dif_pat
+  rownames(blank)=rownames(mut_list2[[i]])
+  mut_list2[[i]]=cbind(mut_list2[[i]],blank)
+  
+  blank= matrix(ncol=ncol(mut_list2[[i]]),nrow=length(dif_gen),0)
+  colnames(blank)=colnames(mut_list2[[i]])
+  rownames(blank)=dif_gen
+  mut_list2[[i]]=rbind(mut_list2[[i]],blank)
+  mut_list2[[i]]=mut_list2[[i]][,ord]
+}
+
+##Annotation
+#Colors
+col = colorRampPalette(brewer.pal(12,&quot;Paired&quot;))(6)
+unique(snv$mut_level)</code></pre>
+<pre><code>[1] &quot;missense_variant&quot;               &quot;stop_gained&quot;                   
+[3] &quot;frameshift_variant&quot;             &quot;splice_region_variant&quot;         
+[5] &quot;splice_donor_variant&quot;           &quot;structural_interaction_variant&quot;</code></pre>
+<pre class="r"><code># alter_fun function 
+fun_alter = list(
+  background = function(x, y, w, h) grid.rect(x, y, w, h, gp = gpar(fill = &quot;#e7e7e7&quot;, col = &quot;white&quot;)),
+  missense_variant = function(x, y, w, h) grid.rect(x, y, w*0.8, h*0.4, gp = gpar(fill = col[1], col = NA)),
+  stop_gained = function(x, y, w, h) grid.rect(x, y, w*0.8, h*0.8, gp = gpar(fill = col[2], col = NA)),
+  frameshift_variant = function(x, y, w, h) grid.rect(x, y, w*0.8, h*0.4, gp = gpar(fill = col[3], col = NA)),
+  splice_region_variant = function(x, y, w, h) grid.rect(x, y, w*0.8, h*0.8, gp = gpar(fill = col[4], col = NA)),
+  splice_donor_variant = function(x, y, w, h) grid.rect(x, y, w*0.4, h*0.8, gp = gpar(fill = col[5], col = NA)),
+  structural_interaction_variant = function(x, y, w, h) grid.rect(x, y, w*0.4, h*0.8, gp = gpar(fill = col[6], col = NA))
+)
+
+names(col) &lt;- c(&quot;missense_variant&quot;,&quot;stop_gained&quot;,&quot;frameshift_variant&quot;,&quot;splice_region_variant&quot;,&quot;splice_donor_variant&quot;,&quot;structural_interaction_variant&quot;)
+test_alter_fun(fun_alter)</code></pre>
+<pre><code>`alter_fun` is defined as a list of functions.
+Functions are defined for following alteration types:
+  background, missense_variant, stop_gained, frameshift_variant,
+splice_region_variant, splice_donor_variant,
+structural_interaction_variant 
+Background is also defined.</code></pre>
+<p><img src="figure/Oncoprint_KeyGenes_ccRCC.Rmd/print%20onc-1.png" width="576" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>#Plot oncoprint
+ht_all= oncoPrint(mut_list2,
+                  alter_fun = fun_alter,
+                  col = col,
+                  show_column_names = F,
+                  #column_split = full_anno$Type,
+                  column_title = c(),
+                  bottom_annotation = ha,
+                  #remove_empty_columns = F,
+                  #remove_empty_rows = T,
+                  #heatmap_legend_param =heatmap_legend,
+                  pct_side = &quot;right&quot;, 
+                  row_names_side = &quot;left&quot;,
+                  #row_names_gp = gpar(fontface = fontface.rownames)
+)
+
+draw(ht_all)</code></pre>
+<p><img src="figure/Oncoprint_KeyGenes_ccRCC.Rmd/print%20onc-2.png" width="576" style="display: block; margin: auto;" /></p>
+<br>
+<p>
+<button type="button" class="btn btn-default btn-workflowr btn-workflowr-sessioninfo" data-toggle="collapse" data-target="#workflowr-sessioninfo" style="display: block;">
+<span class="glyphicon glyphicon-wrench" aria-hidden="true"></span> Session information
+</button>
+</p>
+<div id="workflowr-sessioninfo" class="collapse">
+<pre class="r"><code>sessionInfo()</code></pre>
+<pre><code>R version 4.1.2 (2021-11-01)
+Platform: x86_64-apple-darwin17.0 (64-bit)
+Running under: macOS Big Sur 10.16
+
+Matrix products: default
+BLAS:   /Library/Frameworks/R.framework/Versions/4.1/Resources/lib/libRblas.0.dylib
+LAPACK: /Library/Frameworks/R.framework/Versions/4.1/Resources/lib/libRlapack.dylib
+
+locale:
+[1] en_US.UTF-8/en_US.UTF-8/en_US.UTF-8/C/en_US.UTF-8/en_US.UTF-8
+
+attached base packages:
+[1] grid      stats     graphics  grDevices utils     datasets  methods  
+[8] base     
+
+other attached packages:
+ [1] ComplexHeatmap_2.10.0 circlize_0.4.13       foreach_1.5.1        
+ [4] RColorBrewer_1.1-2    readxl_1.3.1          forcats_0.5.1        
+ [7] stringr_1.4.0         dplyr_1.0.7           purrr_0.3.4          
+[10] readr_2.1.1           tidyr_1.1.4           tibble_3.1.6         
+[13] ggplot2_3.3.5         tidyverse_1.3.1       workflowr_1.7.0      
+
+loaded via a namespace (and not attached):
+ [1] matrixStats_0.61.0  fs_1.5.2            lubridate_1.8.0    
+ [4] doParallel_1.0.16   httr_1.4.2          rprojroot_2.0.2    
+ [7] tools_4.1.2         backports_1.4.1     bslib_0.3.1        
+[10] utf8_1.2.2          R6_2.5.1            DBI_1.1.2          
+[13] BiocGenerics_0.40.0 colorspace_2.0-2    GetoptLong_1.0.5   
+[16] withr_2.4.3         tidyselect_1.1.1    processx_3.5.2     
+[19] compiler_4.1.2      git2r_0.29.0        cli_3.1.1          
+[22] rvest_1.0.2         xml2_1.3.3          sass_0.4.0         
+[25] scales_1.1.1        callr_3.7.0         digest_0.6.29      
+[28] rmarkdown_2.11      pkgconfig_2.0.3     htmltools_0.5.2    
+[31] highr_0.9           dbplyr_2.1.1        fastmap_1.1.0      
+[34] rlang_0.4.12        GlobalOptions_0.1.2 rstudioapi_0.13    
+[37] shape_1.4.6         jquerylib_0.1.4     generics_0.1.1     
+[40] jsonlite_1.7.3      magrittr_2.0.1      Rcpp_1.0.8         
+[43] munsell_0.5.0       S4Vectors_0.32.3    fansi_1.0.2        
+[46] lifecycle_1.0.1     stringi_1.7.6       whisker_0.4        
+[49] yaml_2.2.2          parallel_4.1.2      promises_1.2.0.1   
+[52] crayon_1.4.2        haven_2.4.3         hms_1.1.1          
+[55] magick_2.7.3        knitr_1.37          ps_1.6.0           
+[58] pillar_1.6.5        rjson_0.2.21        codetools_0.2-18   
+[61] stats4_4.1.2        reprex_2.0.1        glue_1.6.1         
+[64] evaluate_0.14       getPass_0.2-2       modelr_0.1.8       
+[67] vctrs_0.3.8         png_0.1-7           tzdb_0.2.0         
+[70] httpuv_1.6.5        cellranger_1.1.0    gtable_0.3.0       
+[73] clue_0.3-60         assertthat_0.2.1    xfun_0.29          
+[76] broom_0.7.11        later_1.3.0         iterators_1.0.13   
+[79] IRanges_2.28.0      cluster_2.1.2       ellipsis_0.3.2     </code></pre>
+</div>
+</div>
+</div>
+
+
+<!-- Adjust MathJax settings so that all math formulae are shown using
+TeX fonts only; see
+https://docs.mathjax.org/en/latest/web/configuration.html. This will make
+the presentation more consistent at the cost of the webpage sometimes
+taking slightly longer to load. Note that this only works because the
+footer is added to webpages before the MathJax javascript. -->
+<script type="text/x-mathjax-config">
+  MathJax.Hub.Config({
+    "HTML-CSS": { availableFonts: ["TeX"] }
+  });
+</script>
+
+
+
+
+</div>
+</div>
+
+</div>
+
+<script>
+
+// add bootstrap table styles to pandoc tables
+function bootstrapStylePandocTables() {
+  $('tr.odd').parent('tbody').parent('table').addClass('table table-condensed');
+}
+$(document).ready(function () {
+  bootstrapStylePandocTables();
+});
+
+
+</script>
+
+<!-- tabsets -->
+
+<script>
+$(document).ready(function () {
+  window.buildTabsets("TOC");
+});
+
+$(document).ready(function () {
+  $('.tabset-dropdown > .nav-tabs > li').click(function () {
+    $(this).parent().toggleClass('nav-tabs-open');
+  });
+});
+</script>
+
+<!-- code folding -->
+
+<script>
+$(document).ready(function ()  {
+
+    // temporarily add toc-ignore selector to headers for the consistency with Pandoc
+    $('.unlisted.unnumbered').addClass('toc-ignore')
+
+    // move toc-ignore selectors from section div to header
+    $('div.section.toc-ignore')
+        .removeClass('toc-ignore')
+        .children('h1,h2,h3,h4,h5').addClass('toc-ignore');
+
+    // establish options
+    var options = {
+      selectors: "h1,h2,h3",
+      theme: "bootstrap3",
+      context: '.toc-content',
+      hashGenerator: function (text) {
+        return text.replace(/[.\\/?&!#<>]/g, '').replace(/\s/g, '_');
+      },
+      ignoreSelector: ".toc-ignore",
+      scrollTo: 0
+    };
+    options.showAndHide = true;
+    options.smoothScroll = true;
+
+    // tocify
+    var toc = $("#TOC").tocify(options).data("toc-tocify");
+});
+</script>
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>
