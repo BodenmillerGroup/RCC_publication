@@ -110,7 +110,7 @@ mut_list2 = unify_mat_list(mut_list_new)
 
 ### 4. Print Oncoprint
 
-```{r print onc, message=FALSE,warning=FALSE,fig.width=6,fig.height=3}
+```{r print onc, message=FALSE,warning=FALSE,fig.width=12,fig.height=6}
 # keep the order of annotation and mutation list
 ord= anno$Tumor
 
