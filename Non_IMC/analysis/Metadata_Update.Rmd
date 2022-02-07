@@ -18,15 +18,18 @@ library(tidyverse)
 library(readxl)
 library(knitr)
 
-Meta_A <- as.data.frame(read_xls("/Users/lasmey/Desktop/ccRCC/Metadaten_RCC/TMA224_update_LM.xls",col_names = T))
-Meta_B <- as.data.frame(read_xls("/Users/lasmey/Desktop/ccRCC/Metadaten_RCC/ZTMA20_update_LM.xls",col_names = T))
+#General metadata
+Meta_224_G <- as.data.frame(read_xls("/Users/lasmey/Desktop/RCC/Metadaten/TMA224_update_LM.xls",col_names = T))
+Meta_20_G <- as.data.frame(read_xls("/Users/lasmey/Desktop/RCC/Metadaten/ZTMA20_update_LM.xls",col_names = T))
 
-Meta_A <- Meta_A %>% mutate_all(as.character)
-Meta_B <- Meta_B %>% mutate_all(as.character)
+#IHC and TMA coord data
+Meta_224_IHC <- as.data.frame(read_xls("/Users/lasmey/Desktop/RCC/Metadaten/TMA224_IHC_Loc_LM.xls",col_names = T))
+Meta_20_IHC <- as.data.frame(read_xls("/Users/lasmey/Desktop/RCC/Metadaten/TMA20_IHC_Loc_LM.xls",col_names = T))
 
-Meta <- bind_rows(Meta_A,Meta_B)
-Meta$PID <- str_replace_all(Meta$PID," ", "")
-Meta$subtype <- str_replace_all(Meta$subtype," ", "_")
+Meta_224 <- left_join(Meta_224_G,Meta_224_IHC,by=c("PID","type")) %>% mutate_all(as.character)
+Meta_20 <- left_join(Meta_20_G,Meta_20_IHC,by=c("PID","type","x")) %>% mutate_all(as.character)
+
+Meta <- bind_rows(Meta_20,Meta_224)
 
 
 ##double-check that entries are distinct
@@ -40,92 +43,116 @@ dup <- Meta %>%
   pull(PID)
 
 Meta_PID_dup <- Meta %>% filter(PID %in% dup) %>% arrange(PID)
-
-#kable(Meta_PID_dup, align = "c")
 ```
 
 ### Tidy up data for processing and display
 
 ```{r tidy}
-#Filter data for primary tumors
-Meta_1 <- Meta %>% filter(type == "primary") %>% select(PID, gender, age, subtype, pT_simple, ISUP, necrose, lymphocytes, survival_months, censor_dead_0_alive_1)
+library(DT)
 
-Meta_1$gender <- str_replace_all(Meta_1$gender,"w","f")
-Meta_1$subtype <- str_replace_all(Meta_1$subtype," ", "_")
-Meta_1$necrose <- str_replace(Meta_1$necrose, "\\?", "")
-Meta_1$lymphocytes <- str_replace(Meta_1$lymphocytes, "\\?", "")
+Meta$PID <- str_replace_all(Meta$PID," ", "")
+Meta$subtype <- str_replace_all(Meta$subtype," ", "_")
+Meta$gender <- str_replace_all(Meta$gender,"w","f")
+Meta$necrose <- str_replace(Meta$necrose, "\\?", "")
+Meta$lymphocytes <- str_replace(Meta$lymphocytes, "\\?", "")
 #Note: Converted ISUP grade 4? into 4 (Patient: B2013.54303)
-Meta_1$ISUP <- str_replace(Meta_1$ISUP, "\\?", "")
+Meta$ISUP <- str_replace(Meta$ISUP, "\\?", "")
 
-Meta_1[Meta_1== ""] <- NA
+Meta[Meta== ""] <- NA
 
 #Age bin for patients (five groups)
-Meta_1$age <- as.numeric(Meta_1$age)
-Meta_1 <- Meta_1 %>% mutate(age_bin = ifelse(age <= 40, "27-40", 
+Meta$age <- as.numeric(Meta$age)
+Meta <- Meta %>% mutate(age_bin = ifelse(age <= 40, "27-40", 
                                    ifelse(40<age & age<=55, "41-55",
                                           ifelse(55<age & age<=70, "56-70",
                                                  ifelse(70<age & age<=85, "71-85",
                                                         ifelse(85<age & age<=90, "85-88",NA))))))
 #Survival data availability
-Meta_1 <- Meta_1 %>% mutate(survival_data = ifelse(!is.na(survival_months),TRUE,FALSE))
+Meta <- Meta %>% mutate(survival_data = ifelse(!is.na(survival_months),TRUE,FALSE))
 
-#Save filtered metadata as csv
-write.csv(Meta_1, file = "/Users/lasmey/Desktop/ccRCC/Metadaten_RCC/Metadata_combined_RCC.csv", row.names = F)
+#Sequencing data availability 
+as.data.frame(read_xlsx("/Users/lasmey/Desktop/RCC/Metadaten/TMA1+2_ccRCC_IHCMut_LM.xlsx",col_names = T)) %>% 
+  mutate_all(as.character) %>% mutate(sequencing_data = ifelse(!is.na(BAP1_mut),TRUE,FALSE)) %>%
+  filter(sequencing_data == TRUE) %>%
+  pull(PID) %>% 
+  str_replace_all(" ", "") -> PID_seq
 
-#Show overview of updated and processed metadata-table
-#kable(Meta_1[1:10,],align = "c")
+Meta <- Meta %>% mutate(sequencing_data = ifelse(PID %in% PID_seq,TRUE,FALSE))
+
+#Arrange 
+colnames(Meta)
+Meta <- Meta %>% select(1,"TMA", "grid","x","y","spot",4,3,"age_bin","type","subtype","comment","ISUP","pT_simple","pT12/34","necrose","lymphocytes","BAP1_IHC","PBRM1_IHC","H3K36me_IHC","survival_months", "censor_dead_0_alive_1", "survival_data", "sequencing_data")
+
+#Save fully annotated metadata as csv
+write.csv(Meta, file = "/Users/lasmey/Desktop/RCC/Metadaten/Metadata_combined_RCC.csv", row.names = F)
+
+#Filter data for primary tumors
+Meta_PT <- Meta %>% filter(type == "primary") 
+
+#Save fully annotated metadata for primary tumors as csv
+write.csv(Meta, file = "/Users/lasmey/Desktop/RCC/Metadata_combined_RCC_onlyPT.csv", row.names = F)
+
+#Show overview of updated and processed metadata-table for primary tumors
+datatable(Meta)
 ```
 
 
 ### Print heatmap based overview
 based on the [ComplexHeatmap](https://bioconductor.org/packages/release/bioc/html/ComplexHeatmap.html) package and the implemented `HeatmapAnnotation` function  
 
-```{r viz, message=F, fig.width=14, fig.height=8, fig.align='center'}
+```{r viz, message=F, fig.width=16, fig.height=9, fig.align='center'}
 library(ComplexHeatmap)
 library(foreach)
 library(ggsci)
 library(RColorBrewer)
 
-Meta_2 <- Meta_1
+#Filter for columns to visualize
+Meta_viz <- Meta_PT %>% select(PID, gender, age_bin, subtype, ISUP, pT_simple, necrose, lymphocytes, BAP1_IHC, PBRM1_IHC, H3K36me_IHC, survival_data,sequencing_data)
 
 #Convert empty columns and NAs for easier handling with ComplexHeatmap package
-Meta_2[is.na(Meta_2)] <- "Unknown"
+Meta_viz[is.na(Meta_viz)] <- "Unknown"
 
-Meta_2 <- Meta_2 %>% arrange(subtype, desc(ISUP), desc(pT_simple))
+Meta_viz <- Meta_viz %>% arrange(subtype, desc(ISUP), desc(pT_simple))
 
 #Color scheme
-#colnames(Meta_2)
-col <- list(PID = colorRampPalette(brewer.pal(9, "Set1"))(length(unique(Meta_2$PID))),
+#colnames(Meta_viz)
+col <- list(PID = colorRampPalette(brewer.pal(9, "Set1"))(length(unique(Meta_viz$PID))),
            gender = c("#7FC97F", "#BEAED4"),
-           age_bin = c(colorRampPalette(brewer.pal(9, "Greens"))(length(unique(Meta_2$age_bin))-1),"black"),
-           #type = c("#E41A1C", "#377EB8"),
-           subtype = c(colorRampPalette(brewer.pal(12, "Paired"))(length(unique(Meta_2$subtype))-1),"black"),
-           pT_simple = c(colorRampPalette(brewer.pal(9, "Blues"))(length(unique(Meta_2$pT_simple))-1),"black"),
-           ISUP = c(colorRampPalette(brewer.pal(9, "Reds"))(length(unique(Meta_2$ISUP))-1),"black"),
-           necrose = c(colorRampPalette(brewer.pal(9, "Purples"))(length(unique(Meta_2$necrose))-1),"black"),
-           lymphocytes = c(colorRampPalette(brewer.pal(9, "Greens"))(length(unique(Meta_2$lymphocytes))-1),"black"),
-           survival_data = c("black","grey")
+           age_bin = c(colorRampPalette(brewer.pal(9, "Greens"))(length(unique(Meta_viz$age_bin))-1),"black"),
+           subtype = c(colorRampPalette(brewer.pal(12, "Paired"))(length(unique(Meta_viz$subtype))-1),"black"),
+           pT_simple = c(colorRampPalette(brewer.pal(9, "Blues"))(length(unique(Meta_viz$pT_simple))-1),"black"),
+           ISUP = c(colorRampPalette(brewer.pal(9, "Reds"))(length(unique(Meta_viz$ISUP))-1),"black"),
+           necrose = c(colorRampPalette(brewer.pal(9, "Purples"))(length(unique(Meta_viz$necrose))-1),"black"),
+           lymphocytes = c(colorRampPalette(brewer.pal(9, "Greens"))(length(unique(Meta_viz$lymphocytes))-1),"black"),
+           BAP1_IHC = c(colorRampPalette(brewer.pal(9, "Oranges"))(length(unique(Meta_viz$BAP1_IHC))-1),"black"),
+           PBRM1_IHC = c(colorRampPalette(brewer.pal(9, "Oranges"))(length(unique(Meta_viz$PBRM1_IHC))-1),"black"),
+           H3K36me_IHC = c(colorRampPalette(brewer.pal(9, "Oranges"))(length(unique(Meta_viz$H3K36me_IHC))-1),"black"),
+           survival_data = c("black","grey"),
+           sequencing_data = c("black","grey")
 )
 
-col_list_1 <- foreach(i=1:9, .packages="foreach") %do% {
+col_list_1 <- foreach(i=1:13, .packages="foreach") %do% {
   color= col[[i]]
-  names(color)= sort(unique(Meta_2[,names(col)[i]]))
+  names(color)= sort(unique(Meta_viz[,names(col)[i]]))
   color
 }
-
 names(col_list_1) <- c(names(col))
 
+
 #Heatmap Annotation
-sample_anno <- HeatmapAnnotation(PID = Meta_2$PID,
-                                gender = Meta_2$gender,
-                                age_bin = Meta_2$age_bin,
-                                #type = Meta_2$type,
-                                subtype = Meta_2$subtype,
-                                ISUP = Meta_2$ISUP,
-                                pT_simple = Meta_2$pT_simple,
-                                necrose = Meta_2$necrose,
-                                lymphocytes = Meta_2$lymphocytes,
-                                survival_data = Meta_2$survival_data,
+sample_anno <- HeatmapAnnotation(PID = Meta_viz$PID,
+                                gender = Meta_viz$gender,
+                                age_bin = Meta_viz$age_bin,
+                                subtype = Meta_viz$subtype,
+                                ISUP = Meta_viz$ISUP,
+                                pT_simple = Meta_viz$pT_simple,
+                                necrose = Meta_viz$necrose,
+                                lymphocytes = Meta_viz$lymphocytes,
+                                BAP1_IHC = Meta_viz$BAP1_IHC,
+                                PBRM1_IHC = Meta_viz$PBRM1_IHC,
+                                H3K36me_IHC = Meta_viz$H3K36me_IHC,
+                                survival_data = Meta_viz$survival_data,
+                                sequencing_data = Meta_viz$sequencing_data,
                                 col = col_list_1,
                                 border = T,
                                 na_col = "black",
@@ -139,11 +166,42 @@ sample_anno <- HeatmapAnnotation(PID = Meta_2$PID,
 draw(sample_anno)
 ```
 
+```{r viz cc, message=F, fig.width=14, fig.height=9, fig.align='center'}
+###Filter for clear cell RCC cases and visualize
+Meta_viz_cc = Meta_viz %>% filter(subtype == "clear_cell_RCC") 
+
+#Heatmap Annotation
+sample_anno_cc <- HeatmapAnnotation(PID = Meta_viz_cc$PID,
+                                gender = Meta_viz_cc$gender,
+                                age_bin = Meta_viz_cc$age_bin,
+                                subtype = Meta_viz_cc$subtype,
+                                ISUP = Meta_viz_cc$ISUP,
+                                pT_simple = Meta_viz_cc$pT_simple,
+                                necrose = Meta_viz_cc$necrose,
+                                lymphocytes = Meta_viz_cc$lymphocytes,
+                                BAP1_IHC = Meta_viz_cc$BAP1_IHC,
+                                PBRM1_IHC = Meta_viz_cc$PBRM1_IHC,
+                                H3K36me_IHC = Meta_viz_cc$H3K36me_IHC,
+                                survival_data = Meta_viz_cc$survival_data,
+                                sequencing_data = Meta_viz_cc$sequencing_data,
+                                col = col_list_1,
+                                border = T,
+                                na_col = "black",
+                                gap = unit(5, "points"),
+                                show_annotation_name = T,
+                                show_legend = c(PID = FALSE)
+                                #annotation_label = c("PID (n=367)","Gender","Subtype","pT","pN")
+)%v%NULL
+
+#Display plot
+draw(sample_anno_cc)
+```
+
 ###More visualization options
 
-```{r more-viz, fig.width=8,fig.height=6,message=FALSE}
+```{r more-viz, fig.width=10,fig.height=6,message=FALSE}
 #Number of subtypes in dataset
-Meta_2 %>% 
+Meta_viz %>% 
   count(subtype) %>%
   arrange(desc(n)) %>%
   ggplot()+
@@ -154,23 +212,53 @@ Meta_2 %>%
   scale_fill_manual(values = col_list_1[["subtype"]])+
   xlab("subtype")
 
-#Relationsship of ISUP, pT_simple,necrose,lymphocytes 
-#Perform chi-square test
+```
 
-#library(corrplot)
-#cor <- Meta_1 %>% select(ISUP, pT_simple,necrose,lymphocytes) %>% sapply(as.numeric) %>% as.data.frame()
-#cor <- cor %>% filter(complete.cases(cor))
+### Reproduce findings from Bihr et al. (2019) for ccRCC
 
-#corrplot(cor(cor, method = "pearson"), method="color", col=brewer.pal(n=8, name="RdBu"),  
-#         type="upper", #order="hclust",hclust.method = "ward.D2", 
-#         addCoef.col = "black", addCoefasPercent = F,# Add coefficient of correlation
-#         tl.col="black", tl.srt=40, #Text label color and rotation
-#         # Combine with significance
-#         #p.mat = p.mat, sig.level = 0.01, insig = "blank", 
-#         # hide correlation coefficient on the principal diagonal
-#         diag=T 
-#)
+see [here](https://www.zora.uzh.ch/id/eprint/171731/1/Bihr_Neoplasia_2019.pdf) for the full publication.
+
+Contingency table analysis and Pearson's chi-square tests were used to analyze the associations between PBRM1, BAP1 and SETD2 expression patterns, gene mutations and pathological parameters in ccRCC.
+
+```{r reproduce birch, fig.width=8,fig.height=5, message=FALSE,warning=FALSE}
+library(sjPlot)
+
+#Groupings in Bihr et al. 
+#T1/T2 (organ-confined) vs. T3/T4 (advanced)
+Meta_viz_cc <- Meta_viz_cc %>% 
+  mutate(pT_comb = ifelse(pT_simple == 1|pT_simple == 2, "1/2", 
+                  ifelse(pT_simple == 3|pT_simple == 4, "3/4", NA))) %>%
+  mutate(ISUP_comb = ifelse(ISUP == 1|ISUP == 2, "1/2", 
+                  ifelse(ISUP == 3, "3", 
+                         ifelse(ISUP == 4, "4", NA)))) %>%
+  na_if("Unknown")
+
+#Perform Chi-Square test and visualize
+plot_xtab(Meta_viz_cc$BAP1_IHC,Meta_viz_cc$ISUP_comb, bar.pos = "stack", margin = "row",show.prc = FALSE,vjust = +0.5, geom.colors = "Reds")+
+  theme_classic()+
+  xlab("BAP1 IHC")+
+  ylab("Fraction [%]")+
+  ggtitle(paste0("P=",chisq.test(table(Meta_viz_cc$BAP1_IHC,Meta_viz_cc$ISUP_comb))$p.value," [Chi-squared]"))
+
+plot_xtab(Meta_viz_cc$BAP1_IHC,Meta_viz_cc$pT_comb, bar.pos = "stack", margin = "row",show.prc = FALSE,vjust = +0.5, geom.colors = "Blues")+
+  theme_classic()+
+  xlab("BAP1 IHC")+
+  ylab("Fraction [%]")+
+  ggtitle(paste0("P=",chisq.test(table(Meta_viz_cc$BAP1_IHC,Meta_viz_cc$pT_comb))$p.value," [Chi-squared]"))
+
+plot_xtab(Meta_viz_cc$BAP1_IHC,Meta_viz_cc$necrose, bar.pos = "stack", margin = "row",show.prc = FALSE,vjust = +0.5, geom.colors = unname(col_list_1[["necrose"]]))+
+  theme_classic()+
+  xlab("BAP1 IHC")+
+  ylab("Fraction [%]")+
+  ggtitle(paste0("P=",chisq.test(table(Meta_viz_cc$BAP1_IHC,Meta_viz_cc$necrose))$p.value," [Chi-squared]"))
 
 
+plot_xtab(Meta_viz_cc$BAP1_IHC,Meta_viz_cc$lymphocytes, bar.pos = "stack", margin = "row",show.prc = FALSE,vjust = +0.5, geom.colors = unname(col_list_1[["lymphocytes"]]))+
+  theme_classic()+
+  xlab("BAP1 IHC")+
+  ylab("Fraction [%]")+
+  ggtitle(paste0("P=",chisq.test(table(Meta_viz_cc$BAP1_IHC,Meta_viz_cc$lymphocytes))$p.value," [Chi-squared]"))
+
+#Results are reproducible
 ```
 
