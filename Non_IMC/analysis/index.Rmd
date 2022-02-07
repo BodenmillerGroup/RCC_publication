@@ -10,5 +10,4 @@ editor_options:
 
 Collection of non-IMC related scripts:  
 1. [Metadata_Update](Metadata_Update.html)  
-2. [Metadata_ccRCC](Metadata_ccRCC.html)  
-3. [Oncoprint_KeyGenes](Oncoprint_KeyGenes_ccRCC.html)  
+2. [Oncoprint_KeyGenes](Oncoprint_KeyGenes_ccRCC.html)  
