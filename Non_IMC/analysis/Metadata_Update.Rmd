@@ -90,7 +90,7 @@ write.csv(Meta, file = "/Users/lasmey/Desktop/RCC/Metadaten/Metadata_combined_RC
 Meta_PT <- Meta %>% filter(type == "primary") 
 
 #Save fully annotated metadata for primary tumors as csv
-write.csv(Meta, file = "/Users/lasmey/Desktop/RCC/Metadata_combined_RCC_onlyPT.csv", row.names = F)
+write.csv(Meta_PT, file = "/Users/lasmey/Desktop/RCC/Metadaten/Metadata_combined_RCC_onlyPT.csv", row.names = F)
 
 #Show overview of updated and processed metadata-table for primary tumors
 datatable(Meta)
@@ -138,6 +138,8 @@ col_list_1 <- foreach(i=1:13, .packages="foreach") %do% {
 }
 names(col_list_1) <- c(names(col))
 
+#Save color list object for downstream usage
+saveRDS(col_list_1,file="/Users/lasmey/Desktop/RCC/Metadaten/color.rds")
 
 #Heatmap Annotation
 sample_anno <- HeatmapAnnotation(PID = Meta_viz$PID,
@@ -197,7 +199,7 @@ sample_anno_cc <- HeatmapAnnotation(PID = Meta_viz_cc$PID,
 draw(sample_anno_cc)
 ```
 
-###More visualization options
+### More visualization options
 
 ```{r more-viz, fig.width=10,fig.height=6,message=FALSE}
 #Number of subtypes in dataset
