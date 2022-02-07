@@ -476,16 +476,16 @@ This reproducible <a href="https://rmarkdown.rstudio.com">R Markdown</a> analysi
 <div class="panel panel-default">
 <div class="panel-heading">
 <p class="panel-title">
-<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongRepositoryversionstrongahrefhttpsgithubcomBodenmillerGroupRCCtree1c7e698064e5dcabc3350fbec9c0fad7296d2e72targetblank1c7e698a"> <span class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> <strong>Repository version:</strong> <a href="https://github.com/BodenmillerGroup/RCC/tree/1c7e698064e5dcabc3350fbec9c0fad7296d2e72" target="_blank">1c7e698</a> </a>
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongRepositoryversionstrongahrefhttpsgithubcomBodenmillerGroupRCCtree847f9317eadfd79956cdccec6a30fcfb8b230df5targetblank847f931a"> <span class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> <strong>Repository version:</strong> <a href="https://github.com/BodenmillerGroup/RCC/tree/847f9317eadfd79956cdccec6a30fcfb8b230df5" target="_blank">847f931</a> </a>
 </p>
 </div>
-<div id="strongRepositoryversionstrongahrefhttpsgithubcomBodenmillerGroupRCCtree1c7e698064e5dcabc3350fbec9c0fad7296d2e72targetblank1c7e698a" class="panel-collapse collapse">
+<div id="strongRepositoryversionstrongahrefhttpsgithubcomBodenmillerGroupRCCtree847f9317eadfd79956cdccec6a30fcfb8b230df5targetblank847f931a" class="panel-collapse collapse">
 <div class="panel-body">
 <p>
 Great! You are using Git for version control. Tracking code development and connecting the code version to the results is critical for reproducibility.
 </p>
 <p>
-The results in this page were generated with repository version <a href="https://github.com/BodenmillerGroup/RCC/tree/1c7e698064e5dcabc3350fbec9c0fad7296d2e72" target="_blank">1c7e698</a>. See the <em>Past versions</em> tab to see a history of the changes made to the R Markdown and HTML files.
+The results in this page were generated with repository version <a href="https://github.com/BodenmillerGroup/RCC/tree/847f9317eadfd79956cdccec6a30fcfb8b230df5" target="_blank">847f931</a>. See the <em>Past versions</em> tab to see a history of the changes made to the R Markdown and HTML files.
 </p>
 <p>
 Note that you need to be careful to ensure that all relevant files for the analysis have been committed to Git prior to generating the results (you can use <code>wflow_publish</code> or <code>wflow_git_commit</code>). workflowr only checks the R Markdown file, but you know if there are other scripts or data files that it depends on. Below is the status of the Git repository when the results were generated:
@@ -546,6 +546,40 @@ Message
 </tr>
 </thead>
 <tbody>
+<tr>
+<td>
+Rmd
+</td>
+<td>
+<a href="https://github.com/BodenmillerGroup/RCC/blob/847f9317eadfd79956cdccec6a30fcfb8b230df5/Non_IMC/analysis/Metadata_Update.Rmd" target="_blank">847f931</a>
+</td>
+<td>
+lassedochreden
+</td>
+<td>
+2022-02-07
+</td>
+<td>
+wflow_publish(c("analysis/Metadata_Update.Rmd", "analysis/Oncoprint_KeyGenes_ccRCC.Rmd"))
+</td>
+</tr>
+<tr>
+<td>
+html
+</td>
+<td>
+<a href="https://rawcdn.githack.com/BodenmillerGroup/RCC/c10330d3844154c84385f8cb9a784260fbb87c8b/Non_IMC/docs/Metadata_Update.html" target="_blank">c10330d</a>
+</td>
+<td>
+lassedochreden
+</td>
+<td>
+2022-02-07
+</td>
+<td>
+Build site.
+</td>
+</tr>
 <tr>
 <td>
 Rmd
@@ -927,7 +961,7 @@ write.csv(Meta, file = &quot;/Users/lasmey/Desktop/RCC/Metadaten/Metadata_combin
 Meta_PT &lt;- Meta %&gt;% filter(type == &quot;primary&quot;) 
 
 #Save fully annotated metadata for primary tumors as csv
-write.csv(Meta, file = &quot;/Users/lasmey/Desktop/RCC/Metadata_combined_RCC_onlyPT.csv&quot;, row.names = F)
+write.csv(Meta_PT, file = &quot;/Users/lasmey/Desktop/RCC/Metadaten/Metadata_combined_RCC_onlyPT.csv&quot;, row.names = F)
 
 #Show overview of updated and processed metadata-table for primary tumors
 datatable(Meta)</code></pre>
@@ -974,6 +1008,8 @@ col_list_1 &lt;- foreach(i=1:13, .packages=&quot;foreach&quot;) %do% {
 }
 names(col_list_1) &lt;- c(names(col))
 
+#Save color list object for downstream usage
+saveRDS(col_list_1,file=&quot;/Users/lasmey/Desktop/RCC/Metadaten/color.rds&quot;)
 
 #Heatmap Annotation
 sample_anno &lt;- HeatmapAnnotation(PID = Meta_viz$PID,
@@ -1023,6 +1059,17 @@ Date
 </tr>
 </thead>
 <tbody>
+<tr>
+<td>
+<a href="https://github.com/BodenmillerGroup/RCC/blob/c10330d3844154c84385f8cb9a784260fbb87c8b/Non_IMC/docs/figure/Metadata_Update.Rmd/viz-1.png" target="_blank">c10330d</a>
+</td>
+<td>
+lassedochreden
+</td>
+<td>
+2022-02-07
+</td>
+</tr>
 <tr>
 <td>
 <a href="https://github.com/BodenmillerGroup/RCC/blob/509fe683cc32f29b4f5bc88d6e11eb3f80a2bd96/Non_IMC/docs/figure/Metadata_Update.Rmd/viz-1.png" target="_blank">509fe68</a>
@@ -1100,7 +1147,46 @@ sample_anno_cc &lt;- HeatmapAnnotation(PID = Meta_viz_cc$PID,
 #Display plot
 draw(sample_anno_cc)</code></pre>
 <p><img src="figure/Metadata_Update.Rmd/viz%20cc-1.png" width="1344" style="display: block; margin: auto;" /></p>
-<p>###More visualization options</p>
+<p>
+<button type="button" class="btn btn-default btn-xs btn-workflowr btn-workflowr-fig" data-toggle="collapse" data-target="#fig-no-spaces-viz-cc-1">
+Past versions of "viz cc-1.png"
+</button>
+</p>
+<div id="fig-no-spaces-viz-cc-1" class="collapse">
+<div class="table-responsive">
+<table class="table table-condensed table-hover">
+<thead>
+<tr>
+<th>
+Version
+</th>
+<th>
+Author
+</th>
+<th>
+Date
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<a href="https://github.com/BodenmillerGroup/RCC/blob/c10330d3844154c84385f8cb9a784260fbb87c8b/Non_IMC/docs/figure/Metadata_Update.Rmd/viz cc-1.png" target="_blank">c10330d</a>
+</td>
+<td>
+lassedochreden
+</td>
+<td>
+2022-02-07
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+<div id="more-visualization-options" class="section level3">
+<h3>More visualization options</h3>
 <pre class="r"><code>#Number of subtypes in dataset
 Meta_viz %&gt;% 
   count(subtype) %&gt;%
@@ -1135,6 +1221,17 @@ Date
 </tr>
 </thead>
 <tbody>
+<tr>
+<td>
+<a href="https://github.com/BodenmillerGroup/RCC/blob/c10330d3844154c84385f8cb9a784260fbb87c8b/Non_IMC/docs/figure/Metadata_Update.Rmd/more-viz-1.png" target="_blank">c10330d</a>
+</td>
+<td>
+lassedochreden
+</td>
+<td>
+2022-02-07
+</td>
+</tr>
 <tr>
 <td>
 <a href="https://github.com/BodenmillerGroup/RCC/blob/ab5bae0c9e470fd66f3a86929c028e8f6ca84c7b/Non_IMC/docs/figure/Metadata_Update.Rmd/more-viz-1.png" target="_blank">ab5bae0</a>
@@ -1174,24 +1271,172 @@ plot_xtab(Meta_viz_cc$BAP1_IHC,Meta_viz_cc$ISUP_comb, bar.pos = &quot;stack&quot
   ylab(&quot;Fraction [%]&quot;)+
   ggtitle(paste0(&quot;P=&quot;,chisq.test(table(Meta_viz_cc$BAP1_IHC,Meta_viz_cc$ISUP_comb))$p.value,&quot; [Chi-squared]&quot;))</code></pre>
 <p><img src="figure/Metadata_Update.Rmd/reproduce%20birch-1.png" width="768" style="display: block; margin: auto;" /></p>
+<p>
+<button type="button" class="btn btn-default btn-xs btn-workflowr btn-workflowr-fig" data-toggle="collapse" data-target="#fig-no-spaces-reproduce-birch-1">
+Past versions of "reproduce birch-1.png"
+</button>
+</p>
+<div id="fig-no-spaces-reproduce-birch-1" class="collapse">
+<div class="table-responsive">
+<table class="table table-condensed table-hover">
+<thead>
+<tr>
+<th>
+Version
+</th>
+<th>
+Author
+</th>
+<th>
+Date
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<a href="https://github.com/BodenmillerGroup/RCC/blob/c10330d3844154c84385f8cb9a784260fbb87c8b/Non_IMC/docs/figure/Metadata_Update.Rmd/reproduce birch-1.png" target="_blank">c10330d</a>
+</td>
+<td>
+lassedochreden
+</td>
+<td>
+2022-02-07
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
 <pre class="r"><code>plot_xtab(Meta_viz_cc$BAP1_IHC,Meta_viz_cc$pT_comb, bar.pos = &quot;stack&quot;, margin = &quot;row&quot;,show.prc = FALSE,vjust = +0.5, geom.colors = &quot;Blues&quot;)+
   theme_classic()+
   xlab(&quot;BAP1 IHC&quot;)+
   ylab(&quot;Fraction [%]&quot;)+
   ggtitle(paste0(&quot;P=&quot;,chisq.test(table(Meta_viz_cc$BAP1_IHC,Meta_viz_cc$pT_comb))$p.value,&quot; [Chi-squared]&quot;))</code></pre>
 <p><img src="figure/Metadata_Update.Rmd/reproduce%20birch-2.png" width="768" style="display: block; margin: auto;" /></p>
+<p>
+<button type="button" class="btn btn-default btn-xs btn-workflowr btn-workflowr-fig" data-toggle="collapse" data-target="#fig-no-spaces-reproduce-birch-2">
+Past versions of "reproduce birch-2.png"
+</button>
+</p>
+<div id="fig-no-spaces-reproduce-birch-2" class="collapse">
+<div class="table-responsive">
+<table class="table table-condensed table-hover">
+<thead>
+<tr>
+<th>
+Version
+</th>
+<th>
+Author
+</th>
+<th>
+Date
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<a href="https://github.com/BodenmillerGroup/RCC/blob/c10330d3844154c84385f8cb9a784260fbb87c8b/Non_IMC/docs/figure/Metadata_Update.Rmd/reproduce birch-2.png" target="_blank">c10330d</a>
+</td>
+<td>
+lassedochreden
+</td>
+<td>
+2022-02-07
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
 <pre class="r"><code>plot_xtab(Meta_viz_cc$BAP1_IHC,Meta_viz_cc$necrose, bar.pos = &quot;stack&quot;, margin = &quot;row&quot;,show.prc = FALSE,vjust = +0.5, geom.colors = unname(col_list_1[[&quot;necrose&quot;]]))+
   theme_classic()+
   xlab(&quot;BAP1 IHC&quot;)+
   ylab(&quot;Fraction [%]&quot;)+
   ggtitle(paste0(&quot;P=&quot;,chisq.test(table(Meta_viz_cc$BAP1_IHC,Meta_viz_cc$necrose))$p.value,&quot; [Chi-squared]&quot;))</code></pre>
 <p><img src="figure/Metadata_Update.Rmd/reproduce%20birch-3.png" width="768" style="display: block; margin: auto;" /></p>
+<p>
+<button type="button" class="btn btn-default btn-xs btn-workflowr btn-workflowr-fig" data-toggle="collapse" data-target="#fig-no-spaces-reproduce-birch-3">
+Past versions of "reproduce birch-3.png"
+</button>
+</p>
+<div id="fig-no-spaces-reproduce-birch-3" class="collapse">
+<div class="table-responsive">
+<table class="table table-condensed table-hover">
+<thead>
+<tr>
+<th>
+Version
+</th>
+<th>
+Author
+</th>
+<th>
+Date
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<a href="https://github.com/BodenmillerGroup/RCC/blob/c10330d3844154c84385f8cb9a784260fbb87c8b/Non_IMC/docs/figure/Metadata_Update.Rmd/reproduce birch-3.png" target="_blank">c10330d</a>
+</td>
+<td>
+lassedochreden
+</td>
+<td>
+2022-02-07
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
 <pre class="r"><code>plot_xtab(Meta_viz_cc$BAP1_IHC,Meta_viz_cc$lymphocytes, bar.pos = &quot;stack&quot;, margin = &quot;row&quot;,show.prc = FALSE,vjust = +0.5, geom.colors = unname(col_list_1[[&quot;lymphocytes&quot;]]))+
   theme_classic()+
   xlab(&quot;BAP1 IHC&quot;)+
   ylab(&quot;Fraction [%]&quot;)+
   ggtitle(paste0(&quot;P=&quot;,chisq.test(table(Meta_viz_cc$BAP1_IHC,Meta_viz_cc$lymphocytes))$p.value,&quot; [Chi-squared]&quot;))</code></pre>
 <p><img src="figure/Metadata_Update.Rmd/reproduce%20birch-4.png" width="768" style="display: block; margin: auto;" /></p>
+<p>
+<button type="button" class="btn btn-default btn-xs btn-workflowr btn-workflowr-fig" data-toggle="collapse" data-target="#fig-no-spaces-reproduce-birch-4">
+Past versions of "reproduce birch-4.png"
+</button>
+</p>
+<div id="fig-no-spaces-reproduce-birch-4" class="collapse">
+<div class="table-responsive">
+<table class="table table-condensed table-hover">
+<thead>
+<tr>
+<th>
+Version
+</th>
+<th>
+Author
+</th>
+<th>
+Date
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<a href="https://github.com/BodenmillerGroup/RCC/blob/c10330d3844154c84385f8cb9a784260fbb87c8b/Non_IMC/docs/figure/Metadata_Update.Rmd/reproduce birch-4.png" target="_blank">c10330d</a>
+</td>
+<td>
+lassedochreden
+</td>
+<td>
+2022-02-07
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
 <pre class="r"><code>#Results are reproducible</code></pre>
 <br>
 <p>
