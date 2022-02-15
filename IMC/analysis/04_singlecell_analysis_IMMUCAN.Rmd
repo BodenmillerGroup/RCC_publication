@@ -1,0 +1,346 @@
+---
+title: "04_singlecell_analysis"
+author: "Lasse Meyer"
+date: "1/24/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Here, I will perform analysis on the single-cell level.
+
+```{r load-data}
+sce <- readRDS("~/switchdrive/RCC_project/data/rcc_sce_Batch20200528.rds")
+```
+
+## Dimensionality reduction
+
+First, I will visualize the cells in low-dimensional space.
+
+```{r tsne-umap, message=FALSE}
+library(scater)
+library(uwot)
+library(tidyverse)
+
+set.seed(22)
+sce <- runUMAP(sce, subset_row = rowData(sce)$use_channels,
+                        exprs_values = "exprs")
+
+plotReducedDim(sce, dimred = "UMAP", colour_by = "Indication")
+plotReducedDim(sce, dimred = "UMAP", colour_by = "SampleId")
+```
+
+## Marker expression visualization
+
+Next, I will visualize single-cell marker expression.
+
+```{r viz markers, fig.height=15, fig.width=15}
+#Select markers for downstream visualization
+rowData(sce)$use_channel <- !grepl("Iridium|Histone",rowData(sce)$Target)
+#Select marker categories
+rowData(sce)$marker_cat <- grepl("CD",rowData(sce)$Target,ignore.case = FALSE,fixed = TRUE)
+
+#Visualize marker of interest
+plotReducedDim(sce, dimred = "UMAP", 
+               colour_by = "CarbonicAnhydrase", 
+               #shape_by = "Indication",
+               by_exprs_values = "exprs",
+               point_size = 0.5)
+
+#Visualize all markers at once
+library(cowplot)
+all_plots <- lapply(c(rownames(sce)[rowData(sce)$use_channel]),
+                    function(x){
+                      p <- plotReducedDim(sce, dimred = "UMAP", 
+                                          colour_by = x, 
+                                          by_exprs_values = "exprs",
+                                          point_size = 0.5)
+                      return(p)                    
+                    })
+
+plot_grid(plotlist = all_plots)
+```
+
+## Clustering
+
+Here I will use Rphenograph (Jaccard-based weights, Louvain clustering as community detection algorithm) to cluster the cells.
+
+```{r clustering}
+library(Rphenograph)
+library(RColorBrewer)
+
+set.seed(22)
+out <- Rphenograph(t(assay(sce, "exprs")[rowData(sce)$use_channel,]),
+                   k = 100)
+
+clusters <- factor(membership(out[[2]]))
+
+sce$clusters <- clusters
+
+col_clust = colorRampPalette(brewer.pal(9,"Paired"))(length(unique(sce$clusters)))
+
+plotReducedDim(sce, dimred = "UMAP", colour_by = "clusters")+
+  scale_color_manual(values = col_clust)
+```
+
+## Cluster annotation based on marker expression
+
+Question: `aggregateAcrossCells` Why mean not median (robust against outliers? - 
+
+`Transformation/Normalization` Which method to choose for visualization? - Arcsinh transformation (cofactor = 1) plus/minus Winsorizing (0-99.9%)?
+
+followed by: A. Min-max(0,1), B. Z-scores, C. Min-max/99th quantile (see older script)
+
+```{r anno-cluster, message = F,fig.width=15,fig.height=10}
+library(ComplexHeatmap)
+library(foreach)
+library(viridis)
+library(dittoSeq)
+
+#Option 1: based on Z-scores of asinh-transformed expression counts
+mean_sce <- aggregateAcrossCells(sce, ids = sce$clusters,
+                                 statistics = "median",
+                                 use.assay.type = "exprs",
+                                 subset.row = rowData(sce)$use_channel)
+
+dittoHeatmap(mean_sce, genes = rownames(mean_sce),
+             assay = "exprs", cluster_cols = T, scale = "row",
+             heatmap.colors = viridis(100), annot.by = c("clusters","Indication"))
+
+#Option 2: Min-Max [0,1] normalization of asinh-transformed expression counts
+assay(sce, "min_max") <- assay(sce, "exprs") - rowMins(assay(sce, "exprs"))
+assay(sce, "min_max") <- assay(sce, "min_max") / (rowMaxs(assay(sce, "exprs")) - rowMins(assay(sce, "exprs")))
+
+mean_sce <- aggregateAcrossCells(sce, ids = sce$clusters,
+                                 statistics = "median",
+                                 use.assay.type = "min_max",
+                                 subset.row = rowData(sce)$use_channel)
+
+dittoHeatmap(mean_sce, genes = rownames(mean_sce),
+             assay = "min_max", cluster_cols = T, scale = "none",
+             heatmap.colors = viridis(100), annot.by = c("clusters","Indication"))
+
+
+###Optional: Customizable visualization with Complex Heatmap
+
+###1. Heatmap body
+HM_body <- assay(mean_sce,"min_max")
+#Colors heatmap body
+#col_main <- colorRamp2(c(0, 0.5, 1), c("#0000FF","#FFFFFF","#FF0000"), space = "RGB")
+col_main = viridis(100)
+
+###2. Top annotation
+#Colors
+col = list(clusters = colorRampPalette(brewer.pal(9,"Paired"))(length(unique(mean_sce$clusters))), 
+           Indication = c("lightgreen")
+           )
+           
+col_list_1 = foreach(i=1:2) %do% {
+  color= col[[i]]
+  names(color)= sort(unique(colData(mean_sce)[,names(col)[i]]))
+  color
+}
+
+names(col_list_1) <- c(names(col))
+
+#Create annotation
+topanno_MCP = HeatmapAnnotation(Indication = mean_sce$Indication,
+                                clusters = mean_sce$ids,
+                                ncells = anno_barplot(mean_sce$ncells,border = TRUE,gp=gpar(fill="black")),
+                                col = col_list_1)
+
+#Plot heatmap
+Heatmap(HM_body,
+        col = col_main,
+        name= "Min-Max norm",
+        cluster_columns = TRUE,
+        cluster_rows = TRUE,
+        row_split = rowData(mean_sce)$marker_cat,
+        row_dend_reorder = TRUE, 
+        show_column_dend = FALSE,
+        row_title = c("Other","CD markers"),
+        row_title_gp = gpar(fontsize = 12),
+        row_title_rot = 0,
+        top_annotation = topanno_MCP,
+        border = TRUE,
+        show_row_names = TRUE,
+        show_column_names = FALSE,
+        column_title_gp = gpar(fontface = "bold")
+        ) %>% 
+  draw()
+```
+## Scoring markers by pairwise comparisons
+Effect sizes = Area under the curve (AUC), Cohens d log fold change
+Statistics for each effect size: mean, median, min, max 
+
+Question: Is this a used approach? Default to *median Cohens log fold change*? 
+
+```{r marker scoring by pairwise comp, message = FALSE, warning=FALSE}
+library(scran)
+library(scater)
+
+marker.info <- scoreMarkers(sce, groups = sce$clusters, assay.type = "exprs")
+                                 
+chosen <- marker.info[["6"]]
+ordered_AUC <- chosen[order(chosen$median.AUC, decreasing=TRUE),]
+ordered_cohen <- chosen[order(chosen$median.logFC.cohen, decreasing=TRUE),]
+
+plotExpression(sce, exprs_values = "exprs",features=rownames(ordered_cohen)[1:6], 
+    x="clusters", colour_by="clusters")
+
+```
+
+## Use Astir for automated cell type assignment
+
+see [here](https://www.sciencedirect.com/science/article/pii/S2405471221003355?via%3Dihub) for full publication (Geuenich et al.,2021, Cell Systems).
+
+```{r astir-expo}
+#Export arsinh normalized expression matrix as csv
+#Add sampleID as covariate in design matrix
+
+expr_astir <- assay(sce,"exprs") %>% t() %>% as.data.frame() %>% mutate(sample = sce$SampleId)
+
+write.csv(expr_astir, file = "~/Desktop/Astir/expr_astir.csv",row.names = TRUE)
+```
+
+`Next: Run Astir in conda-environment.`
+
+```{r astir-ana,fig.width=15,fig.height=10}
+library(easyalluvial)
+library(caret)
+library(dittoSeq)
+library(viridis)
+library(foreach)
+
+#Import Astir cell type assignments
+astir_type <- read_csv("~/Desktop/Astir/cell_types.csv",col_names = c("ID","cell_type"),skip = 1)
+
+sce$astir_type <- astir_type$cell_type
+
+#Mark channels used for cell type assignment 
+astir_channel = c("CD45RO","CD45RA","CD3","CD68","CD20","Ecad","CarbonicAnhydrase","SMA","CD38","MPO")
+
+rowData(sce)$use_astir <- rowData(sce) %>% as.data.frame() %>% mutate(use_astir = ifelse(rownames(sce) %in% astir_channel,TRUE,FALSE)) %>% pull(use_astir)
+
+plotReducedDim(sce, dimred = "UMAP", 
+               colour_by = "astir_type", 
+               #shape_by = "Indication",
+               by_exprs_values = "exprs")
+
+#Heatmap visualization (all cells)
+dittoHeatmap(sce, genes = rownames(sce)[rowData(sce)$use_astir],
+             assay = "exprs", cluster_cols = F, order.by = "astir_type" , scale = "none",
+             heatmap.colors = viridis(100), annot.by = c("astir_type","clusters"))
+
+dittoHeatmap(sce, genes = rownames(sce)[rowData(sce)$use_astir],
+             assay = "exprs", cluster_cols = F, order.by = "clusters" , scale = "none",
+             heatmap.colors = viridis(100), annot.by = c("astir_type","clusters"))
+
+#Heatmap visualization (aggregated)
+mean_sce_astir <- aggregateAcrossCells(sce, ids = sce$astir_type,
+                                 statistics = "median",
+                                 use.assay.type = "exprs",
+                                 subset.row = rowData(sce)$use_astir)
+
+dittoHeatmap(mean_sce_astir, genes = rownames(mean_sce_astir),
+             assay = "exprs", cluster_cols = T, scale = "none",
+             heatmap.colors = viridis(100), annot.by = c("astir_type"))
+
+
+alluvial_wide(data = colData(sce) %>% as.data.frame() %>% select("cell_labels","astir_type"), 
+              max_variables = 6,
+              fill_by = 'all_flows',
+              col_vector_flow = RColorBrewer::brewer.pal(12, "Paired"))+
+  theme_classic(base_size = 12, base_line_size = 0.5)+
+  theme(axis.title.y = element_blank(), axis.ticks.y = element_blank(), axis.text.y = element_blank())
+
+T_cell = c("cytolytic_CD8","CD8_other","cytolytic_exhausted_CD8","Treg","exhausted_CD8","CD4_other","cytolytic_CD4","PD1_CD4","cytolytic_PD1_CD4") 
+B_cell = c("B_cell")
+tumor = c("Tumor","Tumor_Ki67")
+neutrophil = c("Neutrophil")
+macrophage = c("Macrophage")
+plasma = c("CD38")
+stroma = c("Stroma")
+
+astir_test <- colData(sce) %>% 
+  as.data.frame() %>%
+  select(cell_labels,astir_type) %>% 
+  filter(cell_labels != "unlabelled") %>% 
+  mutate(cell_label_simple = ifelse(cell_labels %in% T_cell,"T_cells", 
+                                    ifelse(cell_labels %in% B_cell,"B_cells",
+                                           ifelse(cell_labels %in% tumor,"Tumor",
+                                                  ifelse(cell_labels %in% plasma, "Plasma_cells",
+                                                         ifelse(cell_labels %in% macrophage, "Macrophages",
+                                                                ifelse(cell_labels %in% stroma,"Stroma",
+                                                                       ifelse(cell_labels %in% neutrophil,"Neutrophils", "Unknown/Other")
+                                                                              ))))))
+  ) %>% 
+  mutate(astir_type = ifelse(astir_type %in% c("Unknown","Other","Epithelial"),"Unknown/Other",astir_type))
+                                                                                    
+alluvial_wide(data = astir_test %>% select("cell_label_simple","astir_type"), 
+              max_variables = 6,
+              fill_by = 'all_flows',
+              col_vector_flow = RColorBrewer::brewer.pal(12, "Paired"))+
+  theme_classic(base_size = 12, base_line_size = 0.5)+
+  theme(axis.title.y = element_blank(), axis.ticks.y = element_blank(), axis.text.y = element_blank())
+
+
+run<-unique(astir_test$astir_type)
+astir_senspe <- foreach(i = seq_along(run),.combine = rbind) %do% {
+sen <- sensitivity(table(astir_test$astir_type == run[i],astir_test$cell_label_simple == run[i]))
+spe <- specificity(table(astir_test$astir_type == run[i],astir_test$cell_label_simple == run[i]))
+data.frame(sen = sen, spe = spe, row.names = run[i])  
+}
+astir_senspe
+write.csv(astir_senspe, file = paste0("~/Desktop/Astir/",unique(sce$BatchId),"_astir_senspe.csv"),)
+```
+
+## Subclustering 
+Improve resolution for cell subtypes (e.g. CD3+ cell compartment)
+Three methods:  1. Select single or multiple clusters for subclustering
+              2. Positive or negative for certain markers via GMM
+              3. Use metaclusters from astir analysis
+                
+Question: Which method to use? 
+
+```{r subclustering, message = F,fig.width=15,fig.height=10}
+library(mclust)
+library(dittoSeq)
+library(viridis)
+library(scuttle)
+library(cowplot)
+
+##Method A: Select single or multiple clusters for subclustering
+
+plotExpression(sce, exprs_values = "exprs",features=c("CD3"), 
+    x="clusters", colour_by="clusters")
+
+#Clusters: 2,9,12,16,20
+CD3_clus <- c("3","5","7","15","17")
+
+sce_CD3 <- sce[,sce$clusters %in% CD3_clus]
+
+#Re-run UMAP
+#sce_CD3 <- runUMAP(sce_CD3, subset_row = rowData(sce_CD3)$use_channels,
+                        #exprs_values = "exprs")
+#plotReducedDim(sce_CD3, dimred = "UMAP") #colour_by = "Indication")
+#Re-run Clustering
+#out <- Rphenograph(t(assay(sce_CD3, "exprs")[rowData(sce_CD3)$use_channel,]),
+                   #k = 100)
+#clusters <- factor(membership(out[[2]]))
+#sce_CD3$clusters <- clusters
+
+##Method B: Positive or negative for certain markers via GMM
+
+# CD3
+cur_clust <- Mclust(assay(sce, "exprs")["CD3",], G = 2)
+
+plot(cur_clust, what = "classification")
+plot(cur_clust, what = "density")
+
+#sce$CD3_class <- cur_clust$classification
+```
+
+
