@@ -1,0 +1,185 @@
+---
+title: "astir_test"
+author: "Lasse Meyer"
+date: "2/15/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Batch: 20200528
+
+## Use Astir for automated cell type assignment
+
+see [here](https://www.sciencedirect.com/science/article/pii/S2405471221003355?via%3Dihub) for full publication (Geuenich et al.,2021, Cell Systems).
+
+Here, I will test astir-based cell type assignments RCC IMMUcan batches (Run-each batch.) 
+"Ground truth"=manually labelled cell types by IMMUCAN
+
+```{r load-data, message = FALSE, warning = FALSE}
+library(scater)
+library(uwot)
+library(tidyverse)
+library(Rphenograph)
+
+sce <- readRDS("~/switchdrive/RCC_project/data/rcc_sce_Batch20200528.rds")
+```
+
+```{r astir-expo,fig.width=15,fig.height=10}
+#Export arsinh normalized expression matrix as csv
+#Add sampleID as covariate in design matrix
+
+expr_astir <- assay(sce,"exprs") %>% t() %>% as.data.frame() %>% mutate(sample = sce$SampleId)
+
+write.csv(expr_astir, file = "~/Desktop/Astir/expr_astir.csv",row.names = TRUE)
+```
+
+`Next: Run Astir via conda-environment.`
+
+```{r astir-ana,fig.width=15,fig.height=10, message = FALSE}
+library(caret)
+library(foreach)
+
+#Import Astir cell type assignments
+astir_type <- read_csv("~/Desktop/Astir/cell_types.csv",col_names = c("ID","cell_type"),skip = 1)
+
+sce$astir_type <- astir_type$cell_type
+
+T_cell = c("cytolytic_CD8","CD8_other","cytolytic_exhausted_CD8","Treg","exhausted_CD8","CD4_other",           "cytolytic_CD4","PD1_CD4","cytolytic_PD1_CD4") 
+B_cell = c("B_cell")
+tumor = c("Tumor","Tumor_Ki67")
+neutrophil = c("Neutrophil")
+macrophage = c("Macrophage")
+plasma = c("CD38")
+stroma = c("Stroma")
+
+astir_test <- colData(sce) %>% 
+  as.data.frame() %>%
+  select(cell_labels,astir_type) %>% 
+  filter(cell_labels != "unlabelled") %>% 
+  mutate(cell_label_simple = ifelse(cell_labels %in% T_cell,"T_cells", 
+                                    ifelse(cell_labels %in% B_cell,"B_cells",
+                                           ifelse(cell_labels %in% tumor,"Tumor",
+                                                  ifelse(cell_labels %in% plasma, "Plasma_cells",
+                                                         ifelse(cell_labels %in% macrophage, "Macrophages",
+                                                                ifelse(cell_labels %in% stroma,"Stroma",
+                                                                       ifelse(cell_labels %in% neutrophil,"Neutrophils", "Unknown/Other")
+                                                                              ))))))
+  ) %>% 
+  mutate(astir_type = ifelse(astir_type %in% c("Unknown","Other","Epithelial"),"Unknown/Other",astir_type))
+                                                                                    
+
+#Test specificity and sensitivity in current batch
+run<-unique(astir_test$cell_label_simple)
+astir_senspe <- foreach(i = seq_along(run),.combine = rbind,.errorhandling = "remove") %do% {
+sen <- sensitivity(table(astir_test$astir_type == run[i],astir_test$cell_label_simple == run[i]))
+spe <- specificity(table(astir_test$astir_type == run[i],astir_test$cell_label_simple == run[i]))
+data.frame(sen = sen, spe = spe, row.names = run[i])  
+}
+
+
+
+write.csv(astir_senspe, file = paste0("~/Desktop/Astir/",unique(sce$BatchId),"_astir_senspe.csv"))
+```
+### Batch: 20200113
+
+```{r load-data-1, message = FALSE}
+library(scater)
+library(uwot)
+library(tidyverse)
+library(Rphenograph)
+
+sce <- readRDS("~/switchdrive/RCC_project/data/rcc_sce_Batch20201113.rds")
+```
+
+```{r astir-expo-1,fig.width=15,fig.height=10}
+#Export arsinh normalized expression matrix as csv
+#Add sampleID as covariate in design matrix
+
+expr_astir <- assay(sce,"exprs") %>% t() %>% as.data.frame() %>% mutate(sample = sce$SampleId)
+
+write.csv(expr_astir, file = "~/Desktop/Astir/expr_astir_1.csv",row.names = TRUE)
+```
+
+`Next: Run Astir via conda-environment.`
+
+```{r astir-ana-1,fig.width=15,fig.height=10, message = FALSE}
+library(caret)
+library(foreach)
+
+#Import Astir cell type assignments
+astir_type <- read_csv("~/Desktop/Astir/cell_types_1.csv",col_names = c("ID","cell_type"),skip = 1)
+
+sce$astir_type <- astir_type$cell_type
+
+T_cell = c("cytolytic_CD8","CD8_other","cytolytic_exhausted_CD8","Treg","exhausted_CD8","CD4_other",           "cytolytic_CD4","PD1_CD4","cytolytic_PD1_CD4") 
+B_cell = c("B_cell")
+tumor = c("Tumor","Tumor_Ki67")
+neutrophil = c("Neutrophil")
+macrophage = c("Macrophage")
+plasma = c("CD38")
+stroma = c("Stroma")
+
+astir_test <- colData(sce) %>% 
+  as.data.frame() %>%
+  select(cell_labels,astir_type) %>% 
+  filter(cell_labels != "unlabelled") %>% 
+  mutate(cell_label_simple = ifelse(cell_labels %in% T_cell,"T_cells", 
+                                    ifelse(cell_labels %in% B_cell,"B_cells",
+                                           ifelse(cell_labels %in% tumor,"Tumor",
+                                                  ifelse(cell_labels %in% plasma, "Plasma_cells",
+                                                         ifelse(cell_labels %in% macrophage, "Macrophages",
+                                                                ifelse(cell_labels %in% stroma,"Stroma",
+                                                                       ifelse(cell_labels %in% neutrophil,"Neutrophils", "Unknown/Other")
+                                                                              ))))))
+  ) %>% 
+  mutate(astir_type = ifelse(astir_type %in% c("Unknown","Other","Epithelial"),"Unknown/Other",astir_type))
+                                                                                    
+
+#Test specificity and sensitivity in current batch
+run<-unique(astir_test$cell_label_simple)
+astir_senspe <- foreach(i = seq_along(run),.combine = rbind,.errorhandling = "remove") %do% {
+sen <- sensitivity(table(astir_test$astir_type == run[i],astir_test$cell_label_simple == run[i]))
+spe <- specificity(table(astir_test$astir_type == run[i],astir_test$cell_label_simple == run[i]))
+data.frame(sen = sen, spe = spe, row.names = run[i])  
+}
+
+write.csv(astir_senspe, file = paste0("~/Desktop/Astir/",unique(sce$BatchId),"_astir_senspe.csv"))
+```
+
+# Combine astir testing results and visualize
+
+```{r astir viz-1, message = FALSE, warning=FALSE}
+library(ggpubr)
+
+astir_1 <- read.csv("~/Desktop/Astir/Batch20200528_astir_senspe.csv")
+astir_2 <- read.csv("~/Desktop/Astir/Batch20201113_astir_senspe.csv")
+
+astir_comb <- rbind(astir_1,astir_2)
+
+sen <- ggplot(astir_comb, aes(X, sen)) + 
+  stat_boxplot(geom ='errorbar', width = 0.2)+
+  geom_boxplot(outlier.colour = NA)+
+  geom_jitter(aes(color = X), size = 5)+
+  ylab("Sensitivity")+
+  coord_cartesian(ylim=c(0,1))+
+  theme_classic(base_size = 14, base_line_size = 0.5)+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1),axis.title.x.bottom = element_blank())+
+  guides(color=FALSE)
+
+spe <- ggplot(astir_comb, aes(X, spe)) + 
+  stat_boxplot(geom ='errorbar', width = 0.2)+
+  geom_boxplot(outlier.colour = NA)+
+  geom_jitter(aes(color = X), size = 5)+
+  ylab("Specificity")+
+  coord_cartesian(ylim=c(0,1))+
+  theme_classic(base_size = 14, base_line_size = 0.5)+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1),axis.title.x.bottom = element_blank())+
+  guides(color=FALSE)
+
+ggarrange(sen,spe, ncol = 2, nrow = 1, align = "h")
+
+```
+
