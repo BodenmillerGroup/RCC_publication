@@ -376,7 +376,7 @@ div.tocify {
 <div class="tab-content">
 <div id="summary" class="tab-pane fade in active">
 <p>
-<strong>Last updated:</strong> 2022-02-15
+<strong>Last updated:</strong> 2022-02-16
 </p>
 <p>
 <strong>Checks:</strong> <span class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> 7 <span class="glyphicon glyphicon-exclamation-sign text-danger" aria-hidden="true"></span> 0
@@ -467,16 +467,16 @@ This reproducible <a href="https://rmarkdown.rstudio.com">R Markdown</a> analysi
 <div class="panel panel-default">
 <div class="panel-heading">
 <p class="panel-title">
-<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongRepositoryversionstrongahrefhttpsgithubcomBodenmillerGroupRCCtreecf530d31f74ba2ef2e2c74899733cd525482defctargetblankcf530d3a"> <span class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> <strong>Repository version:</strong> <a href="https://github.com/BodenmillerGroup/RCC/tree/cf530d31f74ba2ef2e2c74899733cd525482defc" target="_blank">cf530d3</a> </a>
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongRepositoryversionstrongahrefhttpsgithubcomBodenmillerGroupRCCtree3254a166e3f66d0189fe793d012d7455519f355atargetblank3254a16a"> <span class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> <strong>Repository version:</strong> <a href="https://github.com/BodenmillerGroup/RCC/tree/3254a166e3f66d0189fe793d012d7455519f355a" target="_blank">3254a16</a> </a>
 </p>
 </div>
-<div id="strongRepositoryversionstrongahrefhttpsgithubcomBodenmillerGroupRCCtreecf530d31f74ba2ef2e2c74899733cd525482defctargetblankcf530d3a" class="panel-collapse collapse">
+<div id="strongRepositoryversionstrongahrefhttpsgithubcomBodenmillerGroupRCCtree3254a166e3f66d0189fe793d012d7455519f355atargetblank3254a16a" class="panel-collapse collapse">
 <div class="panel-body">
 <p>
 Great! You are using Git for version control. Tracking code development and connecting the code version to the results is critical for reproducibility.
 </p>
 <p>
-The results in this page were generated with repository version <a href="https://github.com/BodenmillerGroup/RCC/tree/cf530d31f74ba2ef2e2c74899733cd525482defc" target="_blank">cf530d3</a>. See the <em>Past versions</em> tab to see a history of the changes made to the R Markdown and HTML files.
+The results in this page were generated with repository version <a href="https://github.com/BodenmillerGroup/RCC/tree/3254a166e3f66d0189fe793d012d7455519f355a" target="_blank">3254a16</a>. See the <em>Past versions</em> tab to see a history of the changes made to the R Markdown and HTML files.
 </p>
 <p>
 Note that you need to be careful to ensure that all relevant files for the analysis have been committed to Git prior to generating the results (you can use <code>wflow_publish</code> or <code>wflow_git_commit</code>). workflowr only checks the R Markdown file, but you know if there are other scripts or data files that it depends on. Below is the status of the Git repository when the results were generated:
@@ -488,7 +488,6 @@ Ignored files:
     Ignored:    IMC/.Rhistory
     Ignored:    IMC/.Rproj.user/
     Ignored:    IMC/analysis/.Rhistory
-    Ignored:    IMC/analysis/figure/
     Ignored:    Non_IMC/.DS_Store
     Ignored:    Non_IMC/.Rhistory
     Ignored:    Non_IMC/.Rproj.user/
@@ -504,9 +503,9 @@ Untracked files:
     Untracked:  IMC/analysis/02_spillover_correction.Rmd
     Untracked:  IMC/analysis/03_QC.Rmd
     Untracked:  IMC/analysis/04_singlecell_analysis.Rmd
-    Untracked:  IMC/analysis/05_astir.Rmd
 
 Unstaged changes:
+    Modified:   IMC/analysis/05_astir.Rmd
     Deleted:    Non_IMC/docs/figure/Metadata_ccRCC.Rmd/reproduce birch-1.png
     Deleted:    Non_IMC/docs/figure/Metadata_ccRCC.Rmd/reproduce birch-2.png
     Deleted:    Non_IMC/docs/figure/Metadata_ccRCC.Rmd/reproduce birch-3.png
@@ -555,6 +554,40 @@ Message
 Rmd
 </td>
 <td>
+<a href="https://github.com/BodenmillerGroup/RCC/blob/3254a166e3f66d0189fe793d012d7455519f355a/IMC/analysis/04_singlecell_analysis_IMMUCAN.Rmd" target="_blank">3254a16</a>
+</td>
+<td>
+lassedochreden
+</td>
+<td>
+2022-02-16
+</td>
+<td>
+wflow_publish(c("analysis/04_singlecell_analysis_IMMUCAN.Rmd"))
+</td>
+</tr>
+<tr>
+<td>
+html
+</td>
+<td>
+<a href="https://rawcdn.githack.com/BodenmillerGroup/RCC/a12b58da20c950666f271b6c22fa6c1cd19bfacb/IMC/docs/04_singlecell_analysis_IMMUCAN.html" target="_blank">a12b58d</a>
+</td>
+<td>
+lassedochreden
+</td>
+<td>
+2022-02-15
+</td>
+<td>
+Build site.
+</td>
+</tr>
+<tr>
+<td>
+Rmd
+</td>
+<td>
 <a href="https://github.com/BodenmillerGroup/RCC/blob/cf530d31f74ba2ef2e2c74899733cd525482defc/IMC/analysis/04_singlecell_analysis_IMMUCAN.Rmd" target="_blank">cf530d3</a>
 </td>
 <td>
@@ -589,8 +622,82 @@ sce &lt;- runUMAP(sce, subset_row = rowData(sce)$use_channels,
 
 plotReducedDim(sce, dimred = &quot;UMAP&quot;, colour_by = &quot;Indication&quot;)</code></pre>
 <p><img src="figure/04_singlecell_analysis_IMMUCAN.Rmd/tsne-umap-1.png" width="672" style="display: block; margin: auto;" /></p>
+<p>
+<button type="button" class="btn btn-default btn-xs btn-workflowr btn-workflowr-fig" data-toggle="collapse" data-target="#fig-tsne-umap-1">
+Past versions of tsne-umap-1.png
+</button>
+</p>
+<div id="fig-tsne-umap-1" class="collapse">
+<div class="table-responsive">
+<table class="table table-condensed table-hover">
+<thead>
+<tr>
+<th>
+Version
+</th>
+<th>
+Author
+</th>
+<th>
+Date
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<a href="https://github.com/BodenmillerGroup/RCC/blob/a12b58da20c950666f271b6c22fa6c1cd19bfacb/IMC/docs/figure/04_singlecell_analysis_IMMUCAN.Rmd/tsne-umap-1.png" target="_blank">a12b58d</a>
+</td>
+<td>
+lassedochreden
+</td>
+<td>
+2022-02-15
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
 <pre class="r"><code>plotReducedDim(sce, dimred = &quot;UMAP&quot;, colour_by = &quot;SampleId&quot;)</code></pre>
 <p><img src="figure/04_singlecell_analysis_IMMUCAN.Rmd/tsne-umap-2.png" width="672" style="display: block; margin: auto;" /></p>
+<p>
+<button type="button" class="btn btn-default btn-xs btn-workflowr btn-workflowr-fig" data-toggle="collapse" data-target="#fig-tsne-umap-2">
+Past versions of tsne-umap-2.png
+</button>
+</p>
+<div id="fig-tsne-umap-2" class="collapse">
+<div class="table-responsive">
+<table class="table table-condensed table-hover">
+<thead>
+<tr>
+<th>
+Version
+</th>
+<th>
+Author
+</th>
+<th>
+Date
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<a href="https://github.com/BodenmillerGroup/RCC/blob/a12b58da20c950666f271b6c22fa6c1cd19bfacb/IMC/docs/figure/04_singlecell_analysis_IMMUCAN.Rmd/tsne-umap-2.png" target="_blank">a12b58d</a>
+</td>
+<td>
+lassedochreden
+</td>
+<td>
+2022-02-15
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
 </div>
 <div id="marker-expression-visualization" class="section level2">
 <h2>Marker expression visualization</h2>
@@ -607,6 +714,43 @@ plotReducedDim(sce, dimred = &quot;UMAP&quot;,
                by_exprs_values = &quot;exprs&quot;,
                point_size = 0.5)</code></pre>
 <p><img src="figure/04_singlecell_analysis_IMMUCAN.Rmd/viz%20markers-1.png" width="1440" style="display: block; margin: auto;" /></p>
+<p>
+<button type="button" class="btn btn-default btn-xs btn-workflowr btn-workflowr-fig" data-toggle="collapse" data-target="#fig-no-spaces-viz-markers-1">
+Past versions of "viz markers-1.png"
+</button>
+</p>
+<div id="fig-no-spaces-viz-markers-1" class="collapse">
+<div class="table-responsive">
+<table class="table table-condensed table-hover">
+<thead>
+<tr>
+<th>
+Version
+</th>
+<th>
+Author
+</th>
+<th>
+Date
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<a href="https://github.com/BodenmillerGroup/RCC/blob/a12b58da20c950666f271b6c22fa6c1cd19bfacb/IMC/docs/figure/04_singlecell_analysis_IMMUCAN.Rmd/viz markers-1.png" target="_blank">a12b58d</a>
+</td>
+<td>
+lassedochreden
+</td>
+<td>
+2022-02-15
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
 <pre class="r"><code>#Visualize all markers at once
 library(cowplot)
 all_plots &lt;- lapply(c(rownames(sce)[rowData(sce)$use_channel]),
@@ -620,61 +764,58 @@ all_plots &lt;- lapply(c(rownames(sce)[rowData(sce)$use_channel]),
 
 plot_grid(plotlist = all_plots)</code></pre>
 <p><img src="figure/04_singlecell_analysis_IMMUCAN.Rmd/viz%20markers-2.png" width="1440" style="display: block; margin: auto;" /></p>
+<p>
+<button type="button" class="btn btn-default btn-xs btn-workflowr btn-workflowr-fig" data-toggle="collapse" data-target="#fig-no-spaces-viz-markers-2">
+Past versions of "viz markers-2.png"
+</button>
+</p>
+<div id="fig-no-spaces-viz-markers-2" class="collapse">
+<div class="table-responsive">
+<table class="table table-condensed table-hover">
+<thead>
+<tr>
+<th>
+Version
+</th>
+<th>
+Author
+</th>
+<th>
+Date
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<a href="https://github.com/BodenmillerGroup/RCC/blob/a12b58da20c950666f271b6c22fa6c1cd19bfacb/IMC/docs/figure/04_singlecell_analysis_IMMUCAN.Rmd/viz markers-2.png" target="_blank">a12b58d</a>
+</td>
+<td>
+lassedochreden
+</td>
+<td>
+2022-02-15
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
 </div>
 <div id="clustering" class="section level2">
 <h2>Clustering</h2>
 <p>Here I will use Rphenograph (Jaccard-based weights, Louvain clustering as community detection algorithm) to cluster the cells.</p>
-<pre class="r"><code>library(Rphenograph)</code></pre>
-<pre><code>Loading required package: igraph</code></pre>
-<pre><code>
-Attaching package: &#39;igraph&#39;</code></pre>
-<pre><code>The following objects are masked from &#39;package:dplyr&#39;:
-
-    as_data_frame, groups, union</code></pre>
-<pre><code>The following objects are masked from &#39;package:purrr&#39;:
-
-    compose, simplify</code></pre>
-<pre><code>The following object is masked from &#39;package:tidyr&#39;:
-
-    crossing</code></pre>
-<pre><code>The following object is masked from &#39;package:tibble&#39;:
-
-    as_data_frame</code></pre>
-<pre><code>The following object is masked from &#39;package:scater&#39;:
-
-    normalize</code></pre>
-<pre><code>The following object is masked from &#39;package:GenomicRanges&#39;:
-
-    union</code></pre>
-<pre><code>The following object is masked from &#39;package:IRanges&#39;:
-
-    union</code></pre>
-<pre><code>The following object is masked from &#39;package:S4Vectors&#39;:
-
-    union</code></pre>
-<pre><code>The following objects are masked from &#39;package:BiocGenerics&#39;:
-
-    normalize, path, union</code></pre>
-<pre><code>The following objects are masked from &#39;package:stats&#39;:
-
-    decompose, spectrum</code></pre>
-<pre><code>The following object is masked from &#39;package:base&#39;:
-
-    union</code></pre>
-<pre class="r"><code>library(RColorBrewer)
+<pre class="r"><code>library(Rphenograph)
+library(RColorBrewer)
 
 set.seed(22)
 out &lt;- Rphenograph(t(assay(sce, &quot;exprs&quot;)[rowData(sce)$use_channel,]),
                    k = 100)</code></pre>
-<pre><code>Run Rphenograph starts:
-  -Input data of 39125 rows and 37 columns
-  -k is set to 100</code></pre>
-<pre><code>  Finding nearest neighbors...DONE ~ 33.133 s
-  Compute jaccard coefficient between nearest-neighbor sets...DONE ~ 73.988 s
-  Build undirected graph from the weighted links...DONE ~ 19.702 s
-  Run louvain clustering on the graph ...DONE ~ 7.826 s</code></pre>
-<pre><code>Run Rphenograph DONE, totally takes 134.649s.</code></pre>
-<pre><code>  Return a community class
+<pre><code>  Finding nearest neighbors...DONE ~ 33.549 s
+  Compute jaccard coefficient between nearest-neighbor sets...DONE ~ 73.371 s
+  Build undirected graph from the weighted links...DONE ~ 19.176 s
+  Run louvain clustering on the graph ...DONE ~ 7.242 s
+  Return a community class
   -Modularity value: 0.841665 
   -Number of clusters: 25</code></pre>
 <pre class="r"><code>clusters &lt;- factor(membership(out[[2]]))
@@ -685,9 +826,44 @@ col_clust = colorRampPalette(brewer.pal(9,&quot;Paired&quot;))(length(unique(sce
 
 plotReducedDim(sce, dimred = &quot;UMAP&quot;, colour_by = &quot;clusters&quot;)+
   scale_color_manual(values = col_clust)</code></pre>
-<pre><code>Scale for &#39;colour&#39; is already present. Adding another scale for &#39;colour&#39;,
-which will replace the existing scale.</code></pre>
 <p><img src="figure/04_singlecell_analysis_IMMUCAN.Rmd/clustering-1.png" width="672" style="display: block; margin: auto;" /></p>
+<p>
+<button type="button" class="btn btn-default btn-xs btn-workflowr btn-workflowr-fig" data-toggle="collapse" data-target="#fig-clustering-1">
+Past versions of clustering-1.png
+</button>
+</p>
+<div id="fig-clustering-1" class="collapse">
+<div class="table-responsive">
+<table class="table table-condensed table-hover">
+<thead>
+<tr>
+<th>
+Version
+</th>
+<th>
+Author
+</th>
+<th>
+Date
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<a href="https://github.com/BodenmillerGroup/RCC/blob/a12b58da20c950666f271b6c22fa6c1cd19bfacb/IMC/docs/figure/04_singlecell_analysis_IMMUCAN.Rmd/clustering-1.png" target="_blank">a12b58d</a>
+</td>
+<td>
+lassedochreden
+</td>
+<td>
+2022-02-15
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
 </div>
 <div id="cluster-annotation-based-on-marker-expression" class="section level2">
 <h2>Cluster annotation based on marker expression</h2>
@@ -709,6 +885,43 @@ dittoHeatmap(mean_sce, genes = rownames(mean_sce),
              assay = &quot;exprs&quot;, cluster_cols = T, scale = &quot;row&quot;,
              heatmap.colors = viridis(100), annot.by = c(&quot;clusters&quot;,&quot;Indication&quot;))</code></pre>
 <p><img src="figure/04_singlecell_analysis_IMMUCAN.Rmd/anno-cluster-1.png" width="1440" style="display: block; margin: auto;" /></p>
+<p>
+<button type="button" class="btn btn-default btn-xs btn-workflowr btn-workflowr-fig" data-toggle="collapse" data-target="#fig-anno-cluster-1">
+Past versions of anno-cluster-1.png
+</button>
+</p>
+<div id="fig-anno-cluster-1" class="collapse">
+<div class="table-responsive">
+<table class="table table-condensed table-hover">
+<thead>
+<tr>
+<th>
+Version
+</th>
+<th>
+Author
+</th>
+<th>
+Date
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<a href="https://github.com/BodenmillerGroup/RCC/blob/a12b58da20c950666f271b6c22fa6c1cd19bfacb/IMC/docs/figure/04_singlecell_analysis_IMMUCAN.Rmd/anno-cluster-1.png" target="_blank">a12b58d</a>
+</td>
+<td>
+lassedochreden
+</td>
+<td>
+2022-02-15
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
 <pre class="r"><code>#Option 2: Min-Max [0,1] normalization of asinh-transformed expression counts
 assay(sce, &quot;min_max&quot;) &lt;- assay(sce, &quot;exprs&quot;) - rowMins(assay(sce, &quot;exprs&quot;))
 assay(sce, &quot;min_max&quot;) &lt;- assay(sce, &quot;min_max&quot;) / (rowMaxs(assay(sce, &quot;exprs&quot;)) - rowMins(assay(sce, &quot;exprs&quot;)))
@@ -722,6 +935,43 @@ dittoHeatmap(mean_sce, genes = rownames(mean_sce),
              assay = &quot;min_max&quot;, cluster_cols = T, scale = &quot;none&quot;,
              heatmap.colors = viridis(100), annot.by = c(&quot;clusters&quot;,&quot;Indication&quot;))</code></pre>
 <p><img src="figure/04_singlecell_analysis_IMMUCAN.Rmd/anno-cluster-2.png" width="1440" style="display: block; margin: auto;" /></p>
+<p>
+<button type="button" class="btn btn-default btn-xs btn-workflowr btn-workflowr-fig" data-toggle="collapse" data-target="#fig-anno-cluster-2">
+Past versions of anno-cluster-2.png
+</button>
+</p>
+<div id="fig-anno-cluster-2" class="collapse">
+<div class="table-responsive">
+<table class="table table-condensed table-hover">
+<thead>
+<tr>
+<th>
+Version
+</th>
+<th>
+Author
+</th>
+<th>
+Date
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<a href="https://github.com/BodenmillerGroup/RCC/blob/a12b58da20c950666f271b6c22fa6c1cd19bfacb/IMC/docs/figure/04_singlecell_analysis_IMMUCAN.Rmd/anno-cluster-2.png" target="_blank">a12b58d</a>
+</td>
+<td>
+lassedochreden
+</td>
+<td>
+2022-02-15
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
 <pre class="r"><code>###Optional: Customizable visualization with Complex Heatmap
 
 ###1. Heatmap body
@@ -769,7 +1019,48 @@ Heatmap(HM_body,
         column_title_gp = gpar(fontface = &quot;bold&quot;)
         ) %&gt;% 
   draw()</code></pre>
-<p><img src="figure/04_singlecell_analysis_IMMUCAN.Rmd/anno-cluster-3.png" width="1440" style="display: block; margin: auto;" /> ## Scoring markers by pairwise comparisons Effect sizes = Area under the curve (AUC), Cohens d log fold change Statistics for each effect size: mean, median, min, max</p>
+<p><img src="figure/04_singlecell_analysis_IMMUCAN.Rmd/anno-cluster-3.png" width="1440" style="display: block; margin: auto;" /></p>
+<p>
+<button type="button" class="btn btn-default btn-xs btn-workflowr btn-workflowr-fig" data-toggle="collapse" data-target="#fig-anno-cluster-3">
+Past versions of anno-cluster-3.png
+</button>
+</p>
+<div id="fig-anno-cluster-3" class="collapse">
+<div class="table-responsive">
+<table class="table table-condensed table-hover">
+<thead>
+<tr>
+<th>
+Version
+</th>
+<th>
+Author
+</th>
+<th>
+Date
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<a href="https://github.com/BodenmillerGroup/RCC/blob/a12b58da20c950666f271b6c22fa6c1cd19bfacb/IMC/docs/figure/04_singlecell_analysis_IMMUCAN.Rmd/anno-cluster-3.png" target="_blank">a12b58d</a>
+</td>
+<td>
+lassedochreden
+</td>
+<td>
+2022-02-15
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+<div id="scoring-markers-by-pairwise-comparisons" class="section level2">
+<h2>Scoring markers by pairwise comparisons</h2>
+<p>Effect sizes = Area under the curve (AUC), Cohens d log fold change Statistics for each effect size: mean, median, min, max</p>
 <p>Question: Is this a used approach? Default to <em>median Cohens log fold change</em>?</p>
 <pre class="r"><code>library(scran)
 library(scater)
@@ -783,6 +1074,43 @@ ordered_cohen &lt;- chosen[order(chosen$median.logFC.cohen, decreasing=TRUE),]
 plotExpression(sce, exprs_values = &quot;exprs&quot;,features=rownames(ordered_cohen)[1:6], 
     x=&quot;clusters&quot;, colour_by=&quot;clusters&quot;)</code></pre>
 <p><img src="figure/04_singlecell_analysis_IMMUCAN.Rmd/marker%20scoring%20by%20pairwise%20comp-1.png" width="672" style="display: block; margin: auto;" /></p>
+<p>
+<button type="button" class="btn btn-default btn-xs btn-workflowr btn-workflowr-fig" data-toggle="collapse" data-target="#fig-no-spaces-marker-scoring-by-pairwise-comp-1">
+Past versions of "marker scoring by pairwise comp-1.png"
+</button>
+</p>
+<div id="fig-no-spaces-marker-scoring-by-pairwise-comp-1" class="collapse">
+<div class="table-responsive">
+<table class="table table-condensed table-hover">
+<thead>
+<tr>
+<th>
+Version
+</th>
+<th>
+Author
+</th>
+<th>
+Date
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<a href="https://github.com/BodenmillerGroup/RCC/blob/a12b58da20c950666f271b6c22fa6c1cd19bfacb/IMC/docs/figure/04_singlecell_analysis_IMMUCAN.Rmd/marker scoring by pairwise comp-1.png" target="_blank">a12b58d</a>
+</td>
+<td>
+lassedochreden
+</td>
+<td>
+2022-02-15
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
 </div>
 <div id="use-astir-for-automated-cell-type-assignment" class="section level2">
 <h2>Use Astir for automated cell type assignment</h2>
@@ -795,27 +1123,15 @@ expr_astir &lt;- assay(sce,&quot;exprs&quot;) %&gt;% t() %&gt;% as.data.frame() 
 write.csv(expr_astir, file = &quot;~/Desktop/Astir/expr_astir.csv&quot;,row.names = TRUE)</code></pre>
 <p><code>Next: Run Astir in conda-environment.</code></p>
 <pre class="r"><code>library(easyalluvial)
-library(caret)</code></pre>
-<pre><code>Loading required package: lattice</code></pre>
-<pre><code>
-Attaching package: &#39;caret&#39;</code></pre>
-<pre><code>The following object is masked from &#39;package:purrr&#39;:
-
-    lift</code></pre>
-<pre class="r"><code>library(dittoSeq)
+library(caret)
+library(dittoSeq)
 library(viridis)
 library(foreach)
 
 #Import Astir cell type assignments
-astir_type &lt;- read_csv(&quot;~/Desktop/Astir/cell_types.csv&quot;,col_names = c(&quot;ID&quot;,&quot;cell_type&quot;),skip = 1)</code></pre>
-<pre><code>Rows: 39125 Columns: 2</code></pre>
-<pre><code>── Column specification ────────────────────────────────────────────────────────
-Delimiter: &quot;,&quot;
-chr (2): ID, cell_type
+astir_type &lt;- read_csv(&quot;~/Desktop/Astir/cell_types.csv&quot;,col_names = c(&quot;ID&quot;,&quot;cell_type&quot;),skip = 1)
 
-ℹ Use `spec()` to retrieve the full column specification for this data.
-ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.</code></pre>
-<pre class="r"><code>sce$astir_type &lt;- astir_type$cell_type
+sce$astir_type &lt;- astir_type$cell_type
 
 #Mark channels used for cell type assignment 
 astir_channel = c(&quot;CD45RO&quot;,&quot;CD45RA&quot;,&quot;CD3&quot;,&quot;CD68&quot;,&quot;CD20&quot;,&quot;Ecad&quot;,&quot;CarbonicAnhydrase&quot;,&quot;SMA&quot;,&quot;CD38&quot;,&quot;MPO&quot;)
@@ -827,15 +1143,126 @@ plotReducedDim(sce, dimred = &quot;UMAP&quot;,
                #shape_by = &quot;Indication&quot;,
                by_exprs_values = &quot;exprs&quot;)</code></pre>
 <p><img src="figure/04_singlecell_analysis_IMMUCAN.Rmd/astir-ana-1.png" width="1440" style="display: block; margin: auto;" /></p>
+<p>
+<button type="button" class="btn btn-default btn-xs btn-workflowr btn-workflowr-fig" data-toggle="collapse" data-target="#fig-astir-ana-1">
+Past versions of astir-ana-1.png
+</button>
+</p>
+<div id="fig-astir-ana-1" class="collapse">
+<div class="table-responsive">
+<table class="table table-condensed table-hover">
+<thead>
+<tr>
+<th>
+Version
+</th>
+<th>
+Author
+</th>
+<th>
+Date
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<a href="https://github.com/BodenmillerGroup/RCC/blob/a12b58da20c950666f271b6c22fa6c1cd19bfacb/IMC/docs/figure/04_singlecell_analysis_IMMUCAN.Rmd/astir-ana-1.png" target="_blank">a12b58d</a>
+</td>
+<td>
+lassedochreden
+</td>
+<td>
+2022-02-15
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
 <pre class="r"><code>#Heatmap visualization (all cells)
 dittoHeatmap(sce, genes = rownames(sce)[rowData(sce)$use_astir],
              assay = &quot;exprs&quot;, cluster_cols = F, order.by = &quot;astir_type&quot; , scale = &quot;none&quot;,
              heatmap.colors = viridis(100), annot.by = c(&quot;astir_type&quot;,&quot;clusters&quot;))</code></pre>
 <p><img src="figure/04_singlecell_analysis_IMMUCAN.Rmd/astir-ana-2.png" width="1440" style="display: block; margin: auto;" /></p>
+<p>
+<button type="button" class="btn btn-default btn-xs btn-workflowr btn-workflowr-fig" data-toggle="collapse" data-target="#fig-astir-ana-2">
+Past versions of astir-ana-2.png
+</button>
+</p>
+<div id="fig-astir-ana-2" class="collapse">
+<div class="table-responsive">
+<table class="table table-condensed table-hover">
+<thead>
+<tr>
+<th>
+Version
+</th>
+<th>
+Author
+</th>
+<th>
+Date
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<a href="https://github.com/BodenmillerGroup/RCC/blob/a12b58da20c950666f271b6c22fa6c1cd19bfacb/IMC/docs/figure/04_singlecell_analysis_IMMUCAN.Rmd/astir-ana-2.png" target="_blank">a12b58d</a>
+</td>
+<td>
+lassedochreden
+</td>
+<td>
+2022-02-15
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
 <pre class="r"><code>dittoHeatmap(sce, genes = rownames(sce)[rowData(sce)$use_astir],
              assay = &quot;exprs&quot;, cluster_cols = F, order.by = &quot;clusters&quot; , scale = &quot;none&quot;,
              heatmap.colors = viridis(100), annot.by = c(&quot;astir_type&quot;,&quot;clusters&quot;))</code></pre>
 <p><img src="figure/04_singlecell_analysis_IMMUCAN.Rmd/astir-ana-3.png" width="1440" style="display: block; margin: auto;" /></p>
+<p>
+<button type="button" class="btn btn-default btn-xs btn-workflowr btn-workflowr-fig" data-toggle="collapse" data-target="#fig-astir-ana-3">
+Past versions of astir-ana-3.png
+</button>
+</p>
+<div id="fig-astir-ana-3" class="collapse">
+<div class="table-responsive">
+<table class="table table-condensed table-hover">
+<thead>
+<tr>
+<th>
+Version
+</th>
+<th>
+Author
+</th>
+<th>
+Date
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<a href="https://github.com/BodenmillerGroup/RCC/blob/a12b58da20c950666f271b6c22fa6c1cd19bfacb/IMC/docs/figure/04_singlecell_analysis_IMMUCAN.Rmd/astir-ana-3.png" target="_blank">a12b58d</a>
+</td>
+<td>
+lassedochreden
+</td>
+<td>
+2022-02-15
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
 <pre class="r"><code>#Heatmap visualization (aggregated)
 mean_sce_astir &lt;- aggregateAcrossCells(sce, ids = sce$astir_type,
                                  statistics = &quot;median&quot;,
@@ -846,6 +1273,43 @@ dittoHeatmap(mean_sce_astir, genes = rownames(mean_sce_astir),
              assay = &quot;exprs&quot;, cluster_cols = T, scale = &quot;none&quot;,
              heatmap.colors = viridis(100), annot.by = c(&quot;astir_type&quot;))</code></pre>
 <p><img src="figure/04_singlecell_analysis_IMMUCAN.Rmd/astir-ana-4.png" width="1440" style="display: block; margin: auto;" /></p>
+<p>
+<button type="button" class="btn btn-default btn-xs btn-workflowr btn-workflowr-fig" data-toggle="collapse" data-target="#fig-astir-ana-4">
+Past versions of astir-ana-4.png
+</button>
+</p>
+<div id="fig-astir-ana-4" class="collapse">
+<div class="table-responsive">
+<table class="table table-condensed table-hover">
+<thead>
+<tr>
+<th>
+Version
+</th>
+<th>
+Author
+</th>
+<th>
+Date
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<a href="https://github.com/BodenmillerGroup/RCC/blob/a12b58da20c950666f271b6c22fa6c1cd19bfacb/IMC/docs/figure/04_singlecell_analysis_IMMUCAN.Rmd/astir-ana-4.png" target="_blank">a12b58d</a>
+</td>
+<td>
+lassedochreden
+</td>
+<td>
+2022-02-15
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
 <pre class="r"><code>alluvial_wide(data = colData(sce) %&gt;% as.data.frame() %&gt;% select(&quot;cell_labels&quot;,&quot;astir_type&quot;), 
               max_variables = 6,
               fill_by = &#39;all_flows&#39;,
@@ -853,6 +1317,43 @@ dittoHeatmap(mean_sce_astir, genes = rownames(mean_sce_astir),
   theme_classic(base_size = 12, base_line_size = 0.5)+
   theme(axis.title.y = element_blank(), axis.ticks.y = element_blank(), axis.text.y = element_blank())</code></pre>
 <p><img src="figure/04_singlecell_analysis_IMMUCAN.Rmd/astir-ana-5.png" width="1440" style="display: block; margin: auto;" /></p>
+<p>
+<button type="button" class="btn btn-default btn-xs btn-workflowr btn-workflowr-fig" data-toggle="collapse" data-target="#fig-astir-ana-5">
+Past versions of astir-ana-5.png
+</button>
+</p>
+<div id="fig-astir-ana-5" class="collapse">
+<div class="table-responsive">
+<table class="table table-condensed table-hover">
+<thead>
+<tr>
+<th>
+Version
+</th>
+<th>
+Author
+</th>
+<th>
+Date
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<a href="https://github.com/BodenmillerGroup/RCC/blob/a12b58da20c950666f271b6c22fa6c1cd19bfacb/IMC/docs/figure/04_singlecell_analysis_IMMUCAN.Rmd/astir-ana-5.png" target="_blank">a12b58d</a>
+</td>
+<td>
+lassedochreden
+</td>
+<td>
+2022-02-15
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
 <pre class="r"><code>T_cell = c(&quot;cytolytic_CD8&quot;,&quot;CD8_other&quot;,&quot;cytolytic_exhausted_CD8&quot;,&quot;Treg&quot;,&quot;exhausted_CD8&quot;,&quot;CD4_other&quot;,&quot;cytolytic_CD4&quot;,&quot;PD1_CD4&quot;,&quot;cytolytic_PD1_CD4&quot;) 
 B_cell = c(&quot;B_cell&quot;)
 tumor = c(&quot;Tumor&quot;,&quot;Tumor_Ki67&quot;)
@@ -883,6 +1384,43 @@ alluvial_wide(data = astir_test %&gt;% select(&quot;cell_label_simple&quot;,&quo
   theme_classic(base_size = 12, base_line_size = 0.5)+
   theme(axis.title.y = element_blank(), axis.ticks.y = element_blank(), axis.text.y = element_blank())</code></pre>
 <p><img src="figure/04_singlecell_analysis_IMMUCAN.Rmd/astir-ana-6.png" width="1440" style="display: block; margin: auto;" /></p>
+<p>
+<button type="button" class="btn btn-default btn-xs btn-workflowr btn-workflowr-fig" data-toggle="collapse" data-target="#fig-astir-ana-6">
+Past versions of astir-ana-6.png
+</button>
+</p>
+<div id="fig-astir-ana-6" class="collapse">
+<div class="table-responsive">
+<table class="table table-condensed table-hover">
+<thead>
+<tr>
+<th>
+Version
+</th>
+<th>
+Author
+</th>
+<th>
+Date
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<a href="https://github.com/BodenmillerGroup/RCC/blob/a12b58da20c950666f271b6c22fa6c1cd19bfacb/IMC/docs/figure/04_singlecell_analysis_IMMUCAN.Rmd/astir-ana-6.png" target="_blank">a12b58d</a>
+</td>
+<td>
+lassedochreden
+</td>
+<td>
+2022-02-15
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
 <pre class="r"><code>run&lt;-unique(astir_test$astir_type)
 astir_senspe &lt;- foreach(i = seq_along(run),.combine = rbind) %do% {
 sen &lt;- sensitivity(table(astir_test$astir_type == run[i],astir_test$cell_label_simple == run[i]))
@@ -915,6 +1453,43 @@ library(cowplot)
 plotExpression(sce, exprs_values = &quot;exprs&quot;,features=c(&quot;CD3&quot;), 
     x=&quot;clusters&quot;, colour_by=&quot;clusters&quot;)</code></pre>
 <p><img src="figure/04_singlecell_analysis_IMMUCAN.Rmd/subclustering-1.png" width="1440" style="display: block; margin: auto;" /></p>
+<p>
+<button type="button" class="btn btn-default btn-xs btn-workflowr btn-workflowr-fig" data-toggle="collapse" data-target="#fig-subclustering-1">
+Past versions of subclustering-1.png
+</button>
+</p>
+<div id="fig-subclustering-1" class="collapse">
+<div class="table-responsive">
+<table class="table table-condensed table-hover">
+<thead>
+<tr>
+<th>
+Version
+</th>
+<th>
+Author
+</th>
+<th>
+Date
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<a href="https://github.com/BodenmillerGroup/RCC/blob/a12b58da20c950666f271b6c22fa6c1cd19bfacb/IMC/docs/figure/04_singlecell_analysis_IMMUCAN.Rmd/subclustering-1.png" target="_blank">a12b58d</a>
+</td>
+<td>
+lassedochreden
+</td>
+<td>
+2022-02-15
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
 <pre class="r"><code>#Clusters: 2,9,12,16,20
 CD3_clus &lt;- c(&quot;3&quot;,&quot;5&quot;,&quot;7&quot;,&quot;15&quot;,&quot;17&quot;)
 
@@ -937,8 +1512,82 @@ cur_clust &lt;- Mclust(assay(sce, &quot;exprs&quot;)[&quot;CD3&quot;,], G = 2)
 
 plot(cur_clust, what = &quot;classification&quot;)</code></pre>
 <p><img src="figure/04_singlecell_analysis_IMMUCAN.Rmd/subclustering-2.png" width="1440" style="display: block; margin: auto;" /></p>
+<p>
+<button type="button" class="btn btn-default btn-xs btn-workflowr btn-workflowr-fig" data-toggle="collapse" data-target="#fig-subclustering-2">
+Past versions of subclustering-2.png
+</button>
+</p>
+<div id="fig-subclustering-2" class="collapse">
+<div class="table-responsive">
+<table class="table table-condensed table-hover">
+<thead>
+<tr>
+<th>
+Version
+</th>
+<th>
+Author
+</th>
+<th>
+Date
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<a href="https://github.com/BodenmillerGroup/RCC/blob/a12b58da20c950666f271b6c22fa6c1cd19bfacb/IMC/docs/figure/04_singlecell_analysis_IMMUCAN.Rmd/subclustering-2.png" target="_blank">a12b58d</a>
+</td>
+<td>
+lassedochreden
+</td>
+<td>
+2022-02-15
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
 <pre class="r"><code>plot(cur_clust, what = &quot;density&quot;)</code></pre>
 <p><img src="figure/04_singlecell_analysis_IMMUCAN.Rmd/subclustering-3.png" width="1440" style="display: block; margin: auto;" /></p>
+<p>
+<button type="button" class="btn btn-default btn-xs btn-workflowr btn-workflowr-fig" data-toggle="collapse" data-target="#fig-subclustering-3">
+Past versions of subclustering-3.png
+</button>
+</p>
+<div id="fig-subclustering-3" class="collapse">
+<div class="table-responsive">
+<table class="table table-condensed table-hover">
+<thead>
+<tr>
+<th>
+Version
+</th>
+<th>
+Author
+</th>
+<th>
+Date
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<a href="https://github.com/BodenmillerGroup/RCC/blob/a12b58da20c950666f271b6c22fa6c1cd19bfacb/IMC/docs/figure/04_singlecell_analysis_IMMUCAN.Rmd/subclustering-3.png" target="_blank">a12b58d</a>
+</td>
+<td>
+lassedochreden
+</td>
+<td>
+2022-02-15
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
 <pre class="r"><code>#sce$CD3_class &lt;- cur_clust$classification</code></pre>
 <br>
 <p>
