@@ -67,7 +67,7 @@ plot_grid(plotlist = all_plots)
 
 Here I will use Rphenograph (Jaccard-based weights, Louvain clustering as community detection algorithm) to cluster the cells.
 
-```{r clustering}
+```{r clustering, message = FALSE,warning=FALSE}
 library(Rphenograph)
 library(RColorBrewer)
 
@@ -171,8 +171,9 @@ Heatmap(HM_body,
         ) %>% 
   draw()
 ```
-## Scoring markers by pairwise comparisons
-Effect sizes = Area under the curve (AUC), Cohens d log fold change
+
+## Scoring markers by pairwise comparisons 
+Effect sizes = Area under the curve (AUC), Cohens d log fold change 
 Statistics for each effect size: mean, median, min, max 
 
 Question: Is this a used approach? Default to *median Cohens log fold change*? 
@@ -207,7 +208,7 @@ write.csv(expr_astir, file = "~/Desktop/Astir/expr_astir.csv",row.names = TRUE)
 
 `Next: Run Astir in conda-environment.`
 
-```{r astir-ana,fig.width=15,fig.height=10}
+```{r astir-ana,fig.width=15,fig.height=10, message = FALSE,warning=FALSE}
 library(easyalluvial)
 library(caret)
 library(dittoSeq)
