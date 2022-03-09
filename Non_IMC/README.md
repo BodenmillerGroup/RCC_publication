@@ -1,4 +1,4 @@
-# Non_IMC
+# Non_IMC_RCC
 
 A [workflowr][] project.
 
