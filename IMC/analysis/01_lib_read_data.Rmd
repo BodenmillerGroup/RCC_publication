@@ -1,0 +1,137 @@
+---
+title: "01_lib_read_data"
+author: "Lasse Meyer"
+date: "1/24/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## Software requirements
+
+```{r lib, message=FALSE,warning=FALSE}
+#Data containers
+library(SpatialExperiment)
+library(SingleCellExperiment)
+
+#Data processing
+library(CATALYST)
+library(scuttle)
+library(scater)
+library(imcRtools)
+
+#Data visualization
+library(cytomapper)
+library(dittoSeq)
+
+#Utilities
+library(tidyverse)
+library(openxlsx)
+library(stringr)
+```
+
+## Read in single-cell information
+based on [SpatialExperiment](https://bioconductor.org/packages/release/bioc/html/SingleCellExperiment.html)
+class (Extension of `SingleCellExperiment` class).
+
+### steinbock generated data
+The `read_steinbock` function provided by `imcRtools` can now be used to read in
+`steinbock` generated data. 
+
+```{r read and inspect steinbock}
+spe <- read_steinbock("~/Desktop/IMC processing/steinbock_IMMUCAN/")
+spe
+
+#Inspect data
+counts(spe[1:5,1:5])
+rowData(spe)
+colData(spe)
+counts(spe[1:5,1:5])
+head(spatialCoords(spe)) #main difference between SPE and SCE - single cell location is stored in spatialCoords rather than colData
+colPair(spe) #spatial object graphs
+```
+
+## Single-cell processing
+
+We can set the `colnames` of the object to generate unique identifiers per cell:
+
+```{r set-colnames}
+colnames(spe) <- paste0(spe$sample_id, "_", spe$ObjectNumber)
+```
+
+It is also often the case that sample-specific metadata are available externally.
+For the current data, we need to link the cancer type (also referred to as "Indication")
+to each sample. This metadata is available as external excel file:
+
+```{r add-indication}
+meta <- read.xlsx("~/Desktop/IMC processing/steinbock_IMMUCAN/sample_metadata.xlsx")
+
+spe$patient_id <- str_extract_all(spe$sample_id, "[0-9]+", simplify = TRUE)[,2]
+spe$indication <- meta$Indication[match(spe$patient_id, meta$Sample.ID)]
+```
+
+**Transform counts**
+
+Problem: Right-skewed distribution (bias from highly expressing cells)
+Solution: Count transformation using an inverse hyperbolic sine function (arcsinh; common in flow cytometry) = leads to linear-like scale near zero and log-like scale beyond a threshold (`cofactor`)
+We apply a `cofactor` of `1`. 
+
+```{r transform-counts, message=FALSE}
+#Raw counts
+dittoRidgePlot(spe, var = "CD3", group.by = "patient_id", assay = "counts")
+
+#Transformed counts
+assay(spe, "exprs") <- asinh(counts(spe)/1)
+dittoRidgePlot(spe, var = "CD3", group.by = "patient_id", assay = "exprs")
+```
+**Define interesting channels**
+
+Subset markers of interest for downstream analysis.
+
+```{r select-features}
+rowData(spe)$use_channel <- !grepl("DNA|Histone", rowData(spe)$Clean_Target)
+```
+
+## Read in images
+
+Read in multi-channel images (TIFF) and segmentation masks into a
+`CytoImageList` container using the `loadImages` function from the `cytomapper` package.
+
+The multi-channel images are saved as 32-bit images while the segmentation masks are
+saved as 16-bit images. To correctly scale pixel values of the segmentation
+masks when readin them in set `as.is = TRUE`.
+
+```{r read-images}
+images <- loadImages("~/Desktop/IMC processing/steinbock_IMMUCAN/img/")
+masks <- loadImages("~/Desktop/IMC processing/steinbock_IMMUCAN/masks/", as.is = TRUE)
+
+#set channel-names for multi-channel images
+#double-check that the channel order is correct
+channelNames(images) <- rownames(spe)
+images
+```
+
+Add additional metadata to the `elementMetadata` slot of the `CytoImageList` (accessible via mcols)
+
+```{r add-image-metadata}
+all.equal(names(images), names(masks))
+
+patient_id <- str_extract_all(names(images), "[0-9]+", simplify = TRUE)[,2]
+
+indication <- meta$Indication[match(patient_id, meta$Sample.ID)] 
+
+mcols(images) <- mcols(masks) <- DataFrame(sample_id = names(images),
+                                           patient_id = patient_id,
+                                           indication = indication)
+```
+
+## Save objects for downstream analysis
+
+```{r save-objects-read-data}
+saveRDS(spe, "~/Desktop/IMC processing/data_analysis/spe.rds")
+saveRDS(images, "~/Desktop/IMC processing/data_analysis/images.rds")
+saveRDS(masks, "~/Desktop/IMC processing/data_analysis/masks.rds")
+```

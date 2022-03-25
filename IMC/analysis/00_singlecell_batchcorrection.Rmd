@@ -1,0 +1,61 @@
+---
+title: "00_singlecell_batchcorrection"
+author: "Lasse Meyer"
+date: "2/17/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Batch correction
+
+If batch effects are present, I can perform batch correction with the `fastMNN`(Mutual nearest neighbors) from the [batchelor](https://bioconductor.org/packages/release/bioc/html/batchelor.html) package. 
+
+**BE AWARE**: In general, *cell-based* analyses are safe to apply on corrected data; indeed, the whole purpose of the correction is to place all cells in the same coordinate space. However, the same cannot be easily said for *gene-based* procedures like DE analyses or marker gene detection. See [here](https://bioconductor.org/books/3.14/OSCA.multisample/using-corrected-values.html#for-between-batch-comparisons) for more information.
+
+```{r batch-corr, message = FALSE, warning = FALSE}
+#TO BE UPDATED
+
+library(batchelor)
+
+# Load data
+sce_1 <- readRDS("~/switchdrive/RCC_project/data/rcc_sce_Batch20200528.rds")
+sce_2 <- readRDS("~/switchdrive/RCC_project/data/rcc_sce_Batch20201113.rds")
+sce_3 <- readRDS("~/switchdrive/RCC_project/data/rcc_sce_Batch20210304.rds")
+
+# Combine different batches
+## Synchronize rowdata
+universe <- intersect(rownames(sce_1),rownames(sce_2))
+sce_1 <- sce_1[universe,]
+sce_2 <- sce_2[universe,]
+rownames(sce_3)[which(rownames(sce_3) == "LAG3 / LAG33")] <- "LAG3"
+sce_3 <- sce_3[universe,]
+
+rowData(sce_1) -> rowData(sce_2) -> rowData(sce_3)
+
+## Combine objects by columns (adding new columns to colData if unique in any sce object - ideally the same columns should be present)
+sce <- combineCols(sce_1,sce_2,sce_3)
+assay(sce,"exprs") <- as.matrix(assay(sce,"exprs"))
+
+# Run MNN
+set.seed(22)
+mnn.out <- fastMNN(sce_1,sce_2,sce_3, d=NA, k=20, assay.type = "exprs",subset.row=rowData(sce_1)$use_channel,
+    BSPARAM=BiocSingular::RandomParam(deferred=TRUE))
+
+#the corrected matrix contains low-dimensional corrected coordinates for all cells, which we will use in "cell-based" downstream analyses.
+dim(reducedDim(mnn.out, "corrected"))
+
+reducedDim(sce,"corrected") <- reducedDim(mnn.out, "corrected")
+
+set.seed(22)
+sce <- runUMAP(sce, dimred="corrected",name = "UMAP_cor") 
+
+#Compare before and after                        
+plotReducedDim(sce, dimred = "UMAP", colour_by = "BatchId")
+plotReducedDim(sce, dimred = "UMAP_cor", colour_by = "BatchId")
+
+###Save RDS object after MNN
+saveRDS(sce, "/Volumes/rcc_volume/IMMUCAN/rcc_sce_BatchCombined_Corrected.rds")
+```

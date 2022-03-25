@@ -1,0 +1,209 @@
+---
+title: "04_singlecell_analysis"
+author: "Lasse Meyer"
+date: "1/24/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Here, I will perform analysis on the single-cell level.
+
+```{r load-data}
+spe <- readRDS("~/Desktop/IMC processing/data_analysis/spe_comp.rds")
+```
+
+## Dimensionality reduction
+
+First, I will visualize the cells.
+
+```{r tsne-umap, message=FALSE}
+library(scater)
+library(uwot)
+library(tidyverse)
+
+set.seed(22)
+
+spe <- runTSNE(spe, subset_row = rowData(spe)$use_channels,
+                        exprs_values = "exprs")
+
+spe <- runUMAP(spe, subset_row = rowData(spe)$use_channels,
+                        exprs_values = "exprs")
+
+
+plotReducedDim(spe, dimred = "TSNE", colour_by = "indication")
+plotReducedDim(spe, dimred = "UMAP", colour_by = "indication")
+
+```
+
+## Marker expression visualization
+
+Next, I will visualize single-cell marker expression.
+
+```{r viz markers, fig.height=15, fig.width=15}
+#Visualize marker of interest
+plotReducedDim(spe, dimred = "UMAP", 
+               colour_by = "CD20", 
+               shape_by = "indication",
+               by_exprs_values = "exprs",
+               point_size = 0.5)
+?plotReducedDim
+
+#Visualize all markers at once
+library(cowplot)
+all_plots <- lapply(c(rownames(spe)[rowData(spe)$use_channel]),
+                    function(x){
+                      p <- plotReducedDim(spe, dimred = "UMAP", 
+                                          colour_by = x, 
+                                          by_exprs_values = "exprs",
+                                          point_size = 0.5)
+                      return(p)                    
+                    })
+
+plot_grid(plotlist = all_plots)
+```
+
+## Clustering
+
+Here I will use Rphenograph to cluster the cells.
+
+```{r clustering}
+library(Rphenograph)
+library(RColorBrewer)
+
+set.seed(22)
+out <- Rphenograph(t(assay(spe, "exprs")[rowData(spe)$use_channel,]),
+                   k = 100)
+
+clusters <- factor(membership(out[[2]]))
+
+dim(assay(spe))
+
+spe$clusters <- clusters
+
+
+cluster_color <- colorRampPalette(brewer.pal(9,"Set1"))(length(unique(clusters)))
+names(cluster_color) <- levels(clusters)
+
+plotReducedDim(spe, dimred = "TSNE", colour_by = "clusters") +
+  scale_color_manual(values = cluster_color)
+
+```
+##Postive or negative for certain markers
+
+```{r number-pos, message = F,fig.width=15,fig.height=10}
+
+library(mclust)
+library(dittoSeq)
+library(viridis)
+library(scuttle)
+
+# CD45RO 
+cur_clust <- Mclust(assay(spe, "exprs")["CD45RO",], G = 2)
+
+plot(cur_clust, what = "classification")
+plot(cur_clust, what = "density")
+
+spe$CD45_class <- cur_clust$classification
+  
+  colData(spe) %>% as.data.frame() %>%
+  mutate(classification = as.factor(cur_clust$classification)) %>%
+  group_by(indication, classification, .drop = FALSE) %>%
+  summarize(n_cells = n()) %>%
+  mutate(fraction_cells = n_cells/sum(n_cells)) %>%
+  ggplot() + geom_tile(aes(classification,indication, fill = fraction_cells)) +
+  scale_fill_viridis_c() + theme_minimal(base_size = 15) +
+  theme(axis.title = element_blank(), axis.text.x = element_text(angle = 45,
+                                                                 hjust = 1)) +
+  ggtitle("Fraction of CD45RO+ cells")
+  
+  
+### Subset SPE accordingly
+  
+spe_CD45 <- spe[,spe$CD45_class == "2"]
+
+#Re-run dimensionality reduction 
+spe_CD45 <- runUMAP(spe_CD45, subset_row = rowData(spe_CD45)$use_channels,
+                        exprs_values = "exprs")
+spe_CD45 <- runTSNE(spe_CD45, subset_row = rowData(spe_CD45)$use_channels,
+                        exprs_values = "exprs")
+
+plotReducedDim(spe_CD45, dimred = "TSNE", colour_by = "indication")
+
+#Re-run clustering
+set.seed(22)
+out <- Rphenograph(t(assay(spe_CD45, "exprs")[rowData(spe_CD45)$use_channel,]),
+                   k = 100)
+
+clusters <- factor(membership(out[[2]]))
+
+spe_CD45$clusters <- clusters
+
+cluster_color <- colorRampPalette(brewer.pal(9,"Paired"))(length(unique(clusters)))
+names(cluster_color) <- levels(clusters)
+
+plotReducedDim(spe_CD45, dimred = "TSNE", colour_by = "clusters") +
+  scale_color_manual(values = cluster_color)
+
+#Heatmap visualization
+dittoHeatmap(spe_CD45, genes = rownames(spe_CD45)[rowData(spe)$use_channel],
+             assay = "exprs", cluster_cols = F, order.by = "clusters" , scale = "none",
+             heatmap.colors = viridis(100), annot.by = c("clusters","indication"))
+
+```
+
+##Cluster annotation based on marker expression
+
+```{r anno-cluster, message = F,fig.width=15,fig.height=10}
+
+#1. based on asinh-transformed expression counts
+
+#Genes of interest
+plotExpression(spe, exprs_values = "min_max",features=c("CD45RA", "CD45RO", "CD3", "CD4","CD8a","CD20"),
+    x=I(clusters), colour_by=I(clusters))
+
+ids = spe$clusters
+#ids = DataFrame(spe$clusters,spe$sample_id)
+#ids = spe$sample_id
+
+
+#AggregateAcrossCells does not work for SPE? 
+#try using SCE from the start - try again tomorrow - talk to Nils about gating strategy
+
+mean_spe <- aggregateAcrossCells(spe, ids = spe$clusters,
+                                 statistics = "mean",
+                                 use.assay.type = "exprs",
+                                 subset.row = rowData(spe)$use_channel)
+
+
+?I()
+
+unique(names(ids))
+example_SPE =mockSPE()
+
+
+plotHeatmap(mean_spe, features = rownames(mean_spe), columns = mean_spe$indication,
+            exprs_values = "exprs", center = TRUE, scale = TRUE, 
+            colour_columns_by = mean_spe$sample_id)
+            
+dittoHeatmap(mean_spe, genes = rownames(mean_spe), assay = "exprs", metas = "indication")
+
+colData(mean_spe)
+
+column_annotation_colors = list(clusters = cluster_color))
+
+
+
+
+#Min-Max normalization (min = 0, max = 1)
+assay(spe, "min_max") <- assay(spe, "exprs") - rowMins(assay(spe, "exprs"))
+assay(spe, "min_max") <- assay(spe, "min_max") / rowQuantiles(assay(spe, "exprs"), probs = 0.99)
+
+plotExpression(spe, exprs_values = "min_max",features=c("CD45RA", "CD45RO", "CD3", "CD4","CD8a","CD20"),
+    x=I(clusters), colour_by=I(clusters))
+
+
+```
+

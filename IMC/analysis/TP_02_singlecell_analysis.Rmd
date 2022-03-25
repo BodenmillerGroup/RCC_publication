@@ -1,0 +1,209 @@
+---
+title: "02_singlecell_analysis_tp"
+author: "Lasse Meyer"
+date: "1/24/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Here, I will perform analysis on the single-cell level from RCC tumor pilot data.
+
+```{r load and combine data, message = FALSE, warning = FALSE}
+#Load all necessary libraries
+library(scater)
+library(batchelor)
+library(tidyverse)
+library(Rphenograph)
+library(bluster)
+library(scran)
+library(RColorBrewer)
+library(foreach)
+library(clustree)
+library(ComplexHeatmap)
+library(viridis)
+library(dittoSeq)
+library(easyalluvial)
+library(caret)
+library(mclust)
+library(scuttle)
+library(cowplot)
+
+sce <- readRDS("/Volumes/rcc_volume/RCC/IMC/sce_tumorpilot.rds")
+```
+
+## Dimensionality reduction
+
+First, I will visualize the cells in low-dimensional space. If batch effects seem to be present refer to the batch-correction script [here](00_singlecell_batchcorrection.html) or see below.
+
+```{r tsne-umap, message=FALSE, warning = FALSE}
+set.seed(22)
+sce <- runUMAP(sce, subset_row = rowData(sce)$use_channel_2,exprs_values = "exprs")
+
+plotReducedDim(sce, dimred = "UMAP", colour_by = "type")
+```
+
+## Marker expression visualization
+
+Next, I will visualize single-cell marker expression.
+
+```{r viz markers, fig.height=15, fig.width=15}
+#Visualize all markers at once
+all_plots <- lapply(c(rownames(sce)[rowData(sce)$use_channel_2]),
+                    function(x){
+                      p <- plotReducedDim(sce, dimred = "UMAP", 
+                                          colour_by = x, 
+                                          by_exprs_values = "exprs",
+                                          point_size = 0.5)
+                      return(p)                    
+                    })
+
+plot_grid(plotlist = all_plots)
+```
+
+Next: Filter for ccRCC samples only.
+
+```{r load and combine data-2, message = FALSE, warning = FALSE}
+sce <- sce[,sce$type == c("ccRCC_VHL","ccRCC_notVHL")]
+```
+
+## Dimensionality reduction
+
+First, I will visualize the cells in low-dimensional space. If batch effects seem to be present refer to the batch-correction script [here](00_singlecell_batchcorrection.html).
+
+```{r tsne-umap-2, message=FALSE, warning = FALSE}
+set.seed(22)
+sce <- runUMAP(sce, subset_row = rowData(sce)$use_channel_2,exprs_values = "exprs")
+
+plotReducedDim(sce, dimred = "UMAP", colour_by = "type")
+```
+
+
+## Optional: Batch correction
+
+If batch/patient specific-effects are present, I can perform batch correction with the `fastMNN`(Mutual nearest neighbors) from the [batchelor](https://bioconductor.org/packages/release/bioc/html/batchelor.html) package. 
+
+**BE AWARE**: In general, *cell-based* analyses are safe to apply on corrected data (e.g. clustering); indeed, the whole purpose of the correction is to place all cells in the same coordinate space. However, the same cannot be easily said for *gene-based* procedures like DE analyses or marker gene detection. See [here](https://bioconductor.org/books/3.14/OSCA.multisample/using-corrected-values.html#for-between-batch-comparisons) for more information.
+
+```{r batch-corr, message = FALSE, warning = FALSE}
+# Run MNN for sample ID correction
+set.seed(22)
+mnn.out <- fastMNN(sce, batch = sce$type, d=NA, k=20, assay.type = "exprs",subset.row=rowData(sce)$use_channel_2) 
+
+#the corrected matrix contains low-dimensional corrected coordinates for all cells, which we will use in "cell-based" downstream analyses.
+dim(reducedDim(mnn.out, "corrected"))
+
+reducedDim(sce,"corrected") <- reducedDim(mnn.out, "corrected")
+
+set.seed(22)
+sce <- runUMAP(sce, dimred="corrected",name = "UMAP_cor") 
+
+#Compare before and after                        
+plotReducedDim(sce, dimred = "UMAP", colour_by = "type")
+plotReducedDim(sce, dimred = "UMAP_cor", colour_by = "type")
+
+###Save RDS object after MNN
+saveRDS(sce, "/Volumes/rcc_volume/RCC/IMC/sce_tumorpilot_MNN.rds")
+```
+
+## Marker expression visualization
+
+Next, I will visualize single-cell marker expression.
+
+```{r viz markers-2, fig.height=15, fig.width=15}
+#Visualize all markers at once
+all_plots <- lapply(c(rownames(sce)[rowData(sce)$use_channel_2]),
+                    function(x){
+                      p <- plotReducedDim(sce, dimred = "UMAP", 
+                                          colour_by = x, 
+                                          by_exprs_values = "exprs",
+                                          point_size = 0.5)
+                      return(p)                    
+                    })
+
+plot_grid(plotlist = all_plots)
+```
+
+# Cell identity assignments
+
+Various strategies for cell type assignment are possible. Here I will test following strategies: 
+1. **"Cluster & Interpret"** - Graph-based clustering (Stability testing) -> Marker gene scoring -> Manual annotation 
+2. **ASTIR model** - Probabilistic assignment to *a priori* known cell types 
+3. **Gaussian Mixture Models (GMM)** - Clustering-based approach for well defined cell type markers 
+4. **Gate & Classify** - Cytomapper-based gating for subset of samples ("Ground truth") -> Train random forest classifier -> Classify new data
+
+## 1. Cluster & Interpret
+
+Here I will use Rphenograph (Jaccard-based weights, Louvain clustering as community detection algorithm) and a scran-like pipeline (rank-based weights, Walktrap clustering) to cluster the cells. 
+
+I will use a range of resolution parameters (k=50,100,150,200) and compare cluster results and stability using `clustree` and silhouette width/purity estimates using `bluster`.
+
+```{r cluster-sweep and testing, message = FALSE,warning=FALSE}
+#k=50 
+set.seed(22)
+out <- Rphenograph(t(assay(sce,"exprs")),
+                   k = 50)
+
+clusters_50 <- factor(membership(out[[2]]))
+sce$clusters_50 <- clusters_50
+
+col_clust <- colorRampPalette(brewer.pal(9, "Paired"))(length(unique(sce$clusters_50))) 
+
+plotReducedDim(sce, dimred = "UMAP", colour_by = "clusters_50")+
+  scale_color_manual(values = col_clust)
+```
+
+### Visualization of cluster marker expression 
+
+`Count Normalization`: For visualization I will perform **A. Min-max(0,1)** normalization on the arcsinh (cofactor = 1) transformed counts. (Other options: Z-scores, Winsoring/Clipping)
+
+```{r anno-cluster, message = F,fig.width=15,fig.height=10}
+#Min-Max [0,1] normalization of arcsinh-transformed counts
+assay(sce, "min_max") <- assay(sce, "exprs") - rowMins(assay(sce, "exprs"))
+assay(sce, "min_max") <- assay(sce, "min_max") / (rowMaxs(assay(sce, "exprs")) - rowMins(assay(sce, "exprs")))
+
+#Heatmap visualization (all cells)
+dittoHeatmap(sce, genes = rownames(sce)[rowData(sce)$use_channel_2],
+             assay = "min_max", cluster_cols = F, order.by = "clusters_50" , scale = "none",
+             heatmap.colors = viridis(100), annot.by = c("clusters_50","type"))
+
+#Aggregrate across cells with the mean (median is also possible)
+mean_sce <- aggregateAcrossCells(sce, ids = sce$clusters_50,
+                                 statistics = "mean",
+                                 use.assay.type = "min_max",
+                                 subset.row = rowData(sce)$use_channel_2)
+
+dittoHeatmap(mean_sce, genes = rownames(mean_sce),
+             assay = "min_max", cluster_cols = T, scale = "none",
+             heatmap.colors = viridis(100), annot.by = c("clusters_50"))
+```
+
+```{r cluster-pro, message = FALSE, warning = FALSE}
+#Fraction of PID per cluster
+cluster_PID <- colData(sce) %>% as.data.frame() %>% select(PID,type,clusters_50) %>% group_by(clusters_50,PID) %>% summarise(n_cells = n()) %>% mutate(fraction = n_cells/sum(n_cells))
+
+col_PID <- colorRampPalette(brewer.pal(9, "Accent"))(length(unique(cluster_PID$PID))) 
+
+ggplot(cluster_PID) +
+  geom_tile(color = "black",aes(clusters_50, fraction, fill = PID), position = "stack")+
+  scale_fill_manual(values = col_PID) + 
+  theme_classic(base_size = 15)+
+  ylab("Fraction")+
+  theme(axis.title.x = element_blank())
+
+#Fraction of cluster per PID
+cluster_clus <- colData(sce) %>% as.data.frame() %>% select(PID,type,clusters_50) %>% group_by(PID,clusters_50) %>% summarise(n_cells = n()) %>% mutate(fraction = n_cells/sum(n_cells))
+ 
+ggplot(cluster_clus) +
+  geom_tile(color = "black",aes(PID, fraction, fill = clusters_50), position = "stack")+
+  scale_fill_manual(values=col_clust) + 
+  theme_classic(base_size = 15)+
+  ylab("Fraction")+
+  theme(axis.title.x = element_blank())
+
+```
+
+
+

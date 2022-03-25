@@ -1,7 +1,7 @@
-name: IMC_RCC
+name: IMC
 output_dir: ../docs
 navbar:
-  title: IMC_RCC
+  title: IMC
   left:
   - text: Home
     href: index.html

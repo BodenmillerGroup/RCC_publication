@@ -1,0 +1,563 @@
+---
+title: "04_singlecell_analysis"
+author: "Lasse Meyer"
+date: "1/24/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Here, I will perform analysis on the single-cell level from RCC IMMUCAN data.
+
+```{r load and combine data, message = FALSE, warning = FALSE}
+#Load all necessary libraries
+library(scater)
+library(batchelor)
+library(tidyverse)
+library(Rphenograph)
+library(bluster)
+library(scran)
+library(RColorBrewer)
+library(foreach)
+library(clustree)
+library(ComplexHeatmap)
+library(viridis)
+library(dittoSeq)
+library(easyalluvial)
+library(caret)
+library(mclust)
+library(scuttle)
+library(cowplot)
+
+sce_1 <- readRDS("~/switchdrive/RCC_project/data/rcc_sce_Batch20200528.rds")
+sce_2 <- readRDS("~/switchdrive/RCC_project/data/rcc_sce_Batch20201113.rds")
+sce_3 <- readRDS("~/switchdrive/RCC_project/data/rcc_sce_Batch20210304.rds")
+
+# Combine different batches
+## Synchronize rowdata
+universe <- intersect(rownames(sce_1),rownames(sce_2))
+sce_1 <- sce_1[universe,]
+sce_2 <- sce_2[universe,]
+rownames(sce_3)[which(rownames(sce_3) == "LAG3 / LAG33")] <- "LAG3"
+sce_3 <- sce_3[universe,]
+
+rowData(sce_1) -> rowData(sce_2) -> rowData(sce_3)
+
+## Combine objects by columns (adding new columns to colData if unique in any sce object - ideally the same columns should be present)
+sce <- combineCols(sce_1,sce_2,sce_3)
+assay(sce,"exprs") <- as.matrix(assay(sce,"exprs"))
+```
+
+## Dimensionality reduction
+
+First, I will visualize the cells in low-dimensional space. If batch effects seem to be present refer to the batch-correction script [here](00_singlecell_batchcorrection.html) or see below.
+
+```{r tsne-umap, message=FALSE, warning = FALSE}
+#Select markers for downstream visualization
+rowData(sce)$use_channel <- !grepl("Iridium|Histone",rowData(sce)$Target)
+
+set.seed(22)
+sce <- runUMAP(sce, subset_row = rowData(sce)$use_channel,exprs_values = "exprs")
+
+plotReducedDim(sce, dimred = "UMAP", colour_by = "Indication") #should be GU for RCC
+plotReducedDim(sce, dimred = "UMAP", colour_by = "SampleId") #Patient variability?
+plotReducedDim(sce, dimred = "UMAP", colour_by = "BatchId") #Batch effects?
+```
+## Optional: Batch correction
+
+If batch/patient specific-effects are present, I can perform batch correction with the `fastMNN`(Mutual nearest neighbors) from the [batchelor](https://bioconductor.org/packages/release/bioc/html/batchelor.html) package. 
+
+**BE AWARE**: In general, *cell-based* analyses are safe to apply on corrected data (e.g. clustering); indeed, the whole purpose of the correction is to place all cells in the same coordinate space. However, the same cannot be easily said for *gene-based* procedures like DE analyses or marker gene detection. See [here](https://bioconductor.org/books/3.14/OSCA.multisample/using-corrected-values.html#for-between-batch-comparisons) for more information.
+
+```{r batch-corr, message = FALSE, warning = FALSE}
+# Run MNN for sample ID correction
+set.seed(22)
+mnn.out <- fastMNN(sce, batch = sce$SampleId, d=NA, k=20, assay.type = "exprs",subset.row=rowData(sce)$use_channel) 
+
+#the corrected matrix contains low-dimensional corrected coordinates for all cells, which we will use in "cell-based" downstream analyses.
+dim(reducedDim(mnn.out, "corrected"))
+
+reducedDim(sce,"corrected") <- reducedDim(mnn.out, "corrected")
+
+set.seed(22)
+sce <- runUMAP(sce, dimred="corrected",name = "UMAP_cor") 
+
+#Compare before and after                        
+plotReducedDim(sce, dimred = "UMAP", colour_by = "SampleId")
+plotReducedDim(sce, dimred = "UMAP_cor", colour_by = "SampleId")
+
+###Save RDS object after MNN
+saveRDS(sce, "/Volumes/rcc_volume/RCC/IMMUCAN/rcc_sce_BatchCombined_MNN.rds")
+```
+
+
+## Marker expression visualization
+
+Next, I will visualize single-cell marker expression.
+
+```{r viz markers, fig.height=15, fig.width=15}
+#Visualize marker of interest
+plotReducedDim(sce, dimred = "UMAP_cor", 
+               colour_by = "CD3", 
+               #shape_by = "Indication",
+               by_exprs_values = "exprs",
+               point_size = 0.5)
+
+#Visualize all markers at once
+all_plots <- lapply(c(rownames(sce)[rowData(sce)$use_channel]),
+                    function(x){
+                      p <- plotReducedDim(sce, dimred = "UMAP_cor", 
+                                          colour_by = x, 
+                                          by_exprs_values = "exprs",
+                                          point_size = 0.5)
+                      return(p)                    
+                    })
+
+plot_grid(plotlist = all_plots)
+```
+
+# Cell identity assignments
+
+Various strategies for cell type assignment are possible. Here I will test following strategies: 
+1. **"Cluster & Interpret"** - A.) Graph-based clustering (Stability testing) -> Marker gene scoring -> Manual annotation B.) Graph-based overclustering -> hierarchical clustering (stability testing) -> Manual annotation of cellular meta-clusters 
+2. **ASTIR model** - Probabilistic assignment to *a priori* known cell types 
+3. **Gaussian Mixture Models (GMM)** - Clustering-based approach for well defined cell type markers 
+4. **Gate & Classify** - Cytomapper-based gating for subset of samples ("Ground truth") -> Train random forest classifier -> Classify new data
+
+## 1. Cluster & Interpret
+
+Here I will use Rphenograph (Jaccard-based weights, Louvain clustering as community detection algorithm) and a scran-like pipeline (rank-based weights, Walktrap clustering) to cluster the cells. 
+
+I will use a range of resolution parameters (k=30,50,100) and compare cluster results and stability using `clustree` and silhouette width/purity estimates using `bluster`.
+
+```{r cluster-sweep and testing, message = FALSE,warning=FALSE}
+k=100
+set.seed(22)
+out <- Rphenograph(reducedDim(sce,"corrected"),
+                  k = 100)
+clusters_100 <- factor(membership(out[[2]]))
+sce$clusters_100 <- clusters_100
+
+plotReducedDim(sce, dimred = "UMAP", colour_by = "clusters_100")
+
+k=50 
+set.seed(22)
+out <- Rphenograph(reducedDim(sce,"corrected"),
+                   k = 50)
+clusters_50 <- factor(membership(out[[2]]))
+sce$clusters_50 <- clusters_50
+
+plotReducedDim(sce, dimred = "UMAP_cor", colour_by = "clusters_50")
+
+k=30 
+set.seed(22)
+out <- Rphenograph(reducedDim(sce,"corrected"),
+                   k = 30)
+clusters_30 <- factor(membership(out[[2]]))
+sce$clusters_30 <- clusters_30
+
+plotReducedDim(sce, dimred = "UMAP_cor", colour_by = "clusters_30")
+
+##Save RDS object after clustering
+saveRDS(sce, "/Volumes/rcc_volume/RCC/IMMUCAN/rcc_sce_BatchCombined_MNN_Clustered.rds")
+```
+
+### Cluster stability testing and comparison
+
+```{r clustree, message = FALSE, warning=FALSE, fig.width=10}
+#sce <- readRDS("/Volumes/rcc_volume/RCC/IMMUCAN/rcc_sce_BatchCombined_Clustered.rds")
+
+#Clustree
+clustree(sce, prefix = "clusters_", edge_arrow = FALSE)
+
+#Pairwise rand index 
+#Agreement between two clustering approaches - ARI > 0.5 = "good" similarity
+pairwiseRand(sce$clusters_50,sce$clusters_100, mode = "index")
+pairwiseRand(sce$clusters_100,sce$clusters_30, mode = "index")
+pairwiseRand(sce$clusters_50,sce$clusters_30, mode = "index")
+
+#By clusters for one method
+#1. Silhouette width [-1,1]
+#Clusters with large positive silhouette widths are well-separated from other clusters
+sil.approx <- approxSilhouette(t(assay(sce, "exprs")), clusters=sce$clusters_100)
+
+sil.data <- as.data.frame(sil.approx)
+sil.data$closest <- factor(ifelse(sil.data$width > 0, sce$clusters_100, sil.data$other))
+sil.data$cluster <- sce$clusters_100
+
+ggplot(sil.data, aes(x=cluster, y=width, colour=closest)) +
+    ggbeeswarm::geom_quasirandom(method="smiley")+
+  theme_classic()
+
+
+#Over different resolution parameters 
+clusters <- colnames(colData(sce))[str_detect(colnames(colData(sce)),"clusters_")]
+df <- foreach(i = seq_along(clusters),.combine = rbind) %do% {
+num_clus <- length(unique(colData(sce)[,clusters[i]]))
+sil <- approxSilhouette(t(assay(sce, "exprs")), clusters=colData(sce)[,clusters[i]])
+rmsd <- sum(clusterRMSD(t(assay(sce, "exprs")), colData(sce)[,clusters[i]], sum=TRUE), na.rm=TRUE)
+type <- ifelse(str_detect(clusters[i], "w"),"rank/walktrap","jaccard/louvain")
+data.frame(type = type, num_clus = num_clus,k = as.numeric(str_split(clusters[i],"_",simplify = TRUE)[,2]), sil = mean(sil$width), rmsd = rmsd)  
+}
+
+gridExtra::grid.arrange(
+  ggplot(df, aes(x=k, y=num_clus,color = type))+ 
+  geom_line(lwd = 2)+
+  theme_classic(),
+ggplot(df, aes(x=k, y=sil,color = type))+ 
+  geom_line(lwd = 2)+
+  theme_classic(),
+ggplot(df, aes(x=k, y=rmsd, color = type))+ 
+  geom_line(lwd = 2)+
+  theme_classic(),
+ncol=3
+)
+```
+
+### Visualization of cluster marker expression 
+
+`Count Normalization`: For visualization I will perform **A. Min-max(0,1)** normalization on the arcsinh (cofactor = 1) transformed counts. (Other options: Z-scores, Winsoring/Clipping)
+
+```{r anno-cluster, message = F,fig.width=15,fig.height=10}
+#Min-Max [0,1] normalization of arcsinh-transformed counts
+assay(sce, "min_max") <- assay(sce, "exprs") - rowMins(assay(sce, "exprs"))
+assay(sce, "min_max") <- assay(sce, "min_max") / (rowMaxs(assay(sce, "exprs")) - rowMins(assay(sce, "exprs")))
+
+#Heatmap visualization (all cells)
+dittoHeatmap(sce, genes = rownames(sce)[rowData(sce)$use_channel],
+             assay = "min_max", cluster_cols = F, order.by = "clusters_100" , scale = "none",
+             heatmap.colors = viridis(100), annot.by = c("clusters_100","Indication"))
+
+#Aggregrate across cells with the mean (median is also possible)
+mean_sce <- aggregateAcrossCells(sce, ids = sce$clusters_100,
+                                 statistics = "mean",
+                                 use.assay.type = "min_max",
+                                 subset.row = rowData(sce)$use_channel)
+
+dittoHeatmap(mean_sce, genes = rownames(mean_sce),
+             assay = "min_max", cluster_cols = T, scale = "none",
+             heatmap.colors = viridis(100), annot.by = c("clusters_100","Indication"))
+
+
+###Optional: Custom visualization with Complex Heatmap
+
+#Select marker categories for visualization e.g. cell state, cell type markers etc.
+rowData(sce)$marker_cat <- grepl("CD",rowData(sce)$Target,ignore.case = FALSE,fixed = TRUE)
+
+###1. Heatmap body
+HM_body <- assay(mean_sce,"min_max")
+#Colors heatmap body
+#col_main <- colorRamp2(c(0, 0.5, 1), c("#0000FF","#FFFFFF","#FF0000"), space = "RGB")
+col_main = viridis(100)
+
+###2. Top annotation
+#Colors
+col = list(clusters_100 = colorRampPalette(brewer.pal(9,"Paired"))(length(unique(mean_sce$clusters_100))), 
+           Indication = c("lightgreen")
+           )
+           
+col_list_1 = foreach(i=1:2) %do% {
+  color= col[[i]]
+  names(color)= sort(unique(colData(mean_sce)[,names(col)[i]]))
+  color
+}
+
+names(col_list_1) <- c(names(col))
+
+#Create annotation
+topanno_MCP = HeatmapAnnotation(Indication = mean_sce$Indication,
+                                clusters_100 = mean_sce$ids,
+                                ncells = anno_barplot(mean_sce$ncells,border = TRUE,gp=gpar(fill="black")),
+                                col = col_list_1)
+#Plot heatmap
+Heatmap(HM_body,
+        col = col_main,
+        name= "Min-Max norm",
+        cluster_columns = TRUE,
+        cluster_rows = TRUE,
+        row_split = rowData(mean_sce)$marker_cat,
+        row_dend_reorder = TRUE, 
+        show_column_dend = FALSE,
+        #row_title = c("Other","CD markers"),
+        row_title_gp = gpar(fontsize = 12),
+        row_title_rot = 0,
+        top_annotation = topanno_MCP,
+        border = TRUE,
+        show_row_names = TRUE,
+        show_column_names = FALSE,
+        column_title_gp = gpar(fontface = "bold")
+        ) %>% 
+  draw()
+```
+
+### Scoring markers by pairwise comparisons 
+Useful approach for unclear clusters. 
+Effect sizes = Area under the curve (AUC), Cohens d log fold change (Default to *median Cohens log fold change*?) 
+Statistics for each effect size: mean, median, min, max 
+
+```{r marker scoring by pairwise comp, message = FALSE, warning=FALSE}
+#marker.info <- scoreMarkers(sce, groups = sce$clusters_100,block = sce$SampleId, assay.type = "exprs")
+
+#If patient specific effects / batch effects were present: consider using block parameter (e.g. block = sce$SampleID)
+                                
+#chosen <- marker.info[["22"]]
+#ordered_AUC <- chosen[order(chosen$median.AUC, decreasing=TRUE),]
+#ordered_cohen <- chosen[order(chosen$median.logFC.cohen, decreasing=TRUE),]
+
+#plotExpression(sce, exprs_values = "exprs",features=rownames(ordered_cohen)[1:6], 
+#    x="clusters_50", colour_by="clusters_50")
+
+#It can help to visualize known lineage markers per cluster
+#plotExpression(sce, exprs_values = "exprs",features=c("CD3"), 
+#    x="clusters_50", colour_by="clusters_50")
+
+```
+
+### Manual cluster annotation
+
+```{r manual anno, message = FALSE, warning = FALSE}
+#Annotate
+anno_clus <- as.character(sce$clusters_100)
+
+#anno_clus[anno_clus == "1"] <- "Neutro_1"
+#anno_clus[anno_clus == "2"] <- "Mono_1"
+#anno_clus[anno_clus == "3"] <- "Tumor_1"
+#anno_clus[anno_clus == "4"] <- "Macro_1"
+#anno_clus[anno_clus == "5"] <- "CD8+T"
+#anno_clus[anno_clus == "6"] <- "Prolif"
+#anno_clus[anno_clus == "7"] <- "CD4+T"
+#anno_clus[anno_clus == "8"] <- "Macro_2"
+#anno_clus[anno_clus == "9"] <- "Stromal_1"
+#anno_clus[anno_clus == "10"] <- "Stromal_2"
+#anno_clus[anno_clus == "11"] <- "Mono_2"
+#anno_clus[anno_clus == "12"] <- "Undefined"
+#anno_clus[anno_clus == "13"] <- "CD8+T/Ki67+"
+#anno_clus[anno_clus == "14"] <- "CD8+T/CAIX+"
+#anno_clus[anno_clus == "15"] <- "Eosino"
+#anno_clus[anno_clus == "16"] <- "B cell"
+#anno_clus[anno_clus == "17"] <- "Tumor_2"
+#anno_clus[anno_clus == "18"] <- "NK"
+#anno_clus[anno_clus == "19"] <- "Macro_3"
+#anno_clus[anno_clus == "20"] <- "pDC"
+#anno_clus[anno_clus == "21"] <- "Neutro_2"
+#anno_clus[anno_clus == "22"] <- "CD8+T"
+#anno_clus[anno_clus == "23"] <- "Plasma"
+#anno_clus[anno_clus == "24"] <- "Macro_M2"
+#anno_clus[anno_clus == "25"] <- "Epi-1"
+
+#sce$clusters_anno <- anno_clus
+
+#col = col_list_1[[1]]
+#names(col) = sort(unique(sce$clusters_anno))
+#plotReducedDim(sce, dimred = "UMAP_cor", colour_by = "clusters_anno",text_by = "clusters_anno")+
+#  scale_color_manual(values = col)
+```
+
+## 2. ASTIR model
+
+see [here](https://www.sciencedirect.com/science/article/pii/S2405471221003355?via%3Dihub) for full publication (Geuenich et al.,2021, Cell Systems).
+
+```{r astir-expo}
+#Export arsinh normalized expression matrix as csv
+#Add sampleID and batchID as covariate in design matrix
+
+expr_astir <- assay(sce,"exprs") %>% t() %>% as.data.frame() %>% mutate(sample = sce$SampleId)
+
+write.csv(expr_astir, file = "~/Desktop/Coding_related/Astir/expr_astir.csv",row.names = TRUE)
+```
+
+`Next: Run Astir in conda-environment.`
+
+```{r astir-ana, message = FALSE,warning=FALSE}
+#Import Astir cell type assignments
+astir_type <- read_csv("~/Desktop/Coding_related/Astir/cell_types.csv",col_names = c("ID","cell_type"),skip = 1)
+
+sce$astir_type <- astir_type$cell_type
+
+#Mark channels used for cell type assignment 
+astir_channel = c("CD45RO","CD45RA","CD3","CD68","CD20","Ecad","CarbonicAnhydrase","SMA","CD38","MPO","CD163")
+
+rowData(sce)$use_astir <- rowData(sce) %>% as.data.frame() %>% mutate(use_astir = ifelse(rownames(sce) %in% astir_channel,TRUE,FALSE)) %>% pull(use_astir)
+
+plotReducedDim(sce, dimred = "UMAP_cor", 
+               colour_by = "astir_type", 
+               #shape_by = "Indication",
+               by_exprs_values = "exprs")
+
+#Heatmap visualization (all cells)
+dittoHeatmap(sce, genes = rownames(sce)[rowData(sce)$use_astir],
+             assay = "exprs", cluster_cols = F, order.by = "astir_type" , scale = "none",
+             heatmap.colors = viridis(100), annot.by = c("astir_type","clusters_50"))
+
+#Heatmap visualization (aggregated)
+mean_sce_astir <- aggregateAcrossCells(sce, ids = sce$astir_type,
+                                 statistics = "mean",
+                                 use.assay.type = "exprs",
+                                 subset.row = rowData(sce)$use_astir)
+
+dittoHeatmap(mean_sce_astir, genes = rownames(mean_sce_astir),
+             assay = "exprs", cluster_cols = T, scale = "none",
+             heatmap.colors = viridis(100), annot.by = c("astir_type"))
+```
+
+Next, I will test astir-based cell type assignments in RCC IMMUcan batches.
+"Ground truth" = manually labelled cell types by IMMUCAN
+
+```{r astir-test, message = FALSE,warning=FALSE}
+#Test Astir performance
+#Generate comparable cell labels
+unique(sce$cell_labels)
+
+T_cell = c("cytolytic_CD8","CD8_other","cytolytic_exhausted_CD8","Treg","exhausted_CD8","CD4_other","cytolytic_CD4","PD1_CD4","cytolytic_PD1_CD4") 
+B_cell = c("B_cell")
+tumor = c("Tumor","Tumor_Ki67")
+neutrophil = c("Neutrophil")
+macrophage = c("Macrophage")
+plasma = c("CD38")
+stroma = c("Stroma")
+unlabelled = c("unlabelled",NA)
+
+sce$cell_label_simple <- colData(sce) %>% 
+  as.data.frame() %>%
+  transmute(cell_label_simple = ifelse(cell_labels %in% unlabelled,"unlabelled",
+                                    ifelse(cell_labels %in% T_cell,"T_cells", 
+                                    ifelse(cell_labels %in% B_cell,"B_cells",
+                                           ifelse(cell_labels %in% tumor,"Tumor",
+                                                  ifelse(cell_labels %in% plasma, "Plasma_cells",
+                                                         ifelse(cell_labels %in% macrophage, "Macrophages",
+                                                                ifelse(cell_labels %in% stroma,"Stroma",
+                                                                       ifelse(cell_labels %in% neutrophil,"Neutrophils", "Unknown/Other")
+                                                                              )))))))) 
+
+sce$astir_type <- colData(sce) %>% 
+  as.data.frame() %>%
+  transmute(astir_type = ifelse(astir_type %in% c("Unknown","Other","Epithelial"),"Unknown/Other",astir_type))
+ 
+astir_test <- colData(sce) %>% 
+  as.data.frame() %>% filter(cell_label_simple != "unlabelled") %>% select("cell_label_simple","astir_type")
+
+alluvial_wide(data = astir_test, 
+              max_variables = 6,
+              fill_by = 'all_flows',
+              col_vector_flow = RColorBrewer::brewer.pal(12, "Paired"))+
+  theme_classic(base_size = 12, base_line_size = 0.5)+
+  theme(axis.title.y = element_blank(), axis.ticks.y = element_blank(), axis.text.y = element_blank())
+
+run<-unique(astir_test$astir_type)
+astir_senspe <- foreach(i = seq_along(run),.combine = rbind,.errorhandling = "remove") %do% {
+sen <- sensitivity(table(!astir_test$astir_type == run[i],!astir_test$cell_label_simple == run[i]), negative = "FALSE")
+spe <- specificity(table(astir_test$astir_type == run[i],astir_test$cell_label_simple == run[i]),negative = "FALSE")
+data.frame(cell_type = run[i], sen = sen, spe = spe)  
+}
+astir_senspe
+
+ggplot(astir_senspe %>% filter(cell_type != "Unknown/Other") %>% pivot_longer(cols = c("sen","spe"),names_to = "type"), aes(reorder(cell_type,-value), value, fill = type))+ 
+  geom_bar(position = "dodge",stat = "identity",color="black")+
+  coord_cartesian(ylim=c(0,1))+
+  theme_classic(base_size = 14, base_line_size = 0.5)+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),axis.title.x.bottom = element_blank(),axis.title.y = element_blank())+
+  scale_fill_brewer(palette = "Paired")
+```
+
+## 3. Gaussian Mixture Models (GMM)
+Clustering-based approach for well defined cell type markers (such as CD3 for T cells)
+
+```{r subclustering GMM, message = F}
+##Method A: Positive or negative for single markers via GMM
+GOI = "CD3"
+types = "T_cells"
+
+GMM_GOI <- Mclust(assay(sce, "exprs")[GOI,], G = 2)
+
+plot(GMM_GOI, what = "classification")
+plot(GMM_GOI, what = "density")
+plot(GMM_GOI, what = "uncertainty")
+
+#Classification with uncertainty of 0
+GMM_df <- data.frame(class_GOI = ifelse(GMM_GOI$classification == 2 & GMM_GOI$uncertainty == 0, GOI, "Unknown/Other"))
+
+sce$class_GOI <- GMM_df$class_GOI
+
+plotReducedDim(sce, dimred = "UMAP_cor", 
+               colour_by = "class_GOI", 
+               #shape_by = "Indication",
+               by_exprs_values = "exprs")
+
+GMM_test <- colData(sce) %>% as.data.frame() %>% 
+  filter(cell_labels != "unlabelled") %>% 
+  select(cell_label_simple,class_GOI)
+
+alluvial_wide(GMM_test, 
+              max_variables = 6,
+              fill_by = 'all_flows',
+              col_vector_flow = RColorBrewer::brewer.pal(12, "Paired"))+
+  theme_classic(base_size = 12, base_line_size = 0.5)+
+  theme(axis.title.y = element_blank(), axis.ticks.y = element_blank(), axis.text.y = element_blank())
+
+sen <- sensitivity(table(GMM_test$class_GOI == GOI,GMM_test$cell_label_simple == types),negative = "FALSE", positive = "TRUE")
+spe <- specificity(table(GMM_test$class_GOI == GOI,GMM_test$cell_label_simple == types), negative = "FALSE", positive = "TRUE")
+
+GMM_senspe <- data.frame(cell_type = types, sen = sen, spe = spe)  
+GMM_senspe
+
+ggplot(GMM_senspe %>% filter(cell_type != "Unknown/Other") %>% pivot_longer(cols = c("sen","spe"),names_to = "type"), aes(reorder(cell_type,-value), value, fill = type))+ 
+  geom_bar(position = "dodge",stat = "identity",color="black")+
+  coord_cartesian(ylim=c(0,1))+
+  theme_classic(base_size = 14, base_line_size = 0.5)+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),axis.title.x.bottom = element_blank(),axis.title.y = element_blank())+
+  scale_fill_brewer(palette = "Paired")
+
+##Method B: Positive or negative for multiple markers via GMM
+GMM_CD3 <- Mclust(assay(sce, "exprs")["CD3",], G = 2)
+GMM_Macro <- Mclust(assay(sce, "exprs")["CD68",], G = 2)
+GMM_CAIX <- Mclust(assay(sce, "exprs")["CarbonicAnhydrase",], G = 2)
+
+GMM_df <- data.frame(class_CD3 = ifelse(GMM_CD3$classification == 2 & GMM_CD3$uncertainty == 0, "T_cells", NA),
+                     class_Macro = ifelse(GMM_Macro$classification == 2 & GMM_Macro$uncertainty == 0, "Macrophages",NA),
+                     class_CAIX = ifelse(GMM_CAIX$classification == 2 & GMM_CAIX$uncertainty == 0, "Tumor", NA))
+
+GMM_df <- GMM_df %>% mutate(class_fil = ifelse(class_CD3 == "T_cells" & is.na(class_Macro) & is.na(class_CAIX),"T_cells",
+                                     ifelse(class_Macro == "Macrophages" & is.na(class_CD3) & is.na(class_CAIX),"Macrophages",
+                                            ifelse(class_CAIX == "Tumor" & is.na(class_CD3) & is.na(class_Macro),"Tumor","Unknown/Other"))))
+
+GMM_df$class_fil <- GMM_df$class_fil %>% replace_na("Unknown/Other")
+
+sce$GMM_class <- GMM_df$class_fil
+
+plotReducedDim(sce, dimred = "UMAP_cor", 
+               colour_by = "GMM_class", 
+               #shape_by = "Indication",
+               by_exprs_values = "exprs")
+
+#Classification with uncertainty below 0.01
+GMM_test <- colData(sce) %>% as.data.frame() %>% 
+  filter(cell_labels != "unlabelled") %>% 
+  mutate(cell_label_simple = astir_test$cell_label_simple) %>% 
+  select(cell_label_simple,GMM_class)
+
+alluvial_wide(GMM_test, 
+              max_variables = 6,
+              fill_by = 'all_flows',
+              col_vector_flow = RColorBrewer::brewer.pal(12, "Paired"))+
+  theme_classic(base_size = 12, base_line_size = 0.5)+
+  theme(axis.title.y = element_blank(), axis.ticks.y = element_blank(), axis.text.y = element_blank())
+
+run<-unique(GMM_test$GMM_class)
+GMM_senspe <- foreach(i = seq_along(run),.combine = rbind,.errorhandling = "remove") %do% {
+sen <- sensitivity(table(GMM_test$GMM_class == run[i],GMM_test$cell_label_simple == run[i]))
+spe <- specificity(table(GMM_test$GMM_class == run[i],GMM_test$cell_label_simple == run[i]))
+data.frame(cell_type = run[i], sen = sen, spe = spe)  
+}
+GMM_senspe
+
+ggplot(GMM_senspe %>% filter(cell_type != "Unknown/Other") %>% pivot_longer(cols = c("sen","spe"),names_to = "type"), aes(reorder(cell_type,-value), value, fill = type))+ 
+  geom_bar(position = "dodge",stat = "identity",color="black")+
+  coord_cartesian(ylim=c(0,1))+
+  theme_classic(base_size = 14, base_line_size = 0.5)+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),axis.title.x.bottom = element_blank(),axis.title.y = element_blank())+
+  scale_fill_brewer(palette = "Pastel1")
+```
+
+

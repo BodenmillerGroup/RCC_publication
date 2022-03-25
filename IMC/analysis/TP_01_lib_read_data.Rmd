@@ -1,0 +1,146 @@
+---
+title: "01_lib_read_data"
+author: "Lasse Meyer"
+date: "1/24/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## Software requirements
+
+```{r lib, message=FALSE,warning=FALSE}
+#Data containers
+library(SpatialExperiment)
+library(SingleCellExperiment)
+
+#Data processing
+library(CATALYST)
+library(scuttle)
+library(scater)
+library(imcRtools)
+
+#Data visualization
+library(cytomapper)
+library(dittoSeq)
+
+#Utilities
+library(tidyverse)
+library(openxlsx)
+library(stringr)
+```
+
+## Read in single-cell information
+based on [SingleCellExperiment](https://bioconductor.org/packages/release/bioc/html/SingleCellExperiment.html)
+class (or [SpatialExperiment]())
+
+### steinbock generated data
+The `read_steinbock` function provided by `imcRtools` can now be used to read in
+`steinbock` generated data. 
+
+```{r read and inspect steinbock}
+sce <- read_steinbock("/Volumes/rcc_volume/IMC/tumor_pilot/", return_as = "sce")
+sce
+
+#Inspect data
+counts(sce[1:5,1:5])
+rowData(sce)
+colData(sce)
+```
+
+## Single-cell processing
+
+We can set the `colnames` of the object to generate unique identifiers per cell:
+
+```{r set-colnames}
+colnames(sce) <- paste0(sce$sample_id, "_", sce$ObjectNumber)
+rownames(sce) <- rowData(sce)$Clean_Target
+```
+
+It is also often the case that sample-specific metadata are available externally.
+For the current data, we need to link the cancer type (also referred to as "Indication")
+to each sample. This metadata is available as external excel file:
+
+```{r add-indication}
+meta <- read.xlsx("~/Desktop/RCC/Metadaten/meta_tumorpilot.xlsx")
+
+spe$patient_id <- str_extract_all(sce$sample_id, "[0-9]+", simplify = TRUE)[,2]
+
+sce$PID <- str_split(sce$sample_id, "_0",simplify = TRUE)[,2]
+
+sce$type <- meta$type[match(sce$PID, meta$sample_id)]
+```
+
+**Transform counts**
+
+Problem: Right-skewed distribution (bias from highly expressing cells)
+Solution: Count transformation using an inverse hyperbolic sine function (arcsinh; common in flow cytometry) = leads to linear-like scale near zero and log-like scale beyond a threshold (`cofactor`)
+We apply a `cofactor` of `1`. 
+
+```{r transform-counts, message=FALSE}
+#Raw counts
+dittoRidgePlot(sce, var = "CD44", group.by = "PID", assay = "counts")
+
+#Transformed counts
+assay(sce, "exprs") <- asinh(counts(sce)/1)
+dittoRidgePlot(sce, var = "CD44", group.by = "PID", assay = "exprs")
+```
+**Define interesting channels**
+
+Subset markers of interest for downstream analysis.
+
+```{r select-features}
+rowData(sce)$use_channel <- !grepl("DNA|Histone", rowData(sce)$Clean_Target)
+
+#Load histocat based classification of useful channels
+channel_analysis <- read.csv("~/Desktop/RCC/Panels/Moch_RCC-tumor 1.0_20201210_LM.csv")
+
+rowData(sce)$channel_ok <- channel_analysis$signal[match(rownames(sce),channel_analysis$Clean_Target)]
+
+rowData(sce)$use_channel_2 <- rowData(sce) %>% as.data.frame() %>% mutate(use_channel_2 = ifelse(rowData(sce)$use_channel == TRUE & rowData(sce)$channel_ok == "1",TRUE,FALSE)) %>% pull(use_channel_2)
+
+```
+
+## Read in images
+
+Read in multi-channel images (TIFF) and segmentation masks into a
+`CytoImageList` container using the `loadImages` function from the `cytomapper` package.
+
+The multi-channel images are saved as 32-bit images while the segmentation masks are
+saved as 16-bit images. To correctly scale pixel values of the segmentation
+masks when readin them in set `as.is = TRUE`.
+
+```{r read-images}
+images <- loadImages("/Volumes/rcc_volume/IMC/tumor_pilot/img")
+masks <- loadImages("/Volumes/rcc_volume/IMC/tumor_pilot/masks/", as.is = TRUE)
+
+#set channel-names for multi-channel images
+#double-check that the channel order is correct
+channelNames(images) <- rownames(sce)
+images
+```
+
+Add additional metadata to the `elementMetadata` slot of the `CytoImageList` (accessible via mcols)
+
+```{r add-image-metadata}
+all.equal(names(images), names(masks))
+
+PID <- str_split(names(images), "_0",simplify = TRUE)[,2]
+
+indication <- meta$type[match(PID, meta$sample_id)] 
+
+mcols(images) <- mcols(masks) <- DataFrame(sample_id = names(images),
+                                           PID = PID,
+                                           type = indication)
+```
+
+## Save objects for downstream analysis
+
+```{r save-objects-read-data}
+saveRDS(sce, "/Volumes/rcc_volume/IMC/sce_tumorpilot.rds")
+saveRDS(images, "/Volumes/rcc_volume/IMC/images_tumorpilot.rds")
+saveRDS(masks, "/Volumes/rcc_volume/IMC/masks_tumorpilot.rds")
+```
