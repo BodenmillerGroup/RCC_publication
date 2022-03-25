@@ -1,4 +1,4 @@
-# IMC
+# IMC_RCC
 
 A [workflowr][] project.
 
