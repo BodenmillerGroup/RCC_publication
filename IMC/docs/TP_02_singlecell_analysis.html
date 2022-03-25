@@ -376,7 +376,7 @@ div.tocify {
 <div class="tab-content">
 <div id="summary" class="tab-pane fade in active">
 <p>
-<strong>Last updated:</strong> 2022-03-08
+<strong>Last updated:</strong> 2022-03-09
 </p>
 <p>
 <strong>Checks:</strong> <span class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> 6 <span class="glyphicon glyphicon-exclamation-sign text-danger" aria-hidden="true"></span> 1
@@ -400,7 +400,7 @@ This reproducible <a href="https://rmarkdown.rstudio.com">R Markdown</a> analysi
 </div>
 <div id="strongRMarkdownfilestronguncommittedchanges" class="panel-collapse collapse">
 <div class="panel-body">
-<p>The R Markdown is untracked by Git. To know which version of the R Markdown file created these results, you’ll want to first commit it to the Git repo. If you’re still working on the analysis, you can ignore this warning. When you’re finished, you can run <code>wflow_publish</code> to commit the R Markdown file and build the HTML.</p>
+<p>The R Markdown file has staged changes. To know which version of the R Markdown file created these results, you’ll want to first commit it to the Git repo. If you’re still working on the analysis, you can ignore this warning. When you’re finished, you can run <code>wflow_publish</code> to commit the R Markdown file and build the HTML.</p>
 </div>
 </div>
 </div>
@@ -467,16 +467,16 @@ This reproducible <a href="https://rmarkdown.rstudio.com">R Markdown</a> analysi
 <div class="panel panel-default">
 <div class="panel-heading">
 <p class="panel-title">
-<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongRepositoryversionstrongahrefhttpsgithubcomBodenmillerGroupRCCtreeafa22713ecc5e021cef0f8aaa5e17ce5f761990ftargetblankafa2271a"> <span class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> <strong>Repository version:</strong> <a href="https://github.com/BodenmillerGroup/RCC/tree/afa22713ecc5e021cef0f8aaa5e17ce5f761990f" target="_blank">afa2271</a> </a>
+<a data-toggle="collapse" data-parent="#workflowr-checks" href="#strongRepositoryversionstrongahrefhttpsgithubcomBodenmillerGroupRCCtree40c37aa56f55383b675edc1af5127024be29b9b5targetblank40c37aaa"> <span class="glyphicon glyphicon-ok text-success" aria-hidden="true"></span> <strong>Repository version:</strong> <a href="https://github.com/BodenmillerGroup/RCC/tree/40c37aa56f55383b675edc1af5127024be29b9b5" target="_blank">40c37aa</a> </a>
 </p>
 </div>
-<div id="strongRepositoryversionstrongahrefhttpsgithubcomBodenmillerGroupRCCtreeafa22713ecc5e021cef0f8aaa5e17ce5f761990ftargetblankafa2271a" class="panel-collapse collapse">
+<div id="strongRepositoryversionstrongahrefhttpsgithubcomBodenmillerGroupRCCtree40c37aa56f55383b675edc1af5127024be29b9b5targetblank40c37aaa" class="panel-collapse collapse">
 <div class="panel-body">
 <p>
 Great! You are using Git for version control. Tracking code development and connecting the code version to the results is critical for reproducibility.
 </p>
 <p>
-The results in this page were generated with repository version <a href="https://github.com/BodenmillerGroup/RCC/tree/afa22713ecc5e021cef0f8aaa5e17ce5f761990f" target="_blank">afa2271</a>. See the <em>Past versions</em> tab to see a history of the changes made to the R Markdown and HTML files.
+The results in this page were generated with repository version <a href="https://github.com/BodenmillerGroup/RCC/tree/40c37aa56f55383b675edc1af5127024be29b9b5" target="_blank">40c37aa</a>. See the <em>Past versions</em> tab to see a history of the changes made to the R Markdown and HTML files.
 </p>
 <p>
 Note that you need to be careful to ensure that all relevant files for the analysis have been committed to Git prior to generating the results (you can use <code>wflow_publish</code> or <code>wflow_git_commit</code>). workflowr only checks the R Markdown file, but you know if there are other scripts or data files that it depends on. Below is the status of the Git repository when the results were generated:
@@ -489,7 +489,6 @@ Ignored files:
     Ignored:    IMC/.Rproj.user/
     Ignored:    IMC/analysis/.DS_Store
     Ignored:    IMC/analysis/.Rhistory
-    Ignored:    IMC/analysis/figure/
     Ignored:    Non_IMC/.DS_Store
     Ignored:    Non_IMC/.Rhistory
     Ignored:    Non_IMC/.Rproj.user/
@@ -500,25 +499,32 @@ Ignored files:
     Ignored:    Non_IMC/docs/.DS_Store
     Ignored:    Non_IMC/docs/figure/.DS_Store
 
-Untracked files:
-    Untracked:  IMC/analysis/00_singlecell_batchcorrection.Rmd
-    Untracked:  IMC/analysis/01_lib_read_data.Rmd
-    Untracked:  IMC/analysis/02_spillover_correction.Rmd
-    Untracked:  IMC/analysis/03_QC.Rmd
-    Untracked:  IMC/analysis/04_singlecell_analysis.Rmd
-    Untracked:  IMC/analysis/IMMUCAN_RCC_singlecell_analysis.Rmd
-    Untracked:  IMC/analysis/TP_01_lib_read_data.Rmd
-    Untracked:  IMC/analysis/TP_02_singlecell_analysis.Rmd
-
 Unstaged changes:
-    Deleted:    IMC/analysis/04_singlecell_analysis_IMMUCAN.Rmd
-    Deleted:    IMC/analysis/05_astir.Rmd
+    Deleted:    IMC/IMC_RCC.Rproj
+    Deleted:    IMC_RCC/IMC.Rproj
+    Deleted:    IMC_RCC/README.md
+    Deleted:    IMC_RCC/analysis/_site.yml
     Modified:   Non_IMC/analysis/Metadata_Update.Rmd
     Deleted:    Non_IMC/docs/figure/Metadata_ccRCC.Rmd/reproduce birch-1.png
     Deleted:    Non_IMC/docs/figure/Metadata_ccRCC.Rmd/reproduce birch-2.png
     Deleted:    Non_IMC/docs/figure/Metadata_ccRCC.Rmd/reproduce birch-3.png
     Deleted:    Non_IMC/docs/figure/Metadata_ccRCC.Rmd/reproduce birch-4.png
     Deleted:    Non_IMC/docs/figure/Metadata_ccRCC.Rmd/viz-1.png
+
+Staged changes:
+    New:        IMC/IMC.Rproj
+    Modified:   IMC/README.md
+    New:        IMC/analysis/00_singlecell_batchcorrection.Rmd
+    New:        IMC/analysis/01_lib_read_data.Rmd
+    New:        IMC/analysis/02_spillover_correction.Rmd
+    New:        IMC/analysis/03_QC.Rmd
+    New:        IMC/analysis/04_singlecell_analysis.Rmd
+    Deleted:    IMC/analysis/04_singlecell_analysis_IMMUCAN.Rmd
+    Deleted:    IMC/analysis/05_astir.Rmd
+    New:        IMC/analysis/IMMUCAN_RCC_singlecell_analysis.Rmd
+    New:        IMC/analysis/TP_01_lib_read_data.Rmd
+    New:        IMC/analysis/TP_02_singlecell_analysis.Rmd
+    Modified:   IMC/analysis/_site.yml
 
 </code></pre>
 <p>
@@ -646,10 +652,10 @@ plot_grid(plotlist = all_plots)</code></pre>
 set.seed(22)
 out &lt;- Rphenograph(t(assay(sce,&quot;exprs&quot;)),
                    k = 50)</code></pre>
-<pre><code>  Finding nearest neighbors...DONE ~ 2.191 s
-  Compute jaccard coefficient between nearest-neighbor sets...DONE ~ 5.486 s
-  Build undirected graph from the weighted links...DONE ~ 2.533 s
-  Run louvain clustering on the graph ...DONE ~ 1.143 s
+<pre><code>  Finding nearest neighbors...DONE ~ 2.135 s
+  Compute jaccard coefficient between nearest-neighbor sets...DONE ~ 5.442 s
+  Build undirected graph from the weighted links...DONE ~ 2.504 s
+  Run louvain clustering on the graph ...DONE ~ 1.123 s
   Return a community class
   -Modularity value: 0.8820812 
   -Number of clusters: 18</code></pre>

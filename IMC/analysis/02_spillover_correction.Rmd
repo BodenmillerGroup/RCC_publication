@@ -13,6 +13,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 based on the [CATALYST](https://bioconductor.org/packages/release/bioc/html/CATALYST.html) R package. 
 For the original publication, see [here](https://www.cell.com/cell-systems/fulltext/S2405-4712(18)30063-2).
+
 ## Software requirements
 
 ```{r lib, message=FALSE,warning=FALSE}
@@ -63,7 +64,7 @@ For further downstream analysis, we will asinh-transform the data using a
 cofactor of 5.
 
 ```{r read-txts-transform, message=FALSE}
-sce <- readSCEfromTXT("~/Desktop/IMC processing/steinbock_IMMUCAN/compensation/") 
+sce <- readSCEfromTXT("/Volumes/rcc_volume/TNBC/spillover/spillover_renamed/")
 
 #Transformation
 assay(sce, "exprs") <- asinh(counts(sce)/5)
@@ -91,6 +92,12 @@ plotSpotHeatmap(sce)
 plotSpotHeatmap(sce, log = FALSE, threshold = 200)
 ```
 
+**Observations:** 
+Wrong labeling of ROIs (renaming was performed)
+No signal = Er167, Eu153, In113, Sm147
+Completely wrong signal = Er168
+
+
 ### Optional pixel binning {#pixel_binning}
 
 In cases where median pixel intensities are low (< 200 counts), consecutive
@@ -104,6 +111,8 @@ per spotted metal.
 bin_size = 5
 
 sce2 <- binAcrossPixels(sce, bin_size = bin_size)
+
+assay(sce2, "exprs") <- asinh(counts(sce2)/5)
 
 # Log10 median pixel counts per spot and channel
 plotSpotHeatmap(sce2)
@@ -127,10 +136,11 @@ bc_key <- as.numeric(unique(sce$sample_mass))
 bc_key <- bc_key[order(bc_key)]
 
 #Preliminary metal mass for pixel
-sce <- assignPrelim(sce, bc_key = bc_key)
+sce2 <- assignPrelim(sce2, bc_key = bc_key)
+
 #estimate and apply cut-offs
-sce <- estCutoffs(sce)
-sce <- applyCutoffs(sce)
+sce2 <- estCutoffs(sce2)
+sce2 <- applyCutoffs(sce2)
 ```
 
 The obtained `SingleCellExperiment` now contains the additional `bc_id` entry.
@@ -141,7 +151,7 @@ This information can be visualized in form of a heatmap:
 
 ```{r assignment-heatmap, fig.width=7, fig.height=7}
 
-cur_table <- table(sce$bc_id, sce$sample_mass)
+cur_table <- table(sce2$bc_id, sce2$sample_mass)
 
 pheatmap(log10(cur_table + 1),
          cluster_rows = FALSE,
@@ -153,7 +163,7 @@ measured for some spots, the `imcRtools` package exports a simple helper
 function to exclude pixels based on these criteria:
 
 ```{r pixel-filtering}
-sce <- filterPixels(sce, minevents = 40, correct_pixels = TRUE)
+sce2 <- filterPixels(sce2, minevents = 40, correct_pixels = TRUE)
 ```
 
 ### Compute spillover matrix
@@ -167,13 +177,22 @@ intensity. `Ar80` needs to be added to a custom `isotope_list` object for
 visualization.
 
 ```{r compute-spillover, fig.width=7, fig.height=7}
-sce <- computeSpillmat(sce)
+sce2 <- computeSpillmat(sce2)
+sm <- as.data.frame(metadata(sce2)$spillover_matrix)
 
 isotope_list <- CATALYST::isotope_list
 isotope_list$Ar <- 80
 
-plotSpillmat(sce, isotope_list = isotope_list)
+#Load Janas spillover matrix
+sm_jana <- read.csv("~/Desktop/sm_ZTMA21_26.csv",row.names = 1)
+metadata(sce2)$sm_jana <- sm_jana
+
+#Plot both spillover matrices
+plotSpillmat(sce2,sm_jana, isotope_list = isotope_list) #Janas
+plotSpillmat(sce2, isotope_list = isotope_list) #My - with pixel binning
 ```
+
+### CONTINUE HERE 
 
 ### Save spillover matrix as csv
 
@@ -184,15 +203,20 @@ sm <- metadata(sce)$spillover_matrix
 write.csv(sm, "~/Desktop/IMC processing/steinbock_IMMUCAN/compensation/spillover_matrix.csv")
 ```
 
+
+
 ### Save spillover matrix as image
 
 The `CATALYST` package provides the `adaptSpillmat` function that corrects the
 spillover matrix in a way that rows and columns match a predefined set of metals.
 
 ```{r save-sm-as-tiff, message=FALSE}
-panel <- read.csv("~/Desktop/IMC processing/steinbock_IMMUCAN/panel.csv")
+panel <- read.csv("/Volumes/rcc_volume/TNBC/panel.csv")
 adapted_sm <- adaptSpillmat(sm, paste0(panel$channel[panel$keep == 1], "Di"), 
                             isotope_list = isotope_list)
+
+
+
 
 #writeTIFF(sm, "data/spillover_matrix.tiff", 
 #          bits.per.sample = 32)
