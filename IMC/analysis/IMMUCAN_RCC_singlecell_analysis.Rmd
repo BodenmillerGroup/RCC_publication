@@ -65,6 +65,7 @@ plotReducedDim(sce, dimred = "UMAP", colour_by = "Indication") #should be GU for
 plotReducedDim(sce, dimred = "UMAP", colour_by = "SampleId") #Patient variability?
 plotReducedDim(sce, dimred = "UMAP", colour_by = "BatchId") #Batch effects?
 ```
+
 ## Optional: Batch correction
 
 If batch/patient specific-effects are present, I can perform batch correction with the `fastMNN`(Mutual nearest neighbors) from the [batchelor](https://bioconductor.org/packages/release/bioc/html/batchelor.html) package. 
