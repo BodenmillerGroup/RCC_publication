@@ -49,16 +49,38 @@ sce
 
 ## Single-cell processing
 
-We can set the `colnames` of the object to generate unique identifiers per cell:
+We can set the `colnames` of the object to generate unique identifiers per cell and also set `rownames` to a clean target name.
 
 ```{r set-colnames}
-colnames(sce) <- paste0(sce$sample_id, "_", sce$ObjectNumber)
+colnames(colData(sce))
+colnames(sce) <- sce$cell_id <- paste0(sce$sample_id, "_", sce$ObjectNumber)
 rownames(sce) <- rowData(sce)$clean_target
 ```
 
-It is also often the case that sample-specific metadata are available externally.
-For the current data, we need to link the cancer type (also referred to as "Indication")
-to each sample. This metadata is available as external excel file:
+It is also often the case that sample-specific metadata are available externally. This metadata is available as external excel file:
+
+```{r add metadata, message = FALSE, warning=FALSE}
+#read in patient and image metadata
+patient_meta <- read_csv("/mnt/rcc_volume/RCC/IMC/pan_immune/data_analysis/data/Metadata_combined_RCC.csv")
+
+images_meta <- read_csv("/mnt/rcc_volume/RCC/IMC/pan_immune/images.csv",col_names = TRUE)
+images_meta$names <- str_split(images_meta$image,".tiff",simplify = TRUE)[,1]
+images_meta$TMA_id <- str_split(images_meta$acquisition_description," ",simplify = TRUE)[,1]
+
+patient_meta$sample_id <- images_meta$names[match(patient_meta$TMA_id,images_meta$TMA_id)]
+
+#Add metadata to sce
+sce$age <- patient_meta$age[match(sce$sample_id,patient_meta$sample_id)]
+sce$age_bin <- patient_meta$age_bin[match(sce$sample_id,patient_meta$sample_id)]
+sce$gender <- patient_meta$gender[match(sce$sample_id,patient_meta$sample_id)]
+sce$type <- patient_meta$type[match(sce$sample_id,patient_meta$sample_id)]
+sce$subtype <- patient_meta$subtype[match(sce$sample_id,patient_meta$sample_id)]
+sce$ISUP <- patient_meta$ISUP[match(sce$sample_id,patient_meta$sample_id)]
+sce$pT_simple <- patient_meta$pT_simple[match(sce$sample_id,patient_meta$sample_id)]
+sce$necrose <- patient_meta$necrose[match(sce$sample_id,patient_meta$sample_id)]
+sce$lymphocytes <- patient_meta$lymphocytes[match(sce$sample_id,patient_meta$sample_id)]
+```
+
 
 **Transform counts**
 
@@ -67,17 +89,21 @@ Solution: Count transformation using an inverse hyperbolic sine function (arcsin
 We apply a `cofactor` of `1`. 
 
 ```{r transform-counts, message=FALSE}
+#Select 5 samples
+id <- colData(sce) %>% as.data.frame %>% select(sample_id) %>% unique %>% slice(1:5) %>% pull(sample_id)
+
 #Raw counts
-dittoRidgePlot(sce[,1:10000], var = "panCK", group.by = "sample_id", assay = "counts")
-dittoRidgePlot(sce[,1:10000], var = "CD44", group.by = "sample_id", assay = "counts")
-dittoRidgePlot(sce[,1:10000], var = "CD45", group.by = "sample_id", assay = "counts")
+dittoRidgePlot(sce[,sce$sample_id %in% id], var = "CD3", group.by = "sample_id", assay = "counts")
+dittoRidgePlot(sce[,sce$sample_id %in% id], var = "CD45RA", group.by = "sample_id", assay = "counts")
+dittoRidgePlot(sce[,sce$sample_id %in% id], var = "CD68", group.by = "sample_id", assay = "counts")
+
 
 #Transformed counts
 assay(sce, "exprs") <- asinh(counts(sce)/1)
 
-dittoRidgePlot(sce[,1:10000], var = "panCK", group.by = "sample_id", assay = "exprs")
-dittoRidgePlot(sce[,1:10000], var = "CD44", group.by = "sample_id", assay = "exprs")
-dittoRidgePlot(sce[,1:10000], var = "CD45", group.by = "sample_id", assay = "exprs")
+dittoRidgePlot(sce[,sce$sample_id %in% id], var = "CD3", group.by = "sample_id", assay = "exprs")
+dittoRidgePlot(sce[,sce$sample_id %in% id], var = "CD45RA", group.by = "sample_id", assay = "exprs")
+dittoRidgePlot(sce[,sce$sample_id %in% id], var = "CD68", group.by = "sample_id", assay = "exprs")
 ```
 
 **Define interesting channels**
@@ -85,7 +111,7 @@ dittoRidgePlot(sce[,1:10000], var = "CD45", group.by = "sample_id", assay = "exp
 Subset markers of interest for downstream analysis.
 
 ```{r select-features}
-rowData(sce)$use_channel <- !grepl("DNA|Histone", rowData(sce)$clean_target)
+rowData(sce)$use_channel <- !grepl("DNA|H3", rowData(sce)$clean_target)
 ```
 
 
@@ -94,7 +120,7 @@ rowData(sce)$use_channel <- !grepl("DNA|Histone", rowData(sce)$clean_target)
 Note that masks and images were loaded, modified and saved in the [00_seg_mesmer_QC.Rmd]() script. 
 
 ```{r save-objects-read-data}
-saveRDS(sce, "/mnt/rcc_volume/TNBC/data_analysis/sce_TNBC.rds")
+saveRDS(sce, "/mnt/rcc_volume/RCC/IMC/pan_immune/data_analysis/sce_panimmune_RCC_01.rds")
 ```
 
 
