@@ -73,14 +73,24 @@ Meta <- Meta %>% mutate(age_bin = ifelse(age <= 40, "27-40",
 #Survival data availability
 Meta <- Meta %>% mutate(survival_data = ifelse(!is.na(survival_months),TRUE,FALSE))
 
-#Sequencing data availability 
+##Sequencing data availability 
+#Targeted seq
 as.data.frame(read_xlsx("/Users/lasmey/Desktop/RCC/Metadaten/TMA1+2_ccRCC_IHCMut_LM.xlsx",col_names = T)) %>% 
   mutate_all(as.character) %>% mutate(sequencing_data = ifelse(!is.na(BAP1_mut),TRUE,FALSE)) %>%
   filter(sequencing_data == TRUE) %>%
   pull(PID) %>% 
   str_replace_all(" ", "") -> PID_seq
 
-Meta <- Meta %>% mutate(sequencing_data = ifelse(PID %in% PID_seq,TRUE,FALSE))
+PID_seq_2 <- as.data.frame(read.table("/Users/lasmey/Desktop/RCC/Metadaten/04_Originalfiles_Not_corrected/samplesRCC_seq_Aashil.txt",header = TRUE)) %>% filter(Cohort == "826_gene_panel" & !is.na(Bnumber_cor)) %>% pull(Bnumber_cor)
+
+PID_seq_2[!PID_seq_2 %in% PID_seq] #"B2008.13725" = chromophobe RCC?, "B2011.1970" = normal tissue? double-check that with Schraml
+
+Meta <- Meta %>% mutate(tar_sequencing_data = ifelse(PID %in% PID_seq,TRUE,FALSE))
+
+#WES
+WES_seq <- as.data.frame(read.table("/Users/lasmey/Desktop/RCC/Metadaten/04_Originalfiles_Not_corrected/samplesRCC_seq_Aashil.txt",header = TRUE)) %>% filter(Cohort == "WES" & !is.na(Bnumber_cor)) %>% pull(Bnumber_cor)
+
+Meta <- Meta %>% mutate(WES_data = ifelse(PID %in% WES_seq,TRUE,FALSE))
 
 #Lack of tissue on TMAs
 kick_out <- as.data.frame(read_xlsx("/Users/lasmey/Desktop/RCC/Metadaten/TMA20_224_emptycores_kickout.xlsx",col_names = T,na = "NA")) %>% 
@@ -90,7 +100,7 @@ Meta$no_tissue <- !is.na(row.match(Meta %>% select(grid,x,y,TMA),kick_out))
 
 #Arrange 
 colnames(Meta)
-Meta <- Meta %>% select(1,"TMA", "grid","x","y","spot",4,3,"age_bin","type","subtype","comment","ISUP","pT_simple","pT12/34","necrose","lymphocytes","BAP1_IHC","PBRM1_IHC","H3K36me_IHC","survival_months", "censor_dead_0_alive_1", "survival_data", "sequencing_data","no_tissue")
+Meta <- Meta %>% select(1,"TMA", "grid","x","y","spot",4,3,"age_bin","type","subtype","comment","ISUP","pT_simple","pT12/34","necrose","lymphocytes","BAP1_IHC","PBRM1_IHC","H3K36me_IHC","survival_months", "censor_dead_0_alive_1", "survival_data", "tar_sequencing_data","WES_data","no_tissue")
 
 #Save fully annotated metadata as csv
 write.csv(Meta, file = "/Users/lasmey/Desktop/RCC/Metadaten/Metadata_combined_RCC.csv", row.names = F)
@@ -116,7 +126,7 @@ library(ggsci)
 library(RColorBrewer)
 
 #Filter for columns to visualize
-Meta_viz <- Meta_PT %>% select(PID, gender, age_bin, subtype, ISUP, pT_simple, necrose, lymphocytes, BAP1_IHC, PBRM1_IHC, H3K36me_IHC, survival_data,sequencing_data)
+Meta_viz <- Meta_PT %>% select(PID, gender, age_bin, subtype, ISUP, pT_simple, necrose, lymphocytes, BAP1_IHC, PBRM1_IHC, H3K36me_IHC, survival_data,tar_sequencing_data,WES_data)
 
 #Convert empty columns and NAs for easier handling with ComplexHeatmap package
 Meta_viz[is.na(Meta_viz)] <- "Unknown"
@@ -137,10 +147,11 @@ col <- list(PID = colorRampPalette(brewer.pal(9, "Set1"))(length(unique(Meta_viz
            PBRM1_IHC = c(colorRampPalette(brewer.pal(9, "Oranges"))(length(unique(Meta_viz$PBRM1_IHC))-1),"black"),
            H3K36me_IHC = c(colorRampPalette(brewer.pal(9, "Oranges"))(length(unique(Meta_viz$H3K36me_IHC))-1),"black"),
            survival_data = c("black","grey"),
-           sequencing_data = c("black","grey")
+           WES_data = c("black","grey"),
+           tar_sequencing_data = c("black","grey")
 )
 
-col_list_1 <- foreach(i=1:13, .packages="foreach") %do% {
+col_list_1 <- foreach(i=1:14, .packages="foreach") %do% {
   color= col[[i]]
   names(color)= sort(unique(Meta_viz[,names(col)[i]]))
   color
@@ -163,7 +174,8 @@ sample_anno <- HeatmapAnnotation(PID = Meta_viz$PID,
                                 PBRM1_IHC = Meta_viz$PBRM1_IHC,
                                 H3K36me_IHC = Meta_viz$H3K36me_IHC,
                                 survival_data = Meta_viz$survival_data,
-                                sequencing_data = Meta_viz$sequencing_data,
+                                tar_sequencing_data = Meta_viz$tar_sequencing_data,
+                                WES_data = Meta_viz$WES_data,
                                 col = col_list_1,
                                 border = T,
                                 na_col = "black",
@@ -194,7 +206,8 @@ sample_anno_cc <- HeatmapAnnotation(PID = Meta_viz_cc$PID,
                                 PBRM1_IHC = Meta_viz_cc$PBRM1_IHC,
                                 H3K36me_IHC = Meta_viz_cc$H3K36me_IHC,
                                 survival_data = Meta_viz_cc$survival_data,
-                                sequencing_data = Meta_viz_cc$sequencing_data,
+                                tar_sequencing_data = Meta_viz_cc$tar_sequencing_data,
+                                WES_data = Meta_viz_cc$WES_data,
                                 col = col_list_1,
                                 border = T,
                                 na_col = "black",
@@ -279,8 +292,8 @@ plot_xtab(Meta_viz_cc$BAP1_IHC,Meta_viz_cc$lymphocytes, bar.pos = "stack", margi
 ```{r seq selection, message=FALSE, warnings=FALSE,fig.width=14, fig.height=9, fig.align='center'}
 ###Filter for major RCC classes and cases for which we do not have any sequencing data but do have tissue on the TMA
 Meta_seq = Meta_PT %>% 
-  filter(subtype == "clear_cell_RCC" & sequencing_data == "FALSE" & no_tissue == "FALSE" & survival_data == "TRUE" & !is.na(Meta_PT$ISUP) & !is.na(Meta_PT$pT_simple)) %>%
-  select(PID, gender, age_bin, subtype, ISUP,pT_simple, "pT12/34", necrose, lymphocytes, BAP1_IHC, PBRM1_IHC, H3K36me_IHC, survival_data,sequencing_data)
+  filter(subtype == "clear_cell_RCC" & tar_sequencing_data == "FALSE" & WES_data == "FALSE",no_tissue == "FALSE" & survival_data == "TRUE" & !is.na(Meta_PT$ISUP) & !is.na(Meta_PT$pT_simple)) %>%
+  select(PID, gender, age_bin, subtype, ISUP,pT_simple, "pT12/34", necrose, lymphocytes, BAP1_IHC, PBRM1_IHC, H3K36me_IHC, survival_data,tar_sequencing_data,WES_data)
 
 
 ##Random stratified sampling by tumor stage
@@ -297,7 +310,7 @@ set.seed(11)
 Meta_seq_select_2 <- Meta_seq_notselected_2 %>% group_by(pT_simple) %>% slice_sample(n=6)
 Meta_seq_notselected_3 <- Meta_seq %>% filter(!PID %in% c(Meta_seq_select$PID,Meta_seq_select_1$PID,Meta_seq_select_2$PID))
 
-Manual_PID <- c("B2002.16816","B2003.38849","B2000.38459")
+Manual_PID <- c("B2012.59545","B2011.54740","B2013.21535")
 Meta_seq_select_3 <- Meta_seq %>% filter(PID %in% Manual_PID)
 
 Meta_seq_select_final <- rbind(Meta_seq_select,Meta_seq_select_1,Meta_seq_select_2,Meta_seq_select_3)
@@ -318,7 +331,8 @@ sample_anno_seq <- HeatmapAnnotation(PID = Meta_seq_select_final$PID,
                                 PBRM1_IHC = Meta_seq_select_final$PBRM1_IHC,
                                 H3K36me_IHC = Meta_seq_select_final$H3K36me_IHC,
                                 survival_data = Meta_seq_select_final$survival_data,
-                                sequencing_data = Meta_seq_select_final$sequencing_data,
+                                tar_sequencing_data = Meta_seq_select_final$tar_sequencing_data,
+                                WES_data = Meta_seq_select_final$WES_data,
                                 col = col_list_1,
                                 border = T,
                                 na_col = "black",
@@ -334,3 +348,46 @@ draw(sample_anno_seq)
 #Save metadata for targeted sequencing tumors as csv
 write.csv(Meta_seq_select_final, file = "/Users/lasmey/Desktop/RCC/Metadaten/Metadata_TargetedSeq_RCC_Batch1.csv", row.names = F)
 ```
+
+```{r total seq cases ccRCC, message = FALSE, warning = FALSE}
+Meta_seq_total <- rbind(Meta_seq_select_final,Meta_PT %>% filter(subtype == "clear_cell_RCC" & (tar_sequencing_data == TRUE | WES_data == TRUE)))
+
+Meta_seq_total %>% group_by(ISUP) %>% count()
+Meta_seq_total %>% group_by(pT_simple) %>% count()
+Meta_seq_total <- Meta_seq_total %>% arrange(subtype, desc(pT_simple), desc(ISUP))
+
+#Heatmap Annotation
+sample_anno_seq_total <- HeatmapAnnotation(PID = Meta_seq_total$PID,
+                                gender = Meta_seq_total$gender,
+                                age_bin = Meta_seq_total$age_bin,
+                                subtype = Meta_seq_total$subtype,
+                                pT_simple = Meta_seq_total$pT_simple,
+                                ISUP = Meta_seq_total$ISUP,
+                                necrose = Meta_seq_total$necrose,
+                                lymphocytes = Meta_seq_total$lymphocytes,
+                                BAP1_IHC = Meta_seq_total$BAP1_IHC,
+                                PBRM1_IHC = Meta_seq_total$PBRM1_IHC,
+                                H3K36me_IHC = Meta_seq_total$H3K36me_IHC,
+                                survival_data = Meta_seq_total$survival_data,
+                                tar_sequencing_data = Meta_seq_total$tar_sequencing_data,
+                                WES_data = Meta_seq_total$WES_data,
+                                col = col_list_1,
+                                border = T,
+                                na_col = "black",
+                                gap = unit(5, "points"),
+                                show_annotation_name = T,
+                                show_legend = c(PID = FALSE)
+                                #annotation_label = c("PID (n=367)","Gender","Subtype","pT","pN")
+)%v%NULL
+
+#Display plot
+draw(sample_anno_seq_total)
+```
+
+
+
+
+
+
+
+
