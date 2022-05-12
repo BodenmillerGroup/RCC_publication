@@ -60,41 +60,36 @@ library(psych)
 library(batchelor)
 ```
 
-##TO DO: need to rewrite text!! 
+# Single-cell analysis - Pipeline 2 - Immune cell phenotypes ccRCC
 
-# Single-cell analysis - Pipeline 2 - TNBC tumor phenotypes
+Here, we will perform the second single cell analysis steps, including phenotyping immune cells.
 
-Here, we will perform the second single cell analysis steps, including phenotyping tumor cells.
-
-## Read in data and filter for ZTMA249
-First, we will read in the `SingleCellExperiment` object containing the cleaned, spillover- and (batch-corrected) single-cell data. 
-**Important:** For now, We will filter the object for ZTMA249 samples, since we are sure that those are TNBC. 
+## Read in data
+First, we will read in the `SingleCellExperiment` object containing the cleaned single-cell data of ccRCC origin. 
 
 ```{r read-data-batch-correction, message=FALSE}
-sce <- readRDS("/mnt/rcc_volume/TNBC/data_analysis/sce_TNBC_Clus_249.rds")
+sce <- readRDS("/mnt/rcc_volume/RCC/IMC/pan_immune/data_analysis/sce_panimmune_RCC_03.rds")
 ```
 
-## Filter sce for tumor cells
-Here, we will filter for tumor cells based on the cluster category and GMM approach.
+## Filter sce for immune cells
+Here, we will filter for immune cells based on the cluster category and GMM approach.
 
 ```{r filter sce, message=FALSE}
-#based on cluster categories (n=327196)
-sce <- sce[,colData(sce)$analysis_cat == "tumor"]
+#based on cluster categories (n=175493)
+sce <- sce[,colData(sce)$cluster_category == "immune"]
 sce
 ```
 
 ## Define markers for clustering
-```{r tumor_markers, message = FALSE, warning = FALSE}
-cluster_channel = c("CK5","CK8_18","CD15","KRT14","cMYC","HER2","ER","PR","p53","AR","GATA3","EGFR","p_mTOR","CK7","Ki67","Vimentin","HLADR")
 
-cell_state_channel = c("pH3","H3K27me3","Bcl2", "c_Cas3_PARP","S6", "CD44","CAIX")
+```{r immune_markers, message = FALSE, warning = FALSE}
+cluster_channel = c("MPO","CD7","CD38","HLA_DR","CD99","CD68","LAG3","CD20","CD163","CD14","IDO","CD3","DC_LAMP","CD11c","PD1","CD16","GranB","TCF1_7","FOXP3","CD278","CD8a","TMEM173","CD33","Arginase", "VISTA", "CD40", "CD4","CD206","Ki67","CD15")
 
-other_immune_channel = c("panCK","Ecad","SMA","Fibronectin","CD68","CD3","CD20","HLA_DR","CD11c","CD45","CD20","CD8a","CD4","CD31_vWF")
+cellstate_other_channel = c("CD45","SMA","CD34","PDGFRB","PDL1","CD31","CXCL12", "HLA_ABC","cCASPARP", "Vimentin")
 
 #Add to sce
 rowData(sce)$cluster_channel <- (rowData(sce)$clean_target %in% cluster_channel)
-rowData(sce)$cell_state_channel <- (rowData(sce)$clean_target %in% cell_state_channel)
-rowData(sce)$other_immune_channel <- (rowData(sce)$clean_target %in% other_immune_channel)
+rowData(sce)$cellstate_other_channel <- (rowData(sce)$clean_target %in% cellstate_other_channel)
 ```
 
 ## Perform overclustering and hierarchical clustering
@@ -116,7 +111,7 @@ sce$cluster_30 <- as.factor(clusters_3$membership)
 unique(sce$cluster_30)
 
 #Save SCEs after clustering
-saveRDS(sce, "/mnt/rcc_volume/TNBC/data_analysis/sce_TNBC_249_Tumor_CC_ClusterChannelClus_k.rds")
+saveRDS(sce, "/mnt/rcc_volume/RCC/IMC/pan_immune/data_analysis/sce_panimmune_RCC_04.rds")
 
 
 #k=50
@@ -134,7 +129,7 @@ sce$cluster_50 <- as.factor(clusters$membership)
 unique(sce$cluster_50)
 
 #Save SCEs after clustering
-saveRDS(sce, "/mnt/rcc_volume/TNBC/data_analysis/sce_TNBC_249_Tumor_CC_ClusterChannelClus_k.rds")
+saveRDS(sce, "/mnt/rcc_volume/RCC/IMC/pan_immune/data_analysis/sce_panimmune_RCC_04.rds")
 
 #k=75
 set.seed(22)
@@ -151,7 +146,7 @@ sce$cluster_75 <- as.factor(clusters_1$membership)
 unique(sce$cluster_75)
 
 #Save SCEs after clustering
-saveRDS(sce, "/mnt/rcc_volume/TNBC/data_analysis/sce_TNBC_249_Tumor_CC_ClusterChannelClus_k.rds")
+saveRDS(sce, "/mnt/rcc_volume/RCC/IMC/pan_immune/data_analysis/sce_panimmune_RCC_04.rds")
 
 #k=100
 set.seed(22)
@@ -168,7 +163,7 @@ sce$cluster_100 <- as.factor(clusters_2$membership)
 unique(sce$cluster_100)
 
 #Save SCEs after clustering
-saveRDS(sce, "/mnt/rcc_volume/TNBC/data_analysis/sce_TNBC_249_Tumor_CC_ClusterChannelClus_k.rds")
+saveRDS(sce, "/mnt/rcc_volume/RCC/IMC/pan_immune/data_analysis/sce_panimmune_RCC_04.rds")
 ```
 
 ### Cluster stability testing and comparison

@@ -107,7 +107,7 @@ rownames(sce) <- str_replace(rownames(sce),"CD45RA","CD45")
 set.seed(22)
 GMM_CD45 <- Mclust(assay(sce, "exprs")["CD45",], G = 2)
 
-GMM_df <- data.frame(class_CD45 = ifelse(GMM_CD45$classification == 2, "CD45+", "CD45-"), 
+GMM_df <- data.frame(class_CD45 = ifelse(GMM_CD45$classification == 2 & GMM_CD45$uncertainty < 0.05, "CD45+", "CD45-"), 
                      CD45_exprs = assay(sce, "exprs")["CD45",],
                      uncertainty = GMM_CD45$uncertainty)
 
@@ -186,7 +186,7 @@ ggplot(fr_immune, aes(fr_immune))+
   geom_density()
 
 ### 4. Define immuneor and stroma cluster (Fraction of immuneor cells according to GMM >80%)
-anno_immune <- fr_immune %>% rownames_to_column(var = "cluster") %>% mutate(cluster_category = ifelse(fr_immune >= 0.5,"Immune","Non-Immune"))
+anno_immune <- fr_immune %>% rownames_to_column(var = "cluster") %>% mutate(cluster_category = ifelse(fr_immune >= 0.5,"immune","non_immune"))
 
 col <- list(cluster = colorRampPalette(brewer.pal(9, "Paired"))(length(unique(anno_immune$cluster))),
            cluster_category = c("#1F78B4","#B2DF8A"))
@@ -230,96 +230,60 @@ sce$cluster_category <- anno_immune$cluster_category[match(sce$cluster,anno_immu
 saveRDS(sce,"/mnt/rcc_volume/RCC/IMC/pan_immune/data_analysis/sce_panimmune_RCC_03.rds")
 ```
 
-##CONTINUE HERE TOMORROW 
-
 ## Visualize mixed clusters on images 
 
 ```{r viz critical clus, message=FALSE, warning=FALSE}
-#Load images and masks
-images <- readRDS("/mnt/rcc_volume/TNBC/data_analysis/images_segtest.rds")
-masks <- readRDS("/mnt/rcc_volume/TNBC/data_analysis/masks_segtest_4.rds")
+## Load images and masks
+masks <- readRDS("/mnt/rcc_volume/RCC/IMC/pan_immune/data_analysis/masks_nucexp_panimmune_RCC.rds")
+images <- readRDS("/mnt/rcc_volume/RCC/IMC/pan_immune/data_analysis/images_panimmune_RCC.rds")
 
-#subset images and masks for TMA249
-images <- images[str_detect(mcols(images)$sample_id,"ZTMA249")]
-masks <- masks[str_detect(mcols(masks)$sample_id,"ZTMA249")]
+#rename CD45RA to CD45 (mix of RA and RO)
+channelNames(images) <- str_replace(channelNames(images),"CD45RA","CD45")
+channelNames(masks) <- str_replace(channelNames(masks),"CD45RA","CD45")
 
-##Visualize mixed clusters on images - select 10 images for each category with highest number of cells
-mixed_epi_samples <- colData(sce_mixed) %>% as.data.frame %>% group_by(cluster_category_2) %>% filter(cluster_category_2 == "Epithelial") %>% count(sample_id) %>% arrange(desc(n)) %>% slice(1:10) %>% pull(sample_id)
-mixed_non_epi_samples <- colData(sce_mixed) %>% as.data.frame %>% group_by(cluster_category_2) %>% filter(cluster_category_2 == "Non_Epithelial") %>% count(sample_id) %>% arrange(desc(n)) %>% slice(1:10) %>% pull(sample_id)
+#add sample_id to mcols
+mcols(images)$sample_id <- rownames(mcols(images))
+mcols(masks)$sample_id <- rownames(mcols(masks))
 
-mixed_samples_viz <- c(mixed_epi_samples,mixed_non_epi_samples)
+##Visualize immune and non-immune clusters on images - select 10 images for each category with highest number of cells
+immune_viz <- colData(sce) %>% as.data.frame %>% filter(cluster_category == "immune") %>% count(sample_id) %>% arrange(desc(n)) %>% slice(1:10) %>% pull(sample_id)
 
-mixed_samples_viz <- mixed_samples_viz %>% unique() #total of 13 unique images
+non_immune_viz <- colData(sce) %>% as.data.frame %>% filter(cluster_category == "non_immune") %>% count(sample_id) %>% arrange(desc(n)) %>% slice(1:10) %>% pull(sample_id)
+
+samples_viz <- c(immune_viz,non_immune_viz)
+
+samples_viz <- samples_viz %>% unique() #total of 20 unique images
 
 #Prepare images
-cur_images <- images[mixed_samples_viz]
+cur_images <- images[samples_viz]
 cur_images <- cytomapper::normalize(cur_images, separateImages = TRUE)
 cur_images <- cytomapper::normalize(cur_images, inputRange = c(0, 0.2))
 
+#Plot and save images
 plotPixels(cur_images,
-           mask = masks[mixed_samples_viz],
-           object = sce_mixed,
+           mask = masks[samples_viz],
+           object = sce,
            img_id = "sample_id",
            cell_id = "ObjectNumber",
            missing_colour = "white",
-           colour_by = c("panCK", "Ecad", "Vimentin", "SMA"),
-           outline_by = "analysis_cat",
-           colour = list("panCK" = c("black", "yellow"),
-                         "Ecad" = c("black", "magenta"),
-                         "Vimentin" = c("black", "cyan"),
-                         "SMA" = c("black", "green"),
-                          "analysis_cat" = c("tumor" = "#377EB8", "non_tumor" = "#E41A1C")
+           colour_by = c("CD45", "CD3", "CD20", "CD68"),
+           outline_by = "cluster_category",
+           colour = list("CD45" = c("black", "yellow"),
+                         "CD3" = c("black", "magenta"),
+                         "CD20" = c("black", "cyan"),
+                         "CD68" = c("black", "green"),
+                          "cluster_category" = c("immune" = "#377EB8", "non_immune" = "#E41A1C")
                          ),
            thick = TRUE,
            image_title = NULL,
            legend = list(colour_by.title.cex = 0.7,
                          colour_by.labels.cex = 0.7),
-           save_plot = list(filename = paste0("/mnt/rcc_volume/TNBC/data_analysis/01_figures/05_initial_clus/mixed_clusters_viz/cluster_mixed_epi_non_epi_byanalysiscat.png"), scale = 2)
+           save_plot = list(filename = paste0("/mnt/rcc_volume/RCC/IMC/pan_immune/data_analysis/figures/initial_clus/immune_non_immune_viz.png"), scale = 2)
            )
 
-
-plotPixels(cur_images,
-           mask = masks[mixed_samples_viz],
-           object = sce_mixed,
-           img_id = "sample_id",
-           cell_id = "ObjectNumber",
-           missing_colour = "white",
-           colour_by = c("panCK", "Ecad", "Vimentin", "SMA"),
-           colour = list("panCK" = c("black", "yellow"),
-                         "Ecad" = c("black", "magenta"),
-                         "Vimentin" = c("black", "cyan"),
-                         "SMA" = c("black", "green"),
-                         "GMM_CK" = c("panCK+" = "#377EB8", "panCK-" = "#E41A1C")
-                         ),
-           outline_by = "GMM_CK",
-           thick = TRUE,
-           image_title = NULL,
-           legend = list(colour_by.title.cex = 0.7,
-                         colour_by.labels.cex = 0.7),
-           save_plot = list(filename = paste0("/mnt/rcc_volume/TNBC/data_analysis/01_figures/05_initial_clus/mixed_clusters_viz/cluster_mixed_epi_non_epi_byGMMCK.png"), scale = 2)
-           )
-
-plotPixels(cur_images,
-           mask = masks[mixed_samples_viz],
-           object = sce_mixed,
-           img_id = "sample_id",
-           cell_id = "ObjectNumber",
-           missing_colour = "white",
-           colour_by = c("panCK", "Ecad", "Vimentin", "SMA"),
-           colour = list("panCK" = c("black", "yellow"),
-                         "Ecad" = c("black", "magenta"),
-                         "Vimentin" = c("black", "cyan"),
-                         "SMA" = c("black", "green"),
-                         "GMM_Ecad" = c("Ecad+" = "#377EB8", "Ecad-" = "#E41A1C")
-                         ),
-           outline_by = "GMM_Ecad",
-           thick = TRUE,
-           image_title = NULL,
-           legend = list(colour_by.title.cex = 0.7,
-                         colour_by.labels.cex = 0.7),
-           save_plot = list(filename = paste0("/mnt/rcc_volume/TNBC/data_analysis/01_figures/05_initial_clus/mixed_clusters_viz/cluster_mixed_epi_non_epi_byGMMEcad.png"), scale = 2)
-           )
-
+## Save modified images/masks objects
+saveRDS(masks, "/mnt/rcc_volume/RCC/IMC/pan_immune/data_analysis/masks_nucexp_panimmune_RCC.rds")
+saveRDS(images, "/mnt/rcc_volume/RCC/IMC/pan_immune/data_analysis/images_panimmune_RCC.rds")
 ```
 
 
@@ -328,7 +292,7 @@ plotPixels(cur_images,
 ```{r viz_sub, message = FALSE, warning=FALSE}
 ## Subsample 10% of cells from each core 
 #to save time and not get super crowded dimensionality reduction plots
-set.seed(22011995)
+set.seed(22)
 sub <- colData(sce) %>% as.data.frame() %>% group_by("sample_id") %>% slice_sample(prop = 0.1) %>% arrange("sample_id") %>% mutate(sub_id = paste(sample_id,ObjectNumber,sep="_")) %>% pull(sub_id)
 sce_sub = sce[,sub]
 sce_sub$cluster = as.factor(sce_sub$cluster)  
@@ -338,22 +302,19 @@ sce_sub = runUMAP(sce_sub[rowData(sce_sub)$use_channel,], n_neighbors = 30, pca 
 sce_sub = runTSNE(sce_sub[rowData(sce_sub)$use_channel,], exprs_values = "exprs", external_neighbors=TRUE, BPPARAM = MulticoreParam((detectCores()-2)))
 
 ## 1. Visualize UMAP
-#panCK and GMM_CK
-p1 <- plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "panCK")
 
-p2 <- plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "GMM_CK")+
+p1 <- plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "sample_id")+
+  guides(color = FALSE)
+
+p2 <- plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD45")
+
+p3 <- plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "GMM_CD45")+
   scale_color_brewer(palette="Set1")
-
-#p3 <- plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "astir_type")+
-#  scale_color_brewer(palette="Set1")
 
 p4 <- plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "cluster_category")+
-  scale_color_manual(values = col_list_1[[2]])
+  scale_color_manual(values = col_list_1$cluster_category)
 
-p5 <- plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "analysis_cat")+
-  scale_color_brewer(palette="Set1")
-
-(p1+p2)/(p4+p5)
+(p1+p2)/(p3+p4)
 
 #Visualize all marker expression
 all_plots_UMAP <- lapply(c(rownames(sce_sub)[rowData(sce_sub)$use_channel]),
@@ -370,18 +331,18 @@ plots_UMAP_exp <- plot_grid(plotlist = all_plots_UMAP)
 
 
 ## 2. Visualize TSNE
-#panCK and GMM_CK
-p6 <- plotReducedDim(sce_sub, dimred = "TSNE", by_exprs_values = "exprs",colour_by = "panCK")
+p5 <- plotReducedDim(sce_sub, dimred = "TSNE", colour_by = "sample_id")+
+  guides(color = FALSE)
 
-p7 <- plotReducedDim(sce_sub, dimred = "TSNE", by_exprs_values = "exprs", colour_by = "Ecad")
+p6 <- plotReducedDim(sce_sub, dimred = "TSNE", by_exprs_values = "exprs",colour_by = "CD45")
 
-p8 <- plotReducedDim(sce_sub, dimred = "TSNE", colour_by = "cluster_category")+
-  scale_color_manual(values = col_list_1[[2]])
-
-p9 <- plotReducedDim(sce_sub, dimred = "TSNE", colour_by = "analysis_cat")+
+p7 <- plotReducedDim(sce_sub, dimred = "TSNE", colour_by = "GMM_CD45")+
   scale_color_brewer(palette="Set1")
 
-(p6+p7)/(p8+p9)
+p8 <- plotReducedDim(sce_sub, dimred = "TSNE", colour_by = "cluster_category")+
+  scale_color_manual(values = col_list_1$cluster_category)
+  
+(p5+p6)/(p7+p8)
 
 #Visualize all marker expression
 all_plots_TSNE <- lapply(c(rownames(sce_sub)[rowData(sce_sub)$use_channel]),
@@ -395,73 +356,29 @@ all_plots_TSNE <- lapply(c(rownames(sce_sub)[rowData(sce_sub)$use_channel]),
 
 library(cowplot)
 plots_TSNE_exp <- plot_grid(plotlist = all_plots_TSNE)
-
-#Save sce_sub
-#saveRDS(sce_sub, "/Volumes/rcc_volume/TNBC/data_analysis/sce_TNBC_Clus_249_sub.rds")
 ```
 
 ## Estimate fraction of immune cells for each sample/image
 
 ```{r tumor cell fraction}
 #Per sampleID
-tumor_cell_SID <- colData(sce) %>% as.data.frame() %>% select(sample_id,analysis_cat) %>% group_by(sample_id) %>% table() %>% as.data.frame
-tumor_cell_SID <- tumor_cell_SID %>% group_by(sample_id) %>% mutate(fra = ((Freq/sum(Freq))*100)) %>% filter(analysis_cat == "tumor")
+immune_cell_SID <- colData(sce) %>% as.data.frame() %>% select(sample_id,cluster_category) %>% group_by(sample_id) %>% table() %>% as.data.frame
+immune_cell_SID <- immune_cell_SID %>% group_by(sample_id) %>% mutate(fra = ((Freq/sum(Freq))*100)) %>% filter(cluster_category == "immune")
 
-ggplot(tumor_cell_SID, aes(x = analysis_cat,y = fra))+
+ggplot(immune_cell_SID, aes(x = cluster_category,y = fra))+
   geom_boxplot()+
   geom_jitter(aes(color = sample_id), size = 3, position=position_jitter(w=0.1,h=0.1))+
-  guides(color=FALSE)
-
-tumor_cell_SID_cut_off <- foreach(i = 0:100, .combine = rbind) %do%{
-data.frame(cut_off = i, n_PID = tumor_cell_SID %>% filter(fra > i) %>% ungroup %>% count())
-}
-
-ggplot(tumor_cell_SID_cut_off, aes(x=cut_off,y = n))+
-  geom_bar(stat = "identity",color = "black")+
-  theme_classic()
-
-
-#By patient
-tumor_cell_PID <- colData(sce) %>% as.data.frame() %>% select(PID,analysis_cat) %>% group_by(PID) %>% table() %>% as.data.frame
-tumor_cell_PID <- tumor_cell_PID %>% group_by(PID) %>% mutate(fra = ((Freq/sum(Freq))*100)) %>% filter(analysis_cat == "tumor")
-
-ggplot(tumor_cell_PID, aes(x=analysis_cat,y = fra))+
-  geom_boxplot()+
-  geom_jitter(aes(color = PID, size = Freq), position=position_jitter(w=0.1,h=0.1))+
   guides(color=FALSE)+
   theme_classic()
-
-ggplot(tumor_cell_PID, aes(x=analysis_cat,y = Freq))+
-  geom_boxplot(outlier.color = NA)+
-  geom_jitter(aes(color = PID, size = fra), position=position_jitter(w=0.1,h=0.1))+
-  guides(color=FALSE)+
-  theme_classic()
-
-tumor_cell_PID_cut_off <- foreach(i = 0:100, .combine = rbind) %do%{
-data.frame(cut_off = i, n_PID = tumor_cell_PID %>% filter(fra > i) %>% ungroup %>% count())
-}
-
-ggplot(tumor_cell_PID_cut_off, aes(x=cut_off,y = n))+
-  geom_bar(stat = "identity", color = "black")+
-  theme_classic()
-
-
-#Choose filter criteria
-#here total frequency of tumor cells per PID (two samples) > 30 (100?)
-PID_select_tumor_content <- tumor_cell_PID %>% filter(Freq > 30) %>% pull(PID) %>% unfactor 
-
-sce$PID_tumor_content <- sce$PID %in% PID_select_tumor_content
-
 ```
-
 
 ## Save sce objects
 
 ```{r save_objects, message = FALSE, warning=FALSE}
 #Save sce
-saveRDS(sce, "/mnt/rcc_volume/TNBC/data_analysis/sce_TNBC_Clus_249.rds")
+saveRDS(sce,"/mnt/rcc_volume/RCC/IMC/pan_immune/data_analysis/sce_panimmune_RCC_03.rds")
 #Save sce_sub
-saveRDS(sce_sub, "/mnt/rcc_volume/TNBC/data_analysis/sce_TNBC_Clus_249_sub.rds")
+saveRDS(sce_sub,"/mnt/rcc_volume/RCC/IMC/pan_immune/data_analysis/sce_sub_panimmune_RCC_03.rds")
 ```
 
 ## Optional: Save plots as pdf
