@@ -139,7 +139,7 @@ Heatmap of clusters with GMM information
 
 ```{r heatmap, message=FALSE, warning=FALSE}
 #Read sce after clustering and GMM
-#sce <- readRDS("/mnt/rcc_volume/RCC/IMC/pan_immune/data_analysis/sce_panimmune_RCC_03.rds")
+sce <- readRDS("/mnt/rcc_volume/RCC/IMC/pan_immune/data_analysis/sce_panimmune_RCC_03.rds")
 
 ### 1. Marker Heatmap 
 
@@ -370,6 +370,22 @@ ggplot(immune_cell_SID, aes(x = cluster_category,y = fra))+
   geom_jitter(aes(color = sample_id), size = 3, position=position_jitter(w=0.1,h=0.1))+
   guides(color=FALSE)+
   theme_classic()
+
+## Compare to IHC based lymphocyte scoring
+immune_cell_SID <- immune_cell_SID %>% arrange(desc(fra)) 
+immune_cell_SID$CD45_group <- as.character((ntile(immune_cell_SID$fra, 3)-1))
+
+immune_cell_SID$lymphocytes_group <- as.character(sce$lymphocytes[match(immune_cell_SID$sample_id,sce$sample_id)])
+
+immune_cell_SID <- immune_cell_SID[immune_cell_SID %>% complete.cases(),]
+
+table(immune_cell_SID$lymphocytes_group, immune_cell_SID$CD45_group)
+chisq.test(table(immune_cell_SID$lymphocytes_group, immune_cell_SID$CD45_group)) #significant association between variables
+
+ggplot(immune_cell_SID, aes(x = CD45_group, y=lymphocytes_group, color = CD45_group, shape = lymphocytes_group))+
+  geom_jitter()+
+  theme_classic()
+
 ```
 
 ## Save sce objects

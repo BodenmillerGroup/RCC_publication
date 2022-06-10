@@ -54,6 +54,9 @@ We will first read in the data processed in previous sections:
 sce <- readRDS("/mnt/rcc_volume/RCC/IMC/pan_immune/data_analysis/sce_panimmune_RCC_01.rds")
 masks <- readRDS("/mnt/rcc_volume/RCC/IMC/pan_immune/data_analysis/masks_nucexp_panimmune_RCC.rds")
 images <- readRDS("/mnt/rcc_volume/RCC/IMC/pan_immune/data_analysis/images_panimmune_RCC.rds")
+
+length(unique(sce$sample_id))
+
 ```
 
 

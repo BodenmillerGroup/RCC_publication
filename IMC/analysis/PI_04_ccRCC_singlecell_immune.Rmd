@@ -55,9 +55,7 @@ library(bluster)
 library(psych)
 library(corrplot)
 library(psych)
-
-#Batch correction
-library(batchelor)
+library(ggpubr)
 ```
 
 # Single-cell analysis - Pipeline 2 - Immune cell phenotypes ccRCC
@@ -208,15 +206,15 @@ p1+p3+p2
 #Chosen method => k=100
 
 #Cluster colors 
-col_clus <- colorRampPalette(brewer.pal(9,"Paired"))(length(unique(sce$cluster_100)))
+col_clus <- colorRampPalette(brewer.pal(9,"Paired"))(length(unique(sce$cluster_100_renamed)))
 
 #By clusters for one method (here k=100)
 #1. Silhouette width [-1,1]
 #Clusters with large positive silhouette widths are well-separated from other clusters
-sil.approx <- approxSilhouette(t(assay(sce, "exprs")), clusters=sce$cluster_100)
+sil.approx <- approxSilhouette(t(assay(sce, "exprs")), clusters=sce$cluster_100_renamed)
 sil.data <- as.data.frame(sil.approx)
-sil.data$closest <- factor(ifelse(sil.data$width > 0, sce$cluster_100, sil.data$other))
-sil.data$cluster <- sce$cluster_100
+sil.data$closest <- factor(ifelse(sil.data$width > 0, sce$cluster_100_renamed, sil.data$other))
+sil.data$cluster <- sce$cluster_100_renamed
 
 p4 <- ggplot(sil.data, aes(x=cluster, y=width, colour=closest)) +
     ggbeeswarm::geom_quasirandom(method="smiley")+
@@ -238,7 +236,7 @@ p4
 ```
 
 Observation:  
-- Highest Silhouette width and WCSS for k=50 => selected
+- Highest Silhouette width and WCSS for k=100 => selected
 
 ## Heatmap 
 
@@ -340,7 +338,7 @@ Rich heatmap of clusters with additional information (other channels, spatial, g
 
 ```{r heatmap sce_1, message=FALSE, warning=FALSE}
 #Read sce after clustering and GMM
-#sce <- readRDS("/mnt/rcc_volume/RCC/IMC/pan_immune/data_analysis/sce_panimmune_RCC_04.rds")
+sce <- readRDS("/mnt/rcc_volume/RCC/IMC/pan_immune/data_analysis/sce_panimmune_RCC_04.rds")
 
 ### 1. Marker Heatmaps (Cluster channels, other_immune channels)
 
@@ -504,10 +502,9 @@ h_cluster_anno <- rowAnnotation(cluster_100_renamed = anno_simple((row_order_clu
 draw(h_cluster_anno)
 
 #Save sce
-saveRDS(sce, "/mnt/rcc_volume/RCC/IMC/pan_immune/data_analysis/sce_panimmune_RCC_04.rds")
+#saveRDS(sce, "/mnt/rcc_volume/RCC/IMC/pan_immune/data_analysis/sce_panimmune_RCC_04.rds")
 #saveRDS(col_clusters, "/mnt/rcc_volume/TNBC/data_analysis/color_Tumorpheno.rds")
 ```
-
 
 
 ## Visualization images of clusters
@@ -547,7 +544,6 @@ plotPixels(cur_images,
 
 ## CD15+ CD8 T cells stem from the tumor core - not use for clustering? (or label as tumor_inf CD8a)
 ```
-
 
 
 ## Dimensionality reduction 
@@ -662,6 +658,7 @@ corrplot(cor(SID_cor,method = "spearman"), method="color", col=brewer.pal(n=8, n
          # hide correlation coefficient on the principal diagonal
          diag=F
 )
+
 ```
 
 ## Check correlation of markers
@@ -700,7 +697,7 @@ ISUP_n <- colData(sce) %>%
   group_by(ISUP) %>% 
   count()
 
-ggplot(ISUP_n, aes(x=ISUP,y=n,fill=ISUP))+
+ISUP_p <- ggplot(ISUP_n, aes(x=ISUP,y=n,fill=ISUP))+
   geom_bar(stat = "identity", color = "black")+
   scale_fill_manual(values = col_list_1$ISUP)+
   theme_classic()
@@ -723,10 +720,26 @@ pT_simple_n <- colData(sce) %>%
   group_by(pT_simple) %>% 
   count()
   
-ggplot(pT_simple_n, aes(x=pT_simple,y=n,fill=pT_simple))+
+stage_p <- ggplot(pT_simple_n, aes(x=pT_simple,y=n,fill=pT_simple))+
   geom_bar(stat = "identity", color = "black")+
   scale_fill_manual(values = col_list_1$pT_simple)+
   theme_classic()
+
+## gender
+gender_n <- colData(sce) %>% 
+  as.data.frame %>% 
+  select(sample_id,gender) %>% 
+  unique() %>% 
+  group_by(gender) %>% 
+  count()
+
+ggplot(gender_n, aes(x=gender,y=n,fill=gender))+
+  geom_bar(stat = "identity", color = "black")+
+  theme_classic()
+
+#Plot combined
+ISUP_p + stage_p
+
 
 #add to sce
 sce$pT_merg <- colData(sce) %>% 
@@ -781,6 +794,7 @@ pT_cluster_p <- ggplot(pT_cluster, aes(x=pT_merg,y=fra))+
 
 ISUP_cluster_p+pT_cluster_p
 ```
+
 ```{r diff abun}
 ### Differential abundance analysis based on edgeR
 library(edgeR)
@@ -971,8 +985,98 @@ DA_ISUP_p
 ISUP_cluster_p + DA_ISUP_p
 pT_cluster_p + DA_stage_p
 
+## by gender
+#cluster abundances per PID
+sce$sample_gender <- paste0(sce$sample_id, "_", sce$gender)
+abundances <- colData(sce) %>% as.data.frame %>%
+  group_by(sample_id, gender, cluster_100_renamed) %>%
+  summarize(count = n())  %>%
+  filter(!is.na(gender)) %>%
+  pivot_wider(names_from = c(sample_id, gender), 
+              values_from = count, values_fill = 0) %>%
+  as.data.frame() %>% column_to_rownames("cluster_100_renamed")
 
 
+#relevant patient metadata (Relevel so that pT 1/2 is baseline)
+meta <- colData(sce)[match(colnames(abundances), sce$sample_gender),]
+rownames(meta) <- meta$sample_gender
+meta$gender <- relevel(x=factor(meta$gender), ref = "f") #already correct
+
+#Visualize
+# logCPM of abundances per cluster
+cur_mat <- cpm(abundances,prior.count = 1,log = TRUE)
+
+Heatmap(cur_mat, 
+        col = viridis(100),
+        column_split = unfactor(meta$gender))%v%
+  columnAnnotation(gender = anno_simple(unfactor(meta$gender)))
+
+#create DGEList - based on edgeR package
+y.ab <- DGEList(abundances, samples=meta, group = meta$gender)
+
+#Design matrix
+design <- model.matrix(~gender, data = y.ab$samples)
+
+# Estimate NB and QL dispersion 
+y.ab <- estimateDisp(y.ab, design, trend="none")
+summary(y.ab$common.dispersion)
+plotBCV(y.ab, cex=1)
+
+fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
+summary(fit.ab$var.prior)
+plotQLDisp(fit.ab, cex=1)
+
+# Test for differential abundance of clusters between tumor stages
+res <- glmQLFTest(fit.ab, coef=ncol(design))
+
+res$coefficients
+summary(decideTests(res))
+
+DA <- res$table
+DA <- topTags(res, n = 12, adjust.method = "BH")$table
+
+DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.05, result = ifelse(DA$logFC > 0 & DA$FDR < 0.05, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.05, "DOWN", "NOTSIG"))) %>% 
+  arrange(desc(logFC))
+
+DA$cluster <- factor(DA$cluster, levels = DA$cluster)
+
+sig <- DA %>% filter(FDR<0.05) %>% pull(cluster) %>% unfactor
+
+## Visualize
+#Barplot
+ggplot(DA, aes(cluster, y = logFC))+
+  geom_col(aes(fill=result), col = "black")+
+  scale_fill_manual(values = c("#377EB8","lightgrey","#E41A1C"))+
+  ylab("logFC")+
+  xlab("Cluster")+
+  labs(fill = "FDR<0.05")+
+  ggtitle("gender_grading (1/2 vs 4)")+
+  theme_classic()
+#Volcano plot  
+ggplot(DA, aes(x = logFC, y = -log10(FDR)))+
+  geom_point(aes(col=cluster, size = -log10(FDR)))+
+  scale_color_manual(values = col_clusters$cluster_100_renamed)+
+  xlab("logFC (gender_grading: 1/2 vs 4)")+
+  ylab("-log10(FDR)")+
+  theme_classic()+
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed")+
+  geom_vline(xintercept = 0, linetype = "dashed")+
+  labs(color = "cluster")
+#Abundance vs log fold change (best?)
+DA_gender_p <- ggplot(DA, aes(x = logFC, y = logCPM))+
+  geom_point(aes(col= cluster, 
+                 size = -log10(FDR)))+
+  geom_label_repel(data = DA %>% filter(FDR<0.05), aes(label = cluster))+
+  scale_color_manual(values = ifelse(DA$cluster %in% sig, col_clusters$cluster_100_renamed[match(DA$cluster,names(col_clusters$cluster_100_renamed))], "black"))+
+  xlab("logFC (gender: f vs m)")+
+  ylab("Abundance (logCPM)")+
+  theme_classic()+
+  geom_vline(xintercept = 0, linetype = "dashed")+
+  labs(color = "cluster")
+
+DA_gender_p 
+
+#gender does not have a strong effect on cluster abundances (except cluster 4 which is present only in few samples)
 ```
 
 
@@ -1171,38 +1275,59 @@ hr_cat_GMM
 ##IMPORTANT: change to chunk output in console for this last part 
 
 ##save plots as pdf (vector graphics)
-pdf("/mnt/rcc_volume/TNBC/data_analysis/01_figures/06_tumor/TNBC_249_Tumor_CC_ClusterTesting.pdf",width = 10,height = 5)
+pdf("/mnt/rcc_volume/RCC/IMC/pan_immune/data_analysis/figures/immune_ana/RCC_panImmune_ccRCC_ClusterTesting.pdf",width = 10,height = 5)
 p1+p2+p3
 dev.off()
 
-pdf("/mnt/rcc_volume/TNBC/data_analysis/01_figures/06_tumor/TNBC_249_Tumor_CC_Silhouette_Cluster100.pdf",width = 12,height = 10)
+pdf("/mnt/rcc_volume/RCC/IMC/pan_immune/data_analysis/figures/immune_ana/RCC_panImmune_ccRCC_Silhouette_Cluster100renamed.pdf",width = 12,height = 10)
 p4
 dev.off()
 
-pdf("/mnt/rcc_volume/TNBC/data_analysis/01_figures/06_tumor/TNBC_249_Tumor_CC_HeatmapCluster.pdf",width = 13,height = 7)
+pdf("/mnt/rcc_volume/RCC/IMC/pan_immune/data_analysis/figures/immune_ana/RCC_panImmune_ccRCC_HeatmapCluster.pdf",width = 13,height = 7)
 h
 dev.off()
 
-pdf("/mnt/rcc_volume/TNBC/data_analysis/01_figures/06_tumor/TNBC_249_Tumor_CC_HeatmapCluster_Scales.pdf",width = 20,height = 8)
-h_exprs+h_min_max
-dev.off()
-
-pdf("/mnt/rcc_volume/TNBC/data_analysis/01_figures/06_tumor/TNBC_249_Tumor_CC_ClusterAnno.pdf",width = 5,height = 8)
+pdf("/mnt/rcc_volume/RCC/IMC/pan_immune/data_analysis/figures/immune_ana/RCC_panImmune_ccRCC_ClusterAnno.pdf",width = 5,height = 8)
 h_cluster_anno
 dev.off()
 
-pdf("/Volumes/rcc_volume/TNBC/data_analysis/01_figures/06_tumor//TNBC_249_Tumor_CC_HeatmapCluster_subcells.pdf",width = 10,height = 8)
-dittoHeatmap(sce_sub, 
-             genes = rownames(sce_sub)[rowData(sce_sub)$cluster_channel],
-             assay = "min_max", 
-             scale = "none", 
-             order.by = "cluster_100", 
-             heatmap.colors = viridis(100), 
-             annot.by = c("cluster_100"),
-             annot.colors=col_clusters$cluster_100[order(as.numeric(names(col_clusters$cluster_100)))])
+pdf("/mnt/rcc_volume/RCC/IMC/pan_immune/data_analysis/figures/immune_ana/RCC_panImmune_ccRCC_UMAPSTNE.pdf",width = 10,height = 5)
+UMAP_clus+TSNE_clus
 dev.off()
 
-pdf("/mnt/rcc_volume/TNBC/data_analysis/01_figures/06_tumor/TNBC_249_Tumor_CC_ExpressionCor.pdf",width = 10,height = 8)
+pdf("/mnt/rcc_volume/RCC/IMC/pan_immune/data_analysis/figures/immune_ana/RCC_panImmune_HeatmapSingleCell.pdf",width = 10,height = 7)
+dittoHeatmap(sce_sub, 
+             genes = rownames(sce_sub)[rowData(sce_sub)$cluster_channel],
+             assay = "exprs", 
+             scale = "none", 
+             order.by = "cluster_100_renamed", 
+             heatmap.colors = viridis(100), 
+             annot.by = c("cluster_100_renamed"),
+             annot.colors=col_clusters$cluster_100_renamed[order(as.numeric(names(col_clusters$cluster_100_renamed)))])
+dev.off()
+
+
+pdf("/mnt/rcc_volume/RCC/IMC/pan_immune/data_analysis/figures/immune_ana/RCC_panImmune_clusterSID.pdf",width = 10,height = 6)
+p_clusterSID
+dev.off()
+
+pdf("/mnt/rcc_volume/RCC/IMC/pan_immune/data_analysis/figures/immune_ana/RCC_panImmune_SIDcluster.pdf",width = 15,height = 5)
+p_SID_cluster
+dev.off()
+
+pdf("/mnt/rcc_volume/RCC/IMC/pan_immune/data_analysis/figures/immune_ana/RCC_panImmune_ClusterfractionCor.pdf",width = 10,height = 10)
+corrplot(cor(SID_cor,method = "spearman"), method="color", col=brewer.pal(n=8, name="RdBu"),  
+         type="upper", order="hclust",hclust.method = "ward.D2", 
+         addCoef.col = "black", addCoefasPercent = F,# Add coefficient of correlation
+         tl.col="black", tl.srt=40, #Text label color and rotation
+         # Combine with significance
+         #p.mat = p.mat, sig.level = 0.01, insig = "blank", 
+         # hide correlation coefficient on the principal diagonal
+         diag=F
+)
+dev.off()
+
+pdf("/mnt/rcc_volume/RCC/IMC/pan_immune/data_analysis/figures/immune_ana/RCC_panImmune_GeneCor.pdf",width = 12,height = 12)
 corrplot(cor(cor_sce,method = "spearman"), method="color", col=brewer.pal(n=8, name="RdBu"),  
          type="upper", order="hclust",hclust.method = "ward.D2", 
          addCoef.col = "black", addCoefasPercent = F,# Add coefficient of correlation
@@ -1214,68 +1339,26 @@ corrplot(cor(cor_sce,method = "spearman"), method="color", col=brewer.pal(n=8, n
 )
 dev.off()
 
-pdf("/mnt/rcc_volume/TNBC/data_analysis/01_figures/06_tumor/TNBC_249_Tumor_CC_TSNECluster_Metacluster.pdf",width = 12,height = 6)
-TSNE_clus+TSNE_metaclus
+
+
+pdf("/mnt/rcc_volume/RCC/IMC/pan_immune/data_analysis/figures/immune_ana/RCC_panImmune_ISUPStageGrouping.pdf",width = 10,height = 5)
+ISUP_p + stage_p
 dev.off()
 
-pdf("/mnt/rcc_volume/TNBC/data_analysis/01_figures/06_tumor/TNBC_249_Tumor_CC_TSNEExpression.pdf",width = 12,height = 6)
-exp_plots_TSNE
+pdf("/mnt/rcc_volume/RCC/IMC/pan_immune/data_analysis/figures/immune_ana/RCC_panImmune_DifAbun_ISUP.pdf",width = 12,height = 8)
+ISUP_cluster_p + DA_ISUP_p
 dev.off()
 
-pdf("/mnt/rcc_volume/TNBC/data_analysis/01_figures/06_tumor/TNBC_249_Tumor_CC_UMAPExpression.pdf",width = 12,height = 6)
-exp_plots_UMAP
+
+pdf("/mnt/rcc_volume/RCC/IMC/pan_immune/data_analysis/figures/immune_ana/RCC_panImmune_DifAbun_Staging.pdf",width = 12,height = 8)
+pT_cluster_p + DA_stage_p
 dev.off()
 
-pdf("/mnt/rcc_volume/TNBC/data_analysis/01_figures/06_tumor/TNBC_249_Tumor_CC_MetaClusterPID.pdf",width = 10,height = 10)
-p_clusterPID/p_metaclusterPID
-dev.off()
-
-pdf("/mnt/rcc_volume/TNBC/data_analysis/01_figures/06_tumor/TNBC_249_Tumor_CC_PIDMetaCluster_ClusterCor.pdf",width = 12,height = 10)
-(p_PID_cluster+SID_cluster_cor_plot)/
-(p_PID_metacluster + SID_metacluster_cor_plot)
-dev.off()
-
-pdf("/mnt/rcc_volume/TNBC/data_analysis/01_figures/06_tumor/TNBC_249_Tumor_CC_ClusterMeta_HR_OS.pdf",width = 10,height = 8)
+pdf("/mnt/rcc_volume/RCC/IMC/pan_immune/data_analysis/figures/immune_ana/RCC_panImmune_Harzards_differentcova.pdf",width = 8,height = 10)
 hr_prop/
 hr_cat/
 hr_cat_GMM
 dev.off()
-
-pdf("/mnt/rcc_volume/TNBC/data_analysis/01_figures/06_tumor/TNBC_249_Tumor_CC_ClusterMeta_HR_DFS.pdf",width = 10,height = 8)
-hr_prop/
-hr_cat/
-hr_cat_GMM
-dev.off()
-
-pdf("/mnt/rcc_volume/TNBC/data_analysis/01_figures/06_tumor/TNBC_249_Tumor_CC_Heatmap_metaClus_PIDgroups.pdf",width = 8,height = 8)
-h_g_meta
-dev.off()
-
-pdf("/mnt/rcc_volume/TNBC/data_analysis/01_figures/06_tumor/TNBC_249_Tumor_CC_Heatmap_Clus_PIDgroups.pdf",width = 8,height = 8)
-h_g_clus
-dev.off()
-
-pdf("/mnt/rcc_volume/TNBC/data_analysis/01_figures/06_tumor/TNBC_249_Tumor_CC_HeatmapPIDgroups_mean.pdf",width = 11,height = 7)
-h_g_rich
-dev.off()
-
-pdf("/mnt/rcc_volume/TNBC/data_analysis/01_figures/06_tumor/TNBC_249_Tumor_CC_HeatmapPIDgroupsCLR.pdf",width = 11,height = 7)
-h_g_1
-dev.off()
-
-pdf("/mnt/rcc_volume/TNBC/data_analysis/01_figures/06_tumor/TNBC_249_Tumor_CC_HeatmapPIDgroupsCLR_mean.pdf",width = 11,height = 7)
-h_g_rich_clr
-dev.off()
-
-pdf("/mnt/rcc_volume/TNBC/data_analysis/01_figures/06_tumor/TNBC_249_Tumor_CC_PIDgroups_Clus_OS.pdf",width = 8,height = 5)
-plot_OS
-dev.off()
-
-pdf("/mnt/rcc_volume/TNBC/data_analysis/01_figures/06_tumor/TNBC_249_Tumor_CC_PIDgroups_Clus_DFS.pdf",width = 8,height = 5)
-plot_DFS
-dev.off()
-
-
 ##IMPORTANT: change back to chunk output inline
 ```
 
