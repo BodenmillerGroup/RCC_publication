@@ -63,11 +63,11 @@ SN_ratios <- function(object,markers, group.by){
 # 1.1 Application for RCC - myeloid panel titration on RCC samples
 
 ```{r}
-sce <- read_steinbock("/mnt/rcc_volume/RCC/IMC/myeloid_titration/", graphs_folder = NULL, return_as = "sce")
+sce <- read_steinbock("/Volumes/rcc_volume/RCC/IMC/myeloid_titration/", graphs_folder = NULL, return_as = "sce")
 
 # panel and image information
-panel <- read_csv("/mnt/rcc_volume/RCC/IMC/myeloid_titration/panel.csv")
-images <-  read_csv("/mnt/rcc_volume/RCC/IMC/myeloid_titration/images.csv")
+panel <- read_csv("/Volumes/rcc_volume/RCC/IMC/myeloid_titration/panel.csv")
+images <-  read_csv("/Volumes/rcc_volume/RCC/IMC/myeloid_titration/images.csv")
 
 # add dilution identifier
 images$sample_id <- str_split(images$image, ".tiff", simplify = TRUE)[,1]
@@ -233,7 +233,9 @@ test_markers <- c("cleavPARP","CD303","CCL19","CCL21","CD56","CD209","panCK","TM
 
 rowData(sce)$use_markers <- rowData(sce)$clean_target %in% test_markers
 
-use_markers <- rowData(sce)$clean_target[rowData(sce)$use_markers]
+rowData(sce)$use_markers_old <- rowData(sce)$clean_target %in% use_markers
+
+use_markers_old <- rowData(sce)$clean_target[rowData(sce)$clean_target %in% use_markers]
 
 rowData(sce)$cluster_markers <- !grepl("DNA|H3", rowData(sce)$clean_target)
 ```
@@ -250,7 +252,7 @@ plotReducedDim(sce,dimred = "UMAP", colour_by = "dilution_id")
 ## calculate signal to noise and check splits
 
 ```{r, fig.width=8, fig.height=4}
-sn_dat <- SN_ratios(sce,use_markers,group.by = "dilution_id")
+sn_dat <- SN_ratios(sce,use_markers_old,group.by = "dilution_id")
 
 unique(sn_dat$dilution_id)
 levels = c("Appendix_25","Appendix_25_2","Appendix_50","Appendix_50_2","Appendix_100","Appendix_100_2","PBMC","PBMC_50","PBMC_100","Tonsils_25","Tonsils_50","Tonsils_100")
@@ -291,7 +293,7 @@ g1 <- ggplot(sn_dat)+
   theme(axis.text = element_text(angle = 90))
 g1
 
-pdf("/Volumes/rcc_volume/RCC/IMC/myeloid_TMA_titration/data_analysis/01_RCC_myeloidTMAtitration_posnegSN_output.pdf",width = 12,height = 14)
+pdf("/Volumes/rcc_volume/RCC/IMC/myeloid_TMA_titration/data_analysis/01_RCC_myeloidTMAtitration_posnegSN_output_remainingmarkers.pdf",width = 12,height = 14)
 g1
 dev.off()
 ```
