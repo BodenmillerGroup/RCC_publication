@@ -127,7 +127,11 @@ A: Using `cytoviewer`
 ```{r}
 library(cytoviewer)
 
-cytoviewer(image = images, mask = masks_1, img_id = "sample_id")
+cur_masks <- masks_1[mcols(masks_1)$sample_id %in% mcols(cur_images)$sample_id]
+
+cytoviewer(image = cur_images, mask = cur_masks, img_id = "sample_id")
+
+names(cur_images)
 ```
 
 B: `plotPixels` function from [cytomapper](https://www.bioconductor.org/packages/release/bioc/html/cytomapper.html).
@@ -176,78 +180,212 @@ plotPixels(cur_images,
                          colour_by.labels.cex = 0.7),
            save_plot = list(filename = paste0("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/seg_test/", i,".png"), scale = 2))
 }
+```
 
-# ## Masks_2
-# 
-# # Subset masks
-# cur_masks <- masks_2[mcols(masks_2)$sample_id %in% mcols(cur_images)$sample_id]
-# cur_masks <- cur_masks[match(names(cur_images), names(cur_masks))]
-# 
-# plotPixels(cur_images,
-#            mask = cur_masks,
-#            img_id = "TMA_id",
-#            colour_by = c("DNA1", "CA9", "SMA","CD8a","CD68"),
-#            colour = list("DNA1" = c("black", "yellow"),
-#                          "CA9" = c("black", "magenta"),
-#                          "SMA" = c("black", "cyan"),
-#                          "CD8a" = c("black","red"),
-#                          "CD68" = c("black","green")
-#                          ),
-#            thick = FALSE,
-#            image_title = NULL,
-#            legend = list(colour_by.title.cex = 0.7,
-#                          colour_by.labels.cex = 0.7),
-#            save_plot = list(filename = "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/seg_test/masks_2.png", scale = 2))
-# 
-# 
-# ## Masks_exp
-# 
-# # Subset masks
-# cur_masks <- masks_exp[mcols(masks_exp)$sample_id %in% mcols(cur_images)$sample_id]
-# cur_masks <- cur_masks[match(names(cur_images), names(cur_masks))]
-# 
-# plotPixels(cur_images,
-#            mask = cur_masks,
-#            img_id = "TMA_id",
-#            colour_by = c("DNA1", "CA9", "SMA","CD8a","CD68"),
-#            colour = list("DNA1" = c("black", "yellow"),
-#                          "CA9" = c("black", "magenta"),
-#                          "SMA" = c("black", "cyan"),
-#                          "CD8a" = c("black","red"),
-#                          "CD68" = c("black","green")
-#                          ),
-#            thick = FALSE,
-#            image_title = NULL,
-#            legend = list(colour_by.title.cex = 0.7,
-#                          colour_by.labels.cex = 0.7),
-#            save_plot = list(filename = "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/seg_test/masks_exp.png", scale = 2))
-# 
-# ## Masks_cp_1
-# 
-# # Subset masks
-# cur_masks <- masks_cp_1[mcols(masks_cp_1)$sample_id %in% mcols(cur_images)$sample_id]
-# cur_masks <- cur_masks[match(names(cur_images), names(cur_masks))]
-# 
-# plotPixels(cur_images,
-#            mask = cur_masks,
-#            img_id = "TMA_id",
-#            colour_by = c("DNA1", "CA9", "SMA","CD8a","CD68"),
-#            colour = list("DNA1" = c("black", "yellow"),
-#                          "CA9" = c("black", "magenta"),
-#                          "SMA" = c("black", "cyan"),
-#                          "CD8a" = c("black","red"),
-#                          "CD68" = c("black","green")
-#                          ),
-#            thick = FALSE,
-#            image_title = NULL,
-#            legend = list(colour_by.title.cex = 0.7,
-#                          colour_by.labels.cex = 0.7),
-#            save_plot = list(filename = "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/seg_test/masks_cp_1.png", scale = 2))
+```{r}
+# Subset to ccRCC 
+images <- images[!is.na(mcols(images)$subtype)]
+images_ccRCC <- images[mcols(images)$subtype == "clear_cell_RCC"]
+
+#Randomly select 50 images
+set.seed(220195)
+img_random <- sample(seq_len(length(images_ccRCC)), 30)
+
+# Normalize and clip image
+cur_images <- images_ccRCC[img_random]
+cur_images <- cytomapper::normalize(cur_images, separateImages = TRUE)
+cur_images <- cytomapper::normalize(cur_images, inputRange = c(0, 0.2))
+
+# Generate and save images
+library(foreach)
+library(doParallel)
+registerDoParallel(cores = 20)
+
+masks_options <- c("masks_1", "masks_2", "masks_exp", "masks_cp_1")
+
+foreach(i = masks_options)%dopar%{
+
+# Subset masks
+cur_masks <- get(i)
+cur_masks <- cur_masks[mcols(cur_masks)$sample_id %in% mcols(cur_images)$sample_id]
+cur_masks <- cur_masks[match(names(cur_images), names(cur_masks))]
+
+plotPixels(cur_images,
+           mask = cur_masks,
+           img_id = "sample_id",
+           colour_by = c("DNA1", "CA9", "SMA","CD8a","CD68"),
+           colour = list("DNA1" = c("black", "yellow"),
+                         "CA9" = c("black", "magenta"),
+                         "SMA" = c("black", "cyan"),
+                         "CD8a" = c("black","red"),
+                         "CD68" = c("black","green")
+                         ),
+           thick = FALSE,
+           image_title = NULL,
+           legend = list(colour_by.title.cex = 0.7,
+                         colour_by.labels.cex = 0.7),
+           save_plot = list(filename = paste0("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/seg_test/",i,".png"), scale = 2))
+}
 ```
 
 **Key Observations:**
+1. Some images have horizontal stripes? Can I remove this artifacts? 
 1. Nuclear expansion looks better than DeepCell (has too many small cells that do not look like cells)
-2. Nuclear expansion gives smaller and fewer cells
+2. Cellpose looks best, but overmerges cells currently
+
+```{r}
+# Read in image with artifact
+test_img <- readImage("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/img/202207_TMA224.1_BlockB_SE_106.tiff")
+
+display(test_img)
+
+
+mat <- imageData(test_img)[,,1]
+
+
+# Subset to one channel
+
+test <- test_img[1:600,1:600, 5]
+display(test)
+
+
+hist(abs(test_img[,,5] - mean(test_img[,,5])))
+
+?hist
+
+
+
+
+
+similar_pixels <- apply(test_img, c(1, 2), function(pixel) {
+    print(all(abs(pixel - mean(pixel))))
+  })
+
+
+
+
+display(test > 20 & test < 60)
+
+test
+
+
+
+
+
+
+
+## Histogram
+hist(test_img)
+
+## Range
+range(test)
+
+## Threshold visualization
+
+
+## Conclusion: Artifacts have expression values comparable to normal intensity values => train classifier? 
+```
+
+
+## Find images with artifacts for training
+
+```{r}
+# Subset to ccRCC 
+images <- images[!is.na(mcols(images)$subtype)]
+images_ccRCC <- images[mcols(images)$subtype == "clear_cell_RCC"]
+
+#Randomly select 60 images
+set.seed(220195)
+img_random <- sample(seq_len(length(images_ccRCC)), 60)
+
+# Normalize and clip image
+cur_images <- images_ccRCC[img_random]
+cur_images <- cytomapper::normalize(cur_images, separateImages = TRUE)
+cur_images <- cytomapper::normalize(cur_images, inputRange = c(0, 0.2))
+
+# Generate and save image
+plotPixels(cur_images,
+           img_id = "sample_id",
+           colour_by = c("DNA1", "CA9", "SMA","CD8a","CD68"),
+           colour = list("DNA1" = c("black", "yellow"),
+                         "CA9" = c("black", "magenta"),
+                         "SMA" = c("black", "cyan"),
+                         "CD8a" = c("black","red"),
+                         "CD68" = c("black","green")
+                         ),
+           legend = list(colour_by.title.cex = 0.7,
+                         colour_by.labels.cex = 0.7),
+           save_plot = list(filename = "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/seg_test/artifacts_detect.png", scale = 2))
+```
+
+
+## Function to remove artificial pixels 
+
+```{r}
+library(cytomapper)
+library(EBImage)
+#202207_TMA224.1_BlockB_SE_106.tiff
+#202207_TMA224.1_BlockA_SE_075.tiff
+cur_img <- loadImages("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/img/202207_TMA224.1_BlockB_SE_069.tiff")
+channelNames(cur_img) <- paste0("ch", 1:dim(cur_img[[1]])[3])
+
+# Visualize artefacts
+plotPixels(cur_img, colour_by = "ch1", bcg = list(ch1 = c(0, 10, 1)))
+plotPixels(cur_img, colour_by = "ch2", bcg = list(ch2 = c(0, 10, 1)))
+plotPixels(cur_img, colour_by = "ch10", bcg = list(ch10 = c(0, 10, 1)))
+
+# Step 1: Detect artefacts by log-variance-mean-ratio
+cur_var <- apply(as.array(cur_img[[1]]), MARGIN = c(1,2), var)
+cur_mean <- apply(as.array(cur_img[[1]]), MARGIN = c(1,2), mean)
+
+plot(log(cur_mean), log(cur_var/(cur_mean^2)))
+abline(h = 0, col = "red")
+
+pixels_wrong <- log(cur_var/(cur_mean^2)) < 0
+pixels_wrong[is.na(pixels_wrong)] <- FALSE
+
+if(sum(pixels_wrong) > 0){
+  print(paste0(names(cur_img),": This image contained ", sum(pixels_wrong), " artificial pixels."))
+}
+
+display(pixels_wrong)
+
+# Step 2: Set all artefact pixels to 0
+img_1 <- cur_img[[1]]
+img_1[pixels_wrong] <- 0
+
+display(img_1)
+
+# Step 3: Replace artefact pixels by median
+img_median <- medianFilter(img_1, size = 3)
+
+img_1[test_img] <- img_median[test_img]
+
+display(img_1)
+
+
+# # By Otsu thresholding
+# threshold <- otsu(as.array(cur_mean), range = c(0,max(cur_mean)))
+# 
+# hist(cur_mean)
+# abline(v = otsu(as.array(cur_mean), range = c(0,max(cur_mean))), col = "red")
+# pixels_wrong <- cur_mean > threshold
+# 
+# display(pixels_wrong)
+# 
+# ## Compare between two methods
+# true_positives <- sum(pixels_wrong & pixels_wrong_2)
+# false_positives <- sum(!pixels_wrong & pixels_wrong_2)
+# true_negatives <- sum(!pixels_wrong & !pixels_wrong_2)
+# false_negatives <- sum(pixels_wrong & !pixels_wrong_2)
+# 
+# conf_matrix <- matrix(c(true_positives, false_positives, false_negatives, true_negatives),
+#                       nrow = 2, byrow = TRUE,
+#                       dimnames = list(Actual = c("Positive", "Negative"),
+#                                       Predicted = c("Positive", "Negative")))
+# 
+# conf_matrix
+```
 
 
 <!-- ## For the actual project also perform everything downstream ! -->
