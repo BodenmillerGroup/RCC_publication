@@ -3,6 +3,8 @@ title: "00_seg_mesmer_QC"
 author: "Lasse Meyer"
 date: "1/24/2022"
 output: html_document
+editor_options: 
+  chunk_output_type: console
 ---
 
 ```{r setup, include=FALSE}
@@ -324,9 +326,14 @@ plotPixels(cur_images,
 ```{r}
 library(cytomapper)
 library(EBImage)
+#Artifacts: 
 #202207_TMA224.1_BlockB_SE_106.tiff
 #202207_TMA224.1_BlockA_SE_075.tiff
-cur_img <- loadImages("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/img/202207_TMA224.1_BlockB_SE_069.tiff")
+#202207_TMA224.1_BlockB_SE_069.tiff
+
+#Normal images: 
+
+cur_img <- loadImages("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/img/202209_TMA224.1_BlockC_SE_059.tiff")
 channelNames(cur_img) <- paste0("ch", 1:dim(cur_img[[1]])[3])
 
 # Visualize artefacts
@@ -337,12 +344,24 @@ plotPixels(cur_img, colour_by = "ch10", bcg = list(ch10 = c(0, 10, 1)))
 # Step 1: Detect artefacts by log-variance-mean-ratio
 cur_var <- apply(as.array(cur_img[[1]]), MARGIN = c(1,2), var)
 cur_mean <- apply(as.array(cur_img[[1]]), MARGIN = c(1,2), mean)
+cur_median <- apply(as.array(cur_img[[1]]), MARGIN = c(1,2), mean)
 
 plot(log(cur_mean), log(cur_var/(cur_mean^2)))
 abline(h = 0, col = "red")
 
+max(cur_median)
+
+hist(cur_median, ylim = c(0,2000))
+abline(v = 15, col = "red")
+
+pixels_wrong_2 <- cur_median > 15
+pixels_wrong_2[is.na(pixels_wrong_2)] <- FALSE
+
 pixels_wrong <- log(cur_var/(cur_mean^2)) < 0
 pixels_wrong[is.na(pixels_wrong)] <- FALSE
+
+sum(pixels_wrong_2)
+sum(pixels_wrong)
 
 if(sum(pixels_wrong) > 0){
   print(paste0(names(cur_img),": This image contained ", sum(pixels_wrong), " artificial pixels."))
@@ -357,7 +376,7 @@ img_1[pixels_wrong] <- 0
 display(img_1)
 
 # Step 3: Replace artefact pixels by median
-img_median <- medianFilter(img_1, size = 3)
+img_median <- medianFilter(img_1, size = 1)
 
 img_1[test_img] <- img_median[test_img]
 
@@ -374,18 +393,128 @@ display(img_1)
 # display(pixels_wrong)
 # 
 # ## Compare between two methods
-# true_positives <- sum(pixels_wrong & pixels_wrong_2)
-# false_positives <- sum(!pixels_wrong & pixels_wrong_2)
-# true_negatives <- sum(!pixels_wrong & !pixels_wrong_2)
-# false_negatives <- sum(pixels_wrong & !pixels_wrong_2)
-# 
-# conf_matrix <- matrix(c(true_positives, false_positives, false_negatives, true_negatives),
-#                       nrow = 2, byrow = TRUE,
-#                       dimnames = list(Actual = c("Positive", "Negative"),
-#                                       Predicted = c("Positive", "Negative")))
-# 
-# conf_matrix
+true_positives <- sum(pixels_wrong & pixels_wrong_2)
+false_positives <- sum(!pixels_wrong & pixels_wrong_2)
+true_negatives <- sum(!pixels_wrong & !pixels_wrong_2)
+false_negatives <- sum(pixels_wrong & !pixels_wrong_2)
+
+conf_matrix <- matrix(c(true_positives, false_positives, false_negatives, true_negatives),
+                      nrow = 2, byrow = TRUE,
+                      dimnames = list(Actual = c("Positive", "Negative"),
+                                      Predicted = c("Positive", "Negative")))
+
+conf_matrix
 ```
+
+```{r}
+library(BiocNeighbors)
+library(BiocParallel)
+library(tidyverse)
+
+images <- cur_images 
+cutoff = 0
+size = 2
+x = 1
+
+removePixelArtefacts <- function(images,
+                         cutoff = 0,
+                         size = 2,
+                         BPPARAM = MulticoreParam()){
+  bplapply(seq_along(images), function(x){ 
+    
+    # Step 1: Detect artefacts by log-variance-mean-ratio
+    cur_var <- apply(as.array(images[[x]]), MARGIN = c(1,2), var)
+    cur_mean <- apply(as.array(images[[x]]), MARGIN = c(1,2), mean)
+    
+    pixels_wrong <- log(cur_var/(cur_mean^2)) < cutoff
+    pixels_wrong[is.na(pixels_wrong)] <- FALSE
+
+    if (sum(pixels_wrong) > 0) {
+      print(paste0(names(images[x]),": This image contained ", sum(pixels_wrong), " artificial pixels."))
+    }
+    
+    # Step 2: Set all artefact pixels to 0
+    img_cor <- CytoImageList(images[x], on_disk = FALSE)[[1]] #Load images into memory
+    img_cor[pixels_wrong] <- 0
+    
+    #Step 3: Replace artefact pixels with median filter 
+    img_median <- medianFilter(img_cor, size = size)
+    img_cor[pixels_wrong] <- img_median[pixels_wrong]
+    
+    writeImage(as.array(img_cor)/(2^16 - 1), 
+             paste0("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/img_cor/",names(images[x]), ".tiff"),
+             bits.per.sample = 16)
+    
+    }, BPPARAM = BPPARAM)
+  }
+  
+
+# cur_out <- as(cur_out, "CytoImageList") 
+  # names(cur_out) <- names(images)
+  # mcols(cur_out) <- mcols(images)
+  #    
+  # return(cur_out)
+
+
+# test for in-memory images
+img_out_test <- removePixelArtefacts(cur_img)
+img_out_test
+
+#test for on-disk images
+removePixelArtefacts(cur_images[4])
+
+
+writeImage(as.array(img_out_test[[1]])/(2^16 - 1), 
+             paste0("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/img_cor/", names(img_cor[1]), ".tiff"),
+             bits.per.sample = 16)
+
+writeImage(as.array(img_out_test[[1]])/(2^16 - 1), 
+             paste0("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/img_cor/", names(img_out_test[1]), ".tiff"),
+             bits.per.sample = 16)
+
+
+
+
+
+
+# if (on_disk) {
+    #   print("here")
+    # dim <- dim(img_cor)[3] 
+    # pixels_wrong_DA <- abind(replicate(dim, pixels_wrong, simplify = FALSE), along = 3)
+    # pixels_wrong_DA <- DelayedArray(pixels_wrong_DA)
+    # img_cor[pixels_wrong_DA] <- c(0) 
+    # } else {
+```
+
+```{r}
+writeImage(img_out_test_1, bits.per.sample = 16)
+
+writeTIFF(img_out_test_1[[4]], "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/test.tiff", compression = "none", reduce = TRUE, bits.per.sample = 32L)
+
+
+writeImage(img_out_test_1[[4]], "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/test.tiff", bits.per.sample = 16L)
+
+writeImage(img_out_test_1[[4]], "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/test32.tiff", bits.per.sample = 32L)
+
+test_read <- readImage("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/test.tiff")
+
+
+
+# The image data changes... 
+imageData(img_out_test_1[[4]])[,,1] 
+imageData(test_read)[,,1]
+
+sum(!imageData(img_out_test_1[[4]])[,,1] == imageData(test_read)[,,1])
+
+library(image)
+
+```
+
+
+
+
+
+
 
 
 <!-- ## For the actual project also perform everything downstream ! -->
