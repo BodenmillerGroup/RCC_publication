@@ -4,7 +4,7 @@ author: "Lasse Meyer"
 date: "1/24/2022"
 output: html_document
 editor_options: 
-  chunk_output_type: console
+  chunk_output_type: inline
 ---
 
 ```{r setup, include=FALSE}
@@ -17,7 +17,6 @@ Here, we used different settings for deep-learning based single-cell segmentatio
 
 Mesmer:
 **masks_1** = *Irdium 191/193,* CA9, panCK, Vimentin, SMA, CD8a, CD68   
-**masks_2** = *Irdium 191/193,* CA9, panCK, Vimentin, SMA, CD8a, CD68, CD3, Vimentin, HLADR
 
 Nuclear detection and expansion:
 **masks_exp** = *Irdium 191/193,* + Expansion by maximum of 3 pixels
@@ -52,37 +51,31 @@ library(BiocParallel)
 
 ## Read in images
 
-Note: The multi-channel images are saved as 32-bit images while the segmentation masks are
-saved as 16-bit images. To correctly scale pixel values of the segmentation
-masks when reading them in set `as.is = TRUE`.
+```{r}
+#Load images
+images <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/images.rds")
+images
+```
+
+To correctly scale pixel values of the segmentation masks (contains cell_ids) when reading them in set `as.is = TRUE`.
 
 ```{r read-images}
-#Load images
-images <- loadImages("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/img/",on_disk = TRUE,h5FilesPath = "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/img/",BPPARAM = MulticoreParam(workers = 14,progressbar = TRUE,stop.on.error = FALSE))
-
 #Load masks
 masks_1 <- loadImages("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/masks_1/", as.is = TRUE)
-masks_2 <- loadImages("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/masks_2/", as.is = TRUE)
+masks_1 
+
 masks_exp <- loadImages("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/masks_exp/", as.is = TRUE)
+masks_exp
+
 masks_cp_1 <- loadImages("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/masks_cp_1/", as.is = TRUE)
+masks_cp_1
 ```
 
 ```{r}
 # Safety checks
 all.equal(names(images), names(masks_1))
-all.equal(names(images), names(masks_2))
 all.equal(names(images), names(masks_exp))
 all.equal(names(images), names(masks_cp_1))
-```
-
-
-```{r}
-# Set channel-names for multi-channel images
-panel <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/panel.csv")
-
-channelNames(images) <- panel$clean_target
-
-images
 ```
 
 Add additional metadata to the `elementMetadata` slot of the `CytoImageList` (accessible via mcols)
@@ -108,44 +101,35 @@ mcols(images)$type <- patient_meta$type[match(mcols(images)$TMA_id,patient_meta$
 mcols(images)$subtype <- patient_meta$subtype[match(mcols(images)$TMA_id,patient_meta$TMA_id)]
 
 # Transfer to masks objects as well
-mcols(masks_1) <- mcols(masks_2) <- mcols(masks_exp) <- mcols(masks_cp_1) <- mcols(images)
+mcols(masks_1) <- mcols(masks_exp) <- mcols(masks_cp_1) <- mcols(images)
 ```
 
-## Save image and masks objects for downstream analysis
+## Save masks objects for downstream analysis
 
 ```{r save-objects-read-data}
-saveRDS(images, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/images.rds")
-
 saveRDS(masks_1, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/masks_1.rds")
-saveRDS(masks_2, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/masks_2.rds")
 saveRDS(masks_exp, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/masks_exp.rds")
 saveRDS(masks_cp_1, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/masks_cp_1.rds")
 ```
 
 ## Segmentation quality control - A
 
-
 ```{r}
 images <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/images.rds")
 ```
-
 
 A: Using `cytoviewer`
 
 ```{r}
 library(cytoviewer)
 
-cur_masks <- masks_1[mcols(masks_1)$sample_id %in% mcols(cur_images)$sample_id]
-
-cytoviewer(image = cur_images, mask = cur_masks, img_id = "sample_id")
-
-names(cur_images)
+cytoviewer(image = images, mask = masks_1, img_id = "sample_id")
 ```
 
 B: `plotPixels` function from [cytomapper](https://www.bioconductor.org/packages/release/bioc/html/cytomapper.html).
 
 ```{r overlay-masks, message=FALSE}
-# Subset to ccRCC 
+# 1. Subset to ccRCC 
 images <- images[!is.na(mcols(images)$subtype)]
 images_ccRCC <- images[mcols(images)$subtype == "clear_cell_RCC"]
 
@@ -163,7 +147,7 @@ library(foreach)
 library(doParallel)
 registerDoParallel(cores = 20)
 
-masks_options <- c("masks_1", "masks_2", "masks_exp", "masks_cp_1")
+masks_options <- c("masks_1", "masks_exp", "masks_cp_1")
 
 foreach(i = masks_options)%dopar%{
 
@@ -190,17 +174,17 @@ plotPixels(cur_images,
 }
 ```
 
-```{r}
-# Subset to ccRCC 
+```{r overlay-masks, message=FALSE}
+# 2. Subset to other RCC types
 images <- images[!is.na(mcols(images)$subtype)]
-images_ccRCC <- images[mcols(images)$subtype == "clear_cell_RCC"]
+images_Not_ccRCC <- images[mcols(images)$subtype != "clear_cell_RCC"]
 
-#Randomly select 50 images
+#Randomly select 30 images
 set.seed(220195)
-img_random <- sample(seq_len(length(images_ccRCC)), 30)
+img_random <- sample(seq_len(length(images_Not_ccRCC)), 30)
 
 # Normalize and clip image
-cur_images <- images_ccRCC[img_random]
+cur_images <- images_Not_ccRCC[img_random]
 cur_images <- cytomapper::normalize(cur_images, separateImages = TRUE)
 cur_images <- cytomapper::normalize(cur_images, inputRange = c(0, 0.2))
 
@@ -209,7 +193,7 @@ library(foreach)
 library(doParallel)
 registerDoParallel(cores = 20)
 
-masks_options <- c("masks_1", "masks_2", "masks_exp", "masks_cp_1")
+masks_options <- c("masks_1", "masks_exp", "masks_cp_1")
 
 foreach(i = masks_options)%dopar%{
 
@@ -221,9 +205,9 @@ cur_masks <- cur_masks[match(names(cur_images), names(cur_masks))]
 plotPixels(cur_images,
            mask = cur_masks,
            img_id = "sample_id",
-           colour_by = c("DNA1", "CA9", "SMA","CD8a","CD68"),
+           colour_by = c("DNA1", "panCK", "SMA","CD8a","CD68"),
            colour = list("DNA1" = c("black", "yellow"),
-                         "CA9" = c("black", "magenta"),
+                         "panCK" = c("black", "magenta"),
                          "SMA" = c("black", "cyan"),
                          "CD8a" = c("black","red"),
                          "CD68" = c("black","green")
@@ -232,190 +216,231 @@ plotPixels(cur_images,
            image_title = NULL,
            legend = list(colour_by.title.cex = 0.7,
                          colour_by.labels.cex = 0.7),
-           save_plot = list(filename = paste0("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/seg_test/",i,".png"), scale = 2))
+           save_plot = list(filename = paste0("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/seg_test/", i,"_notCCRCC.png"), scale = 2))
 }
 ```
 
+
 **Key Observations:**
-1. Some images have horizontal stripes? Can I remove this artifacts? 
-1. Nuclear expansion looks better than DeepCell (has too many small cells that do not look like cells)
-2. Cellpose looks best, but overmerges cells currently
+1. Nuclear expansion and CellPose (slightly preferred) looks best and we will have a closer look at single-cell expression below. 
 
+## Read in single-cell information
 
-## Find images with artifacts for training
+### steinbock generated data
 
-```{r}
-# Subset to ccRCC 
-images <- images[!is.na(mcols(images)$subtype)]
-images_ccRCC <- images[mcols(images)$subtype == "clear_cell_RCC"]
+```{r read and inspect steinbock}
+sce_exp <- read_steinbock("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/",intensities_folder = "intensities_exp",return_as = "sce",regionprops_folder = NULL, graphs_folder = NULL)
 
-#Randomly select 60 images
-set.seed(220195)
-img_random <- sample(seq_len(length(images_ccRCC)), 60)
+sce_cp_1 <- read_steinbock("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/",intensities_folder = "intensities_cp_1",return_as = "sce",regionprops_folder = NULL, graphs_folder = NULL)
 
-# Normalize and clip image
-cur_images <- images_ccRCC[img_random]
-cur_images <- cytomapper::normalize(cur_images, separateImages = TRUE)
-cur_images <- cytomapper::normalize(cur_images, inputRange = c(0, 0.2))
-
-# Generate and save image
-plotPixels(cur_images,
-           img_id = "sample_id",
-           colour_by = c("DNA1", "CA9", "SMA","CD8a","CD68"),
-           colour = list("DNA1" = c("black", "yellow"),
-                         "CA9" = c("black", "magenta"),
-                         "SMA" = c("black", "cyan"),
-                         "CD8a" = c("black","red"),
-                         "CD68" = c("black","green")
-                         ),
-           legend = list(colour_by.title.cex = 0.7,
-                         colour_by.labels.cex = 0.7),
-           save_plot = list(filename = "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/seg_test/artifacts_detect.png", scale = 2))
+dim(assay(sce_exp,"counts"))
+dim(assay(sce_exp,"counts"))
 ```
 
+## Single-cell processing
 
-## Function to remove artificial pixels
+```{r set-row-colnames}
+colnames(sce_exp) <- paste0(sce_exp$sample_id, "_", sce_exp$ObjectNumber)
+colnames(sce_cp_1) <- paste0(sce_cp_1$sample_id, "_", sce_cp_1$ObjectNumber)
 
-```{r}
-library(BiocNeighbors)
-library(BiocParallel)
-library(tidyverse)
-library(EBImage)
-
-removePixelArtefacts <- function(images,
-                         cutoff = 0,
-                         size = 2,
-                         BPPARAM = MulticoreParam()){
-  bplapply(seq_along(images), function(x){ 
-    
-    # Step 1: Detect artefacts by log-variance-mean-ratio
-    cur_var <- apply(as.array(images[[x]]), MARGIN = c(1,2), var)
-    cur_mean <- apply(as.array(images[[x]]), MARGIN = c(1,2), mean)
-    
-    pixels_wrong <- log(cur_var/(cur_mean^2)) < cutoff
-    pixels_wrong[is.na(pixels_wrong)] <- FALSE
-
-    if (sum(pixels_wrong) > 0) {
-      print(paste0(names(images[x]),": This image contained ", sum(pixels_wrong), " artificial pixels."))
-    
-    # Step 2: Set all artefact pixels to 0
-    img_cor <- CytoImageList(images[x], on_disk = FALSE)[[1]] #Load images into memory
-    img_cor[pixels_wrong] <- 0
-    
-    range(img_cor)
-    range(images[[4]])
-
-    #Step 3: Replace artefact pixels with median filter 
-    img_median <- medianFilter(img_cor, size = size)
-    img_cor[pixels_wrong] <- img_median[pixels_wrong]
-
-    writeImage(as.array(img_cor)/(2^16 - 1), 
-               paste0("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/img_cor/",names(images[x]), ".tiff"),
-               bits.per.sample = 16)
-    
-    }else{
-      
-      writeImage(as.array(images[[x]])/(2^16 - 1), 
-                 paste0("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/img_cor/",names(images[x]), ".tiff"),
-                 bits.per.sample = 16)
-      
-    }
-    }, BPPARAM = BPPARAM)
-  
-  return(print("Artificial Pixel removal completed."))
-  }
+rownames(sce_exp) <- rowData(sce_exp)$clean_target
+rownames(sce_cp_1) <- rowData(sce_cp_1)$clean_target
 ```
 
+**Transform counts**
+Problem: Right-skewed distribution (bias from highly expressing cells)
+Solution: Count transformation using an inverse hyperbolic sine function (arcsinh; common in flow cytometry) = leads to linear-like scale near zero and log-like scale beyond a threshold (`cofactor`)
+We apply a `cofactor` of `1`.
 
-```{r}
-# Read in images 
-images <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/images.rds")
+```{r transform-counts, message=FALSE}
+#Transformed counts
+assay(sce_exp, "exprs") <- asinh(counts(sce_exp)/1)
+assay(sce_cp_1, "exprs") <- asinh(counts(sce_cp_1)/1)
 ```
 
+**Define interesting channels**
 
-```{r}
-# Run function across all images
-removePixelArtefacts(images)
+Subset markers of interest for downstream analysis.
+
+```{r select-features}
+rowData(sce_exp)$use_channel <- !grepl("DNA|H3", rowData(sce_exp)$clean_target)
+rowData(sce_cp_1)$use_channel <- !grepl("DNA|H3", rowData(sce_cp_1)$clean_target)
 ```
 
+## Segmentation quality control - B
+
+Subset to ccRCC 
+
+```{r}
+sce_exp$subtype <- mcols(images)$subtype[match(sce_exp$sample_id, mcols(images)$sample_id)]
+sce_cp_1$subtype <- mcols(images)$subtype[match(sce_cp_1$sample_id, mcols(images)$sample_id)]
+
+sce_exp <- sce_exp[,!is.na(sce_exp$subtype)]
+sce_exp_ccRCC <- sce_exp[,sce_exp$subtype == "clear_cell_RCC"]
+
+sce_cp_1 <- sce_cp_1[,!is.na(sce_cp_1$subtype)]
+sce_cp_1_ccRCC <- sce_cp_1[,sce_cp_1$subtype == "clear_cell_RCC"]
+```
+
+Heatmap based visualization
+
+```{r segmentation-heatmap, message=FALSE, warning = FALSE, fig.width=10, fig.height=12}
+set.seed(2201)
+cur_cells <- sample(seq_len(ncol(sce_exp_ccRCC)), 5000)
+
+dittoHeatmap(sce_exp_ccRCC[,cur_cells], genes = rownames(sce_exp_ccRCC)[rowData(sce_exp_ccRCC)$use_channel],
+             assay = "exprs", cluster_cols = TRUE,scale = "none",
+             heatmap.colors = viridis(100))
+
+cur_cells_1 <- sample(seq_len(ncol(sce_cp_1_ccRCC)), 2000)
+dittoHeatmap(sce_cp_1_ccRCC[,cur_cells_1], genes = rownames(sce_cp_1_ccRCC)[rowData(sce_cp_1_ccRCC)$use_channel],
+             assay = "exprs", cluster_cols = TRUE,scale = "none",
+             heatmap.colors = viridis(100))
+```
+
+Dimensionality reduction 
+
+```{r}
+### First for expansion masks 
+sce <- sce_exp_ccRCC
+
+## Subsample 10% of cells from each core
+#to save time and not get super crowded dimensionality reduction plots
+set.seed(22)
+sub <- colData(sce) %>% as.data.frame() %>% group_by("sample_id") %>% slice_sample(prop = 0.1) %>% arrange("sample_id") %>% mutate(sub_id = paste(sample_id,ObjectNumber,sep="_")) %>% pull(sub_id)
+sce_sub <- sce[,sub]
+
+#Run UMAP/TSNE
+sce_sub <- runUMAP(sce_sub[rowData(sce_sub)$use_channel,], n_neighbors = 30, pca = 50,exprs_values = "exprs", external_neighbors=TRUE, BPPARAM = MulticoreParam())
+sce_sub <- runTSNE(sce_sub[rowData(sce_sub)$use_channel,], exprs_values = "exprs", external_neighbors=TRUE, BPPARAM = MulticoreParam())
 
 
+## 1. Visualize TSNE
+plotReducedDim(sce_sub, dimred = "TSNE", by_exprs_values = "exprs",colour_by = "CD45RO_RA")+
+plotReducedDim(sce_sub, dimred = "TSNE", by_exprs_values = "exprs",colour_by = "SMA")+
+plotReducedDim(sce_sub, dimred = "TSNE", by_exprs_values = "exprs",colour_by = "CA9")
+
+plotReducedDim(sce_sub, dimred = "TSNE", by_exprs_values = "exprs",colour_by = "CD45RO_RA")+
+plotReducedDim(sce_sub, dimred = "TSNE", by_exprs_values = "exprs",colour_by = "CD8a")+
+plotReducedDim(sce_sub, dimred = "TSNE", by_exprs_values = "exprs",colour_by = "CD68")+
+plotReducedDim(sce_sub, dimred = "TSNE", by_exprs_values = "exprs",colour_by = "CD11b")+
+plotReducedDim(sce_sub, dimred = "TSNE", by_exprs_values = "exprs",colour_by = "CD163")+
+plotReducedDim(sce_sub, dimred = "TSNE", by_exprs_values = "exprs",colour_by = "CD16")
+
+plotReducedDim(sce_sub, dimred = "TSNE", colour_by = "sample_id")+
+  guides(color = "none")
+
+# Visualize all marker expression
+all_plots_TSNE <- lapply(c(rownames(sce_sub)[rowData(sce_sub)$use_channel]),
+                    function(x){
+                      p <- plotReducedDim(sce_sub, dimred = "TSNE", 
+                                          colour_by = x, 
+                                          by_exprs_values = "exprs",
+                                          point_size = 0.5)+
+                        guides(color = "none")+
+                        ggtitle(paste0(x))
+                      return(p)                    
+                    })
 
 
+## 2. Visualize UMAP
+plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD45RO_RA")+
+plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "SMA")+
+plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CA9")
 
-<!-- ## For the actual project also perform everything downstream ! -->
+plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD45RO_RA")+
+plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD8a")+
+plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD68")+
+plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD11b")+
+plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD163")+
+plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD16")
 
-<!-- ## Read in single-cell information -->
-<!-- based on [SingleCellExperiment](https://bioconductor.org/packages/release/bioc/html/SingleCellExperiment.html) -->
-<!-- class (or [SpatialExperiment]()) -->
+plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "sample_id")+
+  guides(color = "none")
 
-<!-- ### steinbock generated data -->
-<!-- The `read_steinbock` function provided by `imcRtools` can now be used to read in -->
-<!-- `steinbock` generated data.  -->
+# Visualize all marker expression
+all_plots_UMAP <- lapply(c(rownames(sce_sub)[rowData(sce_sub)$use_channel]),
+                    function(x){
+                      p <- plotReducedDim(sce_sub, dimred = "UMAP", 
+                                          colour_by = x, 
+                                          by_exprs_values = "exprs",
+                                          point_size = 0.5)+
+                        guides(color = "none")+
+                        ggtitle(paste0(x))
+                      return(p)                    
+                    })
+```
 
-<!-- ```{r read and inspect steinbock} -->
-<!-- sce_4 <- read_steinbock("/mnt/rcc_volume/TNBC/",intensities_folder = "intensities_4",return_as = "sce",regionprops_folder = NULL,graphs_folder = NULL) -->
+```{r}
+### Second for cellpose masks 
+sce_1 <- sce_cp_1_ccRCC
 
-<!-- sce_5 <- read_steinbock("/mnt/rcc_volume/TNBC/",intensities_folder = "intensities_5",return_as = "sce",regionprops_folder = NULL,graphs_folder = NULL) -->
+## Subsample 10% of cells from each core
+#to save time and not get super crowded dimensionality reduction plots
+set.seed(22)
+sub <- colData(sce_1) %>% as.data.frame() %>% group_by("sample_id") %>% slice_sample(prop = 0.1) %>% arrange("sample_id") %>% mutate(sub_id = paste(sample_id,ObjectNumber,sep="_")) %>% pull(sub_id)
+sce_1_sub <- sce_1[,sub]
 
-<!-- dim(assay(sce_4,"counts")) -->
-<!-- dim(assay(sce_5,"counts")) -->
-<!-- ``` -->
+#Run UMAP/TSNE
+sce_1_sub <- runUMAP(sce_1_sub[rowData(sce_1_sub)$use_channel,], n_neighbors = 30, pca = 50,exprs_values = "exprs", external_neighbors=TRUE, BPPARAM = MulticoreParam())
+sce_1_sub <- runTSNE(sce_1_sub[rowData(sce_1_sub)$use_channel,], exprs_values = "exprs", external_neighbors=TRUE, BPPARAM = MulticoreParam())
 
-<!-- ## Single-cell processing -->
 
-<!-- We can set the `colnames` and `rownames` of the object to generate unique identifiers per cell: -->
+## 1. Visualize TSNE
+plotReducedDim(sce_1_sub, dimred = "TSNE", by_exprs_values = "exprs",colour_by = "CD45RO_RA")+
+plotReducedDim(sce_1_sub, dimred = "TSNE", by_exprs_values = "exprs",colour_by = "SMA")+
+plotReducedDim(sce_1_sub, dimred = "TSNE", by_exprs_values = "exprs",colour_by = "CA9")
 
-<!-- ```{r set-colnames} -->
-<!-- colnames(sce_4) <- paste0(sce_4$sample_id, "_", sce_4$ObjectNumber) -->
-<!-- colnames(sce_5) <- paste0(sce_5$sample_id, "_", sce_5$ObjectNumber) -->
+plotReducedDim(sce_1_sub, dimred = "TSNE", by_exprs_values = "exprs",colour_by = "CD45RO_RA")+
+plotReducedDim(sce_1_sub, dimred = "TSNE", by_exprs_values = "exprs",colour_by = "CD8a")+
+plotReducedDim(sce_1_sub, dimred = "TSNE", by_exprs_values = "exprs",colour_by = "CD68")+
+plotReducedDim(sce_1_sub, dimred = "TSNE", by_exprs_values = "exprs",colour_by = "CD11b")+
+plotReducedDim(sce_1_sub, dimred = "TSNE", by_exprs_values = "exprs",colour_by = "CD163")+
+plotReducedDim(sce_1_sub, dimred = "TSNE", by_exprs_values = "exprs",colour_by = "CD16")
 
-<!-- rownames(sce_4) <- rowData(sce_4)$clean_target -->
-<!-- rownames(sce_5) <- rowData(sce_5)$clean_target -->
-<!-- ``` -->
+plotReducedDim(sce_1_sub, dimred = "TSNE", colour_by = "sample_id")+
+  guides(color = "none")
 
-<!-- **Transform counts** -->
-<!-- Problem: Right-skewed distribution (bias from highly expressing cells) -->
-<!-- Solution: Count transformation using an inverse hyperbolic sine function (arcsinh; common in flow cytometry) = leads to linear-like scale near zero and log-like scale beyond a threshold (`cofactor`) -->
-<!-- We apply a `cofactor` of `1`.  -->
+# Visualize all marker expression
+all_plots_TSNE <- lapply(c(rownames(sce_1_sub)[rowData(sce_1_sub)$use_channel]),
+                    function(x){
+                      p <- plotReducedDim(sce_1_sub, dimred = "TSNE", 
+                                          colour_by = x, 
+                                          by_exprs_values = "exprs",
+                                          point_size = 0.5)+
+                        guides(color = "none")+
+                        ggtitle(paste0(x))
+                      return(p)                    
+                    })
 
-<!-- ```{r transform-counts, message=FALSE} -->
-<!-- #Transformed counts -->
-<!-- assay(sce_4, "exprs") <- asinh(counts(sce_4)/1) -->
-<!-- assay(sce_5, "exprs") <- asinh(counts(sce_5)/1) -->
-<!-- ``` -->
 
-<!-- **Define interesting channels** -->
+## 2. Visualize UMAP
+plotReducedDim(sce_1_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD45RO_RA")+
+plotReducedDim(sce_1_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "SMA")+
+plotReducedDim(sce_1_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CA9")
 
-<!-- Subset markers of interest for downstream analysis. -->
+plotReducedDim(sce_1_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD45RO_RA")+
+plotReducedDim(sce_1_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD8a")+
+plotReducedDim(sce_1_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD68")+
+plotReducedDim(sce_1_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD11b")+
+plotReducedDim(sce_1_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD163")+
+plotReducedDim(sce_1_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD16")
 
-<!-- ```{r select-features} -->
-<!-- rowData(sce_4)$use_channel <- !grepl("DNA|Histone", rowData(sce_4)$clean_target) -->
-<!-- rowData(sce_5)$use_channel <- !grepl("DNA|Histone", rowData(sce_5)$clean_target) -->
-<!-- ``` -->
+plotReducedDim(sce_1_sub, dimred = "UMAP", colour_by = "sample_id")+
+  guides(color = "none")
 
-<!-- ## Segmentation quality control - B -->
+# Visualize all marker expression
+all_plots_UMAP <- lapply(c(rownames(sce_1_sub)[rowData(sce_1_sub)$use_channel]),
+                    function(x){
+                      p <- plotReducedDim(sce_1_sub, dimred = "UMAP", 
+                                          colour_by = x, 
+                                          by_exprs_values = "exprs",
+                                          point_size = 0.5)+
+                        guides(color = "none")+
+                        ggtitle(paste0(x))
+                      return(p)                    
+                    })
+```
 
-<!-- An additional approach to observe cell segmentation quality and potentially also -->
-<!-- antibody specificity issues is to visualize single-cell expression in form of a -->
-<!-- heatmap. Here, we sub-sample the dataset to 2000 cells for visualization -->
-<!-- purposes. -->
-
-<!-- ```{r segmentation-heatmap, message=FALSE, warning = FALSE, fig.width=10, fig.height=12} -->
-<!-- set.seed(22) -->
-<!-- cur_cells <- sample(seq_len(ncol(sce_4)), 2000) -->
-
-<!-- dittoHeatmap(sce_4[,cur_cells], genes = rownames(sce_4)[rowData(sce_4)$use_channel], -->
-<!--              assay = "exprs", cluster_cols = TRUE,scale = "none", -->
-<!--              heatmap.colors = viridis(100)) -->
-
-<!-- cur_cells_1 <- sample(seq_len(ncol(sce_5)), 2000) -->
-<!-- dittoHeatmap(sce_5[,cur_cells_1], genes = rownames(sce_5)[rowData(sce_5)$use_channel], -->
-<!--              assay = "exprs", cluster_cols = TRUE,scale = "none", -->
-<!--              heatmap.colors = viridis(100)) -->
-<!-- ``` -->
-
-<!-- **Observations:** -->
-<!-- - No major differences apparent for masks_4/5 = select masks_4 for downstream analysis -->
-<!-- - CD45 does not look very specific -->
-<!-- - HER2+ cells are apparent (Her2+ tumors should be removed) -->
+**Key Conclusion:**
+1. CellPose looks best (better dimensionality reduction plots and single-cell expression patterns) and will be used for downstream analysis. 

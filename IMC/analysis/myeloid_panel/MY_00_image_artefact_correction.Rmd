@@ -193,7 +193,7 @@ removePixelArtifacts <- function(images,
 
 ```{r}
 # Read in images 
-images <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/images.rds")
+images <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/images_before_correction.rds")
 ```
 
 
