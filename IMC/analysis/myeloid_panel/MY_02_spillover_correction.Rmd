@@ -1,0 +1,245 @@
+---
+title: "02_spillover_matrix"
+author: "Lasse Meyer"
+date: "1/24/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Spillover correction
+
+based on the [CATALYST](https://bioconductor.org/packages/release/bioc/html/CATALYST.html) R package. 
+For the original publication, see [here](https://www.cell.com/cell-systems/fulltext/S2405-4712(18)30063-2).
+
+## Software requirements
+
+```{r lib, message=FALSE,warning=FALSE}
+#Data containers
+library(SpatialExperiment)
+library(SingleCellExperiment)
+
+#Data processing
+library(CATALYST)
+library(scuttle)
+library(scater)
+library(imcRtools)
+
+#Data visualization
+library(cytomapper)
+library(dittoSeq)
+library(pheatmap)
+
+#Utilities
+library(tidyverse)
+library(openxlsx)
+library(stringr)
+library(patchwork)
+library(BiocParallel)
+library(tiff)
+```
+
+## Overview
+1. Reading in the data
+2. Quality control 
+3. (Optional) pixel binning
+4. "Debarcoding" for pixel assignment
+5. Pixel selection for spillover matrix estimation
+6. Spillover matrix generation
+7. Saving the results
+8. Single-cell compensation
+9. Image compensation
+
+## Generate the spillover matrix
+
+### Read in the data
+
+```{r read-txts-transform, message=FALSE}
+sce_spill <- readSCEfromTXT("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/spillover/")
+
+#Transformation
+assay(sce_spill, "exprs") <- asinh(counts(sce_spill)/5)
+```
+
+### Quality control
+
+In the next step, we will observe the median pixel intensities per spot and
+threshold on medians < 200 counts.
+These types of visualization serve two purposes:
+
+1. Small median pixel intensities (< 200 counts) might hinder the robust
+estimation of the channel spillover. In that case, consecutive pixels can be
+summed (see [Optional pixel binning](#pixel_binning)).
+
+2. Each spotted metal (row) should show the highest median pixel intensity in its
+corresponding channel (column). If this is not the case, either the naming of the
+.txt files was incorrect or the incorrect metal was spotted.
+
+```{r QC-heatmap, message = FALSE, fig.width=7, fig.height=7}
+# Log10 median pixel counts per spot and channel
+plotSpotHeatmap(sce_spill)
+
+# Thresholded on 200 pixel counts
+plotSpotHeatmap(sce_spill, log = FALSE, threshold = 200)
+```
+
+
+### Filtering incorrectly assigned pixels
+
+Based on the intensity distribution of all channel, pixels are assigned to their corresponding barcode; here this is the already known metal spot. This procedure serves the purpose to identify pixels that cannot be robustly assigned to the spotted metal. Pixels of such kind can be regarded as "noisy", "background" or "artefacts" that should be removed prior to spillover estimation.
+
+The general workflow for pixel debarcoding is as follows:
+1. assign a preliminary metal mass to each pixel
+2. for each pixel, estimate a cutoff parameter for the distance between 
+positive and negative pixel sets
+3. apply the estimated cutoffs to identify truly positive pixels
+
+```{r debarcoding, message=FALSE}
+bc_key <- as.numeric(unique(sce_spill$sample_mass))
+bc_key <- bc_key[order(bc_key)]
+
+#Preliminary metal mass for pixel
+sce_spill <- assignPrelim(sce_spill, bc_key = bc_key)
+
+#estimate and apply cut-offs
+sce_spill <- estCutoffs(sce_spill)
+sce_spill <- applyCutoffs(sce_spill)
+```
+
+The obtained `SingleCellExperiment` now contains the additional `bc_id` entry.
+For each pixel, this vector indicates the assigned mass (e.g. `161`) or
+`0`, meaning unassigned. 
+
+This information can be visualized in form of a heatmap:
+
+```{r assignment-heatmap, fig.width=7, fig.height=7}
+cur_table <- table(sce_spill$bc_id, sce_spill$sample_mass)
+
+pheatmap(log10(cur_table + 1),
+         cluster_rows = FALSE,
+         cluster_cols = FALSE)
+
+# Compute the fraction of unassigned pixels per spot
+cur_table["0",] / colSums(cur_table)
+```
+
+However, in cases where incorrect assignment occurred or where few pixels were
+measured for some spots, the `imcRtools` package exports a simple helper
+function to exclude pixels based on these criteria:
+
+```{r pixel-filtering}
+# Number of assigned pixels per spot 
+spotted_per_channel <- colData(sce_spill) %>% as.data.frame() %>% group_by(bc_id) %>% count(sample_mass) %>% filter(bc_id != 0)
+
+# Filter pixels
+sce_spill <- filterPixels(sce_spill, minevents = 40, correct_pixels = TRUE)
+
+## Note: This will kick out Dy161 from spillover estimation, but we also did not use it in the panel
+```
+
+### Compute spillover matrix
+
+Based on the single-positive pixels, we use the `CATALYST::computeSpillmat()`
+function to compute the spillover matrix and `CATALYST::plotSpillmat()` to
+visualize it. The `plotSpillmat` function checks the spotted and acquired
+metal isotopes against a pre-defined `CATALYST::isotope_list()`.
+
+```{r compute-spillover, fig.width=7, fig.height=7, warning=FALSE}
+sce_spill <- computeSpillmat(sce_spill)
+
+#Plot both spillover matrices
+plotSpillmat(sce_spill) 
+
+# Save spillover matrix in variable
+sm <- metadata(sce_spill)$spillover_matrix
+
+# Check that spillover matrices contain are metals that are included in the study
+panel <- read.csv("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/panel.csv")
+channels <- paste0(panel$channel[panel$keep == 1], "Di")
+
+channels[!channels %in% rownames(sm)] #Not spotted but included in panel (Iridium channels)
+
+rownames(sm)[which(!rownames(sm) %in% channels)] #Spotted but not included in panel (Dy161)
+```
+
+**Observations:**
+- Spillover matrix looks appropriate
+
+### Save spillover matrix as csv
+
+Next, we will write out the spillover matrix as .csv file.
+
+```{r write_sm_csv}
+write.csv(sm, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/spillover/spillover_matrix.csv")
+```
+
+
+## Single-cell data compensation
+
+Firstly, we will use the `CATALYST` package to perform spillover compensation on the
+**single-cell mean intensities** using the `compCytof`function.
+Load `SpatialExperiment` object generated in previous script.
+
+```{r single-cell-compensation}
+sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_MY_01.rds")
+
+rowData(sce)$channel_name <- paste0(rowData(sce)$channel, "Di")
+
+sce <- compCytof(sce, sm, 
+                 transform = TRUE, cofactor = 1,
+                 overwrite = FALSE)
+sce
+```
+
+To check the effect of channel spillover compensation, the expression of markers
+that are affected by spillover can be visualized in form of scatter plots before and after
+compensation. Here we focus on oxidative spillover between La139(panCK) and Gd155(CD11b)
+
+```{r visualize-single-cell-spillover, message=FALSE}
+#Simple scatterplot
+before <- dittoScatterPlot(sce, x.var = "panCK", y.var = "CD11b",
+                           assay.x = "exprs", assay.y = "exprs") +
+    ggtitle("Before compensation")
+
+after <- dittoScatterPlot(sce, x.var = "panCK", y.var = "CD11b",
+                          assay.x = "compexprs", assay.y = "compexprs") +
+    ggtitle("After compensation")
+
+before+after
+
+#Smoothed density scatterplot
+buylrd = c("#313695", "#4575B4", "#74ADD1", "#ABD9E9", "#E0F3F8", "#FFFFBF",
+           "#FEE090", "#FDAE61", "#F46D43", "#D73027", "#A50026") 
+myColRamp = colorRampPalette(c(buylrd))
+
+smoothScatter(x=assay(sce,"exprs")[rownames(sce) == "panCK"],
+              y=assay(sce,"exprs")[rownames(sce) == "CD11b"],
+              colramp=myColRamp,
+              main="Before compensation")
+
+smoothScatter(x=assay(sce,"compexprs")[rownames(sce) == "panCK"],
+              y=assay(sce,"compexprs")[rownames(sce) == "CD11b"],
+              colramp=myColRamp,
+              main="After compensation")
+```
+
+To facilitate further downstream analysis, the non-compensated assays can now be
+replaced by their compensated counterparts:
+
+```{r overwrite-assays}
+assay(sce, "counts") <- assay(sce, "compcounts") 
+assay(sce, "exprs") <- assay(sce, "compexprs") 
+assay(sce, "compcounts") <- assay(sce, "compexprs") <- NULL
+```
+
+## Image compensation
+
+Not performed here. 
+
+## Save objects
+
+```{r save, message = F}
+saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_MY_02.rds")
+```

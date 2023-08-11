@@ -1,0 +1,171 @@
+---
+title: "01_lib_read_data"
+author: "Lasse Meyer"
+date: "1/24/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Software requirements
+
+```{r lib, message=FALSE,warning=FALSE}
+#Data containers
+library(SpatialExperiment)
+library(SingleCellExperiment)
+
+#Data processing
+library(CATALYST)
+library(scuttle)
+library(scater)
+library(imcRtools)
+
+#Data visualization
+library(cytomapper)
+library(dittoSeq)
+library(viridis)
+
+#Utilities
+library(tidyverse)
+library(openxlsx)
+library(stringr)
+library(BiocParallel)
+```
+
+## Read in single-cell information from TMA-based RCC study
+based on [SingleCellExperiment](https://bioconductor.org/packages/release/bioc/html/SingleCellExperiment.html)
+
+### steinbock generated data
+The `read_steinbock` function provided by `imcRtools` can now be used to read in
+`steinbock` generated data. 
+
+```{r read and inspect steinbock}
+sce <- read_steinbock("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/",intensities_folder = "intensities",regionprops_folder = "regionprops", graphs_folder = "neighbors",return_as = "sce")
+sce
+```
+
+## Single-cell processing
+
+We can set the `colnames` of the object to generate unique identifiers per cell and also set `rownames` to a clean target name.
+
+```{r set-col-rownames}
+colnames(colData(sce))
+colnames(sce) <- sce$cell_id <- paste0(sce$sample_id, "_", sce$ObjectNumber)
+rownames(sce) <- rowData(sce)$clean_target
+```
+
+### Add metadata 
+
+It is also often the case that sample-specific metadata are available externally. This metadata is available as an external excel file:
+
+```{r add metadata, message = FALSE, warning=FALSE}
+# Read in external metadata
+patient_meta <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/data/Metadata_combined_RCC.csv",col_names = TRUE)
+patient_meta$TMA_id <- str_replace(paste0(patient_meta$grid,"x",patient_meta$x,"y",patient_meta$y),"NA","")
+patient_meta$TMA_id <- str_replace(patient_meta$TMA_id, "x","X")
+patient_meta$TMA_id <- str_replace(patient_meta$TMA_id, "y","Y")
+patient_meta[is.na(patient_meta$x),]$TMA_id <- "CX7Y8" #was missing in data
+
+# Read in images
+images_meta <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/images.csv",col_names = TRUE)
+images_meta$names <- str_split(images_meta$image,".tiff",simplify = TRUE)[,1]
+images_meta$TMA_id <- str_split(images_meta$acquisition_description," ",simplify = TRUE)[,1]
+
+images_meta$PID <- patient_meta$PID[match(images_meta$TMA_id,patient_meta$TMA_id)]
+
+#Add metadata to sce
+
+## 1. Add PID based on images
+sce$PID <- images_meta$PID[match(sce$sample_id, images_meta$names)] 
+
+## 2. Add all other metadata based on metadata file
+meta_add <- colnames(patient_meta)[!colnames(patient_meta) %in% c("PID","grid","x","y","spot","no_tissue","sample_id")]
+
+patient_meta <- as.data.frame(patient_meta)
+              
+for (entry in meta_add) {
+  colData(sce)[,entry] <- patient_meta[,entry][match(colData(sce)[,"PID"],patient_meta[,"PID"])]
+}
+```
+
+```{r}
+# Check whether every sample (and cell) is associated with a PID
+unique(sce[,is.na(sce$PID)]$sample_id)
+unique(sce[,is.na(sce$sample_id)]$sample_id)
+```
+
+
+### Transform counts
+
+Problem: Right-skewed distribution (bias from highly expressing cells)
+Solution: Count transformation using an inverse hyperbolic sine function (arcsinh; common in flow cytometry) = leads to linear-like scale near zero and log-like scale beyond a threshold (`cofactor`)
+We apply a `cofactor` of `1`. 
+
+```{r transform-counts, message=FALSE}
+#Select 5 samples
+id <- colData(sce) %>% as.data.frame %>% select(sample_id) %>% unique %>% slice(1:5) %>% pull(sample_id)
+
+#Raw counts
+dittoRidgePlot(sce[,sce$sample_id %in% id], var = "CD45RO_RA", group.by = "sample_id", assay = "counts")
+dittoRidgePlot(sce[,sce$sample_id %in% id], var = "CD68", group.by = "sample_id", assay = "counts")
+dittoRidgePlot(sce[,sce$sample_id %in% id], var = "CD163", group.by = "sample_id", assay = "counts")
+
+
+#Transformed counts
+assay(sce, "exprs") <- asinh(counts(sce)/1)
+
+dittoRidgePlot(sce[,sce$sample_id %in% id], var = "CD45RO_RA", group.by = "sample_id", assay = "exprs")
+dittoRidgePlot(sce[,sce$sample_id %in% id], var = "CD68", group.by = "sample_id", assay = "exprs")
+dittoRidgePlot(sce[,sce$sample_id %in% id], var = "CD163", group.by = "sample_id", assay = "exprs")
+```
+
+### Define interesting channels
+
+Subset markers of interest for downstream analysis.
+
+```{r select-features}
+rowData(sce)$use_channel <- !grepl("DNA|H3|clCAS_PARP", rowData(sce)$clean_target)
+```
+
+
+### Define color schemes
+
+We will already at this point define color schemes for different metadata
+entries which will be helpful for downstream data visualizations. 
+
+```{r color-scheme}
+colors <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/color.rds")
+colors
+
+metadata(sce)$colors <- colors
+```
+
+## Save single cell object for downstream analysis
+
+```{r save-objects-read-data}
+saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_MY_01.rds")
+```
+
+## Re-save images and masks 
+
+Note that images and masks were loaded, modified and saved in the [MY_00_seg_QC.Rmd]() script. 
+
+```{r}
+images <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/images.rds")
+masks <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/masks_cp_1.rds")
+
+all.equal(names(images), names(masks))
+all.equal(names(images), mcols(images)$sample_id)
+all.equal(names(masks), mcols(masks)$sample_id)
+```
+
+```{r}
+saveRDS(images, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/images.rds")
+saveRDS(masks, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/masks.rds")
+```
+
+
+
+

@@ -86,6 +86,7 @@ patient_meta <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data
 patient_meta$TMA_id <- str_replace(paste0(patient_meta$grid,"x",patient_meta$x,"y",patient_meta$y),"NA","")
 patient_meta$TMA_id <- str_replace(patient_meta$TMA_id, "x","X")
 patient_meta$TMA_id <- str_replace(patient_meta$TMA_id, "y","Y")
+patient_meta[is.na(patient_meta$x),]$TMA_id <- "CX7Y8" #was missing in data
 
 # Read in images
 images_meta <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/images.csv",col_names = TRUE)
@@ -104,9 +105,10 @@ mcols(images)$subtype <- patient_meta$subtype[match(mcols(images)$TMA_id,patient
 mcols(masks_1) <- mcols(masks_exp) <- mcols(masks_cp_1) <- mcols(images)
 ```
 
-## Save masks objects for downstream analysis
+## Save images and masks objects for downstream analysis
 
 ```{r save-objects-read-data}
+saveRDS(masks_1, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/masks_1.rds")
 saveRDS(masks_1, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/masks_1.rds")
 saveRDS(masks_exp, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/masks_exp.rds")
 saveRDS(masks_cp_1, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/masks_cp_1.rds")
