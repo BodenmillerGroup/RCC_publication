@@ -1,0 +1,618 @@
+---
+title: "03_QC"
+author: "Lasse Meyer"
+date: "1/24/2022"
+output: html_document
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Software requirements
+
+```{r lib, message=FALSE,warning=FALSE}
+#Data containers
+library(SpatialExperiment)
+library(SingleCellExperiment)
+
+#Data processing
+library(scuttle)
+library(scater)
+library(imcRtools)
+
+#Data visualization
+library(cytomapper)
+library(dittoSeq)
+library(pheatmap)
+library(cowplot)
+
+#Utilities
+library(tidyverse)
+library(openxlsx)
+library(stringr)
+library(patchwork)
+library(BiocParallel)
+library(BiocNeighbors)
+library(tiff)
+library(ggrepel)
+library(EBImage)
+library(viridis)
+library(mclust)
+```
+
+# Quality control
+
+## Read in the data
+
+We will first read in the data processed in previous sections:
+
+```{r read-data, message=FALSE}
+images <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/images.rds")
+masks <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/masks.rds")
+sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_MY_02.rds")
+```
+
+## Filter for tumor cells 
+
+```{r}
+# Type 
+type_df <- colData(sce) %>% as.data.frame %>% select(PID, type) %>% unique() %>% group_by(type) %>% count() %>% arrange(desc(n))
+
+ggplot(type_df, aes(x = reorder(type,-n), y = n, fill = type))+
+  geom_bar(stat = "identity", color = "black")+
+  theme_classic()+
+  #scale_fill_manual(values = metadata(sce)$colors$type)+
+  ylab("Number of patients")+
+  xlab("Type")
+```
+
+```{r}
+# Subset sce to only contain primary tumor cells 
+sce <- sce[,sce$type == "primary"]
+```
+
+## Image- and cell-level QC
+
+### Image-level
+
+**Area QC**
+Another quality indicator is the image area covered by cells (or biological tissue).
+This metric identifies ROIs where little cells are present. We can compute the percentage of image 
+are covered by cells using the TMA masks measured with ilastik and cellprofiler. 
+
+We can then identify ROIs that have unusually low cell coverage or number of cells.
+These images can now be visualized using `cytomapper` or `cytoviewer`.
+
+```{r cell-density}
+#Load TMA tissue masks
+tissue_area <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/tissue_masks/tissue_area_TissueSegmentation.csv") 
+
+sce$tissue_area <- as.numeric(tissue_area$AreaShape_Area[match(colData(sce)$sample_id,str_split(tissue_area$FileName_Tissue_Mask, "_Pro",simplify = TRUE)[,1])])
+
+cell_density <- colData(sce) %>%
+    as.data.frame() %>%
+    group_by(sample_id) %>%
+    summarize(cell_area = sum(area),
+              tissue_area = mean(tissue_area)) %>%
+  mutate(covered_area = (cell_area / tissue_area)*100) %>%
+  mutate(n_cells = as.numeric(table(colData(sce)$sample_id))) %>%
+  arrange(covered_area)
+
+ggplot(cell_density) +
+  geom_point(aes(reorder(sample_id,covered_area), covered_area, color = covered_area))+ 
+  ylim(c(0, 100))+
+  geom_hline(yintercept = median(cell_density$covered_area, na.rm = TRUE), linetype="dashed", color = "grey")+
+  geom_hline(yintercept = quantile(cell_density$covered_area, na.rm = TRUE)[2],linetype="dashed", color = "grey")+
+  geom_hline(yintercept = quantile(cell_density$covered_area, na.rm = TRUE)[4],linetype="dashed", color = "grey")+
+  theme_classic(base_size = 15)+
+  theme(axis.text.x = element_blank())+
+  ylab("% covered area")+ 
+  xlab("")+
+  scale_color_viridis()
+
+ggplot(cell_density) +
+  geom_point(aes(reorder(sample_id,n_cells), n_cells, color = n_cells))+
+  geom_hline(yintercept = median(cell_density$n_cells, na.rm = TRUE), linetype="dashed", color = "grey")+
+  geom_hline(yintercept = quantile(cell_density$n_cells, na.rm = TRUE)[2],linetype="dashed", color = "grey")+
+  geom_hline(yintercept = quantile(cell_density$n_cells, na.rm = TRUE)[4],linetype="dashed", color = "grey")+
+  theme_classic(base_size = 15)+
+  theme(axis.text.x = element_blank())+
+  ylab("Number of cells per ROI")+ 
+  xlab("")+
+  scale_color_viridis()
+
+## Visualize critical images
+#Kick-out criteria:
+#n_cells < 300, covered_area < 8, tissue_area < 150000?
+#split acquisitions should also be excluded #str_detect(cell_density$sample_id, "split")
+image_id_cri <- cell_density %>% filter(n_cells < 100 | covered_area < 8 | is.na(tissue_area)) %>% pull(sample_id)
+
+# Normalize and clip images
+cur_images <- images[names(images) %in% image_id_cri]
+cur_images <- cytomapper::normalize(cur_images, separateImages = TRUE)
+cur_images <- cytomapper::normalize(cur_images, inputRange = c(0, 0.2))
+
+plotPixels(cur_images,
+           mask = masks[names(masks) %in% image_id_cri],
+           img_id = "sample_id",
+           missing_colour = "white",
+           colour_by = c("DNA1","panCK", "CA9","CD68","CD45RO_RA"),
+           colour = list("DNA1" = c("black","cyan"),
+                         "panCK" = c("black", "yellow"),
+                         "CA9" = c("black", "magenta"),
+                         "CD68" = c("black", "green"),
+                         "CD45RO_RA" = c("black","blue")
+                         ),
+           image_title = list(cex = 0.8),
+           legend = list(colour_by.title.cex = 0.7,
+                         colour_by.labels.cex = 0.7), 
+           save_plot = list(filename = paste0("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/03_QC/cell_density_QC_critical_images.png")))
+
+# Retain images that look fine 
+image_id_cri <- image_id_cri[!image_id_cri == c("ZTMA249.3_ZTMA249_ID_323_CX3Y11_328")]
+
+#Remove outlying images and cells (n=1728 cells)
+summary(colData(sce)$sample_id %in% image_id_cri)
+sce <- sce[,!colData(sce)$sample_id %in% image_id_cri]
+sce
+```
+
+
+```{r mean-expression-per-image, message=FALSE, fig.height=7}
+# TMA 224.1 block C
+
+sce$TMA_fine <- paste0(str_split(sce$sample_id, "_", simplify = TRUE)[,2],"_", str_split(sce$sample_id, "_", simplify = TRUE)[,3])
+
+cur_sce <- sce[,sce$TMA_fine == c("TMA224.1_BlockC","TMA224.1_BlockB")]
+
+library(scuttle)
+
+image_mean <- aggregateAcrossCells(cur_sce, 
+                                   ids = cur_sce$sample_id, 
+                                   statistics="mean",
+                                   use.assay.type = "exprs")
+
+dittoHeatmap(image_mean, genes = rownames(sce)[rowData(sce)$use_channel],
+             assay = "exprs", cluster_cols = TRUE, scale = "none",
+             heatmap.colors = viridis(100), 
+             annot.by = c("PID", "TMA_fine","subtype"),
+             annotation_colors = list(PID = metadata(sce)$colors$PID,
+                                      subtype = metadata(sce)$colors$subtype
+                                      ),
+             show_colnames = FALSE)
+
+```
+
+
+**Mean marker expression per image**
+
+This check does not indicate image quality _per se_ but can highlight biological differences.
+
+```{r mean-expression-per-image, message=FALSE, fig.height=7}
+library(scuttle)
+
+image_mean <- aggregateAcrossCells(sce, 
+                                   ids = sce$sample_id, 
+                                   statistics="mean",
+                                   use.assay.type = "exprs")
+
+dittoHeatmap(image_mean, genes = rownames(sce)[rowData(sce)$use_channel],
+             assay = "exprs", cluster_cols = TRUE, scale = "none",
+             heatmap.colors = viridis(100), 
+             annot.by = c("PID", "TMA","subtype"),
+             annotation_colors = list(PID = metadata(sce)$colors$PID,
+                                      subtype = metadata(sce)$colors$subtype
+                                      ),
+             show_colnames = FALSE)
+
+```
+
+
+
+## Cell-level
+
+**Cell size QC**
+Next, we observe the distributions of cell size across the individual images. Differences in cell size distributions can indicate segmentation biases due to differences in cell density or can indicate biological differences due to cell type compositions (tumor cells tend to be larger than immune cells).
+We also detect very small cells in the dataset and will remove them. The chosen threshold is arbitrary and needs to be adjusted per dataset.
+
+```{r cellsize_dis, message=FALSE,warning=FALSE}
+colData(sce) %>%
+    as.data.frame() %>%
+    group_by(sample_id) %>%
+    ggplot() +
+        geom_boxplot(aes(reorder(sample_id,area), area)) +
+        theme_classic(base_size = 15) + 
+        theme(axis.text.x = element_blank()) +
+        ylab(~ "Cell area " (mu * m^2)) + xlab("")+
+  geom_hline(yintercept = median(colData(sce)$area), linetype="dashed", color = "grey")+
+  geom_hline(yintercept = quantile(colData(sce)$area)[2],linetype="dashed", color = "grey")+
+  geom_hline(yintercept = quantile(colData(sce)$area)[4],linetype="dashed", color = "grey")
+
+#Cell area range
+summary(sce$area)
+
+#Only keep cells with an area above 5 (n=2909 cells)
+sum(sce$area <= 5)
+sce <- sce[,sce$area > 5]
+sce
+```
+
+
+
+
+
+
+
+
+
+
+
+## Clinical data quality control
+
+### Add metadata
+
+ZTMA20 has pN and pM information for a subset of patients. 
+
+```{r}
+library(readxl)
+ZTMA20 <- read_excel("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/data/ZTMA20_BOD2022.xls")
+
+ZTMA20$PID <- str_replace(ZTMA20$PathoNr, " ", "")
+
+ZTMA20$pN_simple <- ifelse(ZTMA20$pN %in% c("0","1","2"), ZTMA20$pN, NA)
+ZTMA20$pM_simple <- ZTMA20$pM
+
+# Add this information to SCE 
+sce$pN_simple <- ZTMA20$pN_simple[match(sce$PID, ZTMA20$PID)]
+sce$pM_simple <- ZTMA20$pM_simple[match(sce$PID, ZTMA20$PID)]
+```
+
+
+
+### Subtype
+
+```{r}
+
+# Re-group subtypes 
+sce$subtype_combined <- ifelse(sce$subtype %in% c("clear_cell_RCC", "papillary_RCC", "chromophobe_RCC"), sce$subtype, "other")
+sce$subtype_combined[sce$subtype_combined == "clear_cell_RCC"] <- "ccRCC"
+sce$subtype_combined[sce$subtype_combined == "papillary_RCC"] <- "pRCC"
+sce$subtype_combined[sce$subtype_combined == "chromophobe_RCC"] <- "chrRCC"
+
+metadata(sce)$colors$subtype_combined <- setNames(c("#63A8A0", "#A6CEE3","#C3AAD2","grey"),c("ccRCC","chrRCC","pRCC","other"))  
+
+# Subtype 
+subtype_df <- colData(sce) %>% as.data.frame %>% select(PID, subtype_combined) %>% unique() %>% group_by(subtype_combined) %>% count() %>% arrange(desc(n))
+
+ggplot(subtype_df, aes(x = reorder(subtype_combined,-n), y = n, fill = subtype_combined))+
+  geom_bar(stat = "identity", color = "black")+
+  theme_classic()+
+  scale_fill_manual(values = metadata(sce)$colors$subtype_combined)+
+  ylab("Number of patients")+
+  xlab("Subtype")
+```
+
+### Clinical categories (CC)
+
+```{r}
+# Tumor stages 
+pT_df <- colData(sce) %>% as.data.frame %>% #filter(subtype_combined == "ccRCC") %>% 
+  select(PID, pT_simple) %>% unique() %>% group_by(pT_simple) %>% count() %>% arrange(desc(n)) %>% mutate(pT_simple = as.character(pT_simple))
+
+ggplot(pT_df, aes(x = pT_simple, y = n, fill = pT_simple))+
+  geom_bar(stat = "identity", color = "black")+
+  theme_classic()+
+  scale_fill_manual(values = metadata(sce)$colors$pT_simple)+
+  ylab("Number of patients")+
+  xlab("Tumor stages")
+
+# Nodal status (Lots of missing information)
+pN_df <- colData(sce) %>% as.data.frame %>% #filter(subtype_combined == "ccRCC") %>% 
+  select(PID, pN_simple) %>% unique() %>% group_by(pN_simple) %>% count() %>% arrange(desc(n)) %>% mutate(pN_simple = as.character(pN_simple))
+
+ggplot(pN_df, aes(x = pN_simple, y = n, fill = pN_simple))+
+  geom_bar(stat = "identity", color = "black")+
+  theme_classic()+
+  scale_fill_brewer(palette = "Greys")+
+  ylab("Number of patients")+
+  xlab("Nodal status")
+
+# Metastasis status (Lots of missing information)
+pM_df <- colData(sce) %>% as.data.frame %>% #filter(subtype_combined == "ccRCC") %>% 
+  select(PID, pM_simple) %>% unique() %>% group_by(pM_simple) %>% count() %>% arrange(desc(n)) %>% mutate(pM_simple = as.character(pM_simple))
+
+ggplot(pM_df, aes(x = pM_simple, y = n, fill = pM_simple))+
+  geom_bar(stat = "identity", color = "black")+
+  theme_classic()+
+  scale_fill_brewer(palette = "Greys")+
+  ylab("Number of patients")+
+  xlab("Metastasis status")
+
+
+# Grade
+ISUP_df <- colData(sce) %>% as.data.frame %>% #filter(subtype_combined == "ccRCC") %>% 
+  select(PID, ISUP) %>% unique() %>% group_by(ISUP) %>% count() %>% arrange(desc(n)) %>% mutate(ISUP = as.character(ISUP))
+
+ggplot(ISUP_df, aes(x = ISUP, y = n, fill = ISUP))+
+  geom_bar(stat = "identity", color = "black")+
+  theme_classic()+
+  scale_fill_manual(values = metadata(sce)$colors$ISUP)+
+  ylab("Number of patients")+
+  xlab("ISUP grades")
+
+# Lymphocyte status
+lymphocytes_df <- colData(sce) %>% as.data.frame %>% #filter(subtype_combined == "ccRCC") %>% 
+  select(PID, lymphocytes) %>% unique() %>% group_by(lymphocytes) %>% count() %>% arrange(desc(n)) %>% mutate(lymphocytes = as.character(lymphocytes))
+
+ggplot(lymphocytes_df, aes(x = lymphocytes, y = n, fill = lymphocytes))+
+  geom_bar(stat = "identity", color = "black")+
+  theme_classic()+
+  scale_fill_manual(values = metadata(sce)$colors$lymphocytes)+
+  ylab("Number of patients")+
+  xlab("Lymphocytes scores")
+
+# Lymphocyte status
+necrose_df <- colData(sce) %>% as.data.frame %>% #filter(subtype_combined == "ccRCC") %>% 
+  select(PID, necrose) %>% unique() %>% group_by(necrose) %>% count() %>% arrange(desc(n)) %>% mutate(necrose = as.character(necrose))
+
+ggplot(necrose_df, aes(x = necrose, y = n, fill = necrose))+
+  geom_bar(stat = "identity", color = "black")+
+  theme_classic()+
+  scale_fill_manual(values = metadata(sce)$colors$necrose)+
+  ylab("Number of patients")+
+  xlab("necrose scores")
+```
+### Survival of CC 
+
+```{r}
+sce$status_OS <- ifelse(sce$censor_dead_0_alive_1 == 1, 0, 
+       ifelse(sce$censor_dead_0_alive_1 == 0, 1, sce$censor_dead_0_alive_1))
+
+sce$OS_months <- sce$survival_months
+
+sce$pT_combined <- sce$`pT12/34`
+sce$`pT12/34` <- NULL 
+
+sce$ISUP_combined <- ifelse(sce$ISUP %in% c("1","2"),"1/2", ifelse(sce$ISUP %in% c("3","4"), "3/4", sce$ISUP))
+sce$lymphocytes_combined <- ifelse(sce$lymphocytes %in% c("1","2"),"1/2", sce$lymphocytes)
+```
+
+
+```{r}
+## Assess survival impact of clinical categories
+library(survival)
+library(survminer)
+
+cur_surv <- colData(sce) %>% as.data.frame() %>% #filter(subtype_combined == "ccRCC") %>% 
+  select(PID, pT_simple, pT_combined, ISUP, ISUP_combined, lymphocytes, lymphocytes_combined, necrose, OS_months, status_OS) %>% unique()
+
+
+# Tumor stages
+fit <- survfit(Surv(OS_months, status_OS) ~ pT_simple, data = cur_surv)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = c("grey", "#ABCFE5", "#3787C0", "#08306B")
+          #log.rank.weights = "n"
+)
+
+fit <- survfit(Surv(OS_months, status_OS) ~ pT_combined, data = cur_surv)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = c("#ABCFE5", "#08306B")
+          #log.rank.weights = "n"
+)
+
+# ISUP grading
+fit_1 <- survfit(Surv(OS_months, status_OS) ~ ISUP, data = cur_surv)
+print(fit_1)
+
+ggsurvplot(fit_1,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = c("grey", "#FC9F81", "#E32F27", "#67000D")
+          #log.rank.weights = "n"
+)
+
+fit_1 <- survfit(Surv(OS_months, status_OS) ~ ISUP_combined, data = cur_surv)
+print(fit_1)
+
+ggsurvplot(fit_1,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = c("#FC9F81", "#67000D")
+          #log.rank.weights = "n"
+)
+
+# Lymphocytes 
+fit_2 <- survfit(Surv(OS_months, status_OS) ~ lymphocytes, data = cur_surv)
+print(fit_2)
+
+ggsurvplot(fit_2,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = c("grey", "#74C476", "#00441B")
+          #log.rank.weights = "n"
+)
+
+fit_2 <- survfit(Surv(OS_months, status_OS) ~ lymphocytes_combined, data = cur_surv)
+print(fit_2)
+
+ggsurvplot(fit_2,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = c("#74C476", "#00441B")
+          #log.rank.weights = "n"
+)
+
+# Necrosis
+fit_3 <- survfit(Surv(OS_months, status_OS) ~ necrose, data = cur_surv)
+print(fit_3)
+
+ggsurvplot(fit_3,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = c("grey", "#3F007D")
+          #log.rank.weights = "n"
+)
+```
+
+
+
+
+
+
+
+
+## Cell-level
+
+**Cell size QC**
+Next, we observe the distributions of cell size across the individual images. Differences in cell size distributions can indicate segmentation biases due to differences in cell density or can indicate biological differences due to cell type compositions (tumor cells tend to be larger than immune cells).
+We also detect very small cells in the dataset and will remove them. The chosen threshold is arbitrary and needs to be adjusted per dataset.
+
+```{r cellsize_dis, message=FALSE,warning=FALSE}
+colData(sce) %>%
+    as.data.frame() %>%
+    group_by(sample_id) %>%
+    ggplot() +
+        geom_boxplot(aes(reorder(sample_id,area), area)) +
+        theme_classic(base_size = 15) + 
+        theme(axis.text.x = element_blank()) +
+        ylab(~ "Cell area " (mu * m^2)) + xlab("")+
+  geom_hline(yintercept = median(colData(sce)$area), linetype="dashed", color = "grey")+
+  geom_hline(yintercept = quantile(colData(sce)$area)[2],linetype="dashed", color = "grey")+
+  geom_hline(yintercept = quantile(colData(sce)$area)[4],linetype="dashed", color = "grey")
+
+#Cell area range
+summary(sce$area)
+
+#Only keep cells with an area above 5 (n=2909 cells)
+sum(sce$area <= 5)
+sce <- sce[,sce$area > 5]
+sce
+```
+
+**Staining artifacts**
+Observing potential staining differences (e.g. between samples/batches) can be crucial to assess data quality. We will use ridgeline visualizations to check differences in staining patterns:
+
+```{r stainingarti, message=FALSE, warning=FALSE, fig.width=20, fig.height=40}
+#Randomly select 10 sample Ids for visualization
+set.seed(22)
+cur_id <- sample(unique(sce$sample_id), 10)
+
+p1 <- multi_dittoPlot(sce[,sce$sample_id %in% cur_id], vars = rownames(sce)[rowData(sce)$use_channel],
+               group.by = "PID", plots = c("ridgeplot"), 
+               assay = "exprs", 
+               color.panel = metadata(sce)$colors$PID)
+
+plot(p1)
+```
+
+**Dimensionality reduction**
+Finally, we will use non-linear dimensionality reduction methods to project cells from a high-dimensional (40) down to a low-dimensional (2) space. For this the scater package provides the runUMAP (and runTSNE) function. To ensure reproducibility, we will set a seed. For computing time, we will subsample to 10% of the cells.
+
+**Goal:** Visualization of the low-dimensional embedding facilitates assessment of potential "batch effects". Should not be present in present cohort.
+
+```{r dim_red, fig.width=15, fig.height=15}
+library(cowplot)
+## Subsample 10% of cells from each core 
+# to save time and not get super crowded dimensionality reduction plots
+set.seed(22)
+sub_id <- colData(sce) %>% as.data.frame() %>% group_by("sample_id") %>% slice_sample(prop = 0.1) %>% arrange("sample_id") %>% pull(cell_id)
+sce_sub <- sce[,sub_id]
+sce_sub
+
+#Run umap and tsne and save output directly into subsampled SCE
+sce_sub <- runUMAP(sce_sub[rowData(sce_sub)$use_channel,], n_neighbors = 30, pca = 50,exprs_values = "exprs", external_neighbors=TRUE, BPPARAM = MulticoreParam())
+sce_sub <- runTSNE(sce_sub[rowData(sce_sub)$use_channel,], exprs_values = "exprs", external_neighbors=TRUE, BPPARAM = MulticoreParam())
+
+#Visualize
+p1 <- plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "PID")+
+  guides(color="none")
+
+p2 <- plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "TMANr")+
+  scale_color_manual(values = metadata(sce)$colors$TMANr)
+
+
+p1+p2
+
+plotReducedDim(sce_sub, dimred = "TSNE", colour_by = "sample_id")+
+  guides(color="none")
+
+#Visualize all marker expression
+all_plots_UMAP <- lapply(c(rownames(sce_sub)[rowData(sce_sub)$use_channel]),
+                    function(x){
+                      p <- plotReducedDim(sce_sub, dimred = "UMAP", 
+                                          colour_by = x, 
+                                          by_exprs_values = "exprs",
+                                          point_size = 0.5)
+                      return(p)                    
+                    })
+
+plot_grid(plotlist = all_plots_UMAP)
+
+all_plots_TSNE <- lapply(c(rownames(sce_sub)[rowData(sce_sub)$use_channel]),
+                    function(x){
+                      p <- plotReducedDim(sce_sub, dimred = "TSNE", 
+                                          colour_by = x, 
+                                          by_exprs_values = "exprs",
+                                          point_size = 0.5)
+                      return(p)                    
+                    })
+
+plot_grid(plotlist = all_plots_TSNE)
+```
+
+## Save objects
+
+The modified `SingleCellExperiment` object is saved for further downstream analysis.
+
+```{r save-objects-quality-control}
+saveRDS(sce, "/mnt/central_nas/tnbc_volume/TNBC/data_analysis/03_sce_TNBC_QC.rds")
+```
+
+
+
+
+
+
+
+
+
+
