@@ -154,7 +154,7 @@ Note that images and masks were loaded, modified and saved in the [MY_00_seg_QC.
 
 ```{r}
 images <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/images.rds")
-masks <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/masks_cp_1.rds")
+masks <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/masks.rds")
 
 all.equal(names(images), names(masks))
 all.equal(names(images), mcols(images)$sample_id)

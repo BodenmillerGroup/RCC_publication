@@ -78,13 +78,125 @@ sce <- sce[,sce$type == "primary"]
 
 ### Image-level
 
-**Area QC**
-Another quality indicator is the image area covered by cells (or biological tissue).
-This metric identifies ROIs where little cells are present. We can compute the percentage of image 
-are covered by cells using the TMA masks measured with ilastik and cellprofiler. 
+#### Mean marker expression per image
 
-We can then identify ROIs that have unusually low cell coverage or number of cells.
-These images can now be visualized using `cytomapper` or `cytoviewer`.
+```{r mean-expression-per-image, message=FALSE, fig.height=7}
+library(scuttle)
+
+sce$TMA_fine <- paste0(str_split(sce$sample_id, "_", simplify = TRUE)[,2],"_", str_split(sce$sample_id, "_", simplify = TRUE)[,3])
+
+image_mean <- aggregateAcrossCells(sce, 
+                                   ids = sce$sample_id, 
+                                   statistics="mean",
+                                   use.assay.type = "exprs")
+
+dittoHeatmap(image_mean, genes = rownames(sce)[rowData(sce)$use_channel],
+             assay = "exprs", cluster_cols = TRUE, scale = "none",
+             heatmap.colors = viridis(100), 
+             annot.by = c("PID", "TMA_fine","subtype"),
+             annotation_colors = list(PID = metadata(sce)$colors$PID,
+                                      subtype = metadata(sce)$colors$subtype
+                                      ),
+             show_colnames = FALSE)
+
+# We observe a subset of samples to have very little signal across all channels (stems from one TMA_fine category)
+# We identified this to be from TMA 224.1 block C
+
+# CCL19 (high across images) and CCL21 (low across images) have quite unspecific signal - add to not use channels 
+```
+
+```{r}
+# Remove CCL19 and CCL21 from used channels
+rowData(sce)$use_channel <- !grepl("DNA|H3|clCAS_PARP|CCL", rowData(sce)$clean_target)
+```
+
+```{r mean-expression-per-image, message=FALSE, fig.height=7}
+
+# Having a closer look at TMA 224.1 block C
+
+cur_sce <- sce[,sce$TMA_fine == c("TMA224.1_BlockC")]
+
+library(scuttle)
+
+image_mean <- aggregateAcrossCells(cur_sce, 
+                                   ids = cur_sce$sample_id, 
+                                   statistics="mean",
+                                   use.assay.type = "exprs")
+
+Heatmap(t(assay(image_mean)[rowData(sce)$use_channel,]), 
+        col = viridis(100), 
+        clustering_method_rows = "ward.D2", 
+        show_row_names = FALSE)
+
+library(dendextend)
+avg_dend_obj_MCP <- as.dendrogram(agnes(t(assay(image_mean)),metric = "euclidean",method = "ward"))
+avg_col_dend_MCP <- color_branches(avg_dend_obj_MCP, k = 6)
+plot(avg_col_dend_MCP)
+
+# Retrieve sample IDs 
+ht <- Heatmap(t(assay(image_mean)),#[rowData(sce)$use_channel,]), 
+        col = viridis(100), 
+        clustering_method_columns = "ward.D2", 
+        clustering_method_rows = "ward.D2", 
+        cluster_rows = avg_col_dend_MCP, 
+        row_split = 6,
+        show_row_names = FALSE)
+  
+ht <- draw(ht)
+row_order_ht <- row_order(ht)
+img_critical <- image_mean$sample_id[row_order_ht[[6]]]
+
+# Visualize critical images 
+
+# Normalize and clip images
+cur_images <- images[names(images) %in% img_critical]
+cur_images <- cytomapper::normalize(cur_images, separateImages = TRUE)
+cur_images <- cytomapper::normalize(cur_images, inputRange = c(0, 0.2))
+
+plotPixels(cur_images,
+           mask = masks[names(masks) %in% img_critical],
+           img_id = "sample_id",
+           missing_colour = "white",
+           colour_by = c("DNA1","panCK", "CA9","CD68","CD45RO_RA"),
+           colour = list("DNA1" = c("black","cyan"),
+                         "panCK" = c("black", "yellow"),
+                         "CA9" = c("black", "magenta"),
+                         "CD68" = c("black", "green"),
+                         "CD45RO_RA" = c("black","blue")
+                         ),
+           image_title = list(cex = 0.8),
+           legend = list(colour_by.title.cex = 0.7,
+                         colour_by.labels.cex = 0.7), 
+           save_plot = list(filename = paste0("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/03_QC/TMA224_BlockC_QC_critical_images.png")))
+
+
+# Information for kick-out samples
+cur_kick_out <- colData(sce) %>% as.data.frame() %>% filter(sample_id %in% img_critical) %>% 
+  select(PID, subtype, pT_simple, ISUP, ISUP_combined, lymphocytes, lymphocytes_combined, necrose, OS_months, status_OS, WES_data) %>% unique()
+```
+
+
+```{r}
+# Visualize with cytoviewer
+library(cytoviewer)
+
+cur_images <- images[names(images) %in% img_critical]
+cur_masks <- masks[names(masks) %in% img_critical]
+
+cytoviewer(image = cur_images, mask = cur_masks, cell_id = "ObjectNumber", img_id = "sample_id")
+```
+
+
+```{r}
+# Kick out samples from SCE 
+length(img_critical) #n = 32
+
+sce <- sce[,!sce$sample_id %in% img_critical]
+sce
+```
+
+
+#### Cell and tissue area
 
 ```{r cell-density}
 #Load TMA tissue masks
@@ -96,7 +208,8 @@ cell_density <- colData(sce) %>%
     as.data.frame() %>%
     group_by(sample_id) %>%
     summarize(cell_area = sum(area),
-              tissue_area = mean(tissue_area)) %>%
+              tissue_area = mean(tissue_area), 
+              ratio_xy = mean(width_px / height_px)) %>%
   mutate(covered_area = (cell_area / tissue_area)*100) %>%
   mutate(n_cells = as.numeric(table(colData(sce)$sample_id))) %>%
   arrange(covered_area)
@@ -123,12 +236,13 @@ ggplot(cell_density) +
   ylab("Number of cells per ROI")+ 
   xlab("")+
   scale_color_viridis()
+```
 
+
+```{r}
 ## Visualize critical images
 #Kick-out criteria:
-#n_cells < 300, covered_area < 8, tissue_area < 150000?
-#split acquisitions should also be excluded #str_detect(cell_density$sample_id, "split")
-image_id_cri <- cell_density %>% filter(n_cells < 100 | covered_area < 8 | is.na(tissue_area)) %>% pull(sample_id)
+image_id_cri <- cell_density %>% filter(n_cells < 100 | covered_area < 5 | is.na(tissue_area) | tissue_area < 10000 | ratio_xy > 2 | ratio_xy < 0.7) %>% pull(sample_id)
 
 # Normalize and clip images
 cur_images <- images[names(images) %in% image_id_cri]
@@ -149,74 +263,26 @@ plotPixels(cur_images,
            image_title = list(cex = 0.8),
            legend = list(colour_by.title.cex = 0.7,
                          colour_by.labels.cex = 0.7), 
-           save_plot = list(filename = paste0("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/03_QC/cell_density_QC_critical_images.png")))
+           save_plot = list(filename = paste0("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/03_QC/cell_density_QC_critical_images_splits.png")))
 
-# Retain images that look fine 
-image_id_cri <- image_id_cri[!image_id_cri == c("ZTMA249.3_ZTMA249_ID_323_CX3Y11_328")]
+# Select images to be removed (n = 11)
+image_id_cri <- image_id_cri[image_id_cri %in% c("202207_TMA20.4_Block1_SE_099","202207_TMA20.4_Block2_SE_020","202207_TMA224.1_BlockB_SE_004","202207_TMA20.4_Block3_SE_122","20220718_TMA20.1_Block3_SE_070","20220718_TMA20.1_Block1_SE_015","20220718_TMA20.1_Block2_SE_075","202207_TMA20.4_Block3_SE_070","20220718_TMA20.1_Block3_SE_119", "20220718_TMA20.1_Block2_SE_079", "202207_TMA20.4_Block3_SE_129")]
 
-#Remove outlying images and cells (n=1728 cells)
-summary(colData(sce)$sample_id %in% image_id_cri)
+summary(colData(sce)$sample_id %in% image_id_cri) #n=1024 cells
+```
+
+
+```{r}
+#Remove outlying images
 sce <- sce[,!colData(sce)$sample_id %in% image_id_cri]
 sce
 ```
 
 
-```{r mean-expression-per-image, message=FALSE, fig.height=7}
-# TMA 224.1 block C
 
-sce$TMA_fine <- paste0(str_split(sce$sample_id, "_", simplify = TRUE)[,2],"_", str_split(sce$sample_id, "_", simplify = TRUE)[,3])
+### Cell-level
 
-cur_sce <- sce[,sce$TMA_fine == c("TMA224.1_BlockC","TMA224.1_BlockB")]
-
-library(scuttle)
-
-image_mean <- aggregateAcrossCells(cur_sce, 
-                                   ids = cur_sce$sample_id, 
-                                   statistics="mean",
-                                   use.assay.type = "exprs")
-
-dittoHeatmap(image_mean, genes = rownames(sce)[rowData(sce)$use_channel],
-             assay = "exprs", cluster_cols = TRUE, scale = "none",
-             heatmap.colors = viridis(100), 
-             annot.by = c("PID", "TMA_fine","subtype"),
-             annotation_colors = list(PID = metadata(sce)$colors$PID,
-                                      subtype = metadata(sce)$colors$subtype
-                                      ),
-             show_colnames = FALSE)
-
-```
-
-
-**Mean marker expression per image**
-
-This check does not indicate image quality _per se_ but can highlight biological differences.
-
-```{r mean-expression-per-image, message=FALSE, fig.height=7}
-library(scuttle)
-
-image_mean <- aggregateAcrossCells(sce, 
-                                   ids = sce$sample_id, 
-                                   statistics="mean",
-                                   use.assay.type = "exprs")
-
-dittoHeatmap(image_mean, genes = rownames(sce)[rowData(sce)$use_channel],
-             assay = "exprs", cluster_cols = TRUE, scale = "none",
-             heatmap.colors = viridis(100), 
-             annot.by = c("PID", "TMA","subtype"),
-             annotation_colors = list(PID = metadata(sce)$colors$PID,
-                                      subtype = metadata(sce)$colors$subtype
-                                      ),
-             show_colnames = FALSE)
-
-```
-
-
-
-## Cell-level
-
-**Cell size QC**
-Next, we observe the distributions of cell size across the individual images. Differences in cell size distributions can indicate segmentation biases due to differences in cell density or can indicate biological differences due to cell type compositions (tumor cells tend to be larger than immune cells).
-We also detect very small cells in the dataset and will remove them. The chosen threshold is arbitrary and needs to be adjusted per dataset.
+#### Cell size
 
 ```{r cellsize_dis, message=FALSE,warning=FALSE}
 colData(sce) %>%
@@ -234,25 +300,49 @@ colData(sce) %>%
 #Cell area range
 summary(sce$area)
 
-#Only keep cells with an area above 5 (n=2909 cells)
-sum(sce$area <= 5)
-sce <- sce[,sce$area > 5]
+area_stats <- colData(sce) %>%
+    as.data.frame() %>% select(sample_id,area) %>% unique() %>%
+    group_by(sample_id) %>% mutate(mean_area = mean(area), max_area = max(area)) %>% arrange(desc(mean_area)) %>% select(sample_id, mean_area, max_area) %>% unique()
+
+ggplot(area_stats, aes(x = max_area, y = mean_area))+
+  geom_point()
+
+# 0.01 & 99.9th percentile cell area normalization
+quantile(sce$area, probs = c(0.001, 0.25, 0.50, 0.999))
+
+sce$cell_size_critical <- sce$area > 333 | sce$area < 17
+
+summary(sce$area > 333 | sce$area < 17) #n=1985
+
+## Note: Cellpose (in contrary to Mesmer) has sometimes too large cells rather than too small cells
+```
+
+```{r}
+img_area_critical_2 <- colData(sce) %>% as.data.frame %>% select(sample_id, cell_size_critical) %>% filter(cell_size_critical == TRUE) %>% pull(sample_id) %>% unique()
+
+img_area_critical_2 <- img_area_critical_2[1:20]
+
+# Visualize with cytoviewer
+library(cytoviewer)
+
+cur_images <- images[names(images) %in% img_area_critical_2]
+cur_masks <- masks[names(masks) %in% img_area_critical_2]
+cur_sce <- sce[,sce$sample_id %in% img_area_critical_2]
+cytoviewer(image = cur_images, mask = cur_masks, object = cur_sce, cell_id = "ObjectNumber", img_id = "sample_id")
+```
+
+
+```{r}
+# Remove cell size critical cells 
+sce <- sce[,sce$cell_size_critical == FALSE]
 sce
 ```
 
 
 
-
-
-
-
-
-
-
-
 ## Clinical data quality control
 
-### Add metadata
+### Add remaining metadata
 
 ZTMA20 has pN and pM information for a subset of patients. 
 
@@ -275,7 +365,6 @@ sce$pM_simple <- ZTMA20$pM_simple[match(sce$PID, ZTMA20$PID)]
 ### Subtype
 
 ```{r}
-
 # Re-group subtypes 
 sce$subtype_combined <- ifelse(sce$subtype %in% c("clear_cell_RCC", "papillary_RCC", "chromophobe_RCC"), sce$subtype, "other")
 sce$subtype_combined[sce$subtype_combined == "clear_cell_RCC"] <- "ccRCC"
@@ -373,7 +462,7 @@ sce$status_OS <- ifelse(sce$censor_dead_0_alive_1 == 1, 0,
 
 sce$OS_months <- sce$survival_months
 
-sce$pT_combined <- sce$`pT12/34`
+sce$pT_combined <- ifelse(sce$pT_simple %in% c("1","2"),"1/2", ifelse(sce$pT_simple %in% c("3","4"), "3/4", sce$pT_simple))
 sce$`pT12/34` <- NULL 
 
 sce$ISUP_combined <- ifelse(sce$ISUP %in% c("1","2"),"1/2", ifelse(sce$ISUP %in% c("3","4"), "3/4", sce$ISUP))
@@ -500,104 +589,176 @@ ggsurvplot(fit_3,
 
 
 
-## Cell-level
 
-**Cell size QC**
-Next, we observe the distributions of cell size across the individual images. Differences in cell size distributions can indicate segmentation biases due to differences in cell density or can indicate biological differences due to cell type compositions (tumor cells tend to be larger than immune cells).
-We also detect very small cells in the dataset and will remove them. The chosen threshold is arbitrary and needs to be adjusted per dataset.
 
-```{r cellsize_dis, message=FALSE,warning=FALSE}
-colData(sce) %>%
-    as.data.frame() %>%
-    group_by(sample_id) %>%
-    ggplot() +
-        geom_boxplot(aes(reorder(sample_id,area), area)) +
-        theme_classic(base_size = 15) + 
-        theme(axis.text.x = element_blank()) +
-        ylab(~ "Cell area " (mu * m^2)) + xlab("")+
-  geom_hline(yintercept = median(colData(sce)$area), linetype="dashed", color = "grey")+
-  geom_hline(yintercept = quantile(colData(sce)$area)[2],linetype="dashed", color = "grey")+
-  geom_hline(yintercept = quantile(colData(sce)$area)[4],linetype="dashed", color = "grey")
+## Dimensionality reduction
 
-#Cell area range
-summary(sce$area)
-
-#Only keep cells with an area above 5 (n=2909 cells)
-sum(sce$area <= 5)
-sce <- sce[,sce$area > 5]
-sce
-```
-
-**Staining artifacts**
-Observing potential staining differences (e.g. between samples/batches) can be crucial to assess data quality. We will use ridgeline visualizations to check differences in staining patterns:
-
-```{r stainingarti, message=FALSE, warning=FALSE, fig.width=20, fig.height=40}
-#Randomly select 10 sample Ids for visualization
-set.seed(22)
-cur_id <- sample(unique(sce$sample_id), 10)
-
-p1 <- multi_dittoPlot(sce[,sce$sample_id %in% cur_id], vars = rownames(sce)[rowData(sce)$use_channel],
-               group.by = "PID", plots = c("ridgeplot"), 
-               assay = "exprs", 
-               color.panel = metadata(sce)$colors$PID)
-
-plot(p1)
-```
-
-**Dimensionality reduction**
-Finally, we will use non-linear dimensionality reduction methods to project cells from a high-dimensional (40) down to a low-dimensional (2) space. For this the scater package provides the runUMAP (and runTSNE) function. To ensure reproducibility, we will set a seed. For computing time, we will subsample to 10% of the cells.
-
-**Goal:** Visualization of the low-dimensional embedding facilitates assessment of potential "batch effects". Should not be present in present cohort.
+### Across subtypes 
 
 ```{r dim_red, fig.width=15, fig.height=15}
-library(cowplot)
-## Subsample 10% of cells from each core 
-# to save time and not get super crowded dimensionality reduction plots
+## Subsample 10% of cells from each core
+#to save time and not get super crowded dimensionality reduction plots
 set.seed(22)
-sub_id <- colData(sce) %>% as.data.frame() %>% group_by("sample_id") %>% slice_sample(prop = 0.1) %>% arrange("sample_id") %>% pull(cell_id)
-sce_sub <- sce[,sub_id]
-sce_sub
+sub <- colData(sce) %>% as.data.frame() %>% group_by("sample_id") %>% slice_sample(prop = 0.1) %>% arrange("sample_id") %>% mutate(sub_id = paste(sample_id,ObjectNumber,sep="_")) %>% pull(sub_id)
+sce_sub <- sce[,sub]
 
-#Run umap and tsne and save output directly into subsampled SCE
+#Run UMAP/TSNE
 sce_sub <- runUMAP(sce_sub[rowData(sce_sub)$use_channel,], n_neighbors = 30, pca = 50,exprs_values = "exprs", external_neighbors=TRUE, BPPARAM = MulticoreParam())
 sce_sub <- runTSNE(sce_sub[rowData(sce_sub)$use_channel,], exprs_values = "exprs", external_neighbors=TRUE, BPPARAM = MulticoreParam())
 
-#Visualize
-p1 <- plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "PID")+
-  guides(color="none")
 
-p2 <- plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "TMANr")+
-  scale_color_manual(values = metadata(sce)$colors$TMANr)
+## 1. Visualize TSNE
+plotReducedDim(sce_sub, dimred = "TSNE", by_exprs_values = "exprs",colour_by = "CD45RO_RA")+
+plotReducedDim(sce_sub, dimred = "TSNE", by_exprs_values = "exprs",colour_by = "SMA")+
+plotReducedDim(sce_sub, dimred = "TSNE", by_exprs_values = "exprs",colour_by = "CA9")
 
-
-p1+p2
+plotReducedDim(sce_sub, dimred = "TSNE", by_exprs_values = "exprs",colour_by = "CD45RO_RA")+
+plotReducedDim(sce_sub, dimred = "TSNE", by_exprs_values = "exprs",colour_by = "CD8a")+
+plotReducedDim(sce_sub, dimred = "TSNE", by_exprs_values = "exprs",colour_by = "CD68")+
+plotReducedDim(sce_sub, dimred = "TSNE", by_exprs_values = "exprs",colour_by = "CD11b")+
+plotReducedDim(sce_sub, dimred = "TSNE", by_exprs_values = "exprs",colour_by = "CD163")+
+plotReducedDim(sce_sub, dimred = "TSNE", by_exprs_values = "exprs",colour_by = "CD16")
 
 plotReducedDim(sce_sub, dimred = "TSNE", colour_by = "sample_id")+
-  guides(color="none")
+  guides(color = "none")
 
-#Visualize all marker expression
-all_plots_UMAP <- lapply(c(rownames(sce_sub)[rowData(sce_sub)$use_channel]),
-                    function(x){
-                      p <- plotReducedDim(sce_sub, dimred = "UMAP", 
-                                          colour_by = x, 
-                                          by_exprs_values = "exprs",
-                                          point_size = 0.5)
-                      return(p)                    
-                    })
-
-plot_grid(plotlist = all_plots_UMAP)
-
+# Visualize all marker expression
 all_plots_TSNE <- lapply(c(rownames(sce_sub)[rowData(sce_sub)$use_channel]),
                     function(x){
                       p <- plotReducedDim(sce_sub, dimred = "TSNE", 
                                           colour_by = x, 
                                           by_exprs_values = "exprs",
-                                          point_size = 0.5)
+                                          point_size = 0.5)+
+                        guides(color = "none")+
+                        ggtitle(paste0(x))
                       return(p)                    
                     })
 
-plot_grid(plotlist = all_plots_TSNE)
+
+## 2. Visualize UMAP
+plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD45RO_RA")+
+plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "SMA")+
+plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CA9")+
+plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "panCK")
+
+
+plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD45RO_RA")+
+plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD8a")+
+plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD68")+
+plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD11b")+
+plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD163")+
+plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD16")+
+plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "MPO")
+
+
+plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "subtype_combined")+
+  scale_color_manual(values = metadata(sce)$colors$subtype_combined)
+
+plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "sample_id")+
+  guides(color = "none")
+
+plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "PID")+
+    scale_color_manual(values = metadata(sce)$colors$PID)+
+  guides(color = "none")
+
+# Visualize all marker expression
+all_plots_UMAP <- lapply(c(rownames(sce_sub)[rowData(sce_sub)$use_channel]),
+                    function(x){
+                      p <- plotReducedDim(sce_sub, dimred = "UMAP", 
+                                          colour_by = x, 
+                                          by_exprs_values = "exprs",
+                                          point_size = 0.5)+
+                        guides(color = "none")+
+                        ggtitle(paste0(x))
+                      return(p)                    
+                    })
 ```
+
+### ccRCC 
+
+```{r}
+## Subsample 10% of cells from each core
+#to save time and not get super crowded dimensionality reduction plots
+
+sce_ccRCC <- sce[,sce$subtype_combined == "ccRCC"]
+
+set.seed(22)
+sub <- colData(sce_ccRCC) %>% as.data.frame() %>% group_by("sample_id") %>% slice_sample(prop = 0.1) %>% arrange("sample_id") %>% mutate(sub_id = paste(sample_id,ObjectNumber,sep="_")) %>% pull(sub_id)
+sce_ccRCC_sub <- sce_ccRCC[,sub]
+
+#Run UMAP/TSNE
+sce_ccRCC_sub <- runUMAP(sce_ccRCC_sub[rowData(sce_ccRCC_sub)$use_channel,], n_neighbors = 30, pca = 50,exprs_values = "exprs", external_neighbors=TRUE, BPPARAM = MulticoreParam())
+sce_ccRCC_sub <- runTSNE(sce_ccRCC_sub[rowData(sce_ccRCC_sub)$use_channel,], exprs_values = "exprs", external_neighbors=TRUE, BPPARAM = MulticoreParam())
+
+
+## 1. Visualize TSNE
+plotReducedDim(sce_ccRCC_sub, dimred = "TSNE", by_exprs_values = "exprs",colour_by = "CD45RO_RA")+
+plotReducedDim(sce_ccRCC_sub, dimred = "TSNE", by_exprs_values = "exprs",colour_by = "SMA")+
+plotReducedDim(sce_ccRCC_sub, dimred = "TSNE", by_exprs_values = "exprs",colour_by = "CA9")
+
+plotReducedDim(sce_ccRCC_sub, dimred = "TSNE", by_exprs_values = "exprs",colour_by = "CD45RO_RA")+
+plotReducedDim(sce_ccRCC_sub, dimred = "TSNE", by_exprs_values = "exprs",colour_by = "CD8a")+
+plotReducedDim(sce_ccRCC_sub, dimred = "TSNE", by_exprs_values = "exprs",colour_by = "CD68")+
+plotReducedDim(sce_ccRCC_sub, dimred = "TSNE", by_exprs_values = "exprs",colour_by = "CD11b")+
+plotReducedDim(sce_ccRCC_sub, dimred = "TSNE", by_exprs_values = "exprs",colour_by = "CD163")+
+plotReducedDim(sce_ccRCC_sub, dimred = "TSNE", by_exprs_values = "exprs",colour_by = "CD16")
+
+plotReducedDim(sce_ccRCC_sub, dimred = "TSNE", colour_by = "sample_id")+
+  guides(color = "none")
+
+# Visualize all marker expression
+all_plots_TSNE <- lapply(c(rownames(sce_ccRCC_sub)[rowData(sce_ccRCC_sub)$use_channel]),
+                    function(x){
+                      p <- plotReducedDim(sce_ccRCC_sub, dimred = "TSNE", 
+                                          colour_by = x, 
+                                          by_exprs_values = "exprs",
+                                          point_size = 0.5)+
+                        guides(color = "none")+
+                        ggtitle(paste0(x))
+                      return(p)                    
+                    })
+
+
+## 2. Visualize UMAP
+plotReducedDim(sce_ccRCC_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD45RO_RA")+
+plotReducedDim(sce_ccRCC_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "SMA")+
+plotReducedDim(sce_ccRCC_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CA9")+
+plotReducedDim(sce_ccRCC_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "panCK")
+
+
+plotReducedDim(sce_ccRCC_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD45RO_RA")+
+plotReducedDim(sce_ccRCC_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD8a")+
+plotReducedDim(sce_ccRCC_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD68")+
+plotReducedDim(sce_ccRCC_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD11b")+
+plotReducedDim(sce_ccRCC_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD163")+
+plotReducedDim(sce_ccRCC_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD16")+
+plotReducedDim(sce_ccRCC_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "MPO")
+
+
+plotReducedDim(sce_ccRCC_sub, dimred = "UMAP", colour_by = "subtype_combined")+
+  scale_color_manual(values = metadata(sce_ccRCC)$colors$subtype_combined)
+
+plotReducedDim(sce_ccRCC_sub, dimred = "UMAP", colour_by = "sample_id")+
+  guides(color = "none")
+
+plotReducedDim(sce_ccRCC_sub, dimred = "UMAP", colour_by = "PID")+
+    scale_color_manual(values = metadata(sce_ccRCC)$colors$PID)+
+  guides(color = "none")
+
+# Visualize all marker expression
+all_plots_UMAP <- lapply(c(rownames(sce_ccRCC_sub)[rowData(sce_ccRCC_sub)$use_channel]),
+                    function(x){
+                      p <- plotReducedDim(sce_ccRCC_sub, dimred = "UMAP", 
+                                          colour_by = x, 
+                                          by_exprs_values = "exprs",
+                                          point_size = 0.5)+
+                        guides(color = "none")+
+                        ggtitle(paste0(x))
+                      return(p)                    
+                    })
+```
+
+
 
 ## Save objects
 

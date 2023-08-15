@@ -220,7 +220,10 @@ hist(out$n_pixels_changed, breaks = 20)
 
 ```{r read-images}
 #Load images
-images_new <- loadImages("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/img_cor/",on_disk = TRUE,h5FilesPath = "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/img_cor_h5/",BPPARAM = MulticoreParam(workers = 25,progressbar = TRUE,stop.on.error = FALSE))
+images_new <- loadImages("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/img_cor/",
+                         on_disk = TRUE,h5FilesPath = "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/img_cor_h5/", 
+                         as.is = TRUE, # Important to not rescale 16-bit images
+                         BPPARAM = MulticoreParam(workers = 25,progressbar = TRUE,stop.on.error = FALSE))
 ```
 
 ```{r}
