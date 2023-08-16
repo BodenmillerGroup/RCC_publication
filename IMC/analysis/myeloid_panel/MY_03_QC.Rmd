@@ -21,6 +21,7 @@ library(SingleCellExperiment)
 #Data processing
 library(scuttle)
 library(scater)
+library(scran)
 library(imcRtools)
 
 #Data visualization
@@ -28,19 +29,35 @@ library(cytomapper)
 library(dittoSeq)
 library(pheatmap)
 library(cowplot)
+library(ComplexHeatmap)
+library(circlize)
 
 #Utilities
 library(tidyverse)
 library(openxlsx)
 library(stringr)
 library(patchwork)
+library(parallel)
 library(BiocParallel)
 library(BiocNeighbors)
+library(BiocSingular)
 library(tiff)
 library(ggrepel)
 library(EBImage)
 library(viridis)
 library(mclust)
+library(Rphenograph)
+library(igraph)
+library(RColorBrewer)
+library(foreach)
+library(clValid)
+library(bluster)
+library(psych)
+library(corrplot)
+library(psych)
+
+#Batch correction
+library(batchelor)
 ```
 
 # Quality control
@@ -111,7 +128,6 @@ rowData(sce)$use_channel <- !grepl("DNA|H3|clCAS_PARP|CCL", rowData(sce)$clean_t
 ```
 
 ```{r mean-expression-per-image, message=FALSE, fig.height=7}
-
 # Having a closer look at TMA 224.1 block C
 
 cur_sce <- sce[,sce$TMA_fine == c("TMA224.1_BlockC")]
@@ -128,7 +144,6 @@ Heatmap(t(assay(image_mean)[rowData(sce)$use_channel,]),
         clustering_method_rows = "ward.D2", 
         show_row_names = FALSE)
 
-library(dendextend)
 avg_dend_obj_MCP <- as.dendrogram(agnes(t(assay(image_mean)),metric = "euclidean",method = "ward"))
 avg_col_dend_MCP <- color_branches(avg_dend_obj_MCP, k = 6)
 plot(avg_col_dend_MCP)
@@ -172,7 +187,7 @@ plotPixels(cur_images,
 
 # Information for kick-out samples
 cur_kick_out <- colData(sce) %>% as.data.frame() %>% filter(sample_id %in% img_critical) %>% 
-  select(PID, subtype, pT_simple, ISUP, ISUP_combined, lymphocytes, lymphocytes_combined, necrose, OS_months, status_OS, WES_data) %>% unique()
+  select(PID, subtype, pT_simple, ISUP, lymphocytes, necrose, WES_data) %>% unique()
 ```
 
 
@@ -278,6 +293,18 @@ sce <- sce[,!colData(sce)$sample_id %in% image_id_cri]
 sce
 ```
 
+#### Add info on pixel artifact 
+
+```{r}
+library(readxl)
+pixel_removal <- read_excel("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/summary_pixel_removal.xlsx")
+
+pixel_removal$Image <- str_replace(pixel_removal$Image, ":","")
+pixel_removal$Image <- str_replace(pixel_removal$Image, "\"","")
+
+# Add logical entry to colData of sce
+sce$pixel_artifacts_corrected <- sce$sample_id %in% pixel_removal$Image
+```
 
 
 ### Cell-level
@@ -338,6 +365,30 @@ sce <- sce[,sce$cell_size_critical == FALSE]
 sce
 ```
 
+#### Cell eccentricity 
+
+```{r}
+eccentricity_stats <- colData(sce) %>%
+    as.data.frame() %>% select(sample_id,eccentricity) %>% unique() %>%
+    group_by(sample_id) %>% mutate(mean_eccentricity = mean(eccentricity), max_eccentricity = max(eccentricity)) %>% arrange(desc(mean_eccentricity)) %>% select(sample_id, mean_eccentricity, max_eccentricity) %>% unique()
+
+ggplot(eccentricity_stats, aes(x = max_eccentricity, y = mean_eccentricity))+
+  geom_point()
+
+img_eccentricity_critical <- eccentricity_stats %>% filter(mean_eccentricity > 0.7) %>% pull(sample_id) #Identified to be images with high amounts of stromal cells (fibroblasts) = retain in analysis
+```
+
+
+```{r}
+cur_images <- images[names(images) %in% img_eccentricity_critical]
+cur_masks <- masks[names(masks) %in% img_eccentricity_critical]
+cur_sce <- sce[,sce$sample_id %in% img_eccentricity_critical]
+
+unique(cur_sce$subtype_combined)
+
+cytoviewer(image = cur_images, mask = cur_masks, object = cur_sce, cell_id = "ObjectNumber", img_id = "sample_id")
+```
+
 
 
 ## Clinical data quality control
@@ -360,7 +411,20 @@ sce$pN_simple <- ZTMA20$pN_simple[match(sce$PID, ZTMA20$PID)]
 sce$pM_simple <- ZTMA20$pM_simple[match(sce$PID, ZTMA20$PID)]
 ```
 
+### Number of images per patient 
 
+```{r}
+images_per_PID <- colData(sce) %>% as.data.frame %>% select(PID, sample_id) %>% unique() %>% group_by(PID) %>% count() %>% arrange(desc(n))
+
+images_per_PID_final <- images_per_PID %>% group_by(n) %>% count(n, name = "total_n")
+
+ggplot(images_per_PID_final, aes(x = n, y = total_n, fill = as.character(n)))+
+  geom_bar(stat = "identity", color = "black")+
+  theme_classic()+
+  xlab("Number of images per PID")+
+  ylab("Number of patients")+
+  scale_fill_brewer(palette = "Purples")
+```
 
 ### Subtype
 
@@ -475,7 +539,7 @@ sce$lymphocytes_combined <- ifelse(sce$lymphocytes %in% c("1","2"),"1/2", sce$ly
 library(survival)
 library(survminer)
 
-cur_surv <- colData(sce) %>% as.data.frame() %>% #filter(subtype_combined == "ccRCC") %>% 
+cur_surv <- colData(sce) %>% as.data.frame() %>% #filter(subtype_combined %in% c("chrRCC")) %>% 
   select(PID, pT_simple, pT_combined, ISUP, ISUP_combined, lymphocytes, lymphocytes_combined, necrose, OS_months, status_OS) %>% unique()
 
 
@@ -583,19 +647,68 @@ ggsurvplot(fit_3,
 ```
 
 
+### Survival of Mutation IHC
 
+```{r}
+## Assess survival impact of mutation status
+library(survival)
+library(survminer)
 
+cur_surv <- colData(sce) %>% as.data.frame() %>% #filter(subtype_combined %in% c("pRCC")) %>% 
+  select(PID, PBRM1_IHC, BAP1_IHC, H3K36me_IHC, OS_months, status_OS) %>% unique()
 
+# PBRM1
+fit <- survfit(Surv(OS_months, status_OS) ~ PBRM1_IHC, data = cur_surv)
+print(fit)
 
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          #palette = c("grey", "#ABCFE5", "#3787C0", "#08306B")
+          #log.rank.weights = "n"
+          )
 
+# BAP1 
+fit_1 <- survfit(Surv(OS_months, status_OS) ~ BAP1_IHC, data = cur_surv)
+print(fit_1)
 
+ggsurvplot(fit_1,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          #palette = c("grey", "#ABCFE5", "#3787C0", "#08306B")
+          #log.rank.weights = "n"
+          )
+
+# H3K36me3 (SETD2)
+fit_2 <- survfit(Surv(OS_months, status_OS) ~ H3K36me_IHC, data = cur_surv)
+print(fit_2)
+
+ggsurvplot(fit_2,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          #palette = c("grey", "#ABCFE5", "#3787C0", "#08306B")
+          #log.rank.weights = "n"
+          )
+```
 
 
 ## Dimensionality reduction
 
 ### Across subtypes 
 
-```{r dim_red, fig.width=15, fig.height=15}
+```{r dim_red}
 ## Subsample 10% of cells from each core
 #to save time and not get super crowded dimensionality reduction plots
 set.seed(22)
@@ -603,7 +716,7 @@ sub <- colData(sce) %>% as.data.frame() %>% group_by("sample_id") %>% slice_samp
 sce_sub <- sce[,sub]
 
 #Run UMAP/TSNE
-sce_sub <- runUMAP(sce_sub[rowData(sce_sub)$use_channel,], n_neighbors = 30, pca = 50,exprs_values = "exprs", external_neighbors=TRUE, BPPARAM = MulticoreParam())
+sce_sub <- runUMAP(sce_sub[rowData(sce_sub)$use_channel,], n_neighbors = 50, pca = 50,exprs_values = "exprs", external_neighbors=TRUE, BPPARAM = MulticoreParam())
 sce_sub <- runTSNE(sce_sub[rowData(sce_sub)$use_channel,], exprs_values = "exprs", external_neighbors=TRUE, BPPARAM = MulticoreParam())
 
 
@@ -641,15 +754,17 @@ plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "
 plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CA9")+
 plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "panCK")
 
-
 plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD45RO_RA")+
-plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD8a")+
 plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD68")+
 plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD11b")+
 plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD163")+
 plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD16")+
 plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "MPO")
 
+plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD45RO_RA")+
+plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD3")+
+plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD4")+
+plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD8a")
 
 plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "subtype_combined")+
   scale_color_manual(values = metadata(sce)$colors$subtype_combined)
@@ -660,6 +775,9 @@ plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "sample_id")+
 plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "PID")+
     scale_color_manual(values = metadata(sce)$colors$PID)+
   guides(color = "none")
+
+sce_sub$TMA <- as.character(sce_sub$TMA)
+plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "TMA")
 
 # Visualize all marker expression
 all_plots_UMAP <- lapply(c(rownames(sce_sub)[rowData(sce_sub)$use_channel]),
@@ -687,53 +805,30 @@ sub <- colData(sce_ccRCC) %>% as.data.frame() %>% group_by("sample_id") %>% slic
 sce_ccRCC_sub <- sce_ccRCC[,sub]
 
 #Run UMAP/TSNE
-sce_ccRCC_sub <- runUMAP(sce_ccRCC_sub[rowData(sce_ccRCC_sub)$use_channel,], n_neighbors = 30, pca = 50,exprs_values = "exprs", external_neighbors=TRUE, BPPARAM = MulticoreParam())
-sce_ccRCC_sub <- runTSNE(sce_ccRCC_sub[rowData(sce_ccRCC_sub)$use_channel,], exprs_values = "exprs", external_neighbors=TRUE, BPPARAM = MulticoreParam())
+sce_ccRCC_sub <- runUMAP(sce_ccRCC_sub[rowData(sce_ccRCC_sub)$use_channel,], n_neighbors = 50, pca = 50,exprs_values = "exprs", external_neighbors=TRUE, BPPARAM = MulticoreParam())
+
+#sce_ccRCC_sub <- runTSNE(sce_ccRCC_sub[rowData(sce_ccRCC_sub)$use_channel,], exprs_values = "exprs", external_neighbors=TRUE, BPPARAM = MulticoreParam())
 
 
 ## 1. Visualize TSNE
-plotReducedDim(sce_ccRCC_sub, dimred = "TSNE", by_exprs_values = "exprs",colour_by = "CD45RO_RA")+
-plotReducedDim(sce_ccRCC_sub, dimred = "TSNE", by_exprs_values = "exprs",colour_by = "SMA")+
-plotReducedDim(sce_ccRCC_sub, dimred = "TSNE", by_exprs_values = "exprs",colour_by = "CA9")
-
-plotReducedDim(sce_ccRCC_sub, dimred = "TSNE", by_exprs_values = "exprs",colour_by = "CD45RO_RA")+
-plotReducedDim(sce_ccRCC_sub, dimred = "TSNE", by_exprs_values = "exprs",colour_by = "CD8a")+
-plotReducedDim(sce_ccRCC_sub, dimred = "TSNE", by_exprs_values = "exprs",colour_by = "CD68")+
-plotReducedDim(sce_ccRCC_sub, dimred = "TSNE", by_exprs_values = "exprs",colour_by = "CD11b")+
-plotReducedDim(sce_ccRCC_sub, dimred = "TSNE", by_exprs_values = "exprs",colour_by = "CD163")+
-plotReducedDim(sce_ccRCC_sub, dimred = "TSNE", by_exprs_values = "exprs",colour_by = "CD16")
-
-plotReducedDim(sce_ccRCC_sub, dimred = "TSNE", colour_by = "sample_id")+
-  guides(color = "none")
-
-# Visualize all marker expression
-all_plots_TSNE <- lapply(c(rownames(sce_ccRCC_sub)[rowData(sce_ccRCC_sub)$use_channel]),
-                    function(x){
-                      p <- plotReducedDim(sce_ccRCC_sub, dimred = "TSNE", 
-                                          colour_by = x, 
-                                          by_exprs_values = "exprs",
-                                          point_size = 0.5)+
-                        guides(color = "none")+
-                        ggtitle(paste0(x))
-                      return(p)                    
-                    })
-
 
 ## 2. Visualize UMAP
 plotReducedDim(sce_ccRCC_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD45RO_RA")+
 plotReducedDim(sce_ccRCC_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "SMA")+
 plotReducedDim(sce_ccRCC_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CA9")+
 plotReducedDim(sce_ccRCC_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "panCK")
-
-
+  
 plotReducedDim(sce_ccRCC_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD45RO_RA")+
-plotReducedDim(sce_ccRCC_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD8a")+
 plotReducedDim(sce_ccRCC_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD68")+
 plotReducedDim(sce_ccRCC_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD11b")+
 plotReducedDim(sce_ccRCC_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD163")+
 plotReducedDim(sce_ccRCC_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD16")+
 plotReducedDim(sce_ccRCC_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "MPO")
 
+plotReducedDim(sce_ccRCC_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD45RO_RA")+
+plotReducedDim(sce_ccRCC_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD3")+
+plotReducedDim(sce_ccRCC_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD4")+
+plotReducedDim(sce_ccRCC_sub, dimred = "UMAP", by_exprs_values = "exprs",colour_by = "CD8a")
 
 plotReducedDim(sce_ccRCC_sub, dimred = "UMAP", colour_by = "subtype_combined")+
   scale_color_manual(values = metadata(sce_ccRCC)$colors$subtype_combined)
@@ -744,6 +839,9 @@ plotReducedDim(sce_ccRCC_sub, dimred = "UMAP", colour_by = "sample_id")+
 plotReducedDim(sce_ccRCC_sub, dimred = "UMAP", colour_by = "PID")+
     scale_color_manual(values = metadata(sce_ccRCC)$colors$PID)+
   guides(color = "none")
+
+sce_ccRCC_sub$TMA <- as.character(sce_ccRCC_sub$TMA)
+plotReducedDim(sce_ccRCC_sub, dimred = "UMAP", colour_by = "TMA")
 
 # Visualize all marker expression
 all_plots_UMAP <- lapply(c(rownames(sce_ccRCC_sub)[rowData(sce_ccRCC_sub)$use_channel]),
@@ -758,16 +856,78 @@ all_plots_UMAP <- lapply(c(rownames(sce_ccRCC_sub)[rowData(sce_ccRCC_sub)$use_ch
                     })
 ```
 
+## Marker correlations 
 
+### Across subtypes 
+
+```{r}
+# Cluster channel marker correlation (all markers - does not show distribution which is usually recommended)
+cor_sce <- as.data.frame(t(assay(sce,"exprs")[rowData(sce)$use_channel,]))
+
+corrplot(cor(cor_sce,method = "spearman"), method="color", col=brewer.pal(n=8, name="RdBu"),  
+         type="upper", order="hclust",hclust.method = "ward.D2", 
+         addCoef.col = "black", addCoefasPercent = F,# Add coefficient of correlation
+         tl.col="black", tl.srt=40, #Text label color and rotation
+         # Combine with significance
+         #p.mat = , sig.level = 0.01, insig = "blank", 
+         # hide correlation coefficient on the principal diagonal
+         diag=F
+)
+
+# For specific markers of interest (also shows the value distribution which is recommended)
+#pairs.panels(cor_sce[,c("CK5","KRT14")],
+#             method = "spearman",
+#             hist.col = "royalblue1",
+#             digits = 2)
+```
+
+### ccRCC 
+
+```{r}
+# Cluster channel marker correlation (all markers - does not show distribution which is usually recommended)
+cor_sce_ccRCC <- as.data.frame(t(assay(sce_ccRCC,"exprs")[rowData(sce)$use_channel,]))
+
+corrplot(cor(cor_sce_ccRCC,method = "spearman"), method="color", col=brewer.pal(n=8, name="RdBu"),  
+         type="upper", order="hclust",hclust.method = "ward.D2", 
+         addCoef.col = "black", addCoefasPercent = F,# Add coefficient of correlation
+         tl.col="black", tl.srt=40, #Text label color and rotation
+         # Combine with significance
+         #p.mat = , sig.level = 0.01, insig = "blank", 
+         # hide correlation coefficient on the principal diagonal
+         diag=F
+)
+
+# For specific markers of interest (also shows the value distribution which is recommended)
+#pairs.panels(cor_sce[,c("CK5","KRT14")],
+#             method = "spearman",
+#             hist.col = "royalblue1",
+#             digits = 2)
+```
+## colData QC 
+
+```{r}
+for (x in c("TMA", "pT_simple", "ISUP", "necrose", "lymphocytes", "BAP1_IHC", "PBRM1_IHC", "H3K36me_IHC")){ 
+  colData(sce)[,x] <- as.character(colData(sce)[,x])
+  }
+```
+
+
+## Summary after QC 
+
+```{r}
+paste0("Number of cells after QC: ", dim(sce)[2])
+paste0("Number of images after QC: ", length(unique(sce$sample_id)))
+paste0("Number of patients after QC: ", length(unique(sce$PID)))
+```
 
 ## Save objects
 
 The modified `SingleCellExperiment` object is saved for further downstream analysis.
 
 ```{r save-objects-quality-control}
-saveRDS(sce, "/mnt/central_nas/tnbc_volume/TNBC/data_analysis/03_sce_TNBC_QC.rds")
+saveRDS(sce,"/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_MY_03.rds")
+saveRDS(sce_sub,"/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_sub_MY_03.rds")
 ```
-
 
 
 

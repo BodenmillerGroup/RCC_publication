@@ -17,21 +17,45 @@ library(SpatialExperiment)
 library(SingleCellExperiment)
 
 #Data processing
-library(CATALYST)
 library(scuttle)
 library(scater)
+library(scran)
 library(imcRtools)
 
 #Data visualization
 library(cytomapper)
 library(dittoSeq)
-library(viridis)
+library(pheatmap)
+library(cowplot)
+library(ComplexHeatmap)
+library(circlize)
 
 #Utilities
 library(tidyverse)
 library(openxlsx)
 library(stringr)
+library(patchwork)
+library(parallel)
 library(BiocParallel)
+library(BiocNeighbors)
+library(BiocSingular)
+library(tiff)
+library(ggrepel)
+library(EBImage)
+library(viridis)
+library(mclust)
+library(Rphenograph)
+library(igraph)
+library(RColorBrewer)
+library(foreach)
+library(clValid)
+library(bluster)
+library(psych)
+library(corrplot)
+library(psych)
+
+#Batch correction
+library(batchelor)
 ```
 
 ## Read in single-cell information from TMA-based RCC study
