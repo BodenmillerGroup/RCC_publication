@@ -69,12 +69,26 @@ sce
 ## Perform "overclustering"
 
 ```{r}
-rowData(sce)$broad_cluster <- rownames(sce) %in% c("CA9","panCK","CD31_vWF","SMA","CD45RO_RA", "CD3", "Vimentin","CD4","CD8a","CD38","MPO","CD11c","CD20", "CD68","HLADR","CD56")
+rowData(sce)$broad_cluster <- rownames(sce) %in% c("CA9","panCK","CD31_vWF","SMA","CD45RO_RA", "CD3", "Vimentin","CD4","CD8a","CD38","MPO","CD11c","CD20", "CD68","CD56")
 
-rowData(sce)$broad_cluster_1 <- rownames(sce) %in% c("CD31_vWF","SMA","CD45RO_RA", "CD3", "Vimentin","CD4","CD8a","CD38","MPO","CD11c","CD20", "CD68","HLADR","CD56")
+rowData(sce)$broad_cluster_1 <- rownames(sce) %in% c("CA9","panCK","CD31_vWF","SMA","CD45RO_RA", "CD3","CD4","CD8a","CD38","MPO","CD11c","CD20", "CD68")
 
 rowData(sce)$broad_cluster_2 <- rownames(sce) %in% c("CD31_vWF","SMA","CD45RO_RA", "CD3","CD4","CD8a","CD38","MPO","CD11c","CD20", "CD68","HLADR","CD56")
 ```
+
+
+NOTES TO SELF: TO BE CONTINUED HERE 
+
+- channel selection in broad_cluster_1 may be most appropriate (maybes: Vimentin / CD56)
+- divide the categorization into ccRCC (CA9+) and the rest (mostly panCK+)
+- ccRCC immune cells can have CA9 signal, when infiltrated into the tumor tissue (to be quantified later)
+- therefore hierarchical approach useful - Step 1: divide into epithelial (CD45+/SMA+CD31+ - low area/high eccentricity) / non-epithelial (CA9+ or panCK+) 
+
+
+
+
+#### CONTINUE HERE! 
+
 
 Next, we will run a granular Rphenograph (Jaccard-based weights, Louvain clustering as community detection algorithm) clustering. 
 
@@ -82,40 +96,42 @@ Next, we will run a granular Rphenograph (Jaccard-based weights, Louvain cluster
 ```{r}
 library(Rphenoannoy)
 
+sce_ccRCC <- sce[,sce$subtype_combined == "ccRCC"]
+
 set.seed(22)
 
-mat <- t(assay(sce, "exprs")[rowData(sce)$broad_cluster==TRUE,])
+mat <- t(assay(sce_ccRCC, "exprs")[rowData(sce_ccRCC)$broad_cluster_1==TRUE,])
 
 #k=30
 out <- Rphenoannoy(mat, k = 30)
 
 clusters <- factor(membership(out[[2]]))
 
-sce$cluster <- clusters
+sce_ccRCC$cluster <- clusters
 
-unique(sce$cluster)
+unique(sce_ccRCC$cluster)
 
-#Save SCEs after clustering
-saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_MY_04.rds")
+#Save sce_ccRCCs after clustering
+#saveRDS(sce_ccRCC, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_04.rds")
 
 
 #### 
 
 set.seed(22)
 
-mat <- t(assay(sce, "exprs")[rowData(sce)$broad_cluster_1==TRUE,])
+mat <- t(assay(sce_ccRCC, "exprs")[rowData(sce_ccRCC)$broad_cluster_1==TRUE,])
 
 #k=30
 out <- Rphenoannoy(mat, k = 30)
 
 clusters <- factor(membership(out[[2]]))
 
-sce$cluster_1 <- clusters
+sce_ccRCC$cluster_1 <- clusters
 
-unique(sce$cluster_1)
+unique(sce_ccRCC$cluster_1)
 
-#Save SCEs after clustering
-saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_MY_04.rds")
+#Save sce_ccRCCs after clustering
+saveRDS(sce_ccRCC, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_04.rds")
 
 
 #### 
@@ -123,19 +139,19 @@ saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sc
 
 set.seed(22)
 
-mat <- t(assay(sce, "exprs")[rowData(sce)$broad_cluster_2==TRUE,])
+mat <- t(assay(sce_ccRCC, "exprs")[rowData(sce_ccRCC)$broad_cluster_2==TRUE,])
 
 #k=30
 out <- Rphenoannoy(mat, k = 30)
 
 clusters <- factor(membership(out[[2]]))
 
-sce$cluster_2 <- clusters
+sce_ccRCC$cluster_2 <- clusters
 
-unique(sce$cluster_2)
+unique(sce_ccRCC$cluster_2)
 
 #Save SCEs after clustering
-saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_MY_04.rds")
+saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_04.rds")
 ```
 
 
@@ -143,22 +159,49 @@ saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sc
 ```{r}
 sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_MY_04.rds")
 
-mean_sce <- aggregateAcrossCells(sce, ids = sce$cluster_2,
+mean_sce <- aggregateAcrossCells(sce_ccRCC, ids = sce_ccRCC$cluster,
                                  statistics = "mean",
                                  use.assay.type = "exprs",
-                                 subset.row = rowData(sce)$broad_cluster)
+                                 subset.row = rowData(sce_ccRCC)$broad_cluster_1)
 
-mean_sce_2 <- aggregateAcrossCells(sce, ids = sce$cluster_2,
+mean_sce <- aggregateAcrossCells(sce_Not_ccRCC, ids = sce_Not_ccRCC$cluster,
                                  statistics = "mean",
                                  use.assay.type = "exprs",
-                                 subset.row = !rowData(sce)$broad_cluster)
+                                 subset.row = rowData(sce_Not_ccRCC)$broad_cluster)
+
+
+mean_sce_2 <- aggregateAcrossCells(sce_ccRCC, ids = sce_ccRCC$cluster,
+                                 statistics = "mean",
+                                 use.assay.type = "exprs",
+                                 subset.row = !rowData(sce_ccRCC)$broad_cluster_1)
 
 Heatmap(t(assay(mean_sce, "exprs")), col = viridis(100), clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2")
 
-Heatmap(t(scale(assay(mean_sce, "exprs"))), clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2")
+  Heatmap(t(assay(mean_sce_2, "exprs")), col = viridis(100), clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2")
 
-  Heatmap(t(assay(mean_sce_2, "exprs")), col = viridis(100))+
-  rowAnnotation(n_cells = anno_barplot(mean_sce$ncells))
+
+Heatmap(scale(t(assay(mean_sce, "exprs"))), clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2")+ 
+Heatmap(scale(t(assay(mean_sce_2, "exprs"))),clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2")+ 
+    rowAnnotation(n_cells = anno_barplot(mean_sce$ncells))+
+    rowAnnotation(fr_CA9 = anno_barplot(fr_tum$fr_tum))+
+    rowAnnotation(fr_CD45 = anno_barplot(fr_tum_1$fr_tum))+
+    rowAnnotation(area = spatial$area)+
+    rowAnnotation(eccentricity = spatial$eccentricity)
+    
+
+
+
+ht <- Heatmap(t(scale(assay(mean_sce, "exprs"))), clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2")
+
+Heatmap(scale(t(assay(mean_sce, "exprs"))), 
+        col = col_scaled,
+        clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2")
+
+col_scaled <- colorRamp2(c(-1, 0, 2, 4), c("#0000FFFF", "white", "#FFAC95FF", "#FF0000FF"))
+
+Heatmap(t(assay(mean_sce_2, "exprs")), col = viridis(100))+
+  rowAnnotation(n_cells = anno_barplot(mean_sce$ncells))+
+  
 ```
 
 
@@ -168,10 +211,10 @@ We will use a two component gaussian mixture model to distinguish between tumor 
 
 ```{r GMM_CK, message=FALSE,warning=FALSE}
 ## Gaussian mixture model to distinguish tumor/stroma based on panCK expression
-GMM_CK <- Mclust(assay(sce, "exprs")["panCK",], G = 2)
+GMM_CK <- Mclust(assay(sce_ccRCC, "exprs")["CD45RO_RA",], G = 2)
 
-GMM_df <- data.frame(class_CK = ifelse(GMM_CK$classification == 2 & GMM_CK$uncertainty == 0, "panCK+", "panCK-"), 
-                     panCK_exprs = assay(sce, "exprs")["panCK",],
+GMM_df <- data.frame(class_CK = ifelse(GMM_CK$classification == 2, "panCK+", "panCK-"), 
+                     panCK_exprs = assay(sce_ccRCC, "exprs")["CD45RO_RA",],
                      uncertainty = GMM_CK$uncertainty)
 
 #Visualize GMM
@@ -180,6 +223,13 @@ GMM_plot_exp <- ggplot(GMM_df, aes(x = panCK_exprs, fill = class_CK))+
   theme_classic(base_size = 15)+
   theme(axis.title.x = element_blank())+
   scale_fill_brewer(palette = "Set1")
+
+ggplot(GMM_df, aes(x = panCK_exprs))+
+  geom_density()+
+  theme_classic(base_size = 15)+
+  theme(axis.title.x = element_blank())+
+  scale_fill_brewer(palette = "Set1")
+
   
 GMM_plot_unc <- ggplot(GMM_df, aes(x = panCK_exprs, y = uncertainty, color = class_CK))+
   geom_line()+
@@ -190,7 +240,8 @@ GMM_plot_unc <- ggplot(GMM_df, aes(x = panCK_exprs, y = uncertainty, color = cla
 GMM_plot_exp/GMM_plot_unc
 
 #Add GMM CK class to SCE
-#sce$GMM_CK <- GMM_df$class_CK
+sce_ccRCC$GMM_CK <- GMM_df$class_CK
+sce_ccRCC$GMM_CD45 <- GMM_df$class_CK
 
 ## Gaussian mixture model to distinguish tumor/stroma based on Ecad expression
 GMM_Ecad <- Mclust(assay(sce, "exprs")["Ecad",], G = 2)
@@ -300,7 +351,7 @@ sce$n_neighbors <- n_neighbors$n[match(seq_along(colnames(sce)),n_neighbors$from
 sce$n_neighbors <- sce$n_neighbors %>% replace_na(0)
 
 #Select spatial features and average over clusters 
-spatial <- colData(sce) %>% as.data.frame %>% select(area,eccentricity,cluster,n_neighbors)
+spatial <- colData(sce_ccRCC) %>% as.data.frame %>% select(area,eccentricity,cluster)
 spatial <- spatial %>% select(-cluster) %>% aggregate(by = list(cluster = spatial$cluster), FUN = mean) %>% column_to_rownames("cluster")
 
 #Define color schemes for spatial features and add to metadata
@@ -330,9 +381,13 @@ ha_spatial <- HeatmapAnnotation(
 n_cells <- colData(mean_sce) %>% as.data.frame %>% select(cluster, ncells)
 
 #GMM - panCK
-nr_tum <- colData(sce) %>% as.data.frame %>% select(cluster, GMM_CK) %>% table()
+nr_tum <- colData(sce_ccRCC) %>% as.data.frame %>% select(cluster, GMM_CK) %>% table()
 fr_tum <- as.data.frame(nr_tum) %>% pivot_wider(names_from = GMM_CK, values_from = Freq) %>% column_to_rownames("cluster")
 fr_tum <- fr_tum %>% transmute(fr_tum = `panCK+`/rowSums(fr_tum)) %>% as.data.frame()
+
+nr_tum <- colData(sce_ccRCC) %>% as.data.frame %>% select(cluster, GMM_CD45) %>% table()
+fr_tum_1 <- as.data.frame(nr_tum) %>% pivot_wider(names_from = GMM_CD45, values_from = Freq) %>% column_to_rownames("cluster")
+fr_tum_1 <- fr_tum_1 %>% transmute(fr_tum = `panCK+`/rowSums(fr_tum_1)) %>% as.data.frame()
 
 # #Astir
 nr_tum_2 <- colData(sce) %>% as.data.frame %>% select(cluster, astir_type) %>% table()
@@ -370,8 +425,8 @@ ggplot(anno_cluscat, aes(fr_tum))+
   geom_vline(xintercept = 0.7, color = "red3")+
   geom_vline(xintercept = 0.2, color = "red3")+
   theme_classic()+
-  theme(axis.title.x = element_blank())+
-  scale_color_manual(values = cluster_category)
+  theme(axis.title.x = element_blank())
+  #scale_color_manual(values = cluster_category)
 
 ha_cluscat <- HeatmapAnnotation(cluster_category = anno_cluscat$cluster_category,
                                 col = list(cluster_category = metadata(sce)$colors$cluster_category),
