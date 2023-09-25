@@ -3,7 +3,7 @@ title: "04_SingleCell_InitialClustering"
 output: html_document
 date: '2022-03-30'
 editor_options: 
-  chunk_output_type: console
+  chunk_output_type: inline
 ---
 
 ```{r setup, include=FALSE}
@@ -66,12 +66,180 @@ sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/
 sce
 ```
 
+## GMM for all type-relevant markers 
+
+```{r}
+## Gaussian mixture model for all markers relevant for initial celltype assignment 
+type_markers <- c("CA9","panCK","CD31_vWF","SMA","CD45RO_RA", "CD3","CD4","CD8a","CD38","MPO","CD11c","CD20", "CD68", "CD56")
+
+plot_list <- list()
+
+library(doParallel)
+registerDoParallel(cores = 20)
+
+out_list <- foreach (x = type_markers) %dopar%{
+  
+  GMM_marker <- Mclust(assay(sce, "exprs")[x,], G = 2)
+  
+  GMM_df <- data.frame(class_marker = ifelse(GMM_marker$classification == 2 & GMM_marker$uncertainty == 0, paste0(x, "_pos"), paste0(x, "_neg")), 
+                     marker_exprs = assay(sce, "exprs")[x,],
+                     uncertainty = GMM_marker$uncertainty)
+  
+  plot_list[[x]] <- ggplot(GMM_df, aes(x = marker_exprs))+
+  geom_density()+
+  geom_rug(aes(color = class_marker))+
+  theme_classic()+
+  scale_fill_brewer(palette = "Set1")
+  
+  return(GMM_df$class_marker)
+}
+
+for (i in seq_along(out_list)){
+  colData(sce)[,paste0(type_markers[i],"_GMM")] <- out_list[[i]]
+}
+```
+
+```{r}
+library(cowplot)
+
+cowplot::plot_grid(plotlist = plot_list)
+
+pdf("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/04_broad/GMM_type_relevant_GMM.pdf", width = 10, height = 10)
+cowplot::plot_grid(plotlist = plot_list)
+dev.off()
+```
+
+```{r}
+library(data.table)
+
+# Convert the data.frame to a data.table
+data_dt <- colData(sce) %>% as.data.frame %>% select("cell_id", "CD31_vWF_GMM","SMA_GMM","CD45RO_RA_GMM", "CD3_GMM","CD4_GMM","CD8a_GMM","CD38_GMM","MPO_GMM","CD11c_GMM","CD20_GMM", "CD68_GMM", "CD56_GMM") %>% as.data.table()
+
+string_to_detect <- "_pos"
+
+# Detect pos across columns
+data_dt[, Contains_String := apply(.SD, 1, function(x) any(str_detect(x, string_to_detect))), .SDcols = -"cell_id"]
+
+#Add to sce
+sce$type_GMM <- data_dt$Contains_String[match(sce$cell_id, data_dt$cell_id)]
+
+summary(data_dt$Contains_String)
+```
+
+
+```{r}
+mean_sce <- aggregateAcrossCells(sce, ids = sce$type_GMM,
+                                 statistics = "mean",
+                                 use.assay.type = "exprs",
+                                 subset.row = rownames(sce) %in% type_markers_1)
+
+Heatmap(t(assay(mean_sce, "exprs")), col = viridis(100), clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2")
+```
+
+
+
+```{r}
+set.seed(220195)
+cur_cells <- sample(seq_len(ncol(sce)), 20000)
+
+sce$type_GMM_ch <- as.character(sce$type_GMM)
+
+type_markers_1 <- c("CD31_vWF","SMA","CD45RO_RA", "CD3","CD4","CD8a","CD38","MPO","CD11c","CD20", "CD68", "CD56")
+
+# Heatmap visualization - DittoHeatmap
+dittoHeatmap(sce[,cur_cells], 
+             genes = rownames(sce)[rownames(sce) %in% type_markers_1],
+             assay = "exprs", heatmap.colors = viridis(100), 
+             scale = "none", 
+             cluster_cols = FALSE, 
+             annot.by = c("type_GMM_ch","area"))
+
+dittoHeatmap(sce[,cur_cells], 
+             genes = rownames(sce)[rownames(sce) %in% type_markers_1],
+             assay = "exprs", heatmap.colors = viridis(100), 
+             scaled.to.max =  TRUE, 
+             cluster_cols = TRUE, 
+             annot.by = c("type_GMM_ch","area"))
+```
+
+```{r}
+sce_test <- sce[,sce$type_GMM == TRUE]
+
+set.seed(220195)
+cur_cells <- sample(seq_len(ncol(sce_test)), 20000)
+
+sce_test$type_GMM_ch <- as.character(sce_test$type_GMM)
+
+type_markers_1 <- c("CD31_vWF","SMA","CD45RO_RA", "CD3","CD4","CD8a","CD38","MPO","CD11c","CD20", "CD68", "CD56")
+
+# Heatmap visualization - DittoHeatmap
+dittoHeatmap(sce_test[,cur_cells], 
+             genes = rownames(sce)[rownames(sce) %in% type_markers_1],
+             assay = "exprs", heatmap.colors = viridis(100), 
+             scale = "none", 
+             cluster_cols = TRUE, 
+             annot.by = c("type_GMM_ch","area","eccentricity","subtype_combined"))
+
+dittoHeatmap(sce_test[,cur_cells], 
+             genes = rownames(sce)[rownames(sce) %in% type_markers_1],
+             assay = "exprs", #heatmap.colors = viridis(100), 
+             scaled.to.max = TRUE,
+             cluster_cols = TRUE, 
+             annot.by = c("type_GMM_ch","area","eccentricity","subtype_combined"))
+```
+
+```{r}
+sce_test <- sce[,sce$type_GMM == FALSE]
+
+set.seed(220195)
+cur_cells <- sample(seq_len(ncol(sce_test)), 20000)
+
+sce_test$type_GMM_ch <- as.character(sce_test$type_GMM)
+
+# Heatmap visualization - DittoHeatmap
+dittoHeatmap(sce_test[,cur_cells], 
+             genes = rownames(sce)[rownames(sce) %in% type_markers],
+             assay = "exprs", heatmap.colors = viridis(100), 
+             scale = "none", 
+             cluster_cols = TRUE, 
+             annot.by = c("type_GMM_ch","area","eccentricity","subtype_combined"))
+
+dittoHeatmap(sce_test[,cur_cells], 
+             genes = rownames(sce)[rownames(sce) %in% type_markers],
+             assay = "exprs", #heatmap.colors = viridis(100), 
+             scale = "row", 
+             cluster_cols = TRUE, 
+             annot.by = c("type_GMM_ch","area","eccentricity","subtype_combined"))
+```
+## Visualize results using cytoviewer 
+
+```{r}
+images <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/images.rds")
+masks <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/masks.rds")
+```
+
+```{r}
+# Select 30 images 
+set.seed(22)
+cur_sample <- sample(unique(sce$sample_id), 30)
+
+cur_images <- images[mcols(images)$sample_id %in% cur_sample]
+cur_masks <- masks[mcols(masks)$sample_id %in% cur_sample]
+cur_sce <- sce[,sce$sample_id %in% cur_sample]
+```
+
+```{r}
+library(cytoviewer)
+cytoviewer(image = cur_images, mask = cur_masks, object = cur_sce, img_id = "sample_id", cell_id = "ObjectNumber")
+```
+
+
 ## Perform "overclustering"
 
 ```{r}
-rowData(sce)$broad_cluster <- rownames(sce) %in% c("CA9","panCK","CD31_vWF","SMA","CD45RO_RA", "CD3", "Vimentin","CD4","CD8a","CD38","MPO","CD11c","CD20", "CD68","CD56")
+rowData(sce)$broad_cluster <- rownames(sce) %in% c("CA9","panCK","CD31_vWF","SMA","CD45RO_RA", "CD3","CD4","CD8a","CD38","MPO","CD11c","CD20", "CD68","CD56")
 
-rowData(sce)$broad_cluster_1 <- rownames(sce) %in% c("CA9","panCK","CD31_vWF","SMA","CD45RO_RA", "CD3","CD4","CD8a","CD38","MPO","CD11c","CD20", "CD68")
+rowData(sce)$broad_cluster_1 <- rownames(sce) %in% c("CD31_vWF","SMA","CD45RO_RA", "CD3","CD4","CD8a","CD38","MPO","CD11c","CD20", "CD68", "CD56")
 
 rowData(sce)$broad_cluster_2 <- rownames(sce) %in% c("CD31_vWF","SMA","CD45RO_RA", "CD3","CD4","CD8a","CD38","MPO","CD11c","CD20", "CD68","HLADR","CD56")
 ```
@@ -87,7 +255,6 @@ NOTES TO SELF: TO BE CONTINUED HERE
 
 
 
-#### CONTINUE HERE! 
 
 
 Next, we will run a granular Rphenograph (Jaccard-based weights, Louvain clustering as community detection algorithm) clustering. 
@@ -96,20 +263,18 @@ Next, we will run a granular Rphenograph (Jaccard-based weights, Louvain cluster
 ```{r}
 library(Rphenoannoy)
 
-sce_ccRCC <- sce[,sce$subtype_combined == "ccRCC"]
-
 set.seed(22)
 
-mat <- t(assay(sce_ccRCC, "exprs")[rowData(sce_ccRCC)$broad_cluster_1==TRUE,])
+mat <- t(assay(sce, "exprs")[rowData(sce)$broad_cluster==TRUE,])
 
 #k=30
 out <- Rphenoannoy(mat, k = 30)
 
 clusters <- factor(membership(out[[2]]))
 
-sce_ccRCC$cluster <- clusters
+sce$cluster <- clusters
 
-unique(sce_ccRCC$cluster)
+unique(sce$cluster)
 
 #Save sce_ccRCCs after clustering
 #saveRDS(sce_ccRCC, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_04.rds")
@@ -119,19 +284,19 @@ unique(sce_ccRCC$cluster)
 
 set.seed(22)
 
-mat <- t(assay(sce_ccRCC, "exprs")[rowData(sce_ccRCC)$broad_cluster_1==TRUE,])
+mat <- t(assay(sce, "exprs")[rowData(sce)$broad_cluster_1==TRUE,])
 
 #k=30
 out <- Rphenoannoy(mat, k = 30)
 
 clusters <- factor(membership(out[[2]]))
 
-sce_ccRCC$cluster_1 <- clusters
+sce$cluster_1 <- clusters
 
-unique(sce_ccRCC$cluster_1)
+unique(sce$cluster_1)
 
 #Save sce_ccRCCs after clustering
-saveRDS(sce_ccRCC, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_04.rds")
+#saveRDS(sce_ccRCC, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_04.rds")
 
 
 #### 
@@ -154,39 +319,115 @@ unique(sce_ccRCC$cluster_2)
 saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_04.rds")
 ```
 
+```{r}
+Heatmap(t(assay(mean_sce, "exprs")), col = viridis(100), clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2")
+Heatmap(scale(t(assay(mean_sce, "exprs"))), clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2", split = anno_cluscat$cluster_category)
+
+nr_tum <- colData(sce) %>% as.data.frame %>% select(cluster, type_GMM) %>% table()
+fr_tum <- as.data.frame(nr_tum) %>% pivot_wider(names_from = type_GMM, values_from = Freq) %>% column_to_rownames("cluster")
+fr_tum <- fr_tum %>% transmute(fr_tum = `TRUE`/rowSums(fr_tum)) %>% as.data.frame()
+
+anno_cluscat <- fr_tum %>% 
+  rownames_to_column(var = "cluster") %>% 
+  mutate(cluster_category = ifelse(fr_tum >= 0.7,"Non_Epithelial",ifelse(fr_tum < 0.7 & fr_tum > 0.2,"Mixed","Epithelial")))
+
+#Visualize GMM_panCK density plots
+ggplot(anno_cluscat, aes(fr_tum))+
+  geom_density()+
+  geom_rug(aes(color = cluster_category))+
+  geom_vline(xintercept = 0.7, color = "red3")+
+  geom_vline(xintercept = 0.2, color = "red3")+
+  theme_classic()+
+  theme(axis.title.x = element_blank())
+
+
+Heatmap(t(assay(mean_sce, "exprs")),col = viridis(100),
+        clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2", 
+        split = anno_cluscat$cluster_category)+ 
+  Heatmap(t(assay(mean_sce_1, "exprs")),col = viridis(100))+
+    rowAnnotation(n_cells = anno_barplot(mean_sce$ncells))+
+    rowAnnotation(fr_type = anno_barplot(fr_tum$fr_tum))+
+    rowAnnotation(clus_cat = anno_simple(anno_cluscat$cluster_category))+
+  ha_spatial
+```
+
+
+```{r}
+# Cluster category 
+sce$cluster_category <- anno_cluscat$cluster_category[match(sce$cluster, anno_cluscat$cluster)]
+
+# Analysis category 
+sce$analysis_cat <- colData(sce) %>% as.data.frame %>% 
+  select(cluster_category, type_GMM) %>% 
+  mutate(analysis_cat = ifelse(sce$cluster_category == "Epithelial" |(sce$cluster_category == "Mixed" & sce$type_GMM == FALSE),"tumor","non_tumor")) %>% 
+  pull(analysis_cat)
+```
+
+```{r}
+colData(sce) %>% as.data.frame %>% select(analysis_cat) %>% group_by(analysis_cat) %>% dplyr::count()
+#504309 tumor cells
+#583608 non-tumor cells
+
+#Visualize in alluvial plot 
+colData(sce) %>% as.data.frame %>% select(cluster_category, analysis_cat)
+
+alluvial_wide(data = colData(sce) %>% as.data.frame %>% select(type_GMM_ch, cluster_category, analysis_cat), 
+              max_variables = 4,
+              fill_by = 'all_flows',
+              order_levels = c("TRUE", "FALSE","Non_Epithelial","Epithelial","Mixed","non_tumor","tumor"))+
+  theme_classic(base_size = 12, base_line_size = 0.5)
+```
+
+```{r}
+mean_sce <- aggregateAcrossCells(sce, ids = sce$analysis_cat,
+                                 statistics = "mean",
+                                 use.assay.type = "exprs",
+                                 subset.row = rowData(sce)$broad_cluster)
+
+other_markers <- rownames(sce)[!rowData(sce)$broad_cluster]
+other_markers <- other_markers[!other_markers %in% c("H3","DNA1","DNA2")]
+
+mean_sce_1 <- aggregateAcrossCells(sce, ids = sce$analysis_cat,
+                                 statistics = "mean",
+                                 use.assay.type = "exprs",
+                                 subset.row = rownames(sce) %in% other_markers)
+
+Heatmap(t(assay(mean_sce, "exprs")),col = viridis(100),
+        clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2", 
+        split = mean_sce$analysis_cat)+ 
+  Heatmap(t(assay(mean_sce_1, "exprs")),col = viridis(100))+
+    rowAnnotation(n_cells = anno_barplot(mean_sce$ncells))
+```
+
+
+#### CONTINUE HERE! CLEAN UP CODE ABOVE 
+
+
+
 
 
 ```{r}
 sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_MY_04.rds")
 
-mean_sce <- aggregateAcrossCells(sce_ccRCC, ids = sce_ccRCC$cluster,
+mean_sce <- aggregateAcrossCells(sce, ids = sce$cluster,
                                  statistics = "mean",
                                  use.assay.type = "exprs",
-                                 subset.row = rowData(sce_ccRCC)$broad_cluster_1)
+                                 subset.row = rowData(sce)$broad_cluster)
 
-mean_sce <- aggregateAcrossCells(sce_Not_ccRCC, ids = sce_Not_ccRCC$cluster,
+other_markers <- rownames(sce)[!rowData(sce)$broad_cluster]
+other_markers <- other_markers[!other_markers %in% c("H3","DNA1","DNA2")]
+
+mean_sce_1 <- aggregateAcrossCells(sce, ids = sce$cluster,
                                  statistics = "mean",
                                  use.assay.type = "exprs",
-                                 subset.row = rowData(sce_Not_ccRCC)$broad_cluster)
-
-
-mean_sce_2 <- aggregateAcrossCells(sce_ccRCC, ids = sce_ccRCC$cluster,
-                                 statistics = "mean",
-                                 use.assay.type = "exprs",
-                                 subset.row = !rowData(sce_ccRCC)$broad_cluster_1)
+                                 subset.row = rownames(sce) %in% other_markers)
 
 Heatmap(t(assay(mean_sce, "exprs")), col = viridis(100), clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2")
 
-  Heatmap(t(assay(mean_sce_2, "exprs")), col = viridis(100), clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2")
+  Heatmap(t(assay(mean_sce_2, "exprs")), clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2")
 
 
-Heatmap(scale(t(assay(mean_sce, "exprs"))), clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2")+ 
-Heatmap(scale(t(assay(mean_sce_2, "exprs"))),clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2")+ 
-    rowAnnotation(n_cells = anno_barplot(mean_sce$ncells))+
-    rowAnnotation(fr_CA9 = anno_barplot(fr_tum$fr_tum))+
-    rowAnnotation(fr_CD45 = anno_barplot(fr_tum_1$fr_tum))+
-    rowAnnotation(area = spatial$area)+
-    rowAnnotation(eccentricity = spatial$eccentricity)
+
     
 
 
@@ -351,7 +592,7 @@ sce$n_neighbors <- n_neighbors$n[match(seq_along(colnames(sce)),n_neighbors$from
 sce$n_neighbors <- sce$n_neighbors %>% replace_na(0)
 
 #Select spatial features and average over clusters 
-spatial <- colData(sce_ccRCC) %>% as.data.frame %>% select(area,eccentricity,cluster)
+spatial <- colData(sce) %>% as.data.frame %>% select(area,eccentricity,n_neighbors, cluster)
 spatial <- spatial %>% select(-cluster) %>% aggregate(by = list(cluster = spatial$cluster), FUN = mean) %>% column_to_rownames("cluster")
 
 #Define color schemes for spatial features and add to metadata
@@ -374,6 +615,7 @@ ha_spatial <- HeatmapAnnotation(
                n_neighbors = metadata(sce)$colors$n_neighbors),
     border = TRUE,
     which = "row")
+
 
 ### 2.2 Metadata features
 
