@@ -10,7 +10,7 @@ editor_options:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## Software requirements
+# Software requirements
 
 ```{r lib, message=FALSE,warning=FALSE}
 #Data containers
@@ -58,7 +58,6 @@ library(batchelor)
 
 # Single-cell analysis 
 
-
 ## Read in data 
 
 ```{r read-data-batch-correction, message=FALSE}
@@ -66,18 +65,30 @@ sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/
 sce
 ```
 
-## GMM for all type-relevant markers 
+We will perform broad classification into epithelial and non-epithelial cells separately for ccRCC and all other subtypes.
+
+# ccRCC 
+
+## Read in data 
+
+```{r read-data-batch-correction, message=FALSE}
+sce <- sce[,sce$subtype_combined == "ccRCC"]
+sce
+```
+
+
+## 1. GMM for all type-relevant markers 
 
 ```{r}
 ## Gaussian mixture model for all markers relevant for initial celltype assignment 
-type_markers <- c("CA9","panCK","CD31_vWF","SMA","CD45RO_RA", "CD3","CD4","CD8a","CD38","MPO","CD11c","CD20", "CD68", "CD56")
+type_markers <- c("CA9","panCK","CD31_vWF","SMA","CD45RO_RA", "CD3","CD4","CD8a","CD38","MPO","CD11c","CD20", "CD68")
 
 plot_list <- list()
 
 library(doParallel)
 registerDoParallel(cores = 20)
 
-out_list <- foreach (x = type_markers) %dopar%{
+out_list <- foreach (x = type_markers) %dopar%{ #replace with for-loop to also access plot_list (slower)
   
   GMM_marker <- Mclust(assay(sce, "exprs")[x,], G = 2)
   
@@ -99,6 +110,48 @@ for (i in seq_along(out_list)){
 }
 ```
 
+Combine GMM scores into a single type score (separate for epithelial and non-epithelial cells)
+
+```{r}
+## For non_epithelial cells 
+
+library(data.table)
+
+# Convert the data.frame to a data.table
+data_dt <- colData(sce) %>% as.data.frame %>% select("cell_id", "CD31_vWF_GMM","SMA_GMM","CD45RO_RA_GMM", "CD3_GMM","CD4_GMM","CD8a_GMM","CD38_GMM","MPO_GMM","CD11c_GMM","CD20_GMM", "CD68_GMM") %>% as.data.table()
+
+string_to_detect <- "_pos"
+
+# Detect pos across columns
+data_dt[, Contains_String := apply(.SD, 1, function(x) any(str_detect(x, string_to_detect))), .SDcols = -"cell_id"]
+
+#Add to sce
+sce$non_epithelial_GMM <- data_dt$Contains_String[match(sce$cell_id, data_dt$cell_id)]
+
+summary(data_dt$Contains_String)
+```
+
+```{r}
+## For epithelial cells 
+
+library(data.table)
+
+# Convert the data.frame to a data.table
+data_dt <- colData(sce) %>% as.data.frame %>% select("cell_id", "CA9_GMM","panCK_GMM") %>% as.data.table()
+
+string_to_detect <- "_pos"
+
+# Detect pos across columns
+data_dt[, Contains_String := apply(.SD, 1, function(x) any(str_detect(x, string_to_detect))), .SDcols = -"cell_id"]
+
+#Add to sce
+sce$epithelial_GMM <- data_dt$Contains_String[match(sce$cell_id, data_dt$cell_id)]
+
+summary(data_dt$Contains_String)
+```
+
+### Visualization 
+
 ```{r}
 library(cowplot)
 
@@ -110,25 +163,9 @@ dev.off()
 ```
 
 ```{r}
-library(data.table)
+type_markers_1 <- c("CD31_vWF","SMA","CD45RO_RA", "CD3","CD4","CD8a","CD38","MPO","CD11c","CD20", "CD68")
 
-# Convert the data.frame to a data.table
-data_dt <- colData(sce) %>% as.data.frame %>% select("cell_id", "CD31_vWF_GMM","SMA_GMM","CD45RO_RA_GMM", "CD3_GMM","CD4_GMM","CD8a_GMM","CD38_GMM","MPO_GMM","CD11c_GMM","CD20_GMM", "CD68_GMM", "CD56_GMM") %>% as.data.table()
-
-string_to_detect <- "_pos"
-
-# Detect pos across columns
-data_dt[, Contains_String := apply(.SD, 1, function(x) any(str_detect(x, string_to_detect))), .SDcols = -"cell_id"]
-
-#Add to sce
-sce$type_GMM <- data_dt$Contains_String[match(sce$cell_id, data_dt$cell_id)]
-
-summary(data_dt$Contains_String)
-```
-
-
-```{r}
-mean_sce <- aggregateAcrossCells(sce, ids = sce$type_GMM,
+mean_sce <- aggregateAcrossCells(sce, ids = sce$non_epithelial_GMM,
                                  statistics = "mean",
                                  use.assay.type = "exprs",
                                  subset.row = rownames(sce) %in% type_markers_1)
@@ -136,15 +173,24 @@ mean_sce <- aggregateAcrossCells(sce, ids = sce$type_GMM,
 Heatmap(t(assay(mean_sce, "exprs")), col = viridis(100), clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2")
 ```
 
+```{r}
+type_markers_2 <- c("CA9","panCK")
 
+mean_sce_1 <- aggregateAcrossCells(sce, ids = sce$epithelial_GMM,
+                                 statistics = "mean",
+                                 use.assay.type = "exprs",
+                                 subset.row = rownames(sce) %in% type_markers_2)
+
+Heatmap(t(assay(mean_sce_1, "exprs")), col = viridis(100), clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2")
+```
 
 ```{r}
 set.seed(220195)
 cur_cells <- sample(seq_len(ncol(sce)), 20000)
 
-sce$type_GMM_ch <- as.character(sce$type_GMM)
+sce$non_epithelial_GMM_ch <- as.character(sce$non_epithelial_GMM)
 
-type_markers_1 <- c("CD31_vWF","SMA","CD45RO_RA", "CD3","CD4","CD8a","CD38","MPO","CD11c","CD20", "CD68", "CD56")
+type_markers_1 <- c("CD31_vWF","SMA","CD45RO_RA", "CD3","CD4","CD8a","CD38","MPO","CD11c","CD20", "CD68")
 
 # Heatmap visualization - DittoHeatmap
 dittoHeatmap(sce[,cur_cells], 
@@ -152,23 +198,23 @@ dittoHeatmap(sce[,cur_cells],
              assay = "exprs", heatmap.colors = viridis(100), 
              scale = "none", 
              cluster_cols = FALSE, 
-             annot.by = c("type_GMM_ch","area"))
+             annot.by = c("non_epithelial_GMM_ch","area"))
 
 dittoHeatmap(sce[,cur_cells], 
              genes = rownames(sce)[rownames(sce) %in% type_markers_1],
              assay = "exprs", heatmap.colors = viridis(100), 
              scaled.to.max =  TRUE, 
-             cluster_cols = TRUE, 
-             annot.by = c("type_GMM_ch","area"))
+             cluster_cols = FALSE, 
+             annot.by = c("non_epithelial_GMM_ch","area"))
 ```
 
 ```{r}
-sce_test <- sce[,sce$type_GMM == TRUE]
+sce_test <- sce[,sce$non_epithelial_GMM == TRUE]
 
 set.seed(220195)
 cur_cells <- sample(seq_len(ncol(sce_test)), 20000)
 
-sce_test$type_GMM_ch <- as.character(sce_test$type_GMM)
+sce_test$non_epithelial_GMM_ch <- as.character(sce_test$non_epithelial_GMM)
 
 type_markers_1 <- c("CD31_vWF","SMA","CD45RO_RA", "CD3","CD4","CD8a","CD38","MPO","CD11c","CD20", "CD68", "CD56")
 
@@ -178,23 +224,23 @@ dittoHeatmap(sce_test[,cur_cells],
              assay = "exprs", heatmap.colors = viridis(100), 
              scale = "none", 
              cluster_cols = TRUE, 
-             annot.by = c("type_GMM_ch","area","eccentricity","subtype_combined"))
+             annot.by = c("non_epithelial_GMM_ch","area","eccentricity","subtype_combined"))
 
 dittoHeatmap(sce_test[,cur_cells], 
              genes = rownames(sce)[rownames(sce) %in% type_markers_1],
              assay = "exprs", #heatmap.colors = viridis(100), 
              scaled.to.max = TRUE,
              cluster_cols = TRUE, 
-             annot.by = c("type_GMM_ch","area","eccentricity","subtype_combined"))
+             annot.by = c("non_epithelial_GMM_ch","area","eccentricity","subtype_combined"))
 ```
 
 ```{r}
-sce_test <- sce[,sce$type_GMM == FALSE]
+sce_test <- sce[,sce$non_epithelial_GMM == FALSE]
 
 set.seed(220195)
 cur_cells <- sample(seq_len(ncol(sce_test)), 20000)
 
-sce_test$type_GMM_ch <- as.character(sce_test$type_GMM)
+sce_test$non_epithelial_GMM_ch <- as.character(sce_test$non_epithelial_GMM)
 
 # Heatmap visualization - DittoHeatmap
 dittoHeatmap(sce_test[,cur_cells], 
@@ -202,16 +248,17 @@ dittoHeatmap(sce_test[,cur_cells],
              assay = "exprs", heatmap.colors = viridis(100), 
              scale = "none", 
              cluster_cols = TRUE, 
-             annot.by = c("type_GMM_ch","area","eccentricity","subtype_combined"))
+             annot.by = c("non_epithelial_GMM_ch","area","eccentricity","subtype_combined"))
 
 dittoHeatmap(sce_test[,cur_cells], 
              genes = rownames(sce)[rownames(sce) %in% type_markers],
              assay = "exprs", #heatmap.colors = viridis(100), 
              scale = "row", 
              cluster_cols = TRUE, 
-             annot.by = c("type_GMM_ch","area","eccentricity","subtype_combined"))
+             annot.by = c("non_epithelial_GMM_ch","area","eccentricity","subtype_combined"))
 ```
-## Visualize results using cytoviewer 
+
+### cytoviewer visualization
 
 ```{r}
 images <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/images.rds")
@@ -223,10 +270,17 @@ masks <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysi
 set.seed(22)
 cur_sample <- sample(unique(sce$sample_id), 30)
 
+cur_sample <- sample(colData(sce) %>% as.data.frame %>% select(sample_id, subtype_combined) %>% unique() %>% filter(subtype_combined == "ccRCC") %>% pull(sample_id), 30)
+
+cur_sample <- (colData(sce) %>% as.data.frame %>% select(sample_id, astir_type) %>% group_by(sample_id) %>% filter(astir_type == "NK_cell") %>% count() %>% arrange(desc(n)) %>% pull(sample_id))[1:10]
+
+cur_sample <- (colData(sce) %>% as.data.frame %>% select(sample_id, CD20_GMM) %>% group_by(sample_id) %>% filter(CD20_GMM == "CD20_pos") %>% count() %>% arrange(desc(n)) %>% pull(sample_id))[1:10]
+
 cur_images <- images[mcols(images)$sample_id %in% cur_sample]
 cur_masks <- masks[mcols(masks)$sample_id %in% cur_sample]
 cur_sce <- sce[,sce$sample_id %in% cur_sample]
 ```
+
 
 ```{r}
 library(cytoviewer)
@@ -234,30 +288,18 @@ cytoviewer(image = cur_images, mask = cur_masks, object = cur_sce, img_id = "sam
 ```
 
 
-## Perform "overclustering"
+## 2. Perform "overclustering"
+
+Test different channel combinations 
 
 ```{r}
-rowData(sce)$broad_cluster <- rownames(sce) %in% c("CA9","panCK","CD31_vWF","SMA","CD45RO_RA", "CD3","CD4","CD8a","CD38","MPO","CD11c","CD20", "CD68","CD56")
+rowData(sce)$broad_cluster <- rownames(sce) %in% c("CA9","panCK","CD31_vWF","SMA","CD45RO_RA", "CD3","CD4","CD8a","CD38","MPO","CD11c","CD20", "CD68")
 
-rowData(sce)$broad_cluster_1 <- rownames(sce) %in% c("CD31_vWF","SMA","CD45RO_RA", "CD3","CD4","CD8a","CD38","MPO","CD11c","CD20", "CD68", "CD56")
-
-rowData(sce)$broad_cluster_2 <- rownames(sce) %in% c("CD31_vWF","SMA","CD45RO_RA", "CD3","CD4","CD8a","CD38","MPO","CD11c","CD20", "CD68","HLADR","CD56")
+rowData(sce)$broad_cluster_1 <- rownames(sce) %in% c("CA9","panCK", "Vimentin","CD31_vWF","SMA","CD45RO_RA", "CD3","CD4","CD8a","CD38","MPO","CD11c","CD20", "CD68")
 ```
 
 
-NOTES TO SELF: TO BE CONTINUED HERE 
-
-- channel selection in broad_cluster_1 may be most appropriate (maybes: Vimentin / CD56)
-- divide the categorization into ccRCC (CA9+) and the rest (mostly panCK+)
-- ccRCC immune cells can have CA9 signal, when infiltrated into the tumor tissue (to be quantified later)
-- therefore hierarchical approach useful - Step 1: divide into epithelial (CD45+/SMA+CD31+ - low area/high eccentricity) / non-epithelial (CA9+ or panCK+) 
-
-
-
-
-
-
-Next, we will run a granular Rphenograph (Jaccard-based weights, Louvain clustering as community detection algorithm) clustering. 
+Next, we will run a granular graph-based clustering algorithm (Jaccard-based weights, Louvain clustering as community detection algorithm). 
 
 
 ```{r}
@@ -276,8 +318,8 @@ sce$cluster <- clusters
 
 unique(sce$cluster)
 
-#Save sce_ccRCCs after clustering
-#saveRDS(sce_ccRCC, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_04.rds")
+#Save sce after clustering
+saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_04.rds")
 
 
 #### 
@@ -296,59 +338,109 @@ sce$cluster_1 <- clusters
 unique(sce$cluster_1)
 
 #Save sce_ccRCCs after clustering
-#saveRDS(sce_ccRCC, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_04.rds")
-
-
-#### 
-
-
-set.seed(22)
-
-mat <- t(assay(sce_ccRCC, "exprs")[rowData(sce_ccRCC)$broad_cluster_2==TRUE,])
-
-#k=30
-out <- Rphenoannoy(mat, k = 30)
-
-clusters <- factor(membership(out[[2]]))
-
-sce_ccRCC$cluster_2 <- clusters
-
-unique(sce_ccRCC$cluster_2)
-
-#Save SCEs after clustering
 saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_04.rds")
 ```
 
-```{r}
-Heatmap(t(assay(mean_sce, "exprs")), col = viridis(100), clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2")
-Heatmap(scale(t(assay(mean_sce, "exprs"))), clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2", split = anno_cluscat$cluster_category)
 
-nr_tum <- colData(sce) %>% as.data.frame %>% select(cluster, type_GMM) %>% table()
-fr_tum <- as.data.frame(nr_tum) %>% pivot_wider(names_from = type_GMM, values_from = Freq) %>% column_to_rownames("cluster")
+## 3. Astir for automated cell type assignment 
+
+### Astir model
+
+see [here](https://www.sciencedirect.com/science/article/pii/S2405471221003355?via%3Dihub) for full publication (Geuenich et al.,2021, Cell Systems).
+
+```{r astir-expo}
+#Export arsinh normalized expression matrix as csv
+expr_astir <- assay(sce,"exprs") %>% t() %>% as.data.frame() %>% mutate(PID = sce$PID)
+
+write.csv(expr_astir, file = "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/04_broad/expr_ccRCC_astir.csv",row.names = TRUE)
+
+#Export design matrix 
+design_astir <- colData(sce) %>% as.data.frame %>% select(PID)
+
+write.csv(design_astir, file = "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/04_broad/design_ccRCC_astir.csv",row.names = TRUE)
+```
+
+`Next: Run Astir in Python.`
+
+```{r astir-ana, message = FALSE,warning=FALSE}
+#Import Astir cell type assignments
+astir_type <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/04_broad/astir_celltypes_TME.csv",col_names = c("ID","cell_type"),skip = 1)
+
+astir_sum <- astir_type %>% as.data.frame %>% group_by(cell_type) %>% dplyr::count()
+
+sce$astir_type <- astir_type$cell_type
+
+#Mark channels used for cell type assignment 
+astir_channel = c("panCK","Ecad","CD3","CD8a","CD4","CD20","CD68","SMA","CD11c")
+
+rowData(sce)$use_astir <- rowData(sce) %>% as.data.frame() %>% mutate(use_astir = ifelse(rownames(sce) %in% astir_channel,TRUE,FALSE)) %>% pull(use_astir)
+```
+
+```{r}
+#Import Astir cell type assignments
+astir_type <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/04_broad/astir_celltypes_TME_2.csv",col_names = c("ID","cell_type"),skip = 1)
+
+astir_sum_1 <- astir_type %>% as.data.frame %>% group_by(cell_type) %>% dplyr::count()
+
+sce$astir_type <- astir_type$cell_type[match(sce$cell_id, astir_type$ID)]
+
+#Mark channels used for cell type assignment 
+astir_channel = c("panCK","Ecad","CD3","CD8a","CD4","CD20","CD68","SMA","CD11c")
+
+rowData(sce)$use_astir <- rowData(sce) %>% as.data.frame() %>% mutate(use_astir = ifelse(rownames(sce) %in% astir_channel,TRUE,FALSE)) %>% pull(use_astir)
+```
+
+### Visualization 
+
+```{r}
+mean_sce <- aggregateAcrossCells(sce, ids = sce$cluster,
+                                 statistics = "mean",
+                                 use.assay.type = "exprs",
+                                 subset.row = rowData(sce)$broad_cluster)
+
+mean_sce_1 <- aggregateAcrossCells(sce, ids = sce$cluster_1,
+                                 statistics = "mean",
+                                 use.assay.type = "exprs",
+                                 subset.row = rowData(sce)$broad_cluster_1)
+
+Heatmap(t(assay(mean_sce, "exprs")), col = viridis(100), clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2")
+
+Heatmap(t(assay(mean_sce_1, "exprs")), col = viridis(100), clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2")
+```
+
+## 4. Combine results 
+
+```{r}
+nr_immune <- colData(sce) %>% as.data.frame %>% select(cluster_1, non_epithelial_GMM) %>% table()
+fr_immune <- as.data.frame(nr_immune) %>% pivot_wider(names_from = non_epithelial_GMM, values_from = Freq) %>% column_to_rownames("cluster_1")
+fr_immune <- fr_immune %>% transmute(fr_immune = `TRUE`/rowSums(fr_immune)) %>% as.data.frame()
+
+nr_tum <- colData(sce) %>% as.data.frame %>% select(cluster_1, epithelial_GMM) %>% table()
+fr_tum <- as.data.frame(nr_tum) %>% pivot_wider(names_from = epithelial_GMM, values_from = Freq) %>% column_to_rownames("cluster_1")
 fr_tum <- fr_tum %>% transmute(fr_tum = `TRUE`/rowSums(fr_tum)) %>% as.data.frame()
 
-anno_cluscat <- fr_tum %>% 
-  rownames_to_column(var = "cluster") %>% 
-  mutate(cluster_category = ifelse(fr_tum >= 0.7,"Non_Epithelial",ifelse(fr_tum < 0.7 & fr_tum > 0.2,"Mixed","Epithelial")))
+anno_cluscat <- fr_immune %>% 
+  rownames_to_column(var = "cluster_1") %>% 
+  mutate(cluster_1_category = ifelse(fr_immune >= 0.7,"Non_Epithelial",ifelse(fr_immune < 0.7 & fr_immune > 0.2,"Mixed","Epithelial")))
 
 #Visualize GMM_panCK density plots
-ggplot(anno_cluscat, aes(fr_tum))+
+ggplot(anno_cluscat, aes(fr_immune))+
   geom_density()+
-  geom_rug(aes(color = cluster_category))+
+  geom_rug(aes(color = cluster_1_category))+
   geom_vline(xintercept = 0.7, color = "red3")+
   geom_vline(xintercept = 0.2, color = "red3")+
   theme_classic()+
   theme(axis.title.x = element_blank())
 
 
-Heatmap(t(assay(mean_sce, "exprs")),col = viridis(100),
+Heatmap(t(assay(mean_sce_1, "exprs")),col = viridis(100),
         clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2", 
-        split = anno_cluscat$cluster_category)+ 
-  Heatmap(t(assay(mean_sce_1, "exprs")),col = viridis(100))+
+        split = anno_cluscat$cluster_1_category)+ 
+  #Heatmap(t(assay(mean_sce_1, "exprs")),col = viridis(100))+
     rowAnnotation(n_cells = anno_barplot(mean_sce$ncells))+
-    rowAnnotation(fr_type = anno_barplot(fr_tum$fr_tum))+
-    rowAnnotation(clus_cat = anno_simple(anno_cluscat$cluster_category))+
-  ha_spatial
+    rowAnnotation(fr_immune = anno_barplot(fr_immune$fr_immune))+
+    rowAnnotation(fr_tumor = anno_barplot(fr_tum$fr_tum))+
+    rowAnnotation(clus_cat = anno_simple(anno_cluscat$cluster_1_category))
 ```
 
 
@@ -358,8 +450,8 @@ sce$cluster_category <- anno_cluscat$cluster_category[match(sce$cluster, anno_cl
 
 # Analysis category 
 sce$analysis_cat <- colData(sce) %>% as.data.frame %>% 
-  select(cluster_category, type_GMM) %>% 
-  mutate(analysis_cat = ifelse(sce$cluster_category == "Epithelial" |(sce$cluster_category == "Mixed" & sce$type_GMM == FALSE),"tumor","non_tumor")) %>% 
+  select(cluster_category, epithelial_GMM) %>% 
+  mutate(analysis_cat = ifelse(sce$cluster_category == "Epithelial" |(sce$cluster_category == "Mixed" & sce$epithelial_GMM == FALSE),"tumor","non_tumor")) %>% 
   pull(analysis_cat)
 ```
 
@@ -371,7 +463,7 @@ colData(sce) %>% as.data.frame %>% select(analysis_cat) %>% group_by(analysis_ca
 #Visualize in alluvial plot 
 colData(sce) %>% as.data.frame %>% select(cluster_category, analysis_cat)
 
-alluvial_wide(data = colData(sce) %>% as.data.frame %>% select(type_GMM_ch, cluster_category, analysis_cat), 
+alluvial_wide(data = colData(sce) %>% as.data.frame %>% select(epithelial_GMM_ch, cluster_category, analysis_cat), 
               max_variables = 4,
               fill_by = 'all_flows',
               order_levels = c("TRUE", "FALSE","Non_Epithelial","Epithelial","Mixed","non_tumor","tumor"))+
@@ -379,7 +471,7 @@ alluvial_wide(data = colData(sce) %>% as.data.frame %>% select(type_GMM_ch, clus
 ```
 
 ```{r}
-mean_sce <- aggregateAcrossCells(sce, ids = sce$analysis_cat,
+mean_sce <- aggregateAcrossCells(sce, ids = sce$cluster,
                                  statistics = "mean",
                                  use.assay.type = "exprs",
                                  subset.row = rowData(sce)$broad_cluster)
@@ -400,15 +492,13 @@ Heatmap(t(assay(mean_sce, "exprs")),col = viridis(100),
 ```
 
 
-#### CONTINUE HERE! CLEAN UP CODE ABOVE 
+
 
 
 
 
 
 ```{r}
-sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_MY_04.rds")
-
 mean_sce <- aggregateAcrossCells(sce, ids = sce$cluster,
                                  statistics = "mean",
                                  use.assay.type = "exprs",
@@ -446,117 +536,10 @@ Heatmap(t(assay(mean_sce_2, "exprs")), col = viridis(100))+
 ```
 
 
-## Use GMM for panCK
 
-We will use a two component gaussian mixture model to distinguish between tumor (panCK+) and stromal (panCK-) cells. 
 
-```{r GMM_CK, message=FALSE,warning=FALSE}
-## Gaussian mixture model to distinguish tumor/stroma based on panCK expression
-GMM_CK <- Mclust(assay(sce_ccRCC, "exprs")["CD45RO_RA",], G = 2)
 
-GMM_df <- data.frame(class_CK = ifelse(GMM_CK$classification == 2, "panCK+", "panCK-"), 
-                     panCK_exprs = assay(sce_ccRCC, "exprs")["CD45RO_RA",],
-                     uncertainty = GMM_CK$uncertainty)
 
-#Visualize GMM
-GMM_plot_exp <- ggplot(GMM_df, aes(x = panCK_exprs, fill = class_CK))+
-  geom_density()+
-  theme_classic(base_size = 15)+
-  theme(axis.title.x = element_blank())+
-  scale_fill_brewer(palette = "Set1")
-
-ggplot(GMM_df, aes(x = panCK_exprs))+
-  geom_density()+
-  theme_classic(base_size = 15)+
-  theme(axis.title.x = element_blank())+
-  scale_fill_brewer(palette = "Set1")
-
-  
-GMM_plot_unc <- ggplot(GMM_df, aes(x = panCK_exprs, y = uncertainty, color = class_CK))+
-  geom_line()+
-  theme_classic(base_size = 15)+
-  theme(axis.title.x = element_blank())+
-  scale_color_brewer(palette = "Set1")
-
-GMM_plot_exp/GMM_plot_unc
-
-#Add GMM CK class to SCE
-sce_ccRCC$GMM_CK <- GMM_df$class_CK
-sce_ccRCC$GMM_CD45 <- GMM_df$class_CK
-
-## Gaussian mixture model to distinguish tumor/stroma based on Ecad expression
-GMM_Ecad <- Mclust(assay(sce, "exprs")["Ecad",], G = 2)
-
-GMM_df_1 <- data.frame(class_Ecad = ifelse(GMM_Ecad$classification == 2, 
-                                           "Ecad+", "Ecad-"), 
-                     Ecad_exprs = assay(sce, "exprs")["Ecad",],
-                     uncertainty = GMM_Ecad$uncertainty)
-
-GMM_plot_exp_1 <- ggplot(GMM_df_1, aes(x = Ecad_exprs, fill = class_Ecad))+
-  geom_density()+
-  theme_classic(base_size = 15)+
-  theme(axis.title.x = element_blank())+
-  scale_fill_brewer(palette = "Set1")
-
-GMM_plot_unc_1 <- ggplot(GMM_df_1, aes(x = Ecad_exprs, y = uncertainty, color = class_Ecad))+
-  geom_line()+
-  theme_classic(base_size = 15)+
-  theme(axis.title.x = element_blank())+
-  scale_color_brewer(palette = "Set1")
-
-GMM_plot_exp_1/GMM_plot_unc_1
-
-#Add GMM CK class to SCE
-#sce$GMM_Ecad <- GMM_df_1$class_Ecad
-
-#Save sce after clustering and GMM
-#saveRDS(sce, "/mnt/central_nas/tnbc_volume/TNBC/data_analysis/04_sce_TNBC_Clus.rds")
-```
-
-## Check correlation of panCK and Ecad as epithelial cell markers
-
-```{r marker correlations, message = FALSE}
-sce <- readRDS("/mnt/central_nas/tnbc_volume/TNBC/data_analysis/04_sce_TNBC_Clus.rds")
-
-GOI <- c("panCK","Ecad")
-cor_sce <- as.data.frame(t(assay(sce,"exprs")[rowData(sce)$clean_target %in% GOI,]))
-library(psych)
-# For specific markers of interest (also shows the value distribution which is recommended)
-pairs.panels(cor_sce,
-             method = "spearman",
-             hist.col = "#A6CEE3",
-             digits = 2)
-```
-
-## Astir for automated cell type assignment 
-
-## 2. ASTIR model
-
-see [here](https://www.sciencedirect.com/science/article/pii/S2405471221003355?via%3Dihub) for full publication (Geuenich et al.,2021, Cell Systems).
-
-```{r astir-expo}
-#Export arsinh normalized expression matrix as csv
-#Add sampleID as covariate in design matrix
-expr_astir <- assay(sce,"exprs") %>% t() %>% as.data.frame() %>% mutate(sample = sce$sample_id)
-
-write.csv(expr_astir, file = "/mnt/central_nas/tnbc_volume/TNBC/data_analysis/04_astir/expr_TNBC_astir.csv",row.names = TRUE)
-```
-
-`Next: Run Astir in conda-environment.`
-
-```{r astir-ana, message = FALSE,warning=FALSE}
-#Import Astir cell type assignments
-astir_type <- read_csv("/mnt/central_nas/tnbc_volume/TNBC/data_analysis/04_astir/cell_types_TNBC.csv",col_names = c("ID","cell_type"),skip = 1)
-
-astir_sum <- astir_type %>% as.data.frame %>% group_by(cell_type) %>% dplyr::dplyr::count()
-
-sce$astir_type <- astir_type$cell_type
-
-#Mark channels used for cell type assignment 
-astir_channel = c("panCK","Ecad","CD3","CD8a","CD4","CD20","CD68","SMA","CD11c")
-
-rowData(sce)$use_astir <- rowData(sce) %>% as.data.frame() %>% mutate(use_astir = ifelse(rownames(sce) %in% astir_channel,TRUE,FALSE)) %>% pull(use_astir)
-```
 
 
 ## Heatmap 
