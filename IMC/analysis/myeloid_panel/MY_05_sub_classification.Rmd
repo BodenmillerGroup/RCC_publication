@@ -429,6 +429,8 @@ cur_sample <- (colData(sce) %>% as.data.frame %>% select(sample_id, astir_immune
 
 cur_sample <- (colData(sce) %>% as.data.frame %>% select(sample_id, cluster) %>% group_by(sample_id) %>% filter(cluster == "12") %>% count() %>% arrange(desc(n)) %>% pull(sample_id))[1:10]
 
+cur_sample <- (colData(sce) %>% as.data.frame %>% select(sample_id, immune_metacluster) %>% group_by(sample_id) %>% filter(immune_metacluster == "NK_cell") %>% count() %>% arrange(desc(n)) %>% pull(sample_id))[1:10]
+
 cur_images <- images[mcols(images)$sample_id %in% cur_sample]
 cur_masks <- masks[mcols(masks)$sample_id %in% cur_sample]
 cur_sce <- sce[,sce$sample_id %in% cur_sample]
@@ -584,12 +586,57 @@ h <- Heatmap(t(assay(mean_sce, "min_max")),
 draw(h)
 ```
 
+### Define immune metacluster 
+
+```{r ana_cat}
+sce$immune_metacluster <- colData(sce) %>% as.data.frame %>% 
+  select(pre_immune_metacluster, astir_immune_combined) %>% 
+  mutate(immune_metacluster = ifelse(sce$pre_immune_metacluster == "Mixed", ifelse(sce$astir_immune_combined != "Unknown/Other", sce$astir_immune_combined, "Immune_low"), unfactor(sce$pre_immune_metacluster))) %>% pull(immune_metacluster)
+
+sce$immune_metacluster <- factor(sce$immune_metacluster)
+
+#TO DO: Set color scheme 
+# Counts per category
+colData(sce) %>% as.data.frame %>% select(immune_metacluster) %>% group_by(immune_metacluster) %>% dplyr::count()
+
+#473226 tumor cells
+#258163 non-tumor cells
+
+#Visualize in alluvial plot 
+library(easyalluvial)
+alluvial_wide(data = colData(sce) %>% as.data.frame %>% select(pre_immune_metacluster, astir_immune_combined, immune_metacluster), 
+              max_variables = 4,
+              fill_by = 'all_flows')+
+  theme_classic(base_size = 12, base_line_size = 0.5)
+```
+### Visualization 
+
+```{r}
+# per type
+mean_sce <- aggregateAcrossCells(sce, ids = sce$immune_metacluster,
+                                 statistics = "mean",
+                                 use.assay.type = "min_max",
+                                 subset.row = rowData(sce)$sub_cluster_1)
+
+other_mean_sce <- aggregateAcrossCells(sce, ids = sce$immune_metacluster,
+                                 statistics = "mean",
+                                 use.assay.type = "min_max",
+                                 subset.row = rowData(sce)$other_immune)
+
+
+Heatmap(t(assay(mean_sce, "min_max")), col = viridis(100), clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2", row_split = mean_sce$immune_metacluster)+
+  Heatmap(t(assay(other_mean_sce, "min_max")), col = viridis(100))+
+  rowAnnotation(id = anno_text(mean_sce$ids))+
+  rowAnnotation(n_cells = anno_barplot(mean_sce$ncells))
+```
+
 
 # CONTINUE HERE
 
 
 ```{r}
 # For mixed pre-metacluster, use astir assignments = final categories 
+
 ```
 
 ## Cluster stability testing and comparison

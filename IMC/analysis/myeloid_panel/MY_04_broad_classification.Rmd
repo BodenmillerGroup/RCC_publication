@@ -734,6 +734,7 @@ alluvial_wide(data = colData(sce) %>% as.data.frame %>% select(cluster_category,
               order_levels = c("Epithelial","Mixed","Unknown/Other","Non-Epithelial","tumor","non_tumor"))+
   theme_classic(base_size = 12, base_line_size = 0.5)
 ```
+
 ### Save SCE 
 
 ```{r}
