@@ -13,7 +13,7 @@ This script can be used to calculate signal to noise ratios for single cells fro
 
 As an input an expression matrix will work (e.g. steinbock output)
 
-additionally we will load iamges and masks and investigate the positive and negative clusters on images
+Additionally, we will load images and masks and investigate the positive and negative clusters further. 
 
 
 ```{r setup, include=FALSE}
@@ -35,10 +35,10 @@ library(rlang)
 library(data.table)
 ```
 
-here we define a function that takes as an input:
+Here we define a function that takes as an input:
 - object: an sce object
 - markers: character vector of markers found in the sce object
-- group.by: a character string that defines the variable in the colData of the sce object to split groups by
+- group.by: a character string that defines the variable in the colData of the sce object to split groups by (e.g. image)
 
 ```{r}
 SN_ratios <- function(object,markers, group.by){
@@ -63,12 +63,12 @@ SN_ratios <- function(object,markers, group.by){
 # 1.1 Application for RCC - T cell panel titration on RCC samples
 
 ```{r}
-sce <- read_steinbock("/mnt/rcc_volume/RCC/IMC/T_titration/", regionprops_folder = NULL, graphs_folder = NULL, return_as = "sce")
+sce <- read_steinbock("/Volumes/rcc_volume/RCC/IMC/T_titration/", regionprops_folder = NULL, graphs_folder = NULL, return_as = "sce")
 sce
 
 # panel and image information
-panel <- read_csv("/mnt/rcc_volume/RCC/IMC/T_titration/panel.csv")
-images <-  read_csv("/mnt/rcc_volume/RCC/IMC/T_titration/images.csv")
+panel <- read_csv("/Volumes/rcc_volume/RCC/IMC/T_titration/panel.csv")
+images <-  read_csv("/Volumes/rcc_volume/RCC/IMC/T_titration/images.csv")
 
 # add dilution identifier
 images$sample_id <- str_split(images$image, ".tiff", simplify = TRUE)[,1]
@@ -105,13 +105,13 @@ sce <- runUMAP(sce,exprs_values = "exprs", subset_row = cluster_markers)
 plotReducedDim(sce,dimred = "UMAP", colour_by = "dilution_id")
 ```
 
-## calculate signal to noise and check splits
+## Calculate signal to noise and check splits
 
 ```{r, fig.width=8, fig.height=4}
 sn_dat <- SN_ratios(sce,use_markers,group.by = "dilution_id")
 ``` 
 
-here we check if the kmeans clustering actually does a meningful separation of cells into two clusters. we do this visually on the UMAP
+Here we check if the kmeans clustering actually does a meaningful separation of cells into two clusters, which we can do visually on the UMAP.
 
 ```{r, fig.width=8, fig.height=4}
 marker <- "MPO"
@@ -128,7 +128,7 @@ p2 <- plotUMAP(sce, colour_by = marker, by_exprs_values = "exprs",
 plot_grid(p1,p2)
 ```
 
-## plot signal to noise per marker
+## Plot signal to noise per marker
 
 ```{r, fig.height=10, fig.width=8}
 colors <- c("positive_cluster" = "black", "negative cluster" = "gray","signal to noise" = "red")
@@ -144,16 +144,17 @@ g <- ggplot(sn_dat)+
   theme(axis.text = element_text(angle = 90))
 g
 
-pdf("/mnt/rcc_volume/RCC/IMC/T_titration/data_analysis/02_RCC_Ttitration_posnegSN_output.pdf",width = 12,height = 14)
+pdf("/Volumes/rcc_volume/RCC/IMC/T_titration/data_analysis/02_RCC_Ttitration_posnegSN_output.pdf",width = 12,height = 14)
 g
 dev.off()
 ```
-# investigate pos and neg clusters on images
+
+## Investigate pos and neg clusters on images
 
 ```{r load images and masks}
 library(cytomapper)
-images <- cytomapper::loadImages("/mnt/rcc_volume/RCC/IMC/T_titration/img/")
-masks <- cytomapper::loadImages("/mnt/rcc_volume/RCC/IMC/T_titration/masks/", as.is = TRUE)
+images <- cytomapper::loadImages("/Volumes/rcc_volume/RCC/IMC/T_titration/img/")
+masks <- cytomapper::loadImages("/Volumes/rcc_volume/RCC/IMC/T_titration/masks/", as.is = TRUE)
 channelNames(images) <- rownames(sce)
 
 # sample_id in the sce and names of the images match
@@ -167,10 +168,10 @@ mcols(masks)$dilution_id <- names(masks)
 #masks <- scaleImages(masks, 2^16-1)
 ```
 
-## check results on images
+## Check results on images
 
 ```{r, fig.width=12, fig.height=12}
-for(x in rownames(sce)[rowData(sce)$use_markers]){
+for(x in rownames(sce)[rowData(sce)$clean_target == "CD8a"]){
   cur_sce <- sce[x,]
   
   for (i in unique(cur_sce$dilution_id)) {
@@ -208,12 +209,10 @@ for(x in rownames(sce)[rowData(sce)$use_markers]){
                cell_id = "ObjectNumber",
                colour_by = c(x), 
                outline_by = "cluster",
-               save_plot = list(filename = paste0("/mnt/rcc_volume/RCC/IMC/T_titration/data_analysis/", x,"_",i,".png"), scale = 2)
+               save_plot = list(filename = paste0("/Volumes/rcc_volume/RCC/IMC/T_titration/data_analysis/", x,"_",i,".png"), scale = 2)
                )
   
 }
 }
 ```
-
-
 

@@ -126,7 +126,9 @@ library(ggsci)
 library(RColorBrewer)
 
 #Filter for columns to visualize
-Meta_viz <- Meta_PT %>% select(PID, gender, age_bin, subtype, ISUP, pT_simple, necrose, lymphocytes, BAP1_IHC, PBRM1_IHC, H3K36me_IHC, survival_data,tar_sequencing_data,WES_data)
+Meta_viz <- meta_fil %>% select(PID, gender, age_bin, subtype, ISUP, pT_simple, necrose, lymphocytes, BAP1_IHC, PBRM1_IHC, H3K36me_IHC, survival_data,tar_sequencing_data,WES_data)
+
+Meta_viz <- as.data.frame(lapply(Meta_viz, as.character))
 
 #Convert empty columns and NAs for easier handling with ComplexHeatmap package
 Meta_viz[is.na(Meta_viz)] <- "Unknown"
@@ -191,7 +193,7 @@ draw(sample_anno)
 
 ```{r viz cc, message=F, fig.width=14, fig.height=9, fig.align='center'}
 ###Filter for clear cell RCC cases and visualize
-Meta_viz_cc = Meta_viz %>% filter(subtype == "clear_cell_RCC") %>% arrange()
+Meta_viz_cc <- Meta_viz %>% filter(subtype == "clear_cell_RCC") %>% arrange()
 
 #Heatmap Annotation
 sample_anno_cc <- HeatmapAnnotation(PID = Meta_viz_cc$PID,
@@ -387,6 +389,14 @@ draw(sample_anno_seq_total)
 
 
 
+```{r}
+#Save fully annotated metadata for primary tumors as csv
+meta <- read_csv(file = "/Users/lasmey/Desktop/RCC/Metadaten/Metadata_combined_RCC_onlyPT.csv")
+
+meta_fil <- meta %>% filter(TMA == "224" & grid == "A")
+
+write_csv(meta_fil, file = "~/Desktop/BME330/BME330_Computational_Part/data_analysis/metadata/metadata_BME330.csv")
+```
 
 
 

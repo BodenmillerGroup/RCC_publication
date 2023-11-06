@@ -126,7 +126,7 @@ cur_snr <- cur_snr %>%
 
 Another quality indicator is the image area covered by cells (or biological tissue). This metric identifies ROIs where little cells are present, possibly hinting at incorrect selection of the ROI. We can compute the percentage of image that is covered by cells using the TMA masks measured with ilastik and cellprofiler. 
 
-We can then identify ROIs that have unusually low cell coverage or number of cells. These images can now be visualized using `cytomapper`.
+We can then identify ROIs that have unusually low cell coverage or number of cells. These images can now be visualized using `cytomapper`. Hi
 
 ```{r cell-density}
 #Load TMA tissue masks
