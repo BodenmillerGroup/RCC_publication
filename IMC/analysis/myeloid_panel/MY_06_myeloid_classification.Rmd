@@ -726,7 +726,7 @@ foreach(i = seq_along(row_order_ht))%do%{
 anno$myeloid_metacluster <- ifelse(anno$my_cluster_selected %in% row_order_ht[[i]], i,anno$myeloid_metacluster)
 }
  
-anno$myeloid_metacluster[anno$myeloid_metacluster == "1"] <- "Neutro/MDSC"
+anno$myeloid_metacluster[anno$myeloid_metacluster == "1"] <- "Neutro_MDSC"
 anno$myeloid_metacluster[anno$myeloid_metacluster == "2"] <- "M2_like"
 anno$myeloid_metacluster[anno$myeloid_metacluster == "3"] <- "HLADR"
 anno$myeloid_metacluster[anno$myeloid_metacluster == "4"] <- "Other"
@@ -1463,6 +1463,8 @@ ggplot(DA, aes(x = logFC, y = logCPM))+
 
 ## Multivariate cox models
 
+## Cluster 
+
 ### Continious 
 
 ```{r cox}
@@ -1659,6 +1661,208 @@ hr_GMM
 ```
 
 
+
+## Myeloid metacluster 
+
+### Continious 
+
+```{r cox}
+library(survival)
+library(survminer)
+
+PID_myeloid_metacluster <- colData(sce) %>% as.data.frame() %>% select(myeloid_metacluster,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_myeloid_metacluster <- PID_myeloid_metacluster %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq))
+
+### Multivariate cox proportional hazard model on multiple covariates (here proportion of phenotypes)
+PID_metagroups <- PID_myeloid_metacluster %>% pivot_wider(id_cols = "PID",names_from = "myeloid_metacluster",values_from = "fra") %>% column_to_rownames("PID")
+colnames(PID_metagroups) <- paste0("MY_",colnames(PID_metagroups))
+
+## 1. Based on continuous cluster proportions
+Cox_df <- PID_metagroups
+
+#add covariates for correction
+Cox_df$status_OS <- sce$status_OS[match(rownames(Cox_df),sce$PID)]
+Cox_df$OS_months <- sce$OS_months[match(rownames(Cox_df),sce$PID)]
+
+Cox_df$gender <- as.factor(sce$gender[match(rownames(Cox_df),sce$PID)])
+Cox_df$age <- sce$age[match(rownames(Cox_df),sce$PID)]
+Cox_df$ISUP <- as.factor(sce$ISUP_combined[match(rownames(Cox_df),sce$PID)])
+Cox_df$pT <- as.factor(sce$pT_combined[match(rownames(Cox_df),sce$PID)])
+
+#Based on proportions
+covariates <- Cox_df %>% select(-status_OS,-OS_months, -gender, -age, -ISUP, -pT, -MY_Other) %>% colnames
+
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~ gender + age + ISUP + pT +", paste(covariates, collapse = " + "),"+ MY_Other"))
+
+multi_model <- coxph(multi_formula, data = Cox_df)
+
+multi_res <- summary(multi_model)
+
+plot_df_prop <- data.frame(group = rownames(multi_res$coefficients),
+                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],2),
+                      HR = signif(multi_res$coefficients[,"exp(coef)"],2),
+                      CI_low = signif(multi_res$conf.int[,"lower .95"],2),
+                      CI_high = signif(multi_res$conf.int[,"upper .95"],2),
+                      wald_test = signif(multi_res$waldtest["pvalue"],2))
+
+
+#Plot hazard ratios
+hr_prop <- ggplot(plot_df_prop, aes(x = reorder(group,desc(HR)), y = HR, color = p_value < 0.05))+
+geom_point(size = 4)+
+geom_errorbar(aes(ymax = CI_high, ymin = CI_low))+
+#coord_cartesian(ylim=c(0,20))+
+geom_hline(yintercept = 1,color = "black",linetype = "dashed")+
+scale_color_brewer(palette = "Set1")+
+xlab("Immune metaclusters")+
+ylab("HR for con_prop")+
+theme_classic()+
+theme(axis.text.x = element_text(angle = 90))
+
+hr_prop
+```
+
+### Mean / Median 
+
+```{r}
+library(survival)
+library(survminer)
+
+PID_myeloid_metacluster <- colData(sce) %>% as.data.frame() %>% select(myeloid_metacluster,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_myeloid_metacluster <- PID_myeloid_metacluster %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq))
+
+### Multivariate cox proportional hazard model on multiple covariates (here proportion of phenotypes)
+PID_metagroups <- PID_myeloid_metacluster %>% pivot_wider(id_cols = "PID",names_from = "myeloid_metacluster",values_from = "fra") %>% column_to_rownames("PID")
+
+Cox_df <- PID_metagroups
+colnames(Cox_df) <- paste0("MY_", colnames(Cox_df))
+
+## Based on categories (mean or median division of cluster proportions) 
+
+Cox_df_mean <- foreach(i = colnames(Cox_df),.combine = "cbind")%do%{
+Cox_df %>% select(all_of(i)) %>% mutate(mean = ifelse(Cox_df[,i] > mean(Cox_df[,i]),"B","A")) %>% pull(mean)
+}
+
+colnames(Cox_df_mean) <- colnames(Cox_df)
+rownames(Cox_df_mean) <- rownames(Cox_df)
+
+Cox_df_mean <- as.data.frame(Cox_df_mean)
+
+## Add covariates 
+Cox_df_mean$status_OS <- sce$status_OS[match(rownames(Cox_df_mean),sce$PID)]
+Cox_df_mean$OS_months <- sce$OS_months[match(rownames(Cox_df_mean),sce$PID)]
+
+Cox_df_mean$gender <- as.factor(sce$gender[match(rownames(Cox_df_mean),sce$PID)])
+Cox_df_mean$age <- sce$age[match(rownames(Cox_df_mean),sce$PID)]
+Cox_df_mean$ISUP <- as.factor(sce$ISUP_combined[match(rownames(Cox_df_mean),sce$PID)])
+Cox_df_mean$pT <- as.factor(sce$pT_combined[match(rownames(Cox_df_mean),sce$PID)])
+
+#Based on proportions
+covariates <- Cox_df_mean %>% select(-status_OS,-OS_months, -gender, -age, -ISUP, -pT, -MY_Other) %>% colnames
+
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~ gender + age + ISUP + pT +", paste(covariates, collapse = " + "),"+ MY_Other"))
+
+multi_model <- coxph(multi_formula, data = Cox_df_mean)
+
+multi_res <- summary(multi_model)
+
+plot_df_mean <- data.frame(group = rownames(multi_res$coefficients),
+                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],2),
+                      HR = signif(multi_res$coefficients[,"exp(coef)"],2),
+                      CI_low = signif(multi_res$conf.int[,"lower .95"],2),
+                      CI_high = signif(multi_res$conf.int[,"upper .95"],2),
+                      wald_test = signif(multi_res$waldtest["pvalue"],2))
+
+
+#Plot hazard ratios
+hr_mean <- ggplot(plot_df_mean, aes(x = reorder(group,desc(HR)), y = HR, color = p_value < 0.05))+
+geom_point(size = 4)+
+geom_errorbar(aes(ymax = CI_high, ymin = CI_low))+
+#coord_cartesian(ylim=c(0,20))+
+geom_hline(yintercept = 1,color = "black",linetype = "dashed")+
+scale_color_brewer(palette = "Set1")+
+xlab("Immune metaclusters")+
+ylab("HR for con_mean")+
+theme_classic()+
+theme(axis.text.x = element_text(angle = 90))
+
+hr_mean
+```
+
+### GMM
+
+```{r}
+PID_myeloid_metacluster <- colData(sce) %>% as.data.frame() %>% select(myeloid_metacluster,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_myeloid_metacluster <- PID_myeloid_metacluster %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq))
+
+### Multivariate cox proportional hazard model on multiple covariates (here proportion of phenotypes)
+PID_metagroups <- PID_myeloid_metacluster %>% pivot_wider(id_cols = "PID",names_from = "myeloid_metacluster",values_from = "fra") %>% column_to_rownames("PID")
+
+Cox_df <- PID_metagroups
+colnames(Cox_df) <- paste0("MY_", colnames(Cox_df))
+
+## Based on categories (GMM division of cluster proportions)
+Cox_df_GMM <- foreach(i = colnames(Cox_df),.combine = "cbind")%do%{
+GMM_Cox <- Mclust(Cox_df[,i], G = 2)
+as.character(GMM_Cox$classification)
+}
+
+colnames(Cox_df_GMM) <- colnames(Cox_df)
+rownames(Cox_df_GMM) <- rownames(Cox_df)
+
+Cox_df_GMM <- as.data.frame(Cox_df_GMM,stringsAsFactors=TRUE)
+
+## Add covariates 
+Cox_df_GMM$status_OS <- sce$status_OS[match(rownames(Cox_df_GMM),sce$PID)]
+Cox_df_GMM$OS_months <- sce$OS_months[match(rownames(Cox_df_GMM),sce$PID)]
+
+Cox_df_GMM$gender <- as.factor(sce$gender[match(rownames(Cox_df_GMM),sce$PID)])
+Cox_df_GMM$age <- sce$age[match(rownames(Cox_df_GMM),sce$PID)]
+Cox_df_GMM$ISUP <- as.factor(sce$ISUP_combined[match(rownames(Cox_df_GMM),sce$PID)])
+Cox_df_GMM$pT <- as.factor(sce$pT_combined[match(rownames(Cox_df_GMM),sce$PID)])
+
+#Based on proportions
+covariates <- Cox_df_GMM %>% select(-status_OS,-OS_months, -gender, -age, -ISUP, -pT, -MY_Other) %>% colnames
+
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~ gender + age + ISUP + pT +", paste(covariates, collapse = " + "),"+ MY_Other"))
+
+multi_model <- coxph(multi_formula, data = Cox_df_GMM)
+
+multi_res <- summary(multi_model)
+
+plot_df_GMM <- data.frame(group = rownames(multi_res$coefficients),
+                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],2),
+                      HR = signif(multi_res$coefficients[,"exp(coef)"],2),
+                      CI_low = signif(multi_res$conf.int[,"lower .95"],2),
+                      CI_high = signif(multi_res$conf.int[,"upper .95"],2),
+                      wald_test = signif(multi_res$waldtest["pvalue"],2))
+
+
+#Plot hazard ratios
+hr_GMM <- ggplot(plot_df_GMM, aes(x = reorder(group,desc(HR)), y = HR, color = p_value < 0.05))+
+geom_point(size = 4)+
+geom_errorbar(aes(ymax = CI_high, ymin = CI_low))+
+#coord_cartesian(ylim=c(0,20))+
+geom_hline(yintercept = 1,color = "black",linetype = "dashed")+
+scale_color_brewer(palette = "Set1")+
+xlab("Immune metaclusters")+
+ylab("HR for con_GMM")+
+theme_classic()+
+theme(axis.text.x = element_text(angle = 90))
+
+hr_GMM
+```
+
+
+```{r}
+hr_prop/
+hr_mean/
+hr_GMM
+```
+
+
+
+## Kaplan Meier 
+
 ```{r}
 # All clusters with M2-like character
 sce$PID_MY14_mean <- Cox_df_mean$MY14[match(sce$PID, rownames(Cox_df_mean))]
@@ -1677,9 +1881,6 @@ sce$PID_MY7_mean <- Cox_df_mean$MY7[match(sce$PID, rownames(Cox_df_mean))]
 sce$PID_M2_test <- ifelse(sce$PID_MY10_mean == "B" | sce$PID_MY9_mean == "B" | sce$PID_MY14_mean == "B", "B", "A")
 sce$PID_HLADR_test <- ifelse(sce$PID_MY8_mean == "B" | sce$PID_MY11_mean == "B" | sce$PID_MY13_mean == "B", "B", "A")
 ```
-
-
-## Kaplan Meier 
 
 ### M2-like clusters 
 
@@ -1818,7 +2019,191 @@ ggsurvplot(fit,
 ```
 # 6. Supervised analysis 
 
-### CONTINUE HERE 
+## HLADR GMM on myeloid cells 
+
+```{r}
+set.seed(22)
+# HLADR
+GMM_HLADR <- Mclust(assay(sce, "exprs")["HLADR",], G = 2)
+
+
+GMM_df <- data.frame(class_HLA = ifelse(GMM_HLADR$classification == 2 & GMM_HLADR$uncertainty < 0.001, 
+                                        "HLADR+",
+                                        "HLADR-"), 
+                     HLADR_exprs = assay(sce, "exprs")["HLADR",],
+                     uncertainty = GMM_HLADR$uncertainty)
+
+#Visualize GMM
+ggplot(GMM_df, aes(x = HLADR_exprs, fill = class_HLA))+
+  geom_density()+
+  geom_rug(aes(color = class_HLA))+
+  theme_classic(base_size = 15)+
+  theme(axis.title.x = element_blank())+
+  scale_fill_brewer(palette = "Set1")+
+  scale_color_brewer(palette = "Set1")
+
+# Add HLA group 
+sce$my_HLADR_GMM <- GMM_df$class_HLA[match(colnames(sce), rownames(GMM_df))]
+
+n_cat <- colData(sce) %>% as.data.frame() %>% group_by(my_HLADR_GMM) %>% count()
+n_cat <- n_cat %>% ungroup() %>% mutate(sum = sum(n)) %>% mutate(fra = (n/sum)*100)
+```
+
+```{r}
+set.seed(22)
+
+## Define patient groups 
+plot_score_PID <- colData(sce) %>% as.data.frame %>% group_by(PID,my_HLADR_GMM) %>% count() %>% group_by(PID) %>% mutate(fra = n/sum(n))
+
+ggplot(plot_score_PID, aes(x=PID, y=fra, fill = my_HLADR_GMM))+
+  geom_tile(position = "fill")
+
+plot_heat_PID <- plot_score_PID %>% pivot_wider(id_cols = PID, values_from = fra, names_from = my_HLADR_GMM) %>% column_to_rownames("PID")
+plot_heat_PID[is.na(plot_heat_PID)] <- 0
+
+testCL<- clValid(plot_heat_PID,nClust = 2:20,clMethods = c("hierarchical","agnes"),validation="internal",metric="euclidean", method = "ward")
+plot(testCL, legend = FALSE)
+
+dev.off()
+
+h <- Heatmap(plot_heat_PID,
+             name = "Proportion",
+             col = viridis(100), 
+             #row_km = 3, 
+             #row_km_repeats = 100,
+             row_split=3,
+             show_row_names = FALSE)
+
+h <- draw(h)
+
+row_order_h <- row_order(h)
+
+anno <- colData(sce) %>% as.data.frame %>% dplyr::select(PID) %>% unique()
+anno$my_HLADR_group <- NA
+
+for(i in seq_along(row_order_h)){
+anno$my_HLADR_group <- as.factor(ifelse(anno$PID %in% rownames(plot_heat_PID)[row_order_h[[i]]], i, anno$my_HLADR_group))
+}
+
+sce$my_HLADR_group <- anno$my_HLADR_group[match(sce$PID, anno$PID)]
+```
+
+
+```{r}
+cur_surv <- colData(sce) %>% as.data.frame() %>% select(PID, my_HLADR_group, OS_months, status_OS) %>% unique() #%>% filter(my_HLADR_group %in% c("1","2"))
+
+#Plot survival curves
+fit <- survfit(Surv(OS_months, status_OS) ~ my_HLADR_group, data = cur_surv)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = "Set1",
+          conf.int = TRUE
+)
+
+
+```
+
+## M2 - PDL1/IDO1 
+
+```{r}
+set.seed(22)
+sce_M2 <- sce[,sce$myeloid_metacluster == "M2_like"] 
+
+# CD274
+GMM_CD274 <- Mclust(assay(sce_M2, "exprs")["CD274",], G = 2)
+
+
+GMM_df <- data.frame(class_PDL1 = ifelse(GMM_CD274$classification == 2, #& GMM_CD274$uncertainty < 0.001, 
+                                        "CD274+",
+                                        "CD274-"), 
+                     CD274_exprs = assay(sce_M2, "exprs")["CD274",],
+                     uncertainty = GMM_CD274$uncertainty)
+
+#Visualize GMM
+ggplot(GMM_df, aes(x = CD274_exprs, fill = class_PDL1))+
+  geom_density()+
+  geom_rug(aes(color = class_PDL1))+
+  theme_classic(base_size = 15)+
+  theme(axis.title.x = element_blank())+
+  scale_fill_brewer(palette = "Set1")+
+  scale_color_brewer(palette = "Set1")
+
+# Add HLA group 
+sce_M2$my_CD274_GMM <- GMM_df$class_PDL1[match(colnames(sce_M2), rownames(GMM_df))]
+
+n_cat <- colData(sce_M2) %>% as.data.frame() %>% group_by(my_CD274_GMM) %>% count()
+n_cat <- n_cat %>% ungroup() %>% mutate(sum = sum(n)) %>% mutate(fra = (n/sum)*100)
+```
+```{r}
+set.seed(22)
+
+## Define patient groups 
+plot_score_PID <- colData(sce_M2) %>% as.data.frame %>% group_by(PID,my_CD274_GMM) %>% count() %>% group_by(PID) %>% mutate(fra = n/sum(n))
+
+# Filter patients that have at least a total of 5 M2-like macrophages 
+PID_select <- plot_score_PID %>% ungroup() %>% group_by(PID) %>% mutate(total = sum(n)) %>% filter(total > 5) %>% pull(PID) %>% unique()
+
+plot_score_PID <- plot_score_PID %>% filter(PID %in% PID_select)
+
+ggplot(plot_score_PID, aes(x=PID, y=fra, fill = my_CD274_GMM))+
+  geom_tile(position = "fill")
+
+plot_heat_PID <- plot_score_PID %>% pivot_wider(id_cols = PID, values_from = fra, names_from = my_CD274_GMM) %>% column_to_rownames("PID")
+plot_heat_PID[is.na(plot_heat_PID)] <- 0
+
+testCL<- clValid(plot_heat_PID,nClust = 2:20,clMethods = c("hierarchical","agnes"),validation="internal",metric="euclidean", method = "ward")
+plot(testCL, legend = FALSE)
+
+dev.off()
+
+h <- Heatmap(plot_heat_PID,
+             name = "Proportion",
+             col = viridis(100), 
+             row_km = 2, 
+             row_km_repeats = 100,
+             #row_split=2,
+             show_row_names = FALSE)
+
+h <- draw(h)
+
+row_order_h <- row_order(h)
+
+anno <- colData(sce_M2) %>% as.data.frame %>% dplyr::select(PID) %>% unique()
+anno$my_CD274_group <- NA
+
+for(i in seq_along(row_order_h)){
+anno$my_CD274_group <- as.factor(ifelse(anno$PID %in% rownames(plot_heat_PID)[row_order_h[[i]]], i, anno$my_CD274_group))
+}
+
+sce_M2$my_CD274_group <- anno$my_CD274_group[match(sce_M2$PID, anno$PID)]
+```
+
+```{r}
+cur_surv <- colData(sce_M2) %>% as.data.frame() %>% select(PID, my_CD274_group, OS_months, status_OS) %>% unique() #%>% filter(my_HLADR_group %in% c("1","2"))
+
+#Plot survival curves
+fit <- survfit(Surv(OS_months, status_OS) ~ my_CD274_group, data = cur_surv)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = "Set1",
+          conf.int = TRUE
+)
+```
+
 
 # Save SCE objects
 
