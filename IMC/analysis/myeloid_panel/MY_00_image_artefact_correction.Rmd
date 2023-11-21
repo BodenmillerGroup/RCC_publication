@@ -1,0 +1,238 @@
+---
+title: "00_seg_mesmer_QC"
+author: "Lasse Meyer"
+date: "1/24/2022"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Image artefact correction 
+
+Here, we correct observed image artefacts before proceeding with downstream analysis such as single-cell segmentation (see `RCC_steinbock_prepro.md`). 
+
+## Software requirements
+
+```{r lib, message=FALSE,warning=FALSE}
+#Data containers
+library(SpatialExperiment)
+library(SingleCellExperiment)
+
+#Data processing
+library(CATALYST)
+library(scuttle)
+library(scater)
+library(imcRtools)
+
+#Data visualization
+library(cytomapper)
+library(dittoSeq)
+library(viridis)
+
+#Utilities
+library(tidyverse)
+library(openxlsx)
+library(stringr)
+library(BiocParallel)
+```
+
+## Read in uncorrected images
+
+```{r read-images}
+#Load images
+images <- loadImages("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/img/",on_disk = TRUE,h5FilesPath = "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/img/",BPPARAM = MulticoreParam(workers = 14,progressbar = TRUE,stop.on.error = FALSE))
+```
+
+```{r}
+# Set channel-names for multi-channel images
+panel <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/panel.csv")
+channelNames(images) <- panel$clean_target
+images
+```
+
+## Save uncorrected images
+
+```{r save-objects-read-data}
+saveRDS(images, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/images_before_correction.rds")
+```
+
+## Images with artefacts 
+
+```{r}
+library(cytomapper)
+library(EBImage)
+
+#Artefacts: 
+#202207_TMA224.1_BlockB_SE_106.tiff
+#202207_TMA224.1_BlockA_SE_075.tiff
+#202207_TMA224.1_BlockB_SE_069.tiff
+
+cur_img <- loadImages("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/img/202207_TMA224.1_BlockB_SE_106.tiff")
+channelNames(cur_img) <- paste0("ch", 1:dim(cur_img[[1]])[3])
+
+# Visualize artefacts
+plotPixels(cur_img, colour_by = "ch1", bcg = list(ch1 = c(0, 10, 1)))
+plotPixels(cur_img, colour_by = "ch2", bcg = list(ch2 = c(0, 10, 1)))
+plotPixels(cur_img, colour_by = "ch10", bcg = list(ch10 = c(0, 10, 1)))
+
+# Step 1: Detect artefacts by log-variance-mean-ratio
+cur_var <- apply(as.array(cur_img[[1]]), MARGIN = c(1,2), var)
+cur_mean <- apply(as.array(cur_img[[1]]), MARGIN = c(1,2), mean)
+cur_median <- apply(as.array(cur_img[[1]]), MARGIN = c(1,2), mean)
+
+plot(log(cur_mean), log((cur_var)^2/cur_mean)) #Index of dispersion
+
+plot(log(cur_mean), log(cur_var/cur_mean^2)) #log-variance-mean-ratio
+abline(h = 0, col = "red")
+
+max(cur_median)
+
+hist(cur_median, ylim = c(0,2000))
+hist(cur_median)
+
+abline(v = 15, col = "red")
+
+pixels_wrong_2 <- cur_median > 15
+pixels_wrong_2[is.na(pixels_wrong_2)] <- FALSE
+
+pixels_wrong <- log(cur_var/(cur_mean^2)) < 0
+pixels_wrong[is.na(pixels_wrong)] <- FALSE
+
+sum(pixels_wrong_2)
+sum(pixels_wrong)
+
+if(sum(pixels_wrong) > 0){
+  print(paste0(names(cur_img),": This image contained ", sum(pixels_wrong), " artificial pixels."))
+}
+
+display(pixels_wrong)
+
+# Step 2: Set all artificial pixels to 0
+img_1 <- cur_img[[1]]
+img_1[pixels_wrong] <- 0
+
+display(img_1)
+
+# Step 3: Replace artificial pixels by median
+img_median <- medianFilter(img_1, size = 1)
+
+img_1[test_img] <- img_median[test_img]
+
+display(img_1)
+
+
+# Other option: Otsu thresholding on mean or median across channels for images with artefacts 
+
+# threshold <- otsu(as.array(cur_mean), range = c(0,max(cur_mean)))
+# 
+# hist(cur_mean)
+# abline(v = otsu(as.array(cur_mean), range = c(0,max(cur_mean))), col = "red")
+# pixels_wrong <- cur_mean > threshold
+# 
+# display(pixels_wrong)
+# 
+```
+
+
+## Function to remove artificial pixels
+
+Please note that this function returns multi-channel images as **16-bit** encoded images (not 32bit as usual).
+
+```{r}
+library(BiocNeighbors)
+library(BiocParallel)
+library(tidyverse)
+library(EBImage)
+
+removePixelArtifacts <- function(images,
+                         cutoff = 0,
+                         size = 2,
+                         BPPARAM = MulticoreParam()){
+  bplapply(seq_along(images), function(x){ 
+    
+    # Step 1: Detect artifacts by log-variance-mean-ratio
+    cur_var <- apply(as.array(images[[x]]), MARGIN = c(1,2), var)
+    cur_mean <- apply(as.array(images[[x]]), MARGIN = c(1,2), mean)
+    
+    pixels_wrong <- log(cur_var/(cur_mean^2)) < cutoff
+    pixels_wrong[is.na(pixels_wrong)] <- FALSE
+
+    if (sum(pixels_wrong) > 0) {
+      print(paste0(names(images[x]),": This image contained ", sum(pixels_wrong), " artificial pixels."))
+    
+    # Step 2: Set all artificial pixels to 0
+    img_cor <- CytoImageList(images[x], on_disk = FALSE)[[1]] #Load images into memory
+    img_cor[pixels_wrong] <- 0
+
+    #Step 3: Replace artificial pixels with median filter 
+    img_median <- medianFilter(img_cor, size = size)
+    img_cor[pixels_wrong] <- img_median[pixels_wrong]
+
+    writeImage(as.array(img_cor)/(2^16 - 1), 
+               paste0("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/img_cor/",names(images[x]), ".tiff"), #directory currently hard-coded
+               bits.per.sample = 16)
+    
+    }else{
+      
+      writeImage(as.array(images[[x]])/(2^16 - 1), 
+                 paste0("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/img_cor/",names(images[x]), ".tiff"),#directory currently hard-coded
+                 bits.per.sample = 16)
+      
+    }
+    }, BPPARAM = BPPARAM)
+  
+  return(print("Artificial Pixel removal completed."))
+  }
+```
+
+## Apply function to images 
+
+```{r}
+# Read in images 
+images <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/images_before_correction.rds")
+```
+
+
+```{r}
+# Run function across all images
+removePixelArtifacts(images, BPPARAM = MulticoreParam(workers = 20))
+```
+
+```{r}
+# Summary for pixel removal part
+library(readxl)
+out <- read_excel("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/summary_pixel_removal.xlsx")
+
+out$Image <- str_replace(out$Image, ":", "")
+out$Image <- str_replace(out$Image, "\"", "")
+
+dim(out %>% filter(n_pixels_changed >= 100)) 
+
+hist(out$n_pixels_changed, breaks = 20)
+```
+
+
+## Load and save corrected images 
+
+```{r read-images}
+#Load images
+images_new <- loadImages("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/img_cor/",
+                         on_disk = TRUE,h5FilesPath = "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/img_cor_h5/", 
+                         as.is = TRUE, # Important to not rescale 16-bit images
+                         BPPARAM = MulticoreParam(workers = 25,progressbar = TRUE,stop.on.error = FALSE))
+```
+
+```{r}
+# Set channel-names for multi-channel images
+panel <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/panel.csv")
+channelNames(images_new) <- panel$clean_target
+images_new
+```
+
+```{r save-objects-read-data}
+saveRDS(images_new, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/images.rds")
+```
