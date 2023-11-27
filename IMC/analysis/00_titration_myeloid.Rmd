@@ -7,7 +7,7 @@ editor_options:
   chunk_output_type: console
 ---
 
-## Adopted from Daniel Schulz 
+## Adapted from Daniel Schulz 
 
 This script can be used to calculate signal to noise ratios for single cells from an images.
 

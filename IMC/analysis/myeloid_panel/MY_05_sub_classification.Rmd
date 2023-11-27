@@ -816,6 +816,94 @@ lgd_1 <- Legend(title = "Immune MC",
 # Draw heatmap
 draw(fraction_anno + NULL, annotation_legend_list = list(lgd_1))
 ```
+#### Fraction correlation 
+
+```{r}
+# METACLUSTER 
+
+## Correlation of metacluster fractions for each PID (2-6 images per PID)
+SID_metacluster <- colData(sce) %>% as.data.frame() %>% select(immune_metacluster,sample_id) %>% group_by(sample_id) %>% table() %>% as.data.frame
+SID_metacluster <- SID_metacluster %>% group_by(sample_id) %>% mutate(fra = Freq/sum(Freq))
+
+# Cluster fraction correlation for each PID
+## by cluster
+SID_metacluster_cor <- SID_metacluster
+SID_metacluster_cor$PID <- sce$PID[match(SID_metacluster$sample_id,sce$sample_id)]
+
+SID_metacluster_cor <- foreach(i = unique(colData(sce)$PID),.combine = "rbind")%do%{
+SID <- SID_metacluster_cor %>% filter(PID %in% i) %>% select(-Freq,-PID) %>% pivot_wider(id_cols = immune_metacluster,names_from = sample_id,values_from = fra) %>% column_to_rownames("immune_metacluster")
+cor <- cor(SID, method = "spearman")
+#cor[2] # only works for two images per patient 
+n <- length(colnames(SID))
+if(n > 1){
+mean(cor[2:n,1])
+}else{NA}
+}
+
+SID_metacluster_cor <- as.data.frame(SID_metacluster_cor) 
+SID_metacluster_cor$PID <- unique(colData(sce)$PID) 
+SID_metacluster_cor$category <- "PID"
+out <- colData(sce) %>% as.data.frame %>% select(sample_id, PID) %>% unique() %>% group_by(PID) %>% count()
+SID_metacluster_cor$n_images <- out$n[match(SID_metacluster_cor$PID, out$PID)]
+
+# Filter samples with 1 image only - Correlation = NA 
+SID_metacluster_cor <- SID_metacluster_cor %>% filter(n_images > 1)
+
+SID_metacluster_cor_plot <- ggplot(SID_metacluster_cor, aes(x = category, y = V1))+
+  geom_boxplot(outlier.colour = NA)+
+  geom_jitter(aes(color = PID, size = n_images), position=position_jitter(w=0.1,h=0.1))+
+  guides(color = "none")+
+  scale_color_manual(values = metadata(sce)$colors$PID)+
+  theme_classic(base_size = 12)+
+  theme(axis.title.x = element_blank())+
+  scale_size_continuous(range = c(3, 6))+
+  ylab("Correlation of metacluster fractions per PID (n=2-6)")+
+  ggtitle(paste("Spearman rho = ",round(median(SID_metacluster_cor$V1, na.rm = TRUE), digits = 2)))
+
+SID_metacluster_cor_plot
+
+#CLUSTER 
+## Correlation of metacluster fractions for each PID (2-6 images per PID)
+SID_cluster <- colData(sce) %>% as.data.frame() %>% select(cluster_selected,sample_id) %>% group_by(sample_id) %>% table() %>% as.data.frame
+SID_cluster <- SID_cluster %>% group_by(sample_id) %>% mutate(fra = Freq/sum(Freq))
+
+# Cluster fraction correlation for each PID
+## by cluster
+SID_cluster_cor <- SID_cluster
+SID_cluster_cor$PID <- sce$PID[match(SID_cluster$sample_id,sce$sample_id)]
+
+SID_cluster_cor <- foreach(i = unique(colData(sce)$PID),.combine = "rbind")%do%{
+SID <- SID_cluster_cor %>% filter(PID %in% i) %>% select(-Freq,-PID) %>% pivot_wider(id_cols = cluster_selected,names_from = sample_id,values_from = fra) %>% column_to_rownames("cluster_selected")
+cor <- cor(SID, method = "spearman")
+#cor[2] # only works for two images per patient 
+n <- length(colnames(SID))
+if(n > 1){
+mean(cor[2:n,1])
+}else{NA}
+}
+
+SID_cluster_cor <- as.data.frame(SID_cluster_cor) 
+SID_cluster_cor$PID <- unique(colData(sce)$PID) 
+SID_cluster_cor$category <- "PID"
+out <- colData(sce) %>% as.data.frame %>% select(sample_id, PID) %>% unique() %>% group_by(PID) %>% count()
+SID_cluster_cor$n_images <- out$n[match(SID_cluster_cor$PID, out$PID)]
+
+# Filter samples with 1 image only - Correlation = NA 
+SID_cluster_cor <- SID_cluster_cor %>% filter(n_images > 1)
+
+SID_cluster_cor_plot <- ggplot(SID_cluster_cor, aes(x = category, y = V1))+
+  geom_boxplot(outlier.colour = NA)+
+  geom_jitter(aes(color = PID, size = n_images), position=position_jitter(w=0.1,h=0.1))+
+  guides(color = "none")+
+  scale_color_manual(values = metadata(sce)$colors$PID)+
+  theme_classic(base_size = 12)+
+  theme(axis.title.x = element_blank())+
+  scale_size_continuous(range = c(3, 6))+
+  ylab("Correlation of cluster fractions per PID (n=2-6)")+
+  ggtitle(paste("Spearman rho = ",round(median(SID_cluster_cor$V1, na.rm = TRUE), digits = 2)))
+
+SID_cluster_cor_plot
+```
 
 #### Extract images 
 
@@ -962,6 +1050,156 @@ dittoHeatmap(sce_fil,
 
 
 # 4. Differential abundance analysis 
+
+## Loop over categories 
+
+### Immune metacluster 
+
+```{r}
+### Differential abundance analysis based on edgeR
+library(edgeR)
+
+DA <- lapply(c("ISUP_combined", "pT_combined","necrose"), function(x){
+
+abundances <- table(unfactor(sce$immune_metacluster), sce$PID)
+abundances <- unclass(abundances) 
+
+#relevant patient metadata (Re-level for baseline)
+meta <- colData(sce)[match(colnames(abundances), sce$PID),]
+
+if(x == "necrose"){
+  meta[,x] <- relevel(x=factor(meta[,x]), ref = "0")
+}else{
+  meta[,x] <- relevel(x=factor(meta[,x]), ref = "1/2")
+}
+
+#filter
+meta <- meta[!is.na(meta[,x]),]
+abundances <- abundances[,colnames(abundances) %in% meta$PID]
+
+#create DGEList - based on edgeR package
+y.ab <- DGEList(abundances, samples=meta, group = meta[,x])
+
+#Design matrix
+design <- model.matrix(~group, data = y.ab$samples)
+
+#Visualize
+# logCPM of abundances per cluster
+cur_mat <- edgeR::cpm(abundances,prior.count = 1,log = TRUE)
+
+# Estimate NB and QL dispersion 
+y.ab <- estimateDisp(y.ab, design, trend="none")
+
+fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
+
+# Test for differential abundance of clusters between tumor stages
+res <- glmQLFTest(fit.ab, coef=ncol(design))
+
+DA <- res$table
+
+DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
+
+DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.05, result = ifelse(DA$logFC > 0 & DA$FDR < 0.05, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.05, "DOWN", "NOTSIG"))) %>% 
+  arrange(desc(logFC))
+
+DA$cluster <- factor(DA$cluster, levels = DA$cluster)
+DA$category <- x
+
+return(DA)
+})
+
+DA_out <- do.call(rbind, DA)
+```
+
+```{r}
+library(ggnewscale)
+
+DA_out$category <- factor(DA_out$category,levels = c("necrose","pT_combined","ISUP_combined"))
+#DA_out <- DA_out %>% filter(category %in% c("pT_combined","ISUP_combined"))
+
+ggplot(DA_out, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8")+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = DA_out,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")
+```
+### Cluster 
+
+```{r}
+### Differential abundance analysis based on edgeR
+library(edgeR)
+
+DA <- lapply(c("ISUP_combined", "pT_combined","necrose"), function(x){
+
+abundances <- table(unfactor(sce$cluster_selected), sce$PID)
+abundances <- unclass(abundances) 
+
+#relevant patient metadata (Re-level for baseline)
+meta <- colData(sce)[match(colnames(abundances), sce$PID),]
+
+if(x == "necrose"){
+  meta[,x] <- relevel(x=factor(meta[,x]), ref = "0")
+}else{
+  meta[,x] <- relevel(x=factor(meta[,x]), ref = "1/2")
+}
+
+#filter
+meta <- meta[!is.na(meta[,x]),]
+abundances <- abundances[,colnames(abundances) %in% meta$PID]
+
+#create DGEList - based on edgeR package
+y.ab <- DGEList(abundances, samples=meta, group = meta[,x])
+
+#Design matrix
+design <- model.matrix(~group, data = y.ab$samples)
+
+#Visualize
+# logCPM of abundances per cluster
+cur_mat <- edgeR::cpm(abundances,prior.count = 1,log = TRUE)
+
+# Estimate NB and QL dispersion 
+y.ab <- estimateDisp(y.ab, design, trend="none")
+
+fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
+
+# Test for differential abundance of clusters between tumor stages
+res <- glmQLFTest(fit.ab, coef=ncol(design))
+
+DA <- res$table
+
+DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
+
+DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.05, result = ifelse(DA$logFC > 0 & DA$FDR < 0.05, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.05, "DOWN", "NOTSIG"))) %>% 
+  arrange(desc(logFC))
+
+DA$cluster <- factor(DA$cluster, levels = DA$cluster)
+DA$category <- x
+
+return(DA)
+})
+
+DA_out <- do.call(rbind, DA)
+```
+
+```{r}
+library(ggnewscale)
+
+DA_out$category <- factor(DA_out$category,levels = c("necrose","pT_combined","ISUP_combined"))
+#DA_out <- DA_out %>% filter(category %in% c("pT_combined","ISUP_combined"))
+
+ggplot(DA_out, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8")+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = DA_out,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")
+```
+
 
 ## Test overlap of clinical categories 
 

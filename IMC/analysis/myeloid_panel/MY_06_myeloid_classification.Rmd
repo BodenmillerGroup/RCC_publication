@@ -831,6 +831,95 @@ fraction_anno <- HeatmapAnnotation(
 draw(fraction_anno + NULL)
 ```
 
+#### Fraction correlation 
+
+```{r}
+# METACLUSTER 
+
+## Correlation of metacluster fractions for each PID (2-6 images per PID)
+SID_metacluster <- colData(sce) %>% as.data.frame() %>% select(myeloid_metacluster,sample_id) %>% group_by(sample_id) %>% table() %>% as.data.frame
+SID_metacluster <- SID_metacluster %>% group_by(sample_id) %>% mutate(fra = Freq/sum(Freq))
+
+# Cluster fraction correlation for each PID
+## by cluster
+SID_metacluster_cor <- SID_metacluster
+SID_metacluster_cor$PID <- sce$PID[match(SID_metacluster$sample_id,sce$sample_id)]
+
+SID_metacluster_cor <- foreach(i = unique(colData(sce)$PID),.combine = "rbind")%do%{
+SID <- SID_metacluster_cor %>% filter(PID %in% i) %>% select(-Freq,-PID) %>% pivot_wider(id_cols = myeloid_metacluster,names_from = sample_id,values_from = fra) %>% column_to_rownames("myeloid_metacluster")
+cor <- cor(SID, method = "spearman")
+#cor[2] # only works for two images per patient 
+n <- length(colnames(SID))
+if(n > 1){
+mean(cor[2:n,1])
+}else{NA}
+}
+
+SID_metacluster_cor <- as.data.frame(SID_metacluster_cor) 
+SID_metacluster_cor$PID <- unique(colData(sce)$PID) 
+SID_metacluster_cor$category <- "PID"
+out <- colData(sce) %>% as.data.frame %>% select(sample_id, PID) %>% unique() %>% group_by(PID) %>% count()
+SID_metacluster_cor$n_images <- out$n[match(SID_metacluster_cor$PID, out$PID)]
+
+# Filter samples with 1 image only - Correlation = NA 
+SID_metacluster_cor <- SID_metacluster_cor %>% filter(n_images > 1)
+
+SID_metacluster_cor_plot <- ggplot(SID_metacluster_cor, aes(x = category, y = V1))+
+  geom_boxplot(outlier.colour = NA)+
+  geom_jitter(aes(color = PID, size = n_images), position=position_jitter(w=0.1,h=0.1))+
+  guides(color = "none")+
+  scale_color_manual(values = metadata(sce)$colors$PID)+
+  theme_classic(base_size = 12)+
+  theme(axis.title.x = element_blank())+
+  scale_size_continuous(range = c(3, 6))+
+  ylab("Correlation of metacluster fractions per PID (n=2-6)")+
+  ggtitle(paste("Spearman rho = ",round(median(SID_metacluster_cor$V1, na.rm = TRUE), digits = 2)))
+
+SID_metacluster_cor_plot
+
+#CLUSTER 
+## Correlation of metacluster fractions for each PID (2-6 images per PID)
+SID_cluster <- colData(sce) %>% as.data.frame() %>% select(my_cluster_selected,sample_id) %>% group_by(sample_id) %>% table() %>% as.data.frame
+SID_cluster <- SID_cluster %>% group_by(sample_id) %>% mutate(fra = Freq/sum(Freq))
+
+# Cluster fraction correlation for each PID
+## by cluster
+SID_cluster_cor <- SID_cluster
+SID_cluster_cor$PID <- sce$PID[match(SID_cluster$sample_id,sce$sample_id)]
+
+SID_cluster_cor <- foreach(i = unique(colData(sce)$PID),.combine = "rbind")%do%{
+SID <- SID_cluster_cor %>% filter(PID %in% i) %>% select(-Freq,-PID) %>% pivot_wider(id_cols = my_cluster_selected,names_from = sample_id,values_from = fra) %>% column_to_rownames("my_cluster_selected")
+cor <- cor(SID, method = "spearman")
+#cor[2] # only works for two images per patient 
+n <- length(colnames(SID))
+if(n > 1){
+mean(cor[2:n,1])
+}else{NA}
+}
+
+SID_cluster_cor <- as.data.frame(SID_cluster_cor) 
+SID_cluster_cor$PID <- unique(colData(sce)$PID) 
+SID_cluster_cor$category <- "PID"
+out <- colData(sce) %>% as.data.frame %>% select(sample_id, PID) %>% unique() %>% group_by(PID) %>% count()
+SID_cluster_cor$n_images <- out$n[match(SID_cluster_cor$PID, out$PID)]
+
+# Filter samples with 1 image only - Correlation = NA 
+SID_cluster_cor <- SID_cluster_cor %>% filter(n_images > 1)
+
+SID_cluster_cor_plot <- ggplot(SID_cluster_cor, aes(x = category, y = V1))+
+  geom_boxplot(outlier.colour = NA)+
+  geom_jitter(aes(color = PID, size = n_images), position=position_jitter(w=0.1,h=0.1))+
+  guides(color = "none")+
+  scale_color_manual(values = metadata(sce)$colors$PID)+
+  theme_classic(base_size = 12)+
+  theme(axis.title.x = element_blank())+
+  scale_size_continuous(range = c(3, 6))+
+  ylab("Correlation of cluster fractions per PID (n=2-6)")+
+  ggtitle(paste("Spearman rho = ",round(median(SID_cluster_cor$V1, na.rm = TRUE), digits = 2)))
+
+SID_cluster_cor_plot
+```
+
 #### Extract images 
 
 TO BE UPDATED 
@@ -970,6 +1059,7 @@ dittoHeatmap(sce[,sce$my_cluster_selected == "14"],
 
 ```
 
+
 # 4. Differential abundance analysis 
 
 ## Test overlap of clinical categories 
@@ -1076,6 +1166,8 @@ DA_out <- do.call(rbind, DA)
 
 
 ```{r}
+library(ggnewscale)
+
 DA_out$category <- factor(DA_out$category,levels = c("necrose","pT_combined","ISUP_combined"))
 #DA_out <- DA_out %>% filter(category %in% c("pT_combined","ISUP_combined"))
 
@@ -2088,7 +2180,6 @@ anno$my_HLADR_group <- as.factor(ifelse(anno$PID %in% rownames(plot_heat_PID)[ro
 sce$my_HLADR_group <- anno$my_HLADR_group[match(sce$PID, anno$PID)]
 ```
 
-
 ```{r}
 cur_surv <- colData(sce) %>% as.data.frame() %>% select(PID, my_HLADR_group, OS_months, status_OS) %>% unique() #%>% filter(my_HLADR_group %in% c("1","2"))
 
@@ -2106,8 +2197,30 @@ ggsurvplot(fit,
           palette = "Set1",
           conf.int = TRUE
 )
+```
+
+### Check on images 
+
+```{r}
+images <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/images.rds")
+masks <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/masks.rds")
+```
+
+```{r}
+# Select images of interest
+set.seed(22)
+
+cur_sample <- (colData(sce) %>% as.data.frame %>% select(sample_id, my_HLADR_GMM) %>% group_by(sample_id) %>% filter(my_HLADR_GMM == "HLADR+") %>% count() %>% arrange(desc(n)) %>% pull(sample_id))[1:10]
+
+cur_images <- images[mcols(images)$sample_id %in% cur_sample]
+cur_masks <- masks[mcols(masks)$sample_id %in% cur_sample]
+cur_sce <- sce[,sce$sample_id %in% cur_sample]
+```
 
 
+```{r}
+library(cytoviewer)
+cytoviewer(image = cur_images, mask = cur_masks, object = cur_sce, img_id = "sample_id", cell_id = "ObjectNumber")
 ```
 
 ## M2 - PDL1/IDO1 
@@ -2120,7 +2233,7 @@ sce_M2 <- sce[,sce$myeloid_metacluster == "M2_like"]
 GMM_CD274 <- Mclust(assay(sce_M2, "exprs")["CD274",], G = 2)
 
 
-GMM_df <- data.frame(class_PDL1 = ifelse(GMM_CD274$classification == 2, #& GMM_CD274$uncertainty < 0.001, 
+GMM_df <- data.frame(class_PDL1 = ifelse(GMM_CD274$classification == 2 & GMM_CD274$uncertainty < 0.001, 
                                         "CD274+",
                                         "CD274-"), 
                      CD274_exprs = assay(sce_M2, "exprs")["CD274",],
@@ -2141,14 +2254,43 @@ sce_M2$my_CD274_GMM <- GMM_df$class_PDL1[match(colnames(sce_M2), rownames(GMM_df
 n_cat <- colData(sce_M2) %>% as.data.frame() %>% group_by(my_CD274_GMM) %>% count()
 n_cat <- n_cat %>% ungroup() %>% mutate(sum = sum(n)) %>% mutate(fra = (n/sum)*100)
 ```
+
+### Check on images 
+
+```{r}
+images <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/images.rds")
+masks <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/masks.rds")
+```
+
+```{r}
+# Select images of interest
+set.seed(22)
+
+cur_sample <- (colData(sce_M2) %>% as.data.frame %>% select(sample_id, my_CD274_GMM) %>% group_by(sample_id) %>% filter(my_CD274_GMM == "CD274+") %>% count() %>% arrange(desc(n)) %>% pull(sample_id))[1:10]
+
+cur_images <- images[mcols(images)$sample_id %in% cur_sample]
+cur_masks <- masks[mcols(masks)$sample_id %in% cur_sample]
+cur_sce <- sce_M2[,sce_M2$sample_id %in% cur_sample]
+```
+
+
+```{r}
+library(cytoviewer)
+cytoviewer(image = cur_images, mask = cur_masks, object = cur_sce, img_id = "sample_id", cell_id = "ObjectNumber")
+```
+
+### Define PID groups 
+
 ```{r}
 set.seed(22)
 
 ## Define patient groups 
-plot_score_PID <- colData(sce_M2) %>% as.data.frame %>% group_by(PID,my_CD274_GMM) %>% count() %>% group_by(PID) %>% mutate(fra = n/sum(n))
+plot_score_PID <- colData(sce_M2) %>% as.data.frame %>% select(sample_id, my_CD274_GMM) %>% group_by(sample_id,my_CD274_GMM) %>% count() 
+plot_score_PID$PID <- sce_M2$PID[match(plot_score_PID$sample_id, sce_M2$sample_id)]
+plot_score_PID <- plot_score_PID %>% group_by(PID, my_CD274_GMM) %>% mutate(mean_n = mean(n)) %>% select(PID, my_CD274_GMM, mean_n) %>% unique() %>% ungroup() %>% group_by(PID) %>% mutate(fra = mean_n/sum(mean_n))
 
 # Filter patients that have at least a total of 5 M2-like macrophages 
-PID_select <- plot_score_PID %>% ungroup() %>% group_by(PID) %>% mutate(total = sum(n)) %>% filter(total > 5) %>% pull(PID) %>% unique()
+PID_select <- plot_score_PID %>% ungroup() %>% group_by(PID) %>% mutate(total = sum(mean_n)) %>% filter(total > 4) %>% pull(PID) %>% unique()
 
 plot_score_PID <- plot_score_PID %>% filter(PID %in% PID_select)
 
@@ -2167,7 +2309,7 @@ h <- Heatmap(plot_heat_PID,
              name = "Proportion",
              col = viridis(100), 
              row_km = 2, 
-             row_km_repeats = 100,
+             row_km_repeats = 1000,
              #row_split=2,
              show_row_names = FALSE)
 
@@ -2186,7 +2328,8 @@ sce_M2$my_CD274_group <- anno$my_CD274_group[match(sce_M2$PID, anno$PID)]
 ```
 
 ```{r}
-cur_surv <- colData(sce_M2) %>% as.data.frame() %>% select(PID, my_CD274_group, OS_months, status_OS) %>% unique() #%>% filter(my_HLADR_group %in% c("1","2"))
+# Only in patients with more than 5 M2 macrophages
+cur_surv <- colData(sce_M2) %>% as.data.frame() %>% select(PID, my_CD274_group, OS_months, status_OS) %>% unique() %>% filter(PID %in% PID_select)
 
 #Plot survival curves
 fit <- survfit(Surv(OS_months, status_OS) ~ my_CD274_group, data = cur_surv)
@@ -2203,6 +2346,214 @@ ggsurvplot(fit,
           conf.int = TRUE
 )
 ```
+
+# 7. Patient groups
+
+## Myeloid metacluster 
+
+```{r pgroups, eval = F}
+PID_myeloid_metacluster <- colData(sce) %>% as.data.frame() %>% select(myeloid_metacluster,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_myeloid_metacluster <- PID_myeloid_metacluster %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq))
+
+# Filter for patients that have at least 10 myeloid cells
+PID_select <- PID_myeloid_metacluster %>% ungroup() %>% group_by(PID) %>% mutate(total = sum(Freq)) %>% filter(total >= 10) %>% pull(PID) %>% unique()
+
+PID_metagroups <- PID_myeloid_metacluster %>% filter(PID %in% PID_select) %>% pivot_wider(id_cols = "PID",names_from = "myeloid_metacluster",values_from = "fra") %>% column_to_rownames("PID")
+
+#double-check that rowsums are 1 
+rowSums(PID_metagroups)
+
+#Option: Column-scaled
+PID_metagroups_scaled <- scale(as.matrix(PID_metagroups))
+#col_scaled <- colorRamp2(c(-1, 0, 2, 3), c("#A278FAFF", "#F1E9E7FF", "#FF8061FF", "#FF0000FF"))
+
+### 1. Cluster-testing
+library(clValid)
+#Internal measures
+testCL<- clValid(PID_metagroups,nClust = 2:20,clMethods = c("hierarchical","agnes","kmeans"),validation="internal",metric="euclidean", method = "ward")
+summary(testCL)
+plot(testCL)
+
+#Stability measures 
+testCL_1<- clValid(PID_metagroups,nClust = 2:20,clMethods = c("hierarchical","agnes","kmeans"),validation="stability",metric="euclidean", method = "ward")
+summary(testCL_1)
+plot(testCL_1, legend = FALSE)
+
+#Selected method: hierarchical, 4 or kmeans, 4
+
+# Print heatmap
+h_g <- Heatmap(PID_metagroups, name = "Cluster fraction", 
+        col = viridis(100),
+        #row_km = 4, 
+        #row_km_repeats = 1000,
+        row_split = 4,
+        clustering_method_columns = "ward.D2",
+        clustering_method_rows = "ward.D2")
+
+h_g <- draw(h_g)
+draw(h_g)
+
+#Retrieve PID groups
+library(foreach)
+row_groups <- foreach(i = 1:4, .combine = rbind) %do%{
+data.frame(PID = rownames(PID_metagroups[row_order(h_g)[[i]],]), PID_group = i)
+}
+
+#Add to sce
+sce$PID_metagroups <- row_groups$PID_group[match(sce$PID,row_groups$PID)]
+```
+
+```{r}
+#Assess survival impact 
+library(survival)
+library(survminer)
+
+cur_surv <- colData(sce) %>% as.data.frame() %>%
+  select(PID, PID_metagroups, OS_months, status_OS) %>% 
+  #mutate(PID_metagroups_2 = ifelse(PID_metagroups == "6","6","Not_6")) %>% unique()
+  #filter(PID_metagroups %in% c("5","9")) %>% 
+  unique()
+
+#Plot survival curves
+fit <- survfit(Surv(OS_months, status_OS) ~ PID_metagroups, data = cur_surv)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = "Set2",
+          conf.int = FALSE)
+```
+## Myeloid cluster 
+
+```{r pgroups, eval = F}
+PID_my_cluster_selected <- colData(sce) %>% as.data.frame() %>% select(my_cluster_selected,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_my_cluster_selected <- PID_my_cluster_selected %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq))
+
+PID_metagroups <- PID_my_cluster_selected %>% pivot_wider(id_cols = "PID",names_from = "my_cluster_selected",values_from = "fra") %>% column_to_rownames("PID")
+
+#double-check that rowsums are 1 
+rowSums(PID_metagroups)
+
+#Option: Column-scaled
+PID_metagroups_scaled <- scale(as.matrix(PID_metagroups))
+#col_scaled <- colorRamp2(c(-1, 0, 2, 3), c("#A278FAFF", "#F1E9E7FF", "#FF8061FF", "#FF0000FF"))
+
+### 1. Cluster-testing
+library(clValid)
+#Internal measures
+testCL<- clValid(PID_metagroups,nClust = 2:20,clMethods = c("hierarchical","agnes","kmeans"),validation="internal",metric="euclidean", method = "ward")
+summary(testCL)
+plot(testCL)
+
+#Stability measures 
+testCL_1<- clValid(PID_metagroups,nClust = 2:20,clMethods = c("hierarchical","agnes","kmeans"),validation="stability",metric="euclidean", method = "ward")
+summary(testCL_1)
+plot(testCL_1, legend = FALSE)
+
+#Selected method: hierarchical, 4 or kmeans, 4
+
+# Print heatmap
+h_g <- Heatmap(PID_metagroups, name = "Cluster fraction", 
+        col = viridis(100),
+        row_km = 7, 
+        row_km_repeats = 1000,
+        #row_split = 4,
+        clustering_method_columns = "ward.D2",
+        clustering_method_rows = "ward.D2")
+
+h_g <- draw(h_g)
+draw(h_g)
+
+#Retrieve PID groups
+library(foreach)
+row_groups <- foreach(i = 1:7, .combine = rbind) %do%{
+data.frame(PID = rownames(PID_metagroups[row_order(h_g)[[i]],]), PID_group = i)
+}
+
+#Add to sce
+sce$PID_metagroups_cluster <- row_groups$PID_group[match(sce$PID,row_groups$PID)]
+```
+
+```{r}
+#Assess survival impact 
+
+library(survival)
+library(survminer)
+
+cur_surv <- colData(sce) %>% as.data.frame() %>% 
+  select(PID, PID_metagroups_cluster, OS_months, status_OS) %>% 
+  #mutate(PID_metagroups_2 = ifelse(PID_metagroups == "6","6","Not_6")) %>% unique()
+  #filter(PID_metagroups %in% c("5","9")) %>% 
+  unique()
+
+#Plot survival curves
+fit <- survfit(Surv(OS_months, status_OS) ~ PID_metagroups_cluster, data = cur_surv)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = "Set1")
+#          log.rank.weights = "S2")
+```
+
+
+### Per BAP1/PBRM1/SETD2 category 
+
+```{r}
+# Proportion of scores per PID groups 
+## BAP1 
+BAP1_IHC_CK57 <- colData(sce) %>% as.data.frame() %>% select(PID, PID_metagroups,BAP1_IHC) %>% unique() %>% select(-PID) %>% group_by(BAP1_IHC) %>% table() %>% as.data.frame
+BAP1_IHC_CK57 <- BAP1_IHC_CK57 %>% group_by(BAP1_IHC) %>% mutate(fra = Freq/sum(Freq)) 
+
+cur_test <- BAP1_IHC_CK57 %>% pivot_wider(names_from = BAP1_IHC, id_cols = PID_metagroups, values_from = Freq) %>% column_to_rownames("PID_metagroups")
+cur_test_out <- chisq.test(cur_test)
+
+ggplot(BAP1_IHC_CK57, aes(x = BAP1_IHC, y = fra, fill = PID_metagroups))+
+  geom_tile(position = "stack",color = "black")+#+alpha = 0.5)+
+  theme_classic()+
+  ylab("Fraction of patients per group")+
+  #scale_fill_manual(values = metadata(sce)$colors$PID_metagroups)+
+  ggtitle(paste0("p (ChiSquare) = ", round(cur_test_out$p.value,2)))
+
+## PBRM1
+PBRM1_IHC_CK57 <- colData(sce) %>% as.data.frame() %>% select(PID, PID_metagroups,PBRM1_IHC) %>% unique() %>% select(-PID) %>% group_by(PBRM1_IHC) %>% table() %>% as.data.frame
+PBRM1_IHC_CK57 <- PBRM1_IHC_CK57 %>% group_by(PBRM1_IHC) %>% mutate(fra = Freq/sum(Freq)) 
+
+cur_test <- PBRM1_IHC_CK57 %>% pivot_wider(names_from = PBRM1_IHC, id_cols = PID_metagroups, values_from = Freq) %>% column_to_rownames("PID_metagroups")
+cur_test_out <- chisq.test(cur_test)
+
+ggplot(PBRM1_IHC_CK57, aes(x = PBRM1_IHC, y = fra, fill = PID_metagroups))+
+  geom_tile(position = "stack",color = "black")+#+alpha = 0.5)+
+  theme_classic()+
+  ylab("Fraction of patients per group")+
+  #scale_fill_manual(values = metadata(sce)$colors$PID_metagroups)+
+  ggtitle(paste0("p (ChiSquare) = ", round(cur_test_out$p.value,2)))
+
+## H3K36me
+H3K36me_IHC_CK57 <- colData(sce) %>% as.data.frame() %>% select(PID, PID_metagroups,H3K36me_IHC) %>% unique() %>% select(-PID) %>% group_by(H3K36me_IHC) %>% table() %>% as.data.frame
+H3K36me_IHC_CK57 <- H3K36me_IHC_CK57 %>% group_by(H3K36me_IHC) %>% mutate(fra = Freq/sum(Freq)) 
+
+cur_test <- H3K36me_IHC_CK57 %>% pivot_wider(names_from = H3K36me_IHC, id_cols = PID_metagroups, values_from = Freq) %>% column_to_rownames("PID_metagroups")
+cur_test_out <- chisq.test(cur_test)
+
+ggplot(H3K36me_IHC_CK57, aes(x = H3K36me_IHC, y = fra, fill = PID_metagroups))+
+  geom_tile(position = "stack",color = "black")+#+alpha = 0.5)+
+  theme_classic()+
+  ylab("Fraction of patients per group")+
+  #scale_fill_manual(values = metadata(sce)$colors$PID_metagroups)+
+  ggtitle(paste0("p (ChiSquare) = ", round(cur_test_out$p.value,2)))
+```
+
 
 
 # Save SCE objects
