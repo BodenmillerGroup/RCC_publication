@@ -136,10 +136,9 @@ saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sc
 
 
 
+# 2. Spatial analysis 
 
-
-
-### Differential interaction testing 
+## Differential interaction testing 
 
 ```{r}
 ### General phenotype interaction difference
@@ -180,25 +179,411 @@ spicyTest <- spicy(cells_sc,
       BPPARAM = BiocParallel::MulticoreParam(),
       includeZeroCells = TRUE)
 
-saveRDS(spicyTest, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/05_spicyR/spicy_inflamedvscold_allVSall_withzero.rds")
+
 
 
 topPairs(spicyTest, cutoff = 0.05, n=20)
 
-signifPlot(spicyTest,
-           #breaks=c(-3, 3, 0.5),
+out_ISUP <- signifPlot(spicyTest,
+           type = "heatmap",
+           #breaks=c(-1, 1, 0.25),
            fdr = TRUE,
            marksToPlot = unique(sce$celltype_combined))
 
-spicyTest$coefficient
-spicyTest$p.value
+out_ISUP
 
 
+## Tumor stage
 
+# Generate segmentedCells object 
+cur_sce <- sce
+
+cells <- data.frame(row.names = colnames(cur_sce))
+cells$x <- cur_sce$Pos_X
+cells$y <- cur_sce$Pos_Y
+cells$imageID <- cur_sce$sample_id
+cells$imageCellID <- cur_sce$ObjectNumber
+cells$cellType <- cur_sce$celltype_combined
+
+cells_sc <- SegmentedCells(cells, cellProfiler = TRUE)
+
+# Add condition and patient id
+unique(cur_sce$pT_combined)
+
+cat <- relevel(x=factor(cur_sce$pT_combined), ref = "1/2")
+
+imagePheno(cells_sc) <- DataFrame(imageID = cur_sce$sample_id, 
+          PID = cur_sce$PID,
+          pT = cat
+          )
+
+cells_sc
+
+# Run differential interaction analysis 
+spicyTest <- spicy(cells_sc, 
+      condition = "pT", 
+      subject = "PID", 
+      BPPARAM = BiocParallel::MulticoreParam(),
+      includeZeroCells = TRUE)
+
+topPairs(spicyTest, cutoff = 0.05, n=20)
+
+out_pT <- signifPlot(spicyTest,
+           type = "heatmap",
+           #breaks=c(-1, 1, 0.25),
+           fdr = TRUE,
+           marksToPlot = unique(sce$celltype_combined))
+
+out_pT
+
+
+## Necrose
+
+# Generate segmentedCells object 
+cur_sce <- sce
+
+cells <- data.frame(row.names = colnames(cur_sce))
+cells$x <- cur_sce$Pos_X
+cells$y <- cur_sce$Pos_Y
+cells$imageID <- cur_sce$sample_id
+cells$imageCellID <- cur_sce$ObjectNumber
+cells$cellType <- cur_sce$celltype_combined
+
+cells_sc <- SegmentedCells(cells, cellProfiler = TRUE)
+
+# Add condition and patient id
+unique(cur_sce$necrose)
+
+cat <- relevel(x=factor(cur_sce$necrose), ref = "0")
+
+imagePheno(cells_sc) <- DataFrame(imageID = cur_sce$sample_id, 
+          PID = cur_sce$PID,
+          necrose = cat
+          )
+
+cells_sc
+
+# Run differential interaction analysis 
+spicyTest <- spicy(cells_sc, 
+      condition = "necrose", 
+      subject = "PID", 
+      BPPARAM = BiocParallel::MulticoreParam(),
+      includeZeroCells = TRUE)
+
+topPairs(spicyTest, cutoff = 0.05, n=20)
+
+out_necrose <- signifPlot(spicyTest,
+           type = "heatmap",
+           #breaks=c(-1, 1, 0.25),
+           fdr = TRUE,
+           marksToPlot = unique(sce$celltype_combined))
+
+out_necrose
+
+
+out_ISUP
+out_pT
+out_necrose
+```
+
+
+## Distances of M2-like macrophages 
+
+### M2-like vs CD8 
+
+```{r}
+# Test distance of M2-like macrophages to other cell types between conditions 
+sce <- minDistToCells(sce, 
+               x_cells = sce$celltype_combined == "MY_M2_like", 
+               img_id = "sample_id", 
+               name = "DistToM2", 
+               BPPARAM = MulticoreParam())
+```
+
+
+```{r}
+#Per image
+distCells_image <- colData(sce) %>% as.data.frame %>% select(PID, sample_id, ISUP_combined, pT_combined, necrose, celltype_combined, DistToM2) %>% filter(celltype_combined == "CD8_T_cell") %>% 
+  group_by(sample_id) %>% mutate(mean_dist_image = mean(DistToM2)) %>% select(PID, sample_id, ISUP_combined, pT_combined, necrose, celltype_combined,mean_dist_image) %>% unique()
+
+#Per PID
+distCells_PID <- distCells_image %>% ungroup() %>% group_by(PID) %>% mutate(mean_dist_PID = mean(mean_dist_image)) %>% select(PID, ISUP_combined, pT_combined, necrose, celltype_combined,mean_dist_PID) %>% unique()
+
+distCells_PID <- distCells_PID[!is.na(distCells_PID$mean_dist_PID),]
+
+distCells_PID_ISUP <- distCells_PID[!is.na(distCells_PID$ISUP_combined),]    
+
+# ISUP        
+ggplot(distCells_PID_ISUP, aes(x = ISUP_combined, y = mean_dist_PID))+
+  #facet_wrap(~celltype_combined)+
+  geom_boxplot(outlier.colour = NA)+
+  geom_jitter(aes(color = ISUP_combined), size = 3, position=position_jitter(w=0.1,h=0.1))+
+  guides(color = "none")+
+  scale_color_manual(values = c("#FC9F81", "#67000D"))+
+  theme_classic(base_size = 12)+
+  theme(axis.title.x = element_blank())+
+  stat_compare_means()+
+  ylab("Mean minimal distance per cell type pair and PID")+
+  ggtitle("CD8 T cells to M2-like")
+
+distCells_PID_pT <- distCells_PID[!is.na(distCells_PID$pT_combined),]    
+
+# pT        
+ggplot(distCells_PID_pT, aes(x = pT_combined, y = mean_dist_PID))+
+  #facet_wrap(~celltype_combined)+
+  geom_boxplot(outlier.colour = NA)+
+  geom_jitter(aes(color = pT_combined), size = 3, position=position_jitter(w=0.1,h=0.1))+
+  guides(color = "none")+
+  scale_color_manual(values = c("#ABCFE5", "#08306B"))+
+  theme_classic(base_size = 12)+
+  theme(axis.title.x = element_blank())+
+  stat_compare_means()+
+  ylab("Mean minimal distance per cell type pair and PID")+
+  ggtitle("CD8 T cells to M2-like")
+
+distCells_PID_necrose <- distCells_PID[!is.na(distCells_PID$necrose),]    
+
+# Necrose       
+ggplot(distCells_PID_necrose, aes(x = necrose, y = mean_dist_PID))+
+  #facet_wrap(~celltype_combined)+
+  geom_boxplot(outlier.colour = NA)+
+  geom_jitter(aes(color = necrose), size = 3, position=position_jitter(w=0.1,h=0.1))+
+  guides(color = "none")+
+  scale_color_manual(values = c("grey", "#3F007D"))+
+  theme_classic(base_size = 12)+
+  theme(axis.title.x = element_blank())+
+  stat_compare_means()+
+  ylab("Mean minimal distance per cell type pair and PID")+
+  ggtitle("CD8 T cells to M2-like")
+```
+
+#### Create patient groups 
+
+```{r}
+distCells_PID$M2_CD8_dist_category <- ifelse(distCells_PID$mean_dist_PID < quantile(distCells_PID$mean_dist_PID, probs = seq(0, 1, 1/3))[2], "low", 
+       ifelse(distCells_PID$mean_dist_PID > quantile(distCells_PID$mean_dist_PID, probs = seq(0, 1, 1/3))[2] & distCells_PID$mean_dist_PID < quantile(distCells_PID$mean_dist_PID, probs = seq(0, 1, 1/3))[3], "medium", "high"))
+
+sce$M2_CD8_dist_category <- distCells_PID$M2_CD8_dist_category[match(sce$PID,distCells_PID$PID)]
+```
+
+```{r}
+#Assess survival impact 
+library(survival)
+library(survminer)
+
+cur_surv <- colData(sce) %>% as.data.frame() %>% select(PID, M2_CD8_dist_category, OS_months, status_OS) %>% unique()
+
+
+#Plot survival curves
+fit <- survfit(Surv(OS_months, status_OS) ~ M2_CD8_dist_category, data = cur_surv)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = "Set1",
+          conf.int = TRUE
+)
+```
+
+```{r}
+library(survival)
+library(survminer)
+
+### Multivariate cox proportional hazard model on multiple covariates (here proportion of phenotypes)
+PID_metagroups <- colData(sce) %>% as.data.frame() %>% select(PID) %>% unique() %>% as.data.frame
+
+rownames(PID_metagroups) <- NULL
+rownames(PID_metagroups) <- PID_metagroups$PID
+
+## 1. Based on continuous cluster proportions
+Cox_df <- PID_metagroups
+
+#add covariates for correction
+Cox_df$status_OS <- sce$status_OS[match(rownames(Cox_df),sce$PID)]
+Cox_df$OS_months <- sce$OS_months[match(rownames(Cox_df),sce$PID)]
+
+Cox_df$M2_CD8_dist_category <- factor(sce$M2_CD8_dist_category[match(rownames(Cox_df),sce$PID)], levels = c("high","medium","low"))
+
+Cox_df$gender <- as.factor(sce$gender[match(rownames(Cox_df),sce$PID)])
+Cox_df$age <- sce$age[match(rownames(Cox_df),sce$PID)]
+Cox_df$ISUP <- as.factor(sce$ISUP_combined[match(rownames(Cox_df),sce$PID)])
+Cox_df$pT <- as.factor(sce$pT_combined[match(rownames(Cox_df),sce$PID)])
+#Cox_df$necrose <- as.factor(sce$necrose[match(rownames(Cox_df),sce$PID)])
+
+#Based on patient groups
+covariates <- Cox_df %>% select(-status_OS,-OS_months, -PID) %>% colnames
+
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~ ", paste(covariates, collapse = " + ")))
+
+multi_model <- coxph(multi_formula, data = Cox_df)
+
+multi_res_1 <- summary(multi_model)
+
+plot_df_prop_1 <- data.frame(group = rownames(multi_res_1$coefficients),
+                      p_value = signif(multi_res_1$coefficients[,"Pr(>|z|)"],3),
+                      HR = signif(multi_res_1$coefficients[,"exp(coef)"],3),
+                      CI_low = signif(multi_res_1$conf.int[,"lower .95"],3),
+                      CI_high = signif(multi_res_1$conf.int[,"upper .95"],3),
+                      wald_test = signif(multi_res_1$waldtest["pvalue"],3))
+
+
+#Plot hazard ratiOS
+#hr_prop <- 
+ggplot(plot_df_prop_1, aes(x = reorder(group,desc(HR)), y = HR, color = p_value < 0.05))+
+geom_point(size = 4)+
+geom_errorbar(aes(ymax = CI_high, ymin = CI_low))+
+geom_hline(yintercept = 1,color = "black",linetype = "dashed")+
+scale_color_brewer(palette = "Set1")+
+xlab("Tumor metaclusters")+
+ylab("HR for con_prop")+
+theme_classic()+
+#scale_y_continuous(trans = "log10")
+theme(axis.text.x = element_text(angle = 90))
 ```
 
 
 
+
+
+## Myeloid scores 
+
+```{r}
+## Aggregate neighbors
+sce <- aggregateNeighbors(sce, colPairName = "neighborhood", aggregate_by = "metadata", count_by = "celltype_combined", proportions = FALSE, name = "count_neighbors")
+```
+
+### Myeloid phenotype 
+based on Ruben Casanova and Hammerl et al., 2022
+
+```{r}
+## Step 1: CD8 T cell type scoring 
+cur_dat <- sce$count_neighbors %>% as.data.frame
+rownames(cur_dat) <- sce$cell_id
+cur_dat$PID <- sce$PID
+cur_dat$celltype_combined <- sce$celltype_combined
+
+# Define CD8+ T cells as infiltrating, bystanding, ignored
+cur_dat <- cur_dat %>% filter(celltype_combined == "MY_M2_like") %>% 
+  mutate(M2_type = ifelse(CD8_T_cell >= 1, "interactor", "not_interactor"))
+
+sce$M2_type <- cur_dat$M2_type[match(sce$cell_id, rownames(cur_dat))]
+  
+## Fraction and count of M2_type per PID
+p1 <- dittoBarPlot(sce[,!is.na(sce$M2_type)], var = "M2_type", group.by = "PID")+
+  theme(axis.text.x = element_blank(), axis.title.x = element_blank())
+
+p2 <- dittoBarPlot(sce[,!is.na(sce$M2_type)], var = "M2_type", group.by = "PID", scale = "count")+
+  theme(axis.text.x = element_blank())+
+  ggtitle("")
+
+p1 / p2
+```
+
+```{r}
+set.seed(22)
+sce_M2 <- sce[,sce$celltype_combined == "MY_M2_like"] 
+
+# CD274
+GMM_CD274 <- Mclust(assay(sce_M2, "exprs")["CD274",], G = 2)
+
+
+GMM_df <- data.frame(class_PDL1 = ifelse(GMM_CD274$classification == 2 & GMM_CD274$uncertainty < 0.001, 
+                                        "CD274+",
+                                        "CD274-"), 
+                     CD274_exprs = assay(sce_M2, "exprs")["CD274",],
+                     uncertainty = GMM_CD274$uncertainty)
+
+#Visualize GMM
+ggplot(GMM_df, aes(x = CD274_exprs, fill = class_PDL1))+
+  geom_density()+
+  geom_rug(aes(color = class_PDL1))+
+  theme_classic(base_size = 15)+
+  theme(axis.title.x = element_blank())+
+  scale_fill_brewer(palette = "Set1")+
+  scale_color_brewer(palette = "Set1")
+
+# Add HLA group 
+sce$M2_type_PDL1 <- GMM_df$class_PDL1[match(colnames(sce), rownames(GMM_df))]
+```
+
+```{r}
+n_cat <- colData(sce) %>% as.data.frame() %>% select(M2_type_PDL1, M2_type) %>% filter(!is.na(M2_type_PDL1)) %>% group_by(M2_type_PDL1, M2_type) %>% table() %>% as.data.frame %>% ungroup() %>% group_by(M2_type) %>% mutate(sum = sum(Freq)) %>% mutate(fra = (Freq/sum)*100)
+
+ggplot(pretreatment_mc, aes(x = metacluster, y = fra, fill = pretreatment))+
+  geom_tile(position = "stack",color = "black")+#+alpha = 0.5)+
+  theme_classic()+
+  ylab("Fraction of cells per group")+
+  scale_fill_manual(values = metadata(sce)$colors$pretreatment)
+```
+
+```{r}
+## Step 2: Classify Patients based on spatial CD8 T cell scores
+out <- cur_dat %>% group_by(PID, M2_type) %>% count() %>% 
+  pivot_wider(id_cols = PID, values_from = n, names_from = M2_type) %>% mutate(interactor = replace_na(interactor,0), not_interactor = replace_na(not_interactor,0)) %>% mutate(ratio_int_non = interactor / not_interactor, number_int_non = interactor + not_interactor) %>% 
+  mutate(M2_type_group = ifelse(ratio_int_non > 0 & number_int_non >= 10, "M2_CD8_int", "Not_M2_CD8_int"))
+
+# Add to sce
+sce$M2_type_group <- out$M2_type_group[match(sce$PID, out$PID)]
+
+sce[,is.na(sce$M2_type_group)]$M2_type_group <- "Not_M2_CD8_int"
+```
+
+
+```{r}
+#Assess survival impact 
+library(survival)
+library(survminer)
+
+cur_surv <- colData(sce) %>% as.data.frame() %>% select(PID, M2_type_group, OS_months, status_OS) %>% unique()
+
+
+#Plot survival curves
+fit <- survfit(Surv(OS_months, status_OS) ~ M2_type_group, data = cur_surv)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = "Set1",
+          conf.int = TRUE
+)
+```
+
+
+```{r}
+plotExpression(sce[,!is.na(sce$M2_type)], 
+               features = c("IDO1","CD274"),
+               x = "M2_CD8_dist_category", 
+               exprs_values = "exprs", 
+               colour_by = "M2_CD8_dist_category") +
+    theme(axis.text.x =  element_text(angle = 90))
+```
+
+
+```{r}
+#Per image
+distCells_image <- colData(sce) %>% as.data.frame %>% select(PID, sample_id, ISUP_combined, pT_combined, necrose, celltype_combined, DistToM2) %>% #filter(celltype_combined == "CD8_T_cell") %>% 
+  group_by(sample_id) %>% mutate(mean_dist_image = mean(DistToM2)) %>% select(PID, sample_id, ISUP_combined, pT_combined, necrose, celltype_combined,mean_dist_image) %>% unique()
+
+#Per PID
+distCells_PID <- distCells_image %>% ungroup() %>% group_by(PID) %>% mutate(mean_dist_PID = mean(mean_dist_image)) %>% select(PID, ISUP_combined, pT_combined, necrose, celltype_combined,mean_dist_PID) %>% unique()
+```
+
+
+
+
+
+
+# CONTINUE HERE
 
 
 
