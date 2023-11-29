@@ -3,7 +3,7 @@ title: "04_SingleCell_InitialClustering"
 output: html_document
 date: '2022-03-30'
 editor_options: 
-  chunk_output_type: inline
+  chunk_output_type: console
 ---
 
 ```{r setup, include=FALSE}
@@ -542,7 +542,7 @@ Heatmap of clusters with GMM and ASTIR information
 
 ```{r heatmap, message=FALSE, warning=FALSE}
 #Read sce after clustering, astir and GMM
-#sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_04.rds")
+sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_04.rds")
 
 ### 1. Heatmap body ###
 
@@ -772,7 +772,7 @@ ggplot(spatial_comp, aes(x = analysis_cat, y = mean_ecc))+
   guides(color = "none")+
   scale_fill_manual(values = metadata(sce)$colors$analysis_cat)+
   theme_classic()+
-  ylab("Mean cell area")
+  ylab("Mean cell eccentricity")
 ```
 
 ### Visualization
@@ -789,8 +789,6 @@ masks <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysi
 set.seed(220195)
 cur_sample <- sample(unique(sce$sample_id), 40)
 
-cur_sample <- sample(colData(sce) %>% as.data.frame %>% select(sample_id, subtype_combined) %>% unique() %>% filter(subtype_combined == "ccRCC") %>% pull(sample_id), 30)
-
 cur_sample <- (colData(sce) %>% as.data.frame %>% select(sample_id, astir_type) %>% group_by(sample_id) %>% filter(astir_type == "NK_cell") %>% count() %>% arrange(desc(n)) %>% pull(sample_id))[1:10]
 
 cur_sample <- (colData(sce) %>% as.data.frame %>% select(sample_id, cluster) %>% group_by(sample_id) %>% filter(cluster == "21") %>% count() %>% arrange(desc(n)) %>% pull(sample_id))[1:10]
@@ -802,7 +800,6 @@ cur_images <- images[mcols(images)$sample_id %in% cur_sample]
 cur_masks <- masks[mcols(masks)$sample_id %in% cur_sample]
 cur_sce <- sce[,sce$sample_id %in% cur_sample]
 ```
-
 
 ```{r}
 library(cytoviewer)
@@ -865,16 +862,18 @@ dittoHeatmap(sce[,cur_cells],
 #### Dimensionality reduction
 
 ```{r dim_red}
+sce_sub <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_sub_ccRCC_MY_04.rds")
+
 ## Subsample 10% of cells from each core
 #to save time and not get super crowded dimensionality reduction plots
-set.seed(220195)
-sub <- colData(sce) %>% as.data.frame() %>% group_by("sample_id") %>% slice_sample(prop = 0.1) %>% arrange("sample_id") %>% mutate(sub_id = paste(sample_id,ObjectNumber,sep="_")) %>% pull(sub_id)
-sce_sub <- sce[,sub]
+#set.seed(220195)
+#sub <- colData(sce) %>% as.data.frame() %>% group_by("sample_id") %>% slice_sample(prop = 0.1) %>% arrange("sample_id") %>% mutate(sub_id = paste(sample_id,ObjectNumber,sep="_")) %>% pull(sub_id)
+#sce_sub <- sce[,sub]
 
 #Run UMAP/TSNE
-reducedDim(sce_sub, "UMAP") <- calculateUMAP(sce_sub[rowData(sce_sub)$broad_cluster,], n_neighbors = 30, pca = 30,exprs_values = "min_max", external_neighbors=TRUE, BPPARAM = MulticoreParam())
+#reducedDim(sce_sub, "UMAP") <- calculateUMAP(sce_sub[rowData(sce_sub)$broad_cluster,], n_neighbors = 30, pca = 30,exprs_values = "min_max", external_neighbors=TRUE, BPPARAM = MulticoreParam())
 
-reducedDim(sce_sub, "TSNE") <- calculateTSNE(sce_sub[rowData(sce_sub)$broad_cluster,], exprs_values = "min_max", external_neighbors=TRUE, BPPARAM = MulticoreParam())
+#reducedDim(sce_sub, "TSNE") <- calculateTSNE(sce_sub[rowData(sce_sub)$broad_cluster,], exprs_values = "min_max", external_neighbors=TRUE, BPPARAM = MulticoreParam())
 
 plotReducedDim(sce_sub, dimred = "TSNE", colour_by = "analysis_cat")+
   scale_color_manual(values = metadata(sce)$colors$analysis_cat)
