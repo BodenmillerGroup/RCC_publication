@@ -141,6 +141,8 @@ saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sc
 ## Differential interaction testing 
 
 ```{r}
+sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_07.rds")
+
 ### General phenotype interaction difference
 
 library(spicyR)
@@ -178,8 +180,6 @@ spicyTest <- spicy(cells_sc,
       subject = "PID", 
       BPPARAM = BiocParallel::MulticoreParam(),
       includeZeroCells = TRUE)
-
-
 
 
 topPairs(spicyTest, cutoff = 0.05, n=20)
@@ -220,15 +220,15 @@ imagePheno(cells_sc) <- DataFrame(imageID = cur_sce$sample_id,
 cells_sc
 
 # Run differential interaction analysis 
-spicyTest <- spicy(cells_sc, 
+spicyTest_1 <- spicy(cells_sc, 
       condition = "pT", 
       subject = "PID", 
       BPPARAM = BiocParallel::MulticoreParam(),
       includeZeroCells = TRUE)
 
-topPairs(spicyTest, cutoff = 0.05, n=20)
+topPairs(spicyTest_1, cutoff = 0.05, n=20)
 
-out_pT <- signifPlot(spicyTest,
+out_pT <- signifPlot(spicyTest_1,
            type = "heatmap",
            #breaks=c(-1, 1, 0.25),
            fdr = TRUE,
@@ -264,15 +264,15 @@ imagePheno(cells_sc) <- DataFrame(imageID = cur_sce$sample_id,
 cells_sc
 
 # Run differential interaction analysis 
-spicyTest <- spicy(cells_sc, 
+spicyTest_2 <- spicy(cells_sc, 
       condition = "necrose", 
       subject = "PID", 
       BPPARAM = BiocParallel::MulticoreParam(),
       includeZeroCells = TRUE)
 
-topPairs(spicyTest, cutoff = 0.05, n=20)
+topPairs(spicyTest_2, cutoff = 0.05, n=20)
 
-out_necrose <- signifPlot(spicyTest,
+out_necrose <- signifPlot(spicyTest_2,
            type = "heatmap",
            #breaks=c(-1, 1, 0.25),
            fdr = TRUE,
@@ -363,7 +363,22 @@ ggplot(distCells_PID_necrose, aes(x = necrose, y = mean_dist_PID))+
 distCells_PID$M2_CD8_dist_category <- ifelse(distCells_PID$mean_dist_PID < quantile(distCells_PID$mean_dist_PID, probs = seq(0, 1, 1/3))[2], "low", 
        ifelse(distCells_PID$mean_dist_PID > quantile(distCells_PID$mean_dist_PID, probs = seq(0, 1, 1/3))[2] & distCells_PID$mean_dist_PID < quantile(distCells_PID$mean_dist_PID, probs = seq(0, 1, 1/3))[3], "medium", "high"))
 
+distCells_PID$M2_CD8_dist_category <- factor(distCells_PID$M2_CD8_dist_category, levels = c("high","medium","low"))
+
 sce$M2_CD8_dist_category <- distCells_PID$M2_CD8_dist_category[match(sce$PID,distCells_PID$PID)]
+
+ggplot(distCells_PID, aes(x = M2_CD8_dist_category, y = mean_dist_PID))+
+  #facet_wrap(~celltype_combined)+
+  geom_boxplot(outlier.colour = NA)+
+  geom_jitter(aes(color = M2_CD8_dist_category), size = 3, position=position_jitter(w=0.1,h=0.1))+
+  guides(color = "none")+
+  scale_color_brewer(palette = "Reds")+
+  theme_classic(base_size = 12)+
+  theme(axis.title.x = element_blank())+
+  stat_compare_means()+
+  ylab("Mean minimal distance per cell type pair and PID")+
+  ggtitle("CD8+ T cells to M2-like")
+
 ```
 
 ```{r}
@@ -385,7 +400,7 @@ ggsurvplot(fit,
           linetype = "strata", # Change line type by groups
           surv.median.line = "hv", # Specify median survival
           ggtheme = theme_classic(), # Change ggplot2 theme
-          palette = "Set1",
+          palette = "Reds",
           conf.int = TRUE
 )
 ```
@@ -439,7 +454,7 @@ geom_point(size = 4)+
 geom_errorbar(aes(ymax = CI_high, ymin = CI_low))+
 geom_hline(yintercept = 1,color = "black",linetype = "dashed")+
 scale_color_brewer(palette = "Set1")+
-xlab("Tumor metaclusters")+
+xlab("CD8_M2_groups")+
 ylab("HR for con_prop")+
 theme_classic()+
 #scale_y_continuous(trans = "log10")
