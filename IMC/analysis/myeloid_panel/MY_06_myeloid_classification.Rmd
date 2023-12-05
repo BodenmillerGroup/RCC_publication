@@ -2198,6 +2198,62 @@ ggsurvplot(fit,
 )
 ```
 
+```{r}
+library(survival)
+library(survminer)
+
+### Multivariate cox proportional hazard model on multiple covariates (here proportion of phenotypes)
+PID_metagroups <- colData(sce) %>% as.data.frame() %>% select(PID) %>% unique() %>% as.data.frame
+
+rownames(PID_metagroups) <- NULL
+rownames(PID_metagroups) <- PID_metagroups$PID
+
+## 1. Based on continuous cluster proportions
+Cox_df <- PID_metagroups
+
+#add covariates for correction
+Cox_df$status_OS <- sce$status_OS[match(rownames(Cox_df),sce$PID)]
+Cox_df$OS_months <- sce$OS_months[match(rownames(Cox_df),sce$PID)]
+
+Cox_df$my_HLADR_group <- factor(sce$my_HLADR_group[match(rownames(Cox_df),sce$PID)], levels = c("1","2","3"))
+
+Cox_df$gender <- as.factor(sce$gender[match(rownames(Cox_df),sce$PID)])
+Cox_df$age <- sce$age[match(rownames(Cox_df),sce$PID)]
+Cox_df$ISUP <- as.factor(sce$ISUP_combined[match(rownames(Cox_df),sce$PID)])
+Cox_df$pT <- as.factor(sce$pT_combined[match(rownames(Cox_df),sce$PID)])
+#Cox_df$necrose <- as.factor(sce$necrose[match(rownames(Cox_df),sce$PID)])
+
+#Based on patient groups
+covariates <- Cox_df %>% select(-status_OS,-OS_months, -PID) %>% colnames
+
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~ ", paste(covariates, collapse = " + ")))
+
+multi_model <- coxph(multi_formula, data = Cox_df)
+
+multi_res_1 <- summary(multi_model)
+
+plot_df_prop_1 <- data.frame(group = rownames(multi_res_1$coefficients),
+                      p_value = signif(multi_res_1$coefficients[,"Pr(>|z|)"],3),
+                      HR = signif(multi_res_1$coefficients[,"exp(coef)"],3),
+                      CI_low = signif(multi_res_1$conf.int[,"lower .95"],3),
+                      CI_high = signif(multi_res_1$conf.int[,"upper .95"],3),
+                      wald_test = signif(multi_res_1$waldtest["pvalue"],3))
+
+
+#Plot hazard ratiOS
+#hr_prop <- 
+ggplot(plot_df_prop_1, aes(x = reorder(group,desc(HR)), y = HR, color = p_value < 0.05))+
+geom_point(size = 4)+
+geom_errorbar(aes(ymax = CI_high, ymin = CI_low))+
+geom_hline(yintercept = 1,color = "black",linetype = "dashed")+
+scale_color_brewer(palette = "Set1")+
+xlab("HLA_DR_groups")+
+ylab("HR for con_prop")+
+theme_classic()+
+#scale_y_continuous(trans = "log10")
+theme(axis.text.x = element_text(angle = 90))
+```
+
 ### Check on images 
 
 ```{r}

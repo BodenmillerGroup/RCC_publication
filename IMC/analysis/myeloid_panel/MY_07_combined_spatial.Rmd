@@ -461,7 +461,237 @@ theme_classic()+
 theme(axis.text.x = element_text(angle = 90))
 ```
 
+### Tumor expression analysis 
 
+```{r}
+## Visualize 
+cur_dat <- t(assay(sce,"min_max")) %>% as.matrix %>% as.data.frame %>% dplyr::select("IDO1","CD274")
+
+cur_dat$M2_CD8_dist_category <- sce$M2_CD8_dist_category[match(rownames(cur_dat), sce$cell_id)]
+
+cur_dat$celltype_combined <- sce$celltype_combined[match(rownames(cur_dat), sce$cell_id)]
+
+cur_dat_fil <- cur_dat %>% filter(celltype_combined == "tumor")
+
+#cur_dat$GMM_tumor_CK5 <- sce$GMM_tumor_CK5[match(rownames(cur_dat), sce$cell_id)]
+#cur_dat$GMM_tumor_CK7 <- sce$GMM_tumor_CK7[match(rownames(cur_dat), sce$cell_id)]
+
+ggplot(cur_dat_fil, aes(x=IDO1, y=CD274, color = M2_CD8_dist_category)) +
+  geom_point(alpha = 0.5)+
+  theme_classic()+
+  xlab("IDO1 exprs")+
+  ylab("CD274 exprs")+
+  guides(color = "none")+
+  scale_color_brewer(palette = "Reds")
+
+
+ggplot(cur_dat_fil, aes(x=M2_CD8_dist_category, y=IDO1)) +
+  geom_boxplot(outlier.color = NA)+
+  geom_jitter(aes(color = M2_CD8_dist_category), size = 3, position=position_jitter(w=0.1,h=0.1))+
+  #coord_cartesian(ylim = c(3,13))+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90))+
+  ylab("Mean metacommunity cell number per PID")+
+  stat_compare_means(method = "kruskal.test")
+
+
+
+#Per image
+distCells_image <- colData(sce) %>% as.data.frame %>% select(PID, sample_id) %>% filter(celltype_combined == "CD8_T_cell") %>% 
+  group_by(sample_id) %>% mutate(mean_dist_image = mean(DistToM2)) %>% select(PID, sample_id, ISUP_combined, pT_combined, necrose, celltype_combined,mean_dist_image) %>% unique()
+
+#Per PID
+distCells_PID <- distCells_image %>% ungroup() %>% group_by(PID) %>% mutate(mean_dist_PID = mean(mean_dist_image)) %>% select(PID, ISUP_combined, pT_combined, necrose, celltype_combined,mean_dist_PID) %>% unique()
+
+distCells_PID <- distCells_PID[!is.na(distCells_PID$mean_dist_PID),]
+
+distCells_PID_ISUP <- distCells_PID[!is.na(distCells_PID$ISUP_combined),]    
+```
+
+```{r}
+## Analyse tumor compartment expression 
+
+# Subset to tumor cells
+sce_tumor <- sce[,sce$analysis_cat == "tumor"]
+
+# Tumor relevant markers 
+rowData(sce)$tumor_type_markers <- rownames(sce) %in% c("HLADR","IDO1","CD274","Ki67","Vimentin","CXCL13")
+
+# Aggregate expression per PID 
+spatialpheno_mean_PID <- aggregateAcrossCells(sce_tumor, ids = sce_tumor$PID,
+                                 statistics = "mean",
+                                 use.assay.type = "exprs",
+                                 subset.row = rowData(sce_tumor)$tumor_type_markers)
+
+
+# Test for differential expression per category 
+test <- t(assay(spatialpheno_mean_PID, "exprs")[rowData(spatialpheno_mean_PID)$tumor_type_markers,]) %>% as.data.frame %>% mutate(M2_CD8_dist_category = spatialpheno_mean_PID$M2_CD8_dist_category) 
+
+test <- test[!is.na(test$M2_CD8_dist_category),]
+
+ggplot(test, aes(x=M2_CD8_dist_category, y=CD274)) +
+  geom_jitter(aes(color = M2_CD8_dist_category), size = 3, position=position_jitter(w=0.1,h=0.1))+
+  geom_boxplot(outlier.color = NA)+
+  scale_color_brewer(palette = "Reds")+
+    theme_classic()+
+  theme(axis.text.x = element_text(angle = 90))+
+  ylab("CD274 - Mean expression per PID")+
+  stat_compare_means(method = "kruskal.test")
+
+
+
+test_result <- compare_means(c(HLADR,IDO1,CD274,Ki67,Vimentin,CXCL13)~M2_CD8_dist_category, method = "kruskal.test",data = test)
+
+test_result$p.adj <- p.adjust(test_result$p, method = "BH") 
+
+test_result$psignif.adj <- as.matrix(symnum(test_result$p.adj,
+       cutpoints = c(0, 0.0001, 0.001, 0.01, 0.05, 1), 
+       symbols = c("****", "***", "**", "*", "ns")))[,1]
+
+rownames(test_result) <- test_result$.y.
+
+sig.poteins <- unfactor(test_result$.y.[test_result$p.adj < 0.05])
+
+
+
+
+
+# Aggregate expression per spatial phenotype
+spatialpheno_mean_sce <- aggregateAcrossCells(sce_tumor, ids = sce_tumor$spatial_CD8_pheno,
+                                 statistics = "mean",
+                                 use.assay.type = "exprs",
+                                 subset.row = rowData(sce_tumor)$tumor_cluster_channel)
+
+mat_scaled<- t(scale(t(assay(spatialpheno_mean_sce, "exprs"))))
+
+
+highest_cat <- mat_scaled %>% as.data.frame() %>% rownames_to_column("gene") %>% pivot_longer(cols = 2:4, names_to = "spatial_CD8", values_to = "exprs") %>% group_by(gene) %>% mutate(max = max(exprs)) %>% filter(exprs == max) %>% select(gene, spatial_CD8) %>% as.data.frame() %>% column_to_rownames("gene")
+
+## Visualize 
+
+# Heatmap 
+h <- Heatmap(assay(spatialpheno_mean_sce, "exprs"), col = viridis(100), name = "exprs", cluster_columns = FALSE, row_names_side = "left", show_row_dend = FALSE)+
+  #Heatmap(mat_scaled, name = "scaled exprs", cluster_columns = FALSE)+
+  rowAnnotation(cat = anno_simple(highest_cat, col = metadata(sce)$colors$spatial_CD8_pheno, width = unit(10, "mm")))+
+  rowAnnotation(test = anno_text(test_result$psignif.adj))
+
+lgd_cat <- Legend(title = "Highest_exprs", at = names(metadata(sce)$colors$spatial_CD8_pheno), 
+              legend_gp = gpar(fill = metadata(sce)$colors$spatial_CD8_pheno))
+
+
+draw(h,annotation_legend_list = list(lgd_cat))
+
+# Violin plot
+plotExpression(spatialpheno_mean_PID, 
+               features = sig.poteins,
+               x = "spatial_CD8_pheno", exprs_values = "exprs", 
+               colour_by = "spatial_CD8_pheno") +
+    theme(axis.text.x =  element_text(angle = 90))+
+    scale_color_manual(values = metadata(sce)$colors$spatial_CD8_pheno)
+```
+
+
+```{r}
+set.seed(22)
+sce_M2 <- sce[,sce$celltype_combined == "MY_M2_like"] 
+
+# CD274
+GMM_CD274 <- Mclust(assay(sce_M2, "exprs")["CD274",], G = 2)
+
+
+GMM_df <- data.frame(class_PDL1 = ifelse(GMM_CD274$classification == 2 & GMM_CD274$uncertainty < 0.001, 
+                                        "CD274+",
+                                        "CD274-"), 
+                     CD274_exprs = assay(sce_M2, "exprs")["CD274",],
+                     uncertainty = GMM_CD274$uncertainty)
+
+#Visualize GMM
+ggplot(GMM_df, aes(x = CD274_exprs, fill = class_PDL1))+
+  geom_density()+
+  geom_rug(aes(color = class_PDL1))+
+  theme_classic(base_size = 15)+
+  theme(axis.title.x = element_blank())+
+  scale_fill_brewer(palette = "Set1")+
+  scale_color_brewer(palette = "Set1")
+
+# Add HLA group 
+sce_M2$my_CD274_GMM <- GMM_df$class_PDL1[match(colnames(sce_M2), rownames(GMM_df))]
+
+n_cat <- colData(sce_M2) %>% as.data.frame() %>% group_by(my_CD274_GMM, M2_CD8_dist_category) %>% count()
+n_cat <- n_cat %>% ungroup() %>% group_by(M2_CD8_dist_category) %>% mutate(sum = sum(n)) %>% mutate(fra = (n/sum)*100) %>% filter(!is.na(M2_CD8_dist_category))
+
+cur_test <- n_cat %>% pivot_wider(names_from = M2_CD8_dist_category, id_cols = my_CD274_GMM, values_from = n) %>% column_to_rownames("my_CD274_GMM")
+cur_test_out <- chisq.test(cur_test)
+cur_test_out
+
+ggplot(n_cat, aes(x = M2_CD8_dist_category, y = fra, fill = my_CD274_GMM))+
+  geom_tile(position = "stack",color = "black")+#+alpha = 0.5)+
+  theme_classic()+
+  ylab("Fraction of CD274+ M2-like per group")+
+  scale_fill_brewer(palette = "Set1")+
+  coord_cartesian(ylim = c(0,10))+
+  ggtitle("p (ChiSqu) < 2.2e-16")
+
+```
+
+```{r}
+## Analyse tumor compartment expression 
+
+# M2 relevant markers 
+rowData(sce_M2)$M2_type_markers <- rownames(sce) %in% c("CD274","IDO1")
+
+# Aggregate expression per PID 
+M2_mean_PID <- aggregateAcrossCells(sce_M2, 
+                                    ids = sce_M2$PID,
+                                 statistics = "mean",
+                                 use.assay.type = "exprs",
+                                 subset.row = rowData(sce_M2)$M2_type_markers)
+
+
+# Test for differential expression per category 
+test <- t(assay(M2_mean_PID, "exprs")[rowData(M2_mean_PID)$M2_type_markers,]) %>% as.data.frame %>% mutate(M2_CD8_dist_category = M2_mean_PID$M2_CD8_dist_category) 
+
+test <- test[!is.na(test$M2_CD8_dist_category),]
+
+ggplot(test, aes(x=M2_CD8_dist_category, y=CD274)) +
+  geom_jitter(aes(color = M2_CD8_dist_category), size = 3, position=position_jitter(w=0.1,h=0.1))+
+  geom_boxplot(outlier.color = NA)+
+  scale_color_brewer(palette = "Reds")+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90))+
+  ylab("CD274 - Mean expression per PID")+
+  stat_compare_means(method = "kruskal.test")
+```
+
+
+```{r}
+sce$M2_CD274_status <- sce_M2$my_CD274_GMM[match(sce$cell_id, sce_M2$cell_id)]
+```
+
+
+### cytoviewer visualization
+
+```{r}
+images <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/images.rds")
+masks <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/masks.rds")
+```
+
+```{r}
+# Select images
+cur_PID <- (test %>% filter(M2_CD8_dist_category == "low") %>% arrange(-CD274) %>% rownames_to_column("PID") %>% pull(PID))[1:10]
+cur_sample <- (colData(sce) %>% as.data.frame %>% select(PID, sample_id) %>% filter(PID %in%cur_PID) %>% pull(sample_id) %>% unique())
+
+
+cur_images <- images[mcols(images)$sample_id %in% cur_sample]
+cur_masks <- masks[mcols(masks)$sample_id %in% cur_sample]
+cur_sce <- sce[,sce$sample_id %in% cur_sample]
+```
+
+
+```{r}
+library(cytoviewer)
+cytoviewer(image = cur_images, mask = cur_masks, object = cur_sce, img_id = "sample_id", cell_id = "ObjectNumber")
+```
 
 
 
@@ -573,9 +803,28 @@ ggsurvplot(fit,
 )
 ```
 
+```{r}
+colData(sce) %>% 
+
+
+plotExpression(sce[,sce$celltype_combined == "tumor"], 
+               features = c("IDO1","CD274"),
+               x = "M2_CD8_dist_category", 
+               exprs_values = "exprs", 
+               colour_by = "M2_CD8_dist_category") +
+    theme(axis.text.x =  element_text(angle = 90))
+```
+
 
 ```{r}
 plotExpression(sce[,!is.na(sce$M2_type)], 
+               features = c("IDO1","CD274"),
+               x = "M2_CD8_dist_category", 
+               exprs_values = "exprs", 
+               colour_by = "M2_CD8_dist_category") +
+    theme(axis.text.x =  element_text(angle = 90))
+
+plotExpression(sce[,sce$celltype_combined == "tumor"], 
                features = c("IDO1","CD274"),
                x = "M2_CD8_dist_category", 
                exprs_values = "exprs", 
