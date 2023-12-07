@@ -303,7 +303,19 @@ sce <- minDistToCells(sce,
 
 ```{r}
 #Per image
-distCells_image <- colData(sce) %>% as.data.frame %>% select(PID, sample_id, ISUP_combined, pT_combined, necrose, celltype_combined, DistToM2) %>% filter(celltype_combined == "CD8_T_cell") %>% 
+distCells_image <- colData(sce) %>% as.data.frame %>% select(PID, sample_id, celltype_combined, DistToM2) %>% filter(celltype_combined == "CD8_T_cell") %>% 
+  group_by(sample_id, celltype_combined) %>% mutate(mean_dist_image = mean(DistToM2)) %>% select(PID, sample_id, celltype_combined,mean_dist_image) %>% unique()
+
+#Per PID
+distCells_PID <- distCells_image %>% ungroup() %>% group_by(PID, celltype_combined) %>% mutate(mean_dist_PID = mean(mean_dist_image)) %>% select(PID, celltype_combined,mean_dist_PID) %>% unique() %>% filter(celltype_combined != "MY_M2_like")
+
+distCells_hazard <- distCells_PID %>% pivot_wider(names_from = "celltype_combined", values_from = "mean_dist_PID")
+```
+
+
+```{r}
+#Per image
+distCells_image <- colData(sce) %>% as.data.frame %>% select(PID, sample_id, ISUP_combined, pT_combined, necrose, celltype_combined, DistToM2) %>% #filter(celltype_combined == "CD8_T_cell") %>% 
   group_by(sample_id) %>% mutate(mean_dist_image = mean(DistToM2)) %>% select(PID, sample_id, ISUP_combined, pT_combined, necrose, celltype_combined,mean_dist_image) %>% unique()
 
 #Per PID
@@ -386,11 +398,26 @@ ggplot(distCells_PID, aes(x = M2_CD8_dist_category, y = mean_dist_PID))+
 library(survival)
 library(survminer)
 
-cur_surv <- colData(sce) %>% as.data.frame() %>% select(PID, M2_CD8_dist_category, OS_months, status_OS) %>% unique()
+cur_surv <- colData(sce) %>% as.data.frame() %>% select(PID, ratio_category, M2_CD8_dist_category, OS_months, status_OS) %>% unique()
 
 
 #Plot survival curves
 fit <- survfit(Surv(OS_months, status_OS) ~ M2_CD8_dist_category, data = cur_surv)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = "Reds",
+          conf.int = TRUE
+)
+
+#Plot survival curves
+fit <- survfit(Surv(OS_months, status_OS) ~ ratio_category, data = cur_surv)
 print(fit)
 
 ggsurvplot(fit,
@@ -694,40 +721,156 @@ cytoviewer(image = cur_images, mask = cur_masks, object = cur_sce, img_id = "sam
 ```
 
 
-
 ## Myeloid scores 
 
 ```{r}
+# Build spatial knn graph
+sce <- buildSpatialGraph(sce, img_id = "sample_id", type = "knn", k = 20, 
+                         coords = c("Pos_X",  "Pos_Y"),
+                         max_dist = 30,
+                         BPPARAM = MulticoreParam())
+```
+
+```{r}
 ## Aggregate neighbors
+
+### Neighborhood expansion graph
 sce <- aggregateNeighbors(sce, colPairName = "neighborhood", aggregate_by = "metadata", count_by = "celltype_combined", proportions = FALSE, name = "count_neighbors")
+
+### KNN graph
+sce <- aggregateNeighbors(sce, colPairName = "knn_interaction_graph", aggregate_by = "metadata", count_by = "celltype_combined", proportions = FALSE, name = "count_neighbors_knn")
 ```
 
 ### Myeloid phenotype 
 based on Ruben Casanova and Hammerl et al., 2022
 
 ```{r}
-## Step 1: CD8 T cell type scoring 
+## Step 1: Retrieve neighbors table
 cur_dat <- sce$count_neighbors %>% as.data.frame
 rownames(cur_dat) <- sce$cell_id
 cur_dat$PID <- sce$PID
 cur_dat$celltype_combined <- sce$celltype_combined
+cur_dat$M2_CD274_status <- sce$M2_CD274_status
+cur_dat$M2_CD8_dist_category <- sce$M2_CD8_dist_category
 
-# Define CD8+ T cells as infiltrating, bystanding, ignored
+## Step 2: Define M2-like macrophages into CD8 interactors or not interactors
 cur_dat <- cur_dat %>% filter(celltype_combined == "MY_M2_like") %>% 
-  mutate(M2_type = ifelse(CD8_T_cell >= 1, "interactor", "not_interactor"))
+  mutate(M2_type = ifelse(CD8_T_cell >= 1, "interactor", "not_interactor")) 
 
-sce$M2_type <- cur_dat$M2_type[match(sce$cell_id, rownames(cur_dat))]
+## Step 3: Compare for CD274 status of M2-like 
+cur_plot <- cur_dat %>% group_by(M2_type) %>% count(M2_CD274_status) %>% mutate(fra = n/(sum(n)))
+
+ggplot(cur_plot, aes(x = M2_type, y = fra, fill = M2_CD274_status))+
+  geom_tile(position = "stack", color = "black")+#+alpha = 0.5)+
+  theme_classic()+
+  ylab("Fraction of CD274+ M2-like per group")+
+  scale_fill_brewer(palette = "Paired")
+
+## Step 4: Compare between M2-CD8 dist categories 
+cur_plot_1 <- cur_dat %>% group_by(M2_type) %>% filter(!is.na(M2_CD8_dist_category)) %>% count(M2_CD8_dist_category) %>% mutate(fra = n/(sum(n)))
+
+ggplot(cur_plot_1, aes(x = M2_type, y = fra, fill = M2_CD8_dist_category))+
+  geom_tile(position = "stack", color = "black")+#+alpha = 0.5)+
+  theme_classic()+
+  ylab("Fraction of CD274+ M2-like per group")+
+  scale_fill_brewer(palette = "Reds")
+
+cur_plot_2 <- cur_dat %>% group_by(M2_CD8_dist_category) %>% filter(!is.na(M2_CD8_dist_category)) %>% count(M2_type) %>% mutate(fra = n/(sum(n)))
+
+ggplot(cur_plot_2, aes(x = M2_CD8_dist_category, y = fra, fill = M2_type))+
+  geom_tile(position = "stack", color = "black")+#+alpha = 0.5)+
+  theme_classic()+
+  ylab("Fraction of CD8-M2 interactors per group")+
+  scale_fill_brewer(palette = "Pastel1")
+
+## Step 5: Look at ratio between interactors / not-interactors
+cur_test <- cur_dat %>% group_by(PID, M2_type) %>% count() %>% ungroup() %>% group_by(PID) %>% mutate(sum = sum(n)) %>% filter(sum > 10)
   
-## Fraction and count of M2_type per PID
-p1 <- dittoBarPlot(sce[,!is.na(sce$M2_type)], var = "M2_type", group.by = "PID")+
-  theme(axis.text.x = element_blank(), axis.title.x = element_blank())
+cur_test <- cur_test %>% pivot_wider(names_from = M2_type, values_from = n) %>% mutate(ratio = interactor/not_interactor) %>% filter(interactor > 1 & not_interactor > 1)
 
-p2 <- dittoBarPlot(sce[,!is.na(sce$M2_type)], var = "M2_type", group.by = "PID", scale = "count")+
-  theme(axis.text.x = element_blank())+
-  ggtitle("")
+cur_test$M2_CD8_dist_category <- cur_dat$M2_CD8_dist_category[match(cur_test$PID, cur_dat$PID)]
 
-p1 / p2
+cur_test <- cur_test[!is.na(cur_test$ratio),]
+cur_test <- cur_test[!is.na(cur_test$M2_CD8_dist_category),]
+
+ggplot(cur_test, aes(x = M2_CD8_dist_category, y = ratio))+
+  geom_jitter(aes(color = M2_CD8_dist_category), size = 3, position=position_jitter(w=0.1,h=0.1))+
+  geom_boxplot(outlier.color = NA)+
+  geom_hline(yintercept = 1, color = "grey")+
+  scale_color_brewer(palette = "Reds")+
+  theme_classic()+
+  stat_compare_means(method = "kruskal.test")
+
+cur_test$ratio_category <- ifelse(cur_test$ratio < quantile(cur_test$ratio, probs = seq(0, 1, 1/3))[2], "low", 
+       ifelse(cur_test$ratio > quantile(cur_test$ratio, probs = seq(0, 1, 1/3))[2] & cur_test$ratio < quantile(cur_test$ratio, probs = seq(0, 1, 1/3))[3], "medium", "high"))
+
+cur_test$ratio_category <- factor(cur_test$ratio_category, levels = c("high","medium","low"))
+
+sce$ratio_category <- cur_test$ratio_category[match(sce$PID,cur_test$PID)]
 ```
+
+
+```{r}
+## Step 1: Retrieve neighbors table
+cur_dat <- sce$count_neighbors %>% as.data.frame
+rownames(cur_dat) <- sce$cell_id
+cur_dat$PID <- sce$PID
+cur_dat$celltype_combined <- sce$celltype_combined
+cur_dat$M2_CD274_status <- sce$M2_CD274_status
+cur_dat$M2_CD8_dist_category <- sce$M2_CD8_dist_category
+
+## Step 2: Define CD8 T cells into M2 interactors or not interactors
+cur_dat <- cur_dat %>% filter(celltype_combined == "CD8_T_cell") %>% 
+  mutate(CD8_type = ifelse(MY_M2_like >= 1, "M2_interactor", "M2_not_interactor")) 
+
+## Step 3: Compare between M2-CD8 dist categories 
+cur_plot_1 <- cur_dat %>% group_by(CD8_type) %>% filter(!is.na(M2_CD8_dist_category)) %>% count(M2_CD8_dist_category) %>% mutate(fra = n/(sum(n)))
+
+ggplot(cur_plot_1, aes(x = CD8_type, y = fra, fill = M2_CD8_dist_category))+
+  geom_tile(position = "stack", color = "black")+#+alpha = 0.5)+
+  theme_classic()+
+  ylab("Fraction of CD8+ T cell types per group")+
+  scale_fill_brewer(palette = "Reds")
+
+cur_plot_2 <- cur_dat %>% group_by(M2_CD8_dist_category) %>% filter(!is.na(M2_CD8_dist_category)) %>% count(CD8_type) %>% mutate(fra = n/(sum(n)))
+
+ggplot(cur_plot_2, aes(x = M2_CD8_dist_category, y = fra, fill = CD8_type))+
+  geom_tile(position = "stack", color = "black")+#+alpha = 0.5)+
+  theme_classic()+
+  ylab("Fraction of CD8-M2 interactors per group")+
+  scale_fill_brewer(palette = "Pastel1")
+
+## Step 5: Look at ratio between interactors / not-interactors
+cur_test <- cur_dat %>% group_by(PID, CD8_type) %>% count() %>% ungroup() %>% group_by(PID) %>% mutate(sum = sum(n)) %>% filter(sum > 10)
+  
+cur_test <- cur_test %>% pivot_wider(names_from = CD8_type, values_from = n) %>% mutate(ratio = M2_interactor/M2_not_interactor) %>% filter(M2_interactor > 1 & M2_not_interactor > 1)
+
+cur_test$M2_CD8_dist_category <- cur_dat$M2_CD8_dist_category[match(cur_test$PID, cur_dat$PID)]
+
+cur_test <- cur_test[!is.na(cur_test$ratio),]
+cur_test <- cur_test[!is.na(cur_test$M2_CD8_dist_category),]
+
+ggplot(cur_test, aes(x = M2_CD8_dist_category, y = ratio))+
+  geom_jitter(aes(color = M2_CD8_dist_category), size = 3, position=position_jitter(w=0.1,h=0.1))+
+  geom_boxplot(outlier.color = NA)+
+  geom_hline(yintercept = 1, color = "grey")+
+  scale_color_brewer(palette = "Reds")+
+  theme_classic()+
+  stat_compare_means(method = "kruskal.test")
+
+cur_test$ratio_category <- ifelse(cur_test$ratio < quantile(cur_test$ratio, probs = seq(0, 1, 1/3))[2], "low", 
+       ifelse(cur_test$ratio > quantile(cur_test$ratio, probs = seq(0, 1, 1/3))[2] & cur_test$ratio < quantile(cur_test$ratio, probs = seq(0, 1, 1/3))[3], "medium", "high"))
+
+cur_test$ratio_category <- factor(cur_test$ratio_category, levels = c("high","medium","low"))
+
+sce$ratio_category <- cur_test$ratio_category[match(sce$PID,cur_test$PID)]
+```
+
+
+
+
+
+
 
 ```{r}
 set.seed(22)
