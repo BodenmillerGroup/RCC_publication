@@ -1,5 +1,5 @@
 ---
-title: "00_seg_mesmer_QC"
+title: "00_image_artefact_QC"
 author: "Lasse Meyer"
 date: "1/24/2022"
 output: html_document
@@ -60,13 +60,13 @@ images
 saveRDS(images, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/images_before_correction.rds")
 ```
 
-## Images with artefacts 
+## Images with artefacts (Test code)
 
 ```{r}
 library(cytomapper)
 library(EBImage)
 
-#Artefacts: 
+#Test image artefacts: 
 #202207_TMA224.1_BlockB_SE_106.tiff
 #202207_TMA224.1_BlockA_SE_075.tiff
 #202207_TMA224.1_BlockB_SE_069.tiff
@@ -173,13 +173,13 @@ removePixelArtifacts <- function(images,
     img_cor[pixels_wrong] <- img_median[pixels_wrong]
 
     writeImage(as.array(img_cor)/(2^16 - 1), 
-               paste0("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/img_cor/",names(images[x]), ".tiff"), #directory currently hard-coded
+               paste0("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/img_cor/",names(images[x]), ".tiff"), #directory currently hard-coded - has to be created
                bits.per.sample = 16)
     
     }else{
       
       writeImage(as.array(images[[x]])/(2^16 - 1), 
-                 paste0("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/img_cor/",names(images[x]), ".tiff"),#directory currently hard-coded
+                 paste0("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/img_cor/",names(images[x]), ".tiff"),#directory currently hard-coded - has to be created
                  bits.per.sample = 16)
       
     }
@@ -199,13 +199,13 @@ images <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analys
 
 ```{r}
 # Run function across all images
-removePixelArtifacts(images, BPPARAM = MulticoreParam(workers = 20))
+removePixelArtifacts(images, BPPARAM = MulticoreParam(workers = 20)) #please copy the function print out into an excel file
 ```
 
 ```{r}
 # Summary for pixel removal part
 library(readxl)
-out <- read_excel("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/summary_pixel_removal.xlsx")
+out <- read_excel("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/summary_pixel_removal.xlsx") # created by coyping the function print out into excel 
 
 out$Image <- str_replace(out$Image, ":", "")
 out$Image <- str_replace(out$Image, "\"", "")
