@@ -1158,13 +1158,13 @@ head(sce$aggregatedNeighbors)
 # Perform cluster sweep for kmeans (silhouette width, wcss)
 set.seed(22)
 clust_list <- lapply(2:20, function(k){
-  cur_km <- kmeans(sce$aggregatedNeighbors, centers = k)
+  cur_km <- kmeans(sce$count_neighbors, centers = k)
   return(list(wss = sum(cur_km$withinss),
            clusters = cur_km$cluster))
 })
 
 sil <- vapply(lapply(clust_list, `[[`, 2), 
-              function(x) mean(approxSilhouette(sce$aggregatedNeighbors, x)$width), 
+              function(x) mean(approxSilhouette(sce$count_neighbors, x)$width), 
               0)
 
 ggplot(data.frame(k = 2:20, sil = sil))+
@@ -1187,7 +1187,7 @@ ggplot(data.frame(k = 2:20,wss = unlist(lapply(clust_list, `[[`, 1))))+
 
 # Select 13 clusters
 set.seed(22)
-cur_clusters <- kmeans(sce$aggregatedNeighbors, centers = 18, nstart = 100)$cluster
+cur_clusters <- kmeans(sce$count_neighbors, centers = 15, nstart = 100)$cluster
 
 sce$cellular_neighborhood <- as.factor(cur_clusters)
 ```
@@ -1330,16 +1330,32 @@ Quick and easy heatmap to visualize the proportion of metaclusters in each CN
 ```{r}
 library(tidyverse)
 for_plot <- colData(sce) %>% as_tibble() %>%
-    group_by(cellular_neighborhood, metacluster_combined) %>%
+    group_by(cellular_neighborhood, celltype_combined) %>%
     summarize(count = n()) %>%
     mutate(freq = count / sum(count)) %>%
-    pivot_wider(id_cols = cellular_neighborhood, names_from = metacluster_combined, 
+    pivot_wider(id_cols = cellular_neighborhood, names_from = celltype_combined, 
                 values_from = freq, values_fill = 0) %>%
     ungroup() %>%
     select(-cellular_neighborhood)
 
 pheatmap(for_plot, #color = colorRampPalette(c("dark blue", "white", "dark red"))(100), 
          scale = "column", show_rownames = TRUE)
+
+for_plot <- table(as.character(sce$cellular_neighborhood), sce$celltype_combined)
+
+pheatmap(for_plot, 
+         color = viridis(100), display_numbers = TRUE, 
+         number_color = "white", number_format = "%.0f")
+
+for_plot <- prop.table(table(as.character(sce$cellular_neighborhood), sce$celltype_combined), margin = 1)
+
+pheatmap(for_plot, 
+         color = viridis(100), display_numbers = TRUE, 
+         number_color = "white", number_format = "%.2f")
+
+pheatmap(for_plot, 
+         color = colorRampPalette(c("dark blue", "white", "dark red"))(100), 
+         scale = "column")
 ```
 Rich heatmap visualization 
 
