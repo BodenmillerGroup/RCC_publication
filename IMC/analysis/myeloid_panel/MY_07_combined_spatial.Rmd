@@ -4,7 +4,7 @@ author: "Lasse Meyer"
 date: "`r Sys.Date()`"
 output: html_document
 editor_options: 
-  chunk_output_type: console
+  chunk_output_type: inline
 ---
 
 ```{r setup, include=FALSE}
@@ -141,7 +141,7 @@ saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sc
 ## Differential interaction testing 
 
 ```{r}
-sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_07.rds")
+sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/others/myeloid_panel_old/data_analysis/sce_ccRCC_MY_07.rds")
 
 ### General phenotype interaction difference
 
@@ -178,8 +178,7 @@ cells_sc
 spicyTest <- spicy(cells_sc, 
       condition = "ISUP", 
       subject = "PID", 
-      BPPARAM = BiocParallel::MulticoreParam(),
-      includeZeroCells = TRUE)
+      BPPARAM = BiocParallel::MulticoreParam())
 
 
 topPairs(spicyTest, cutoff = 0.05, n=20)
@@ -699,12 +698,13 @@ sce$M2_CD274_status <- sce_M2$my_CD274_GMM[match(sce$cell_id, sce_M2$cell_id)]
 ### cytoviewer visualization
 
 ```{r}
-images <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/images.rds")
-masks <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/masks.rds")
+images <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/others/myeloid_panel_old/data_analysis/images.rds")
+masks <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/others/myeloid_panel_old/data_analysis/masks.rds")
 ```
 
 ```{r}
 # Select images
+cur_PID <- "B1997.29774"
 cur_PID <- (test %>% filter(M2_CD8_dist_category == "low") %>% arrange(-CD274) %>% rownames_to_column("PID") %>% pull(PID))[1:10]
 cur_sample <- (colData(sce) %>% as.data.frame %>% select(PID, sample_id) %>% filter(PID %in%cur_PID) %>% pull(sample_id) %>% unique())
 
@@ -718,6 +718,10 @@ cur_sce <- sce[,sce$sample_id %in% cur_sample]
 ```{r}
 library(cytoviewer)
 cytoviewer(image = cur_images, mask = cur_masks, object = cur_sce, img_id = "sample_id", cell_id = "ObjectNumber")
+```
+
+```{r}
+plotSpatial(sce[,sce$PID == "B1997.29774" & sce$celltype_combined %in% c("MY_M2_like","CD8_T_cell")], img_id = "sample_id", colPairName = "neighborhood", node_color_by = "celltype_combined", draw_edges = TRUE, nodes_first = FALSE, directed = FALSE)
 ```
 
 
@@ -986,6 +990,161 @@ distCells_PID <- distCells_image %>% ungroup() %>% group_by(PID) %>% mutate(mean
 ```
 
 
+
+
+
+## Normalized interaction scores 
+see Wang et al., 2023 (Nature)
+
+```{r}
+# Step 1: Retrieve neighbors table
+cur_dat <- sce$count_neighbors %>% as.data.frame
+rownames(cur_dat) <- sce$cell_id
+cur_dat$PID <- sce$PID
+cur_dat$celltype_combined <- sce$celltype_combined
+
+# Step 2: Define index and test cell and count interactions per PID
+test_cell <- "MY_Neutro_MDSC"
+index_cell <- "tumor"
+
+cur_int <- cur_dat %>% filter(celltype_combined == test_cell) %>% rownames_to_column("cell_id") %>% pivot_longer(2:13, names_to = "interacting_celltype", values_to = "n_int") %>% filter(interacting_celltype == index_cell) %>% group_by(PID) %>% summarise(n_int = sum(n_int))
+  
+# Step 3: Add the total count of cells per PID
+## Total number of test cells
+count_int <- colData(sce) %>% as.data.frame %>% group_by(PID, celltype_combined) %>% count() %>% filter(celltype_combined == test_cell)
+cur_int$n_total_int <- count_int$n[match(cur_int$PID, count_int$PID)]
+
+## Total number of index cells 
+count_index <- colData(sce) %>% as.data.frame %>% group_by(PID, celltype_combined) %>% count() %>% filter(celltype_combined == index_cell)
+cur_int$n_total_index <- count_index$n[match(cur_int$PID, count_index$PID)]
+
+## Total number of cells   
+count_PID <- colData(sce) %>% as.data.frame %>% group_by(PID) %>% count()
+cur_int$n_total_PID <- count_PID$n[match(cur_int$PID, count_PID$PID)]
+
+# Step 4: Create different cell-cell interaction scores 
+cur_final <- cur_int %>% mutate(score_int_int = n_int/n_total_int) %>% mutate(score_int_index = n_int/n_total_index) %>% mutate(score_int_total = n_int/n_total_PID)
+
+## Optional: Split a score by the mean 
+cur_final$int_mean_split <- ifelse(cur_final$score_int_total > mean(cur_final$score_int_total, na.rm = TRUE), "high", "low")
+
+#sce$int_mean_split <- cur_final$int_mean_split[match(sce$PID, cur_final$PID)]
+```
+
+
+```{r}
+### Perform interaction scoring for a number of cell types ###
+
+# See above for step-explanations 
+cur_dat <- sce$count_neighbors %>% as.data.frame
+rownames(cur_dat) <- sce$cell_id
+cur_dat$PID <- sce$PID
+cur_dat$celltype_combined <- sce$celltype_combined
+
+out_df <- data.frame(PID = unique(cur_dat$PID))
+
+celltypes <- unique(cur_dat$celltype_combined)
+celltypes <- celltypes[!celltypes %in% c("tumor","Stromal","Endothelial","CD8_T_cell", "CD4_T_cell", "Immune_low", "B_cell","Plasma_cell")]
+
+for(test_cell in celltypes){
+index_cell <- "tumor"
+
+cur_int <- cur_dat %>% filter(celltype_combined == test_cell) %>% rownames_to_column("cell_id") %>% pivot_longer(2:13, names_to = "interacting_celltype", values_to = "n_int") %>% filter(interacting_celltype == index_cell) %>% group_by(PID) %>% summarise(n_int = sum(n_int))
+  
+count_int <- colData(sce) %>% as.data.frame %>% group_by(PID, celltype_combined) %>% count() %>% filter(celltype_combined == test_cell)
+cur_int$n_total_int <- count_int$n[match(cur_int$PID, count_int$PID)]
+    
+count_index <- colData(sce) %>% as.data.frame %>% group_by(PID, celltype_combined) %>% count() %>% filter(celltype_combined == index_cell)
+cur_int$n_total_index <- count_index$n[match(cur_int$PID, count_index$PID)]
+
+count_PID <- colData(sce) %>% as.data.frame %>% group_by(PID) %>% count()
+cur_int$n_total_PID <- count_PID$n[match(cur_int$PID, count_PID$PID)]
+
+cur_final <- cur_int %>% mutate(score_int_int = n_int/n_total_int) %>% mutate(score_int_index = n_int/n_total_index) %>% mutate(score_int_total = n_int/n_total_PID)
+
+cur_final$int_mean_split <- ifelse(cur_final$score_int_index > mean(cur_final$score_int_index, na.rm = TRUE), "high", "low")
+
+out_df[,paste0(test_cell,"_to_", index_cell,"_score")] <- cur_final$score_int_index[match(out_df$PID, cur_final$PID)]
+}
+```
+
+```{r}
+library(survival)
+library(survminer)
+
+### Multivariate cox proportional hazard model on multiple covariates (here proportion of phenotypes)
+out_df
+
+rownames(out_df) <- out_df$PID
+#rownames(PID_metagroups) <- PID_metagroups$PID
+
+## 1. Based on continuous cluster proportions
+Cox_df <- out_df
+
+#add covariates for correction
+Cox_df$status_OS <- sce$status_OS[match(rownames(Cox_df),sce$PID)]
+Cox_df$OS_months <- sce$OS_months[match(rownames(Cox_df),sce$PID)]
+
+#Cox_df$gender <- as.factor(sce$gender[match(rownames(Cox_df),sce$PID)])
+#Cox_df$age <- sce$age[match(rownames(Cox_df),sce$PID)]
+#Cox_df$ISUP <- as.factor(sce$ISUP_combined[match(rownames(Cox_df),sce$PID)])
+#Cox_df$pT <- as.factor(sce$pT_combined[match(rownames(Cox_df),sce$PID)])
+#Cox_df$necrose <- as.factor(sce$necrose[match(rownames(Cox_df),sce$PID)])
+
+#Based on patient groups
+covariates <- Cox_df %>% select(-status_OS,-OS_months, -PID) %>% colnames
+
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~ ", paste(covariates, collapse = " + ")))
+
+multi_model <- coxph(multi_formula, data = Cox_df)
+
+multi_res_1 <- summary(multi_model)
+
+plot_df_prop_1 <- data.frame(group = rownames(multi_res_1$coefficients),
+                      p_value = signif(multi_res_1$coefficients[,"Pr(>|z|)"],3),
+                      HR = signif(multi_res_1$coefficients[,"exp(coef)"],3),
+                      CI_low = signif(multi_res_1$conf.int[,"lower .95"],3),
+                      CI_high = signif(multi_res_1$conf.int[,"upper .95"],3),
+                      wald_test = signif(multi_res_1$waldtest["pvalue"],3))
+
+
+#Plot hazard ratiOS
+#hr_prop <- 
+ggplot(plot_df_prop_1, aes(x = reorder(group,desc(HR)), y = HR, color = p_value < 0.05))+
+geom_point(size = 4)+
+geom_errorbar(aes(ymax = CI_high, ymin = CI_low))+
+geom_hline(yintercept = 1,color = "black",linetype = "dashed")+
+scale_color_brewer(palette = "Set1")+
+xlab("CD8_M2_groups")+
+ylab("HR for con_prop")+
+theme_classic()+
+scale_y_continuous(trans = "log10")+
+theme(axis.text.x = element_text(angle = 90))
+```
+
+```{r}
+#Assess survival impact 
+library(survival)
+library(survminer)
+
+cur_surv <- colData(sce) %>% as.data.frame() %>% select(PID, int_mean_split, OS_months, status_OS) %>% unique()
+
+
+#Plot survival curves
+fit <- survfit(Surv(OS_months, status_OS) ~ int_mean_split, data = cur_surv)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = "Set1",
+          conf.int = TRUE
+)
+```
 
 
 
