@@ -1147,6 +1147,8 @@ ggsurvplot(fit,
 
 ## Clinical PDL1 score 
 
+see Rosellini et al. (Nature Reviews Urology, 2022) - Describes different clinical studies and their respective cut-offs
+
 ### Tumor cells 
 
 ```{r}

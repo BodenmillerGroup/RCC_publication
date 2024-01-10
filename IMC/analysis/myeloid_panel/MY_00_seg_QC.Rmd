@@ -69,6 +69,9 @@ masks_exp
 
 masks_cp_1 <- loadImages("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/masks_cp_1/", as.is = TRUE)
 masks_cp_1
+
+masks_cp <- loadImages("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/masks/", as.is = TRUE)
+masks_cp
 ```
 
 ```{r}

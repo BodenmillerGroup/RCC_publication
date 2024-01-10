@@ -116,8 +116,29 @@ for (entry in meta_add) {
 
 ```{r}
 # Check whether every sample (and cell) is associated with a PID
-unique(sce[,is.na(sce$PID)]$sample_id)
+unique(sce[,is.na(sce$PID)]$sample_id) 
 unique(sce[,is.na(sce$sample_id)]$sample_id)
+
+# Remove samples without PID (Random tissues on top of TMA)
+sample_remove <- unique(sce[,is.na(sce$PID)]$sample_id) 
+
+sce <- sce[,!sce$sample_id %in% sample_remove]
+```
+
+```{r}
+# Images 
+img_from <- paste0("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/img_cor/",unique(sce[,is.na(sce$PID)]$sample_id), ".tiff")
+img_to <- paste0("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/img_removed/")
+
+file.copy(from = img_from, to = img_to)
+file.remove(img_from)
+
+# Masks
+masks_from <- paste0("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/masks/",unique(sce[,is.na(sce$PID)]$sample_id), ".tiff")
+masks_to <- paste0("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/masks_removed/")
+
+file.copy(from = masks_from, to = masks_to)
+file.remove(masks_from)
 ```
 
 
@@ -126,6 +147,8 @@ unique(sce[,is.na(sce$sample_id)]$sample_id)
 Problem: Right-skewed distribution (bias from highly expressing cells)
 Solution: Count transformation using an inverse hyperbolic sine function (arcsinh; common in flow cytometry) = leads to linear-like scale near zero and log-like scale beyond a threshold (`cofactor`)
 We apply a `cofactor` of `1`. 
+
+After spillover correction, we will also introduce count winsoring [0, 99.9%].
 
 ```{r transform-counts, message=FALSE}
 #Select 5 samples
@@ -172,18 +195,76 @@ metadata(sce)$colors <- colors
 saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_MY_01.rds")
 ```
 
-## Re-save images and masks 
 
-Note that images and masks were loaded, modified and saved in the [MY_00_seg_QC.Rmd]() script. 
+## Read in images and masks 
+
+### Images 
+
+```{r read-images}
+#Load images
+images <- loadImages("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/img_cor/",
+                         on_disk = TRUE,h5FilesPath = "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/img_cor_h5/", #create separate h5_folder
+                         as.is = TRUE, # Important to not rescale 16-bit images
+                         BPPARAM = MulticoreParam(workers = 25,progressbar = TRUE,stop.on.error = FALSE))
+```
 
 ```{r}
-images <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/images.rds")
-masks <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/masks.rds")
+# Set channel-names for multi-channel images
+panel <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/panel.csv")
+channelNames(images) <- panel$clean_target
+images
+```
 
+### Masks 
+
+To correctly scale pixel values of the segmentation masks (contains cell_ids) when reading them in set `as.is = TRUE`.
+
+```{r read-images}
+#Load masks
+masks <- loadImages("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/masks/", as.is = TRUE)
+masks
+```
+
+```{r}
+# Safety checks
 all.equal(names(images), names(masks))
+```
+
+### Add metadata 
+
+Add additional metadata to the `elementMetadata` slot of the `CytoImageList` (accessible via mcols)
+
+```{r add-image-metadata}
+# Read in external metadata
+patient_meta <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/data/Metadata_combined_RCC.csv",col_names = TRUE)
+patient_meta$TMA_id <- str_replace(paste0(patient_meta$grid,"x",patient_meta$x,"y",patient_meta$y),"NA","")
+patient_meta$TMA_id <- str_replace(patient_meta$TMA_id, "x","X")
+patient_meta$TMA_id <- str_replace(patient_meta$TMA_id, "y","Y")
+patient_meta[is.na(patient_meta$x),]$TMA_id <- "CX7Y8" #was missing in data
+
+# Read in images
+images_meta <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/images.csv",col_names = TRUE)
+images_meta$names <- str_split(images_meta$image,".tiff",simplify = TRUE)[,1]
+images_meta$TMA_id <- str_split(images_meta$acquisition_description," ",simplify = TRUE)[,1]
+
+images_meta$PID <- patient_meta$PID[match(images_meta$TMA_id,patient_meta$TMA_id)]
+
+# Add information to metadata of CytoImageList
+mcols(images)$sample_id <- images_meta$names[match(names(images),images_meta$names)]
+mcols(images)$TMA_id <- images_meta$TMA_id[match(names(images),images_meta$names)]
+
+mcols(images)$PID <- patient_meta$PID[match(mcols(images)$TMA_id,patient_meta$TMA_id)]
+mcols(images)$type <- patient_meta$type[match(mcols(images)$TMA_id,patient_meta$TMA_id)]
+mcols(images)$subtype <- patient_meta$subtype[match(mcols(images)$TMA_id,patient_meta$TMA_id)]
+
+# Transfer to masks object as well
+mcols(masks) <- mcols(images)
+
 all.equal(names(images), mcols(images)$sample_id)
 all.equal(names(masks), mcols(masks)$sample_id)
 ```
+
+## Save images and masks objects for downstream analysis
 
 ```{r}
 saveRDS(images, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/images.rds")
