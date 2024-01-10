@@ -1121,7 +1121,6 @@ theme_classic()+
 scale_y_continuous(trans = "log10")+
 theme(axis.text.x = element_text(angle = 90))
 ```
-
 ```{r}
 #Assess survival impact 
 library(survival)
@@ -1145,6 +1144,221 @@ ggsurvplot(fit,
           conf.int = TRUE
 )
 ```
+
+## Clinical PDL1 score 
+
+### Tumor cells 
+
+```{r}
+# 1. Tumor cells only 
+# Define PDL1 positivity by GMM
+set.seed(22)
+sce_tumor <- sce[,sce$celltype_combined == "tumor"] 
+
+# CD274
+GMM_CD274 <- Mclust(assay(sce_tumor, "exprs")["CD274",], G = 2)
+
+
+GMM_df <- data.frame(class_PDL1 = ifelse(GMM_CD274$classification == 2 & GMM_CD274$uncertainty == 0, 
+                                        "CD274+",
+                                        "CD274-"), 
+                     CD274_exprs = assay(sce_tumor, "exprs")["CD274",],
+                     uncertainty = GMM_CD274$uncertainty)
+
+# Define PDL1 positivity by exprs > 1 
+GMM_df$class_PDL1_1 <- ifelse(GMM_df$CD274_exprs > 1, "CD274+", "CD274-") 
+
+#Visualize GMM
+ggplot(GMM_df, aes(x = CD274_exprs, fill = class_PDL1_1))+
+  geom_density()+
+  geom_rug(aes(color = class_PDL1_1))+
+  theme_classic(base_size = 15)+
+  theme(axis.title.x = element_blank())+
+  scale_fill_brewer(palette = "Set1")+
+  scale_color_brewer(palette = "Set1")
+
+# Add PDL1 group 
+sce_tumor$tumor_CD274_GMM <- GMM_df$class_PDL1[match(colnames(sce_tumor), rownames(GMM_df))]
+sce_tumor$tumor_CD274_1 <- GMM_df$class_PDL1_1[match(colnames(sce_tumor), rownames(GMM_df))]
+
+n_cat <- colData(sce_tumor) %>% as.data.frame() %>% group_by(tumor_CD274_1) %>% count()
+n_cat <- n_cat %>% ungroup() %>% mutate(sum = sum(n)) %>% mutate(fra = (n/sum)*100)
+n_cat
+```
+
+```{r}
+# Define PDL1 positive patients 
+
+# Based on GMM
+# More than 1% of tumor cells 
+cur_PID <- colData(sce_tumor) %>% as.data.frame() %>% select(tumor_CD274_GMM,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+cur_PID_out <- cur_PID %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq)) %>% filter(tumor_CD274_GMM == "CD274+" & fra >= 0.01) %>% arrange(desc(fra)) %>% pull(PID) %>% unfactor()
+
+sce$PDL1_score_tumor_GMM_1 <- ifelse(sce$PID %in% cur_PID_out, "PDL1_pos", "PDL1_neg")
+
+# Based on exprs cut-off
+# More than 1% of tumor cells 
+cur_PID <- colData(sce_tumor) %>% as.data.frame() %>% select(tumor_CD274_1,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+cur_PID_out <- cur_PID %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq)) %>% filter(tumor_CD274_1 == "CD274+" & fra >= 0.01) %>% arrange(desc(fra)) %>% pull(PID) %>% unfactor()
+
+# Add to SCE 
+sce$PDL1_score_tumor_1_1 <- ifelse(sce$PID %in% cur_PID_out, "PDL1_pos", "PDL1_neg")
+```
+
+### All cells 
+
+```{r}
+# 2. All cells
+# Define PDL1 positivity by GMM
+set.seed(22)
+sce_all <- sce 
+
+# CD274
+GMM_CD274 <- Mclust(assay(sce_all, "exprs")["CD274",], G = 2)
+
+
+GMM_df <- data.frame(class_PDL1 = ifelse(GMM_CD274$classification == 2 & GMM_CD274$uncertainty == 0, 
+                                        "CD274+",
+                                        "CD274-"), 
+                     CD274_exprs = assay(sce_all, "exprs")["CD274",],
+                     uncertainty = GMM_CD274$uncertainty)
+
+# Define PDL1 positivity by exprs > 1 
+GMM_df$class_PDL1_1 <- ifelse(GMM_df$CD274_exprs > 1, "CD274+", "CD274-") 
+
+#Visualize GMM
+ggplot(GMM_df, aes(x = CD274_exprs, fill = class_PDL1_1))+
+  geom_density()+
+  geom_rug(aes(color = class_PDL1_1))+
+  theme_classic(base_size = 15)+
+  theme(axis.title.x = element_blank())+
+  scale_fill_brewer(palette = "Set1")+
+  scale_color_brewer(palette = "Set1")
+
+# Add HLA group 
+sce_all$all_CD274_GMM <- GMM_df$class_PDL1[match(colnames(sce_all), rownames(GMM_df))]
+sce_all$all_CD274_1 <- GMM_df$class_PDL1_1[match(colnames(sce_all), rownames(GMM_df))]
+
+n_cat <- colData(sce_all) %>% as.data.frame() %>% group_by(all_CD274_1) %>% count()
+n_cat <- n_cat %>% ungroup() %>% mutate(sum = sum(n)) %>% mutate(fra = (n/sum)*100)
+n_cat
+```
+
+```{r}
+# Define PDL1 positive patients 
+
+# Based on GMM
+# More than 1% of tumor cells 
+cur_PID <- colData(sce_all) %>% as.data.frame() %>% select(all_CD274_GMM,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+cur_PID_out <- cur_PID %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq)) %>% filter(all_CD274_GMM == "CD274+" & fra >= 0.01) %>% arrange(desc(fra)) %>% pull(PID) %>% unfactor()
+
+sce$PDL1_score_all_GMM_1 <- ifelse(sce$PID %in% cur_PID_out, "PDL1_pos", "PDL1_neg")
+
+# Based on exprs cut-off
+# More than 1% of tumor cells 
+cur_PID <- colData(sce_all) %>% as.data.frame() %>% select(all_CD274_1,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+cur_PID_out <- cur_PID %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq)) %>% filter(all_CD274_1 == "CD274+" & fra >= 0.01) %>% arrange(desc(fra)) %>% pull(PID) %>% unfactor()
+
+# Add to SCE 
+sce$PDL1_score_all_1_1 <- ifelse(sce$PID %in% cur_PID_out, "PDL1_pos", "PDL1_neg")
+```
+
+### Survival impact 
+
+```{r}
+#Assess survival impact 
+library(survival)
+library(survminer)
+
+cur_surv <- colData(sce) %>% as.data.frame() %>% select(PID, PDL1_score_all_GMM_1, PDL1_score_tumor_GMM_1,PDL1_score_all_1_1,PDL1_score_tumor_1_1, OS_months, status_OS) %>% unique()
+
+#Plot survival curves
+fit <- survfit(Surv(OS_months, status_OS) ~ PDL1_score_tumor_GMM_1, data = cur_surv)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = "Set1",
+          conf.int = TRUE
+)
+
+#Plot survival curves
+fit <- survfit(Surv(OS_months, status_OS) ~ PDL1_score_tumor_1_1, data = cur_surv)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = "Set1",
+          conf.int = TRUE
+)
+
+#Plot survival curves
+fit <- survfit(Surv(OS_months, status_OS) ~ PDL1_score_all_GMM_1, data = cur_surv)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = "Set1",
+          conf.int = TRUE
+)
+
+# Plot survival curves
+fit <- survfit(Surv(OS_months, status_OS) ~ PDL1_score_all_1_1, data = cur_surv)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = "Set1",
+          conf.int = TRUE
+)
+```
+
+### cytoviewer visualization
+
+```{r}
+images <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/others/myeloid_panel_old/data_analysis/images.rds")
+masks <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/others/myeloid_panel_old/data_analysis/masks.rds")
+```
+
+```{r}
+# Select images
+cur_PID <- colData(sce_tumor) %>% as.data.frame() %>% select(tumor_CD274_GMM,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+cur_PID <- unfactor(cur_PID %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq)) %>% filter(tumor_CD274_GMM == "CD274+" & fra > 0.1) %>% arrange(desc(fra)) %>% pull(PID))[1:10]
+  
+cur_sample <- (colData(sce) %>% as.data.frame %>% select(PID, sample_id) %>% filter(PID %in%cur_PID) %>% pull(sample_id) %>% unique())
+
+
+cur_images <- images[mcols(images)$sample_id %in% cur_sample]
+cur_masks <- masks[mcols(masks)$sample_id %in% cur_sample]
+cur_sce <- sce_tumor[,sce_tumor$sample_id %in% cur_sample]
+```
+
+
+```{r}
+library(cytoviewer)
+cytoviewer(image = cur_images, mask = cur_masks, object = cur_sce, img_id = "sample_id", cell_id = "ObjectNumber")
+```
+
 
 
 
