@@ -273,8 +273,10 @@ library(spatialEco)
 # Perform 99.9 % winsorization (per channel)
 assay(sce, "quant") <- t(apply(counts(sce), MARGIN = 1, function(x) winsorize(x,p=c(0,0.999))))
 
-# Perform asinh transformation of winsorized counts
+# Perform asinh transformation of winsorized counts with two different co-factors
 assay(sce, "exprs_quant") <- asinh(assay(sce, "quant")/1)
+
+assay(sce, "exprs_quant_5") <- asinh(assay(sce, "quant")/5)
 ```
 
 ## Image compensation

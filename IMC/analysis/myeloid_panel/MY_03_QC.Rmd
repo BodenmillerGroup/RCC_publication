@@ -4,7 +4,7 @@ author: "Lasse Meyer"
 date: "1/24/2022"
 output: html_document
 editor_options: 
-  chunk_output_type: console
+  chunk_output_type: inline
 ---
 
 ```{r setup, include=FALSE}
@@ -144,6 +144,7 @@ Heatmap(t(assay(image_mean)[rowData(sce)$use_channel,]),
         clustering_method_rows = "ward.D2", 
         show_row_names = FALSE)
 
+library(dendextend)
 avg_dend_obj_MCP <- as.dendrogram(agnes(t(assay(image_mean)),metric = "euclidean",method = "ward"))
 avg_col_dend_MCP <- color_branches(avg_dend_obj_MCP, k = 6)
 plot(avg_col_dend_MCP)
@@ -204,7 +205,7 @@ cytoviewer(image = cur_images, mask = cur_masks, cell_id = "ObjectNumber", img_i
 
 ```{r}
 # Kick out samples from SCE 
-length(img_critical) #n = 32
+length(img_critical) #n = 31
 
 sce <- sce[,!sce$sample_id %in% img_critical]
 sce
@@ -215,10 +216,12 @@ sce
 
 ```{r cell-density}
 #Load TMA tissue masks
-tissue_area <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/tissue_masks/tissue_area_TissueSegmentation.csv") 
+tissue_area <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/tissue_masks/tissue_areaTissueSegmentation_all.csv") 
 
+# Add tissue area to SCE
 sce$tissue_area <- as.numeric(tissue_area$AreaShape_Area[match(colData(sce)$sample_id,str_split(tissue_area$FileName_Tissue_Mask, "_Pro",simplify = TRUE)[,1])])
 
+# Check distribution of tissue areas 
 cell_density <- colData(sce) %>%
     as.data.frame() %>%
     group_by(sample_id) %>%
@@ -228,6 +231,14 @@ cell_density <- colData(sce) %>%
   mutate(covered_area = (cell_area / tissue_area)*100) %>%
   mutate(n_cells = as.numeric(table(colData(sce)$sample_id))) %>%
   arrange(covered_area)
+
+ggplot(cell_density, aes(x = tissue_area))+
+  geom_histogram()
+
+quantile(cell_density$tissue_area)
+
+
+
 
 ggplot(cell_density) +
   geom_point(aes(reorder(sample_id,covered_area), covered_area, color = covered_area))+ 
@@ -257,7 +268,7 @@ ggplot(cell_density) +
 ```{r}
 ## Visualize critical images
 #Kick-out criteria:
-image_id_cri <- cell_density %>% filter(n_cells < 100 | covered_area < 5 | is.na(tissue_area) | tissue_area < 10000 | ratio_xy > 2 | ratio_xy < 0.7) %>% pull(sample_id)
+image_id_cri <- cell_density %>% filter(n_cells <= 100 | covered_area < 9 | covered_area > 100 | is.na(tissue_area) | tissue_area < 30000 | ratio_xy > 1.5 | ratio_xy < 0.8) %>% pull(sample_id)
 
 # Normalize and clip images
 cur_images <- images[names(images) %in% image_id_cri]
@@ -278,10 +289,19 @@ plotPixels(cur_images,
            image_title = list(cex = 0.8),
            legend = list(colour_by.title.cex = 0.7,
                          colour_by.labels.cex = 0.7), 
-           save_plot = list(filename = paste0("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/03_QC/cell_density_QC_critical_images_splits.png")))
+           save_plot = list(filename = paste0("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/03_QC/cell_density_QC_critical_images_density.png")))
 
 # Select images to be removed (n = 11)
-image_id_cri <- image_id_cri[image_id_cri %in% c("202207_TMA20.4_Block1_SE_099","202207_TMA20.4_Block2_SE_020","202207_TMA224.1_BlockB_SE_004","202207_TMA20.4_Block3_SE_122","20220718_TMA20.1_Block3_SE_070","20220718_TMA20.1_Block1_SE_015","20220718_TMA20.1_Block2_SE_075","202207_TMA20.4_Block3_SE_070","20220718_TMA20.1_Block3_SE_119", "20220718_TMA20.1_Block2_SE_079", "202207_TMA20.4_Block3_SE_129")]
+image_remove <- c("202207_TMA20.4_Block3_SE_097", "202207_TMA20.4_Block3_SE_122", "202207_TMA20.4_Block3_SE_129", "202207_TMA224.1_BlockB_SE_004", "202207_TMA224.2_BlockA_SE_101", "202207_TMA224.2_BlockB_SE_004", "202207_TMA224.2_BlockB_SE_048", "202207_TMA224.2_BlockC_SE_004", "20220718_TMA20.1_Block1_SE_010", "20220718_TMA20.1_Block1_SE_015", "20220718_TMA20.1_Block2_SE_075", "20220718_TMA20.1_Block3_SE_119", "202209_TMA224.1_BlockC_SE_121")
+
+
+image_id_cri_2 <- image_id_cri[image_id_cri %in% c("202207_TMA20.4_Block1_SE_099","202207_TMA20.4_Block2_SE_020","202207_TMA224.1_BlockB_SE_004","202207_TMA20.4_Block3_SE_122","20220718_TMA20.1_Block3_SE_070","20220718_TMA20.1_Block1_SE_015","20220718_TMA20.1_Block2_SE_075","202207_TMA20.4_Block3_SE_070","20220718_TMA20.1_Block3_SE_119", "20220718_TMA20.1_Block2_SE_079", "202207_TMA20.4_Block3_SE_129")]
+
+old <- c("202207_TMA20.4_Block1_SE_099","202207_TMA20.4_Block2_SE_020","202207_TMA224.1_BlockB_SE_004","202207_TMA20.4_Block3_SE_122","20220718_TMA20.1_Block3_SE_070","20220718_TMA20.1_Block1_SE_015","20220718_TMA20.1_Block2_SE_075","202207_TMA20.4_Block3_SE_070","20220718_TMA20.1_Block3_SE_119", "20220718_TMA20.1_Block2_SE_079", "202207_TMA20.4_Block3_SE_129")
+
+
+setdiff(old, img_remove)
+
 
 summary(colData(sce)$sample_id %in% image_id_cri) #n=1024 cells
 ```
