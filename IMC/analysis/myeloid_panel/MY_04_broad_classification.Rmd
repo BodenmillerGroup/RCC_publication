@@ -3,7 +3,7 @@ title: "04_SingleCell_InitialClustering"
 output: html_document
 date: '2022-03-30'
 editor_options: 
-  chunk_output_type: console
+  chunk_output_type: inline
 ---
 
 ```{r setup, include=FALSE}
@@ -114,7 +114,6 @@ Combine GMM scores into a single type score (separate for epithelial and non-epi
 
 ```{r}
 ## For non_epithelial cells 
-
 library(data.table)
 
 # Convert the data.frame to a data.table
@@ -295,7 +294,7 @@ Test different channel combinations
 ```{r}
 rowData(sce)$broad_cluster <- rownames(sce) %in% c("CA9","panCK","CD31_vWF","SMA","CD45RO_RA", "CD3","CD4","CD8a","CD38","MPO","CD11c","CD20", "CD68")
 
-rowData(sce)$broad_cluster_1 <- rownames(sce) %in% c("CA9","panCK", "Vimentin","CD31_vWF","SMA","CD45RO_RA", "CD3","CD4","CD8a","CD38","MPO","CD11c","CD20", "CD68")
+#rowData(sce)$broad_cluster_1 <- rownames(sce) %in% c("CA9","panCK", "Vimentin","CD31_vWF","SMA","CD45RO_RA", "CD3","CD4","CD8a","CD38","MPO","CD11c","CD20", "CD68")
 ```
 
 
@@ -352,6 +351,20 @@ set.seed(22)
 
 mat <- t(assay(sce, "exprs")[rowData(sce)$broad_cluster==TRUE,])
 
+#k=30
+out <- Rphenoannoy(mat, k = 30)
+
+clusters <- factor(membership(out[[2]]))
+
+sce$cluster <- clusters #renamed to sce$cluster_30
+
+unique(sce$cluster)
+
+#Save sce after clustering
+saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_04.rds")
+
+#### 
+
 #k=50
 out <- Rphenoannoy(mat, k = 50)
 
@@ -366,10 +379,6 @@ saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sc
 
 ####
 
-set.seed(22)
-
-mat <- t(assay(sce, "exprs")[rowData(sce)$broad_cluster==TRUE,])
-
 #k=70
 out <- Rphenoannoy(mat, k = 70)
 
@@ -383,6 +392,55 @@ unique(sce$cluster_70)
 saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_04.rds")
 ```
 
+```{r}
+library(Rphenoannoy)
+
+set.seed(22)
+
+mat <- t(assay(sce, "exprs_quant")[rowData(sce)$broad_cluster==TRUE,])
+
+#k=30
+out <- Rphenoannoy(mat, k = 30)
+
+clusters <- factor(membership(out[[2]]))
+
+sce$cluster_quant_30 <- clusters #renamed to sce$cluster_30
+
+unique(sce$cluster_quant_30)
+
+#Save sce after clustering
+saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_04.rds")
+
+#### 
+
+#k=50
+out <- Rphenoannoy(mat, k = 50)
+
+clusters <- factor(membership(out[[2]]))
+
+sce$cluster_quant_50 <- clusters
+
+unique(sce$cluster_quant_50)
+
+#Save sce after clustering
+saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_04.rds")
+
+####
+
+set.seed(22)
+
+#k=70
+out <- Rphenoannoy(mat, k = 70)
+
+clusters <- factor(membership(out[[2]]))
+
+sce$cluster_quant_70 <- clusters
+
+unique(sce$cluster_quant_70)
+
+#Save sce after clustering
+saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_04.rds")
+```
 
 ### Cluster stability testing and comparison
 
