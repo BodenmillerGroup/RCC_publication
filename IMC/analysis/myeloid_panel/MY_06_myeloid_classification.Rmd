@@ -400,8 +400,8 @@ my_clusters <- my_clusters[!str_detect(my_clusters, "_2_")]
 
 df <- foreach(i = seq_along(my_clusters),.combine = rbind) %do% {
 num_clus <- length(unique(colData(sce)[,my_clusters[i]]))
-sil <- approxSilhouette(t(assay(sce, "min_max")), clusters=colData(sce)[,my_clusters[i]])
-rmsd <- clusterRMSD(t(assay(sce, "min_max")), clusters=colData(sce)[,my_clusters[i]])
+sil <- approxSilhouette(t(assay(sce, "exprs")), clusters=colData(sce)[,my_clusters[i]])
+rmsd <- clusterRMSD(t(assay(sce, "exprs")), clusters=colData(sce)[,my_clusters[i]])
 data.frame(num_clus = num_clus,
            k = as.numeric(str_split(my_clusters[i],"_",simplify = TRUE)[,3]), 
            sil = mean(sil$width), 
@@ -413,8 +413,8 @@ my_clusters <- colnames(colData(sce))[str_detect(colnames(colData(sce)),"my_clus
 
 df_1 <- foreach(i = seq_along(my_clusters),.combine = rbind) %do% {
 num_clus <- length(unique(colData(sce)[,my_clusters[i]]))
-sil <- approxSilhouette(t(assay(sce, "min_max")), clusters=colData(sce)[,my_clusters[i]])
-rmsd <- clusterRMSD(t(assay(sce, "min_max")), clusters=colData(sce)[,my_clusters[i]])
+sil <- approxSilhouette(t(assay(sce, "exprs")), clusters=colData(sce)[,my_clusters[i]])
+rmsd <- clusterRMSD(t(assay(sce, "exprs")), clusters=colData(sce)[,my_clusters[i]])
 data.frame(num_clus = num_clus,
            k = as.numeric(str_split(my_clusters[i],"_",simplify = TRUE)[,4]), 
            sil = mean(sil$width), 
@@ -426,8 +426,8 @@ my_clusters <- colnames(colData(sce))[str_detect(colnames(colData(sce)),"my_clus
 
 df_2 <- foreach(i = seq_along(my_clusters),.combine = rbind) %do% {
 num_clus <- length(unique(colData(sce)[,my_clusters[i]]))
-sil <- approxSilhouette(t(assay(sce, "min_max")), clusters=colData(sce)[,my_clusters[i]])
-rmsd <- clusterRMSD(t(assay(sce, "min_max")), clusters=colData(sce)[,my_clusters[i]])
+sil <- approxSilhouette(t(assay(sce, "exprs")), clusters=colData(sce)[,my_clusters[i]])
+rmsd <- clusterRMSD(t(assay(sce, "exprs")), clusters=colData(sce)[,my_clusters[i]])
 data.frame(num_clus = num_clus,
            k = as.numeric(str_split(my_clusters[i],"_",simplify = TRUE)[,4]), 
            sil = mean(sil$width), 

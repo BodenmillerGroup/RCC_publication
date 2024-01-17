@@ -356,9 +356,9 @@ out <- Rphenoannoy(mat, k = 30)
 
 clusters <- factor(membership(out[[2]]))
 
-sce$cluster <- clusters #renamed to sce$cluster_30
+sce$cluster_30 <- clusters #renamed to sce$cluster_30
 
-unique(sce$cluster)
+unique(sce$cluster_30)
 
 #Save sce after clustering
 saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_04.rds")
@@ -442,64 +442,100 @@ unique(sce$cluster_quant_70)
 saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_04.rds")
 ```
 
+FlowSOM clustering 
+
+```{r}
+library(CATALYST)
+
+# Run FlowSOM and ConsensusClusterPlus clustering
+set.seed(220410)
+sce <- cluster(sce, 
+               features = rownames(sce)[rowData(sce)$broad_cluster],
+               maxK = 30)
+
+# Assess cluster stability
+delta_area(sce)
+
+saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_04.rds")
+```
+
 ### Cluster stability testing and comparison
 
-```{r clustree, message = FALSE, warning=FALSE}
-#Read sce after clustering and GMM
+```{r}
+#Over different resolution parameters - Silhouette width [-1,1,max], Purity[0,1,max], Root-mean-squared difference [min]
 #sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_04.rds")
 
-#Pairwise rand index 
-#Agreement between two clustering approaches - ARI > 0.5 = "good" similarity
-pairwiseRand(sce$cluster_30,sce$cluster_50, mode = "index")
-pairwiseRand(sce$cluster_50,sce$cluster_70, mode = "index")
 
-#Over different resolution parameters - Silhouette width [-1,1,max], Purity[0,1,max], Root-mean-squared difference [min]
-clusters <- colnames(colData(sce))[str_detect(colnames(colData(sce)),"cluster_[:digit:]")]
-clusters <- clusters[!clusters == "cluster_1"]
+my_clusters <- colnames(colData(sce))[str_detect(colnames(colData(sce)),"cluster_[:digit:]")]
 
-df <- foreach(i = seq_along(clusters),.combine = rbind) %do% {
-num_clus <- length(unique(colData(sce)[,clusters[i]]))
-sil <- approxSilhouette(t(assay(sce, "min_max")), clusters=colData(sce)[,clusters[i]])
-rmsd <- clusterRMSD(t(assay(sce, "min_max")), clusters=colData(sce)[,clusters[i]])
+df <- foreach(i = seq_along(my_clusters),.combine = rbind) %do% {
+num_clus <- length(unique(colData(sce)[,my_clusters[i]]))
+sil <- approxSilhouette(t(assay(sce, "exprs")), clusters=colData(sce)[,my_clusters[i]])
+rmsd <- clusterRMSD(t(assay(sce, "exprs")), clusters=colData(sce)[,my_clusters[i]])
 data.frame(num_clus = num_clus,
-           k = as.numeric(str_split(clusters[i],"_",simplify = TRUE)[,2]), 
+           k = as.numeric(str_split(my_clusters[i],"_",simplify = TRUE)[,2]), 
            sil = mean(sil$width), 
-           rmsd = sum(rmsd))
+           rmsd = sum(rmsd),
+           type = "cluster")
 }
 
-p1 <- ggplot(df, aes(x=k, y=num_clus))+
-  geom_point(aes(k, num_clus, col = num_clus))+
-  geom_line(aes(k, num_clus,col=num_clus))+
-  theme_classic()+
-  scale_color_continuous(type = "viridis")
+my_clusters <- colnames(colData(sce))[str_detect(colnames(colData(sce)),"cluster_quant_[:digit:]")]
 
-p2 <- ggplot(df, aes(x=k, y=rmsd))+
-  geom_point(aes(k, rmsd, col = rmsd))+
-  geom_line(aes(k, rmsd,col=rmsd))+
-  theme_classic()+
-  scale_color_continuous(type = "viridis")
+df_1 <- foreach(i = seq_along(my_clusters),.combine = rbind) %do% {
+num_clus <- length(unique(colData(sce)[,my_clusters[i]]))
+sil <- approxSilhouette(t(assay(sce, "exprs")), clusters=colData(sce)[,my_clusters[i]])
+rmsd <- clusterRMSD(t(assay(sce, "exprs")), clusters=colData(sce)[,my_clusters[i]])
+data.frame(num_clus = num_clus,
+           k = as.numeric(str_split(my_clusters[i],"_",simplify = TRUE)[,3]), 
+           sil = mean(sil$width), 
+           rmsd = sum(rmsd),
+           type = "cluster_quant")
+}
 
-p3 <- ggplot(df, aes(x=k, y=sil))+
-  geom_point(aes(k, sil, col = sil))+
-  geom_line(aes(k, sil,col=sil))+
+df_out <- rbind(df, df_1)
+
+
+p1 <- ggplot(df_out, aes(x=k, y=num_clus, color = type))+
+  geom_point(aes(k, num_clus), size = 3)+
+  geom_line(aes(k, num_clus))+
   theme_classic()+
-  scale_color_continuous(type = "viridis")
+  scale_color_brewer(palette = "Set1")+
+  guides(color = "none")
+
+p2 <- ggplot(df_out, aes(x=k, y=rmsd, color = type))+
+  geom_point(aes(k, rmsd), size = 3)+
+  geom_line(aes(k, rmsd))+
+  theme_classic()+
+  scale_color_brewer(palette = "Set1")+
+  guides(color = "none")
+
+
+p3 <- ggplot(df_out, aes(x=k, y=sil, color = type))+
+  geom_point(aes(k, sil), size = 3)+
+  geom_line(aes(k, sil))+
+  theme_classic()+
+  scale_color_brewer(palette = "Set1")
   
 p1+p2+p3 
 ```
 
-We selected cluster_70 for downstream analysis. 
+We selected cluster_30 for downstream analysis. 
 
 ### Visualization 
 
 ```{r}
 # By cluster 
-mean_sce <- aggregateAcrossCells(sce, ids = sce$cluster_1, #select cluster of interest
+mean_sce <- aggregateAcrossCells(sce, ids = sce$cluster_30, #select cluster of interest
                                  statistics = "mean",
                                  use.assay.type = "exprs",
-                                 subset.row = rowData(sce)$broad_cluster_1)
+                                 subset.row = rowData(sce)$broad_cluster)
 
 Heatmap(t(assay(mean_sce, "exprs")), col = viridis(100), clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2")+
+  rowAnnotation(id = anno_text(mean_sce$ids))+
+  rowAnnotation(n_cells = anno_barplot(mean_sce$ncells))
+
+
+Heatmap(scale(t(assay(mean_sce, "exprs"))), clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2")+
   rowAnnotation(id = anno_text(mean_sce$ids))+
   rowAnnotation(n_cells = anno_barplot(mean_sce$ncells))
 ```
@@ -577,16 +613,20 @@ nr_immune <- colData(sce) %>% as.data.frame %>% select(astir_combined, non_epith
 fr_immune <- as.data.frame(nr_immune) %>% pivot_wider(names_from = non_epithelial_GMM, values_from = Freq) %>% column_to_rownames("astir_combined")
 fr_immune <- fr_immune %>% transmute(fr_immune = `TRUE`/rowSums(fr_immune)) %>% as.data.frame()
 
-nr_immune <- colData(sce) %>% as.data.frame %>% select(cluster, astir_combined) %>% table()
-fr_immune <- as.data.frame(nr_immune) %>% pivot_wider(names_from = astir_combined, values_from = Freq) %>% column_to_rownames("cluster")
+nr_immune <- colData(sce) %>% as.data.frame %>% select(cluster_30, astir_combined) %>% table()
+fr_immune <- as.data.frame(nr_immune) %>% pivot_wider(names_from = astir_combined, values_from = Freq) %>% column_to_rownames("cluster_30")
 fr_immune <- fr_immune %>% select(-"Unknown/Other") %>% transmute(fr_immune = `Non-Epithelial`/rowSums(fr_immune)) %>% as.data.frame()
+
+nr_immune <- colData(sce) %>% as.data.frame %>% select(cluster_30, non_epithelial_GMM) %>% table()
+fr_immune <- as.data.frame(nr_immune) %>% pivot_wider(names_from = non_epithelial_GMM, values_from = Freq) %>% column_to_rownames("cluster_30")
+fr_immune <- fr_immune %>% transmute(fr_immune = `TRUE`/rowSums(fr_immune)) %>% as.data.frame()
 
 
 ggplot(fr_immune, aes(fr_immune))+
   geom_density()+
   geom_rug(aes(color = rownames(fr_immune)))+
-  geom_vline(xintercept = 0.7, color = "red3")+
-  geom_vline(xintercept = 0.2, color = "red3")+
+  geom_vline(xintercept = 0.75, color = "red3")+
+  geom_vline(xintercept = 0.25, color = "red3")+
   theme_classic()+
   theme(axis.title.x = element_blank())
 ```
@@ -600,7 +640,7 @@ Heatmap of clusters with GMM and ASTIR information
 
 ```{r heatmap, message=FALSE, warning=FALSE}
 #Read sce after clustering, astir and GMM
-sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_04.rds")
+#sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_04.rds")
 
 ### 1. Heatmap body ###
 
@@ -609,11 +649,11 @@ assay(sce, "min_max") <- assay(sce, "exprs") - rowMins(assay(sce, "exprs"))
 assay(sce, "min_max") <- assay(sce, "min_max") / (rowMaxs(assay(sce, "exprs")) - rowMins(assay(sce, "exprs")))
 
 # Aggregrate across cells with the mean
-# We select cluster_70 
-sce$cluster <- sce$cluster_70
+# We select cluster_30 
+sce$cluster <- sce$cluster_30
 mean_sce <- aggregateAcrossCells(sce, ids = sce$cluster,
                                  statistics = "mean",
-                                 use.assay.type = "min_max",
+                                 use.assay.type = "exprs",
                                  subset.row = rowData(sce)$broad_cluster)
 
 # Heatmap body color 
@@ -709,9 +749,9 @@ ha_cluscat <- HeatmapAnnotation(cluster_category = anno_cluscat$cluster_category
 
 
 ### 4. Plot combined Heatmap
-h <- Heatmap(t(assay(mean_sce, "min_max")),
+h <- Heatmap(t(assay(mean_sce, "exprs")),
         col = col_main,
-        name= "min-max",
+        name= "exprs",
         km = 1,
         show_row_names = T, 
         row_names_side = "left",
@@ -849,7 +889,7 @@ cur_sample <- sample(unique(sce$sample_id), 40)
 
 cur_sample <- (colData(sce) %>% as.data.frame %>% select(sample_id, astir_type) %>% group_by(sample_id) %>% filter(astir_type == "NK_cell") %>% count() %>% arrange(desc(n)) %>% pull(sample_id))[1:10]
 
-cur_sample <- (colData(sce) %>% as.data.frame %>% select(sample_id, cluster) %>% group_by(sample_id) %>% filter(cluster == "21") %>% count() %>% arrange(desc(n)) %>% pull(sample_id))[1:10]
+cur_sample <- (colData(sce) %>% as.data.frame %>% select(sample_id, cluster) %>% group_by(sample_id) %>% filter(cluster == "22") %>% count() %>% arrange(desc(n)) %>% pull(sample_id))[1:10]
 ```
 
 ```{r}
@@ -920,23 +960,22 @@ dittoHeatmap(sce[,cur_cells],
 #### Dimensionality reduction
 
 ```{r dim_red}
-sce_sub <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_sub_ccRCC_MY_04.rds")
+#sce_sub <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_sub_ccRCC_MY_04.rds")
 
 ## Subsample 10% of cells from each core
 #to save time and not get super crowded dimensionality reduction plots
-#set.seed(220195)
-#sub <- colData(sce) %>% as.data.frame() %>% group_by("sample_id") %>% slice_sample(prop = 0.1) %>% arrange("sample_id") %>% mutate(sub_id = paste(sample_id,ObjectNumber,sep="_")) %>% pull(sub_id)
-#sce_sub <- sce[,sub]
+set.seed(220195)
+sub <- colData(sce) %>% as.data.frame() %>% group_by("sample_id") %>% slice_sample(prop = 0.1) %>% arrange("sample_id") %>% mutate(sub_id = paste(sample_id,ObjectNumber,sep="_")) %>% pull(sub_id)
+sce_sub <- sce[,sub]
 
 #Run UMAP/TSNE
-#reducedDim(sce_sub, "UMAP") <- calculateUMAP(sce_sub[rowData(sce_sub)$broad_cluster,], n_neighbors = 30, pca = 30,exprs_values = "min_max", external_neighbors=TRUE, BPPARAM = MulticoreParam())
+reducedDim(sce_sub, "UMAP") <- calculateUMAP(sce_sub[rowData(sce_sub)$broad_cluster,], n_neighbors = 50, pca = 50,exprs_values = "min_max", external_neighbors=TRUE, BPPARAM = MulticoreParam())
 
 #reducedDim(sce_sub, "TSNE") <- calculateTSNE(sce_sub[rowData(sce_sub)$broad_cluster,], exprs_values = "min_max", external_neighbors=TRUE, BPPARAM = MulticoreParam())
 
-plotReducedDim(sce_sub, dimred = "TSNE", colour_by = "analysis_cat")+
-  scale_color_manual(values = metadata(sce)$colors$analysis_cat)
 plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "analysis_cat")+
   scale_color_manual(values = metadata(sce)$colors$analysis_cat)
+
 
 ## 1. Visualize TSNE
 plotReducedDim(sce_sub, dimred = "TSNE", by_exprs_values = "min_max",colour_by = "CD45RO_RA")+
@@ -970,10 +1009,10 @@ plotReducedDim(sce_sub, dimred = "TSNE", colour_by = "sample_id")+
 
 
 ## 2. Visualize UMAP
-plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "CD45RO_RA")+
-plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "SMA")+
-plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "CA9")+
-plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "panCK")
+plotReducedDim(sce_sub, dimred = "UMAP_2", by_exprs_values = "min_max",colour_by = "CD45RO_RA")+
+plotReducedDim(sce_sub, dimred = "UMAP_2", by_exprs_values = "min_max",colour_by = "SMA")+
+plotReducedDim(sce_sub, dimred = "UMAP_2", by_exprs_values = "min_max",colour_by = "CA9")+
+plotReducedDim(sce_sub, dimred = "UMAP_2", by_exprs_values = "min_max",colour_by = "panCK")
 
 plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "CD45RO_RA")+
 plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "CD68")+
