@@ -460,7 +460,7 @@ sce <- cluster(sce,
 delta_area(sce)
 
 delta_area(sce)+
-  coord_cartesian(ylim = c(0,0.01), xlim = c(4, 18))# select k = 8
+  coord_cartesian(ylim = c(0,0.01), xlim = c(4, 20))# select k = 8
 
 saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_04.rds")
 ```
@@ -468,12 +468,38 @@ saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sc
 
 ```{r}
 sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_04.rds")
-# Add SOM clusters to SCE (select pretty high k for better resolution)
-sce$cluster_som_10 <- cluster_ids(sce, "meta10")
+# Add SOM clusters to SCE (select pretty high k for "overclustering")
 sce$cluster_som_13 <- cluster_ids(sce, "meta13")
 sce$cluster_som_16 <- cluster_ids(sce, "meta16")
+sce$cluster_som_18 <- cluster_ids(sce, "meta18")
+sce$cluster_som_20 <- cluster_ids(sce, "meta20")
 ```
 
+
+```{r}
+library(CATALYST)
+
+sce_test <- sce 
+
+assay(sce_test, "exprs") <- assay(sce, "exprs_quant")
+
+
+# Run FlowSOM and ConsensusClusterPlus clustering
+set.seed(220410)
+sce_test <- cluster(sce_test, 
+               features = rownames(sce_test)[rowData(sce_test)$broad_cluster],
+               maxK = 20)
+
+# Assess cluster stability
+delta_area(sce_test)
+
+delta_area(sce_test)+
+  coord_cartesian(ylim = c(0,0.01), xlim = c(4, 20))# select k = 8
+
+sce$cluster_som_quant_16 <- cluster_ids(sce_test, "meta16")
+sce$cluster_som_quant_18 <- cluster_ids(sce_test, "meta18")
+sce$cluster_som_quant_20 <- cluster_ids(sce_test, "meta20")
+```
 
 #### Cluster stability testing and comparison
 
@@ -521,8 +547,21 @@ data.frame(num_clus = num_clus,
            type = "cluster_som")
 }
 
+my_clusters <- colnames(colData(sce))[str_detect(colnames(colData(sce)),"cluster_som_quant_[:digit:]")]
 
-df_out <- rbind(df, df_1, df_2)
+df_3 <- foreach(i = seq_along(my_clusters),.combine = rbind) %do% {
+num_clus <- length(unique(colData(sce)[,my_clusters[i]]))
+sil <- approxSilhouette(t(assay(sce, "exprs")), clusters=colData(sce)[,my_clusters[i]])
+rmsd <- clusterRMSD(t(assay(sce, "exprs")), clusters=colData(sce)[,my_clusters[i]])
+data.frame(num_clus = num_clus,
+           k = as.numeric(str_split(my_clusters[i],"_",simplify = TRUE)[,4]), 
+           sil = mean(sil$width), 
+           rmsd = sum(rmsd),
+           type = "cluster_som_quant")
+}
+
+
+df_out <- rbind(df, df_1, df_2, df_3)
 
 
 p1 <- ggplot(df_out, aes(x=k, y=num_clus, color = type))+
@@ -549,13 +588,13 @@ p3 <- ggplot(df_out, aes(x=k, y=sil, color = type))+
 p1+p2+p3 
 ```
 
-We selected cluster_70 for downstream analysis. 
+We selected cluster_30 for downstream analysis. 
 
 #### Visualization 
 
 ```{r}
 # By cluster 
-mean_sce <- aggregateAcrossCells(sce, ids = sce$cluster_30, #select cluster of interest
+mean_sce <- aggregateAcrossCells(sce, ids = sce$cluster_som_quant_18, #select cluster of interest
                                  statistics = "mean",
                                  use.assay.type = "exprs",
                                  subset.row = rowData(sce)$broad_cluster)
@@ -569,7 +608,7 @@ Heatmap(scale(t(assay(mean_sce, "exprs"))), clustering_method_rows = "ward.D2", 
   rowAnnotation(id = anno_text(mean_sce$ids))+
   rowAnnotation(n_cells = anno_barplot(mean_sce$ncells))
 
-mean_sce <- aggregateAcrossCells(sce, ids = sce$cluster_70, #select cluster of interest
+mean_sce <- aggregateAcrossCells(sce, ids = sce$cluster_som_16, #select cluster of interest
                                  statistics = "mean",
                                  use.assay.type = "exprs",
                                  subset.row = rowData(sce)$broad_cluster)
@@ -693,6 +732,9 @@ Heatmap of clusters with GMM and ASTIR information
 # Min-Max [0,1] normalization of arcsinh-transformed counts
 assay(sce, "min_max") <- assay(sce, "exprs") - rowMins(assay(sce, "exprs"))
 assay(sce, "min_max") <- assay(sce, "min_max") / (rowMaxs(assay(sce, "exprs")) - rowMins(assay(sce, "exprs")))
+
+assay(sce, "min_max_quant") <- assay(sce, "exprs_quant") - rowMins(assay(sce, "exprs_quant"))
+assay(sce, "min_max_quant") <- assay(sce, "min_max_quant") / (rowMaxs(assay(sce, "exprs_quant")) - rowMins(assay(sce, "exprs_quant")))
 
 # Aggregrate across cells with the mean
 # We select cluster_30 
@@ -1097,7 +1139,7 @@ plotPixels(cur_images,
                          "CD8a" = c("black", "cyan"),
                          "CD68" = c("black", "cyan"),
                          "SMA" = c("black", "cyan"),
-                          paste0(i) = c("non_tumor" = "yellow", "tumor" = "#E41A1C")
+                          i = c("non_tumor" = "yellow", "tumor" = "#E41A1C")
                          ),
            thick = TRUE,
            legend = list(colour_by.title.cex = 0.7,
@@ -1282,26 +1324,34 @@ sce_sub <- sce[,sub]
 #Run UMAP/TSNE
 reducedDim(sce_sub, "UMAP") <- calculateUMAP(sce_sub[rowData(sce_sub)$broad_cluster,], n_neighbors = 50, pca = 50,exprs_values = "min_max", external_neighbors=TRUE, BPPARAM = MulticoreParam())
 
+reducedDim(sce_sub, "UMAP_1") <- calculateUMAP(sce_sub[rowData(sce_sub)$broad_cluster,], n_neighbors = 30, pca = 30,exprs_values = "min_max_quant", external_neighbors=TRUE, BPPARAM = MulticoreParam())
+
 
 ## 1. Visualize UMAP
-plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "CD45RO_RA")+
-plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "SMA")+
-plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "CA9")+
-plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "panCK")
+plotReducedDim(sce_sub, dimred = "UMAP_1", by_exprs_values = "min_max",colour_by = "CD45RO_RA")+
+plotReducedDim(sce_sub, dimred = "UMAP_1", by_exprs_values = "min_max",colour_by = "SMA")+
+plotReducedDim(sce_sub, dimred = "UMAP_1", by_exprs_values = "min_max",colour_by = "CA9")+
+plotReducedDim(sce_sub, dimred = "UMAP_1", by_exprs_values = "min_max",colour_by = "panCK")
 
-plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "CD45RO_RA")+
-plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "CD68")+
-plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "CD11b")+
-plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "CD163")+
-plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "CD16")+
-plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "MPO")
+plotReducedDim(sce_sub, dimred = "UMAP_1", by_exprs_values = "min_max",colour_by = "CD45RO_RA")+
+plotReducedDim(sce_sub, dimred = "UMAP_1", by_exprs_values = "min_max",colour_by = "CD68")+
+plotReducedDim(sce_sub, dimred = "UMAP_1", by_exprs_values = "min_max",colour_by = "CD11b")+
+plotReducedDim(sce_sub, dimred = "UMAP_1", by_exprs_values = "min_max",colour_by = "CD163")+
+plotReducedDim(sce_sub, dimred = "UMAP_1", by_exprs_values = "min_max",colour_by = "CD16")+
+plotReducedDim(sce_sub, dimred = "UMAP_1", by_exprs_values = "min_max",colour_by = "MPO")
 
 plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "CD45RO_RA")+
 plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "CD3")+
 plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "CD4")+
 plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "CD8a")
 
-plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "analysis_cat")+
+plotReducedDim(sce_sub, dimred = "UMAP_1", colour_by = "analysis_cat_graph_astir")+
+  scale_color_manual(values = metadata(sce)$colors$analysis_cat)
+plotReducedDim(sce_sub, dimred = "UMAP_1", colour_by = "analysis_cat_graph_GMM")+
+  scale_color_manual(values = metadata(sce)$colors$analysis_cat)
+plotReducedDim(sce_sub, dimred = "UMAP_1", colour_by = "analysis_cat_som_astir")+
+  scale_color_manual(values = metadata(sce)$colors$analysis_cat)
+plotReducedDim(sce_sub, dimred = "UMAP_1", colour_by = "analysis_cat_som_GMM")+
   scale_color_manual(values = metadata(sce)$colors$analysis_cat)
 
 plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "cluster_category")+
@@ -1309,8 +1359,13 @@ plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "cluster_category")+
 
 plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "astir_combined")
 
-plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "cluster_som_6")+
+plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "cluster_som_16")+
   scale_color_manual(values = metadata(sce)$colors$cluster)
+plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "cluster_som_18")+
+  scale_color_manual(values = metadata(sce)$colors$cluster)
+plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "cluster_som_20")+
+  scale_color_manual(values = metadata(sce)$colors$cluster)
+
 
 plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "non_epithelial_GMM")+
   scale_color_brewer(palette = "Set1")
