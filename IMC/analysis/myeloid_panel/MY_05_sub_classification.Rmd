@@ -79,7 +79,50 @@ sce <- sce[,colData(sce)$analysis_cat == "non_tumor"]
 sce
 ```
 
-# 1. Clustering
+# 1. GMM 
+
+Combine GMM scores into a single type score (separate for epithelial and non-epithelial cells)
+
+```{r}
+## For non_epithelial cells 
+library(data.table)
+
+# Convert the data.frame 
+data_dt <- colData(sce) %>% as.data.frame %>% select("CD31_vWF_GMM","SMA_GMM", "CD3_GMM","CD4_GMM","CD8a_GMM","CD38_GMM","MPO_GMM","CD11c_GMM","CD20_GMM", "CD68_GMM") 
+
+data_numeric <- data_dt %>%
+  mutate(across(everything(), ~as.numeric(str_detect(., "_pos"))))
+
+data_numeric_out <- data_numeric %>% 
+  mutate(CD11c_CD68_GMM = ifelse(CD11c_GMM | CD68_GMM, 1, 0)) %>% 
+  #mutate(CD3_CD8_GMM = ifelse(CD3_GMM & CD8a_GMM, 1, 0)) %>%
+  mutate(CD3_CD4_GMM = ifelse(CD3_GMM & CD4_GMM, 1, 0)) %>%
+  select(-CD11c_GMM,-CD68_GMM, -CD3_GMM, -CD4_GMM) %>% 
+  mutate(sum = rowSums(.)) %>% filter(sum == 1) %>% 
+  rownames_to_column("cell_id") %>% 
+  pivot_longer(2:9, names_to = "GMM", values_to = "count") %>% 
+  filter(count == 1) %>% select(cell_id, GMM)
+
+data_numeric_out$GMM[data_numeric_out$GMM == "CD31_vWF_GMM"] <- "Endothelial"
+data_numeric_out$GMM[data_numeric_out$GMM == "SMA_GMM"] <- "Stromal"
+data_numeric_out$GMM[data_numeric_out$GMM == "CD3_CD4_GMM"] <- "CD4_T_cell"
+data_numeric_out$GMM[data_numeric_out$GMM == "CD8a_GMM"] <- "CD8_T_cell"
+data_numeric_out$GMM[data_numeric_out$GMM == "CD38_GMM"] <- "Plasma_cell"
+data_numeric_out$GMM[data_numeric_out$GMM == "MPO_GMM"] <- "Neutrophil"
+data_numeric_out$GMM[data_numeric_out$GMM == "CD20_GMM"] <- "B_cell"
+data_numeric_out$GMM[data_numeric_out$GMM == "CD11c_CD68_GMM"] <- "Macrophage"
+
+#Add to sce
+sce$GMM_immune_combined <- data_numeric_out$GMM[match(sce$cell_id, data_numeric_out$cell_id)]
+
+sce$GMM_immune_combined[is.na(sce$GMM_immune_combined)] <- "Unknown/Other"
+
+# GMM per category
+GMM_sum <- colData(sce) %>% as.data.frame %>% group_by(GMM_immune_combined) %>% dplyr::count()
+```
+
+
+# 2. Clustering
 
 ## Define markers for clustering
 
@@ -221,69 +264,114 @@ sce$cluster_som_20 <- cluster_ids(sce, "meta20")
 
 ### Cluster stability testing and comparison
 
+```{r}
+#Over different resolution parameters - Silhouette width [-1,1,max], Purity[0,1,max], Root-mean-squared difference [min]
+#sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_04.rds")
+
+
+my_clusters <- colnames(colData(sce))[str_detect(colnames(colData(sce)),"cluster_[:digit:]")]
+
+df <- foreach(i = seq_along(my_clusters),.combine = rbind) %do% {
+num_clus <- length(unique(colData(sce)[,my_clusters[i]]))
+sil <- approxSilhouette(t(assay(sce, "exprs")), clusters=colData(sce)[,my_clusters[i]])
+rmsd <- clusterRMSD(t(assay(sce, "exprs")), clusters=colData(sce)[,my_clusters[i]])
+data.frame(num_clus = num_clus,
+           k = as.numeric(str_split(my_clusters[i],"_",simplify = TRUE)[,2]), 
+           sil = mean(sil$width), 
+           rmsd = sum(rmsd),
+           type = "cluster")
+}
+
+
+my_clusters <- colnames(colData(sce))[str_detect(colnames(colData(sce)),"cluster_som_[:digit:]")]
+
+df_1 <- foreach(i = seq_along(my_clusters),.combine = rbind) %do% {
+num_clus <- length(unique(colData(sce)[,my_clusters[i]]))
+sil <- approxSilhouette(t(assay(sce, "exprs")), clusters=colData(sce)[,my_clusters[i]])
+rmsd <- clusterRMSD(t(assay(sce, "exprs")), clusters=colData(sce)[,my_clusters[i]])
+data.frame(num_clus = num_clus,
+           k = as.numeric(str_split(my_clusters[i],"_",simplify = TRUE)[,3]), 
+           sil = mean(sil$width), 
+           rmsd = sum(rmsd),
+           type = "cluster_som")
+}
+
+
+df_out <- rbind(df, df_1)
+
+
+p1 <- ggplot(df_out, aes(x=k, y=num_clus, color = type))+
+  geom_point(aes(k, num_clus), size = 3)+
+  geom_line(aes(k, num_clus))+
+  theme_classic()+
+  scale_color_brewer(palette = "Set1")+
+  guides(color = "none")
+
+p2 <- ggplot(df_out, aes(x=k, y=rmsd, color = type))+
+  geom_point(aes(k, rmsd), size = 3)+
+  geom_line(aes(k, rmsd))+
+  theme_classic()+
+  scale_color_brewer(palette = "Set1")+
+  guides(color = "none")
+
+
+p3 <- ggplot(df_out, aes(x=k, y=sil, color = type))+
+  geom_point(aes(k, sil), size = 3)+
+  geom_line(aes(k, sil))+
+  theme_classic()+
+  scale_color_brewer(palette = "Set1")
+  
+p1+p2+p3 
+```
+
+
 ```{r clustree, message = FALSE, warning=FALSE}
 #Read sce after clustering and GMM
 sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_immune_05.rds")
 
 #Pairwise rand index 
 #Agreement between two clustering approaches - ARI > 0.5 = "good" similarity
-pairwiseRand(sce$cluster_30,sce$cluster_50, mode = "index")
-pairwiseRand(sce$cluster_50,sce$cluster_70, mode = "index")
-pairwiseRand(sce$cluster_70,sce$cluster_90, mode = "index")
-pairwiseRand(sce$cluster_90,sce$cluster_110, mode = "index")
-pairwiseRand(sce$cluster_110,sce$cluster_130, mode = "index")
-
-#Over different resolution parameters - Silhouette width [-1,1,max], Purity[0,1,max], Root-mean-squared difference [min]
-clusters <- colnames(colData(sce))[str_detect(colnames(colData(sce)),"cluster_som_[:digit:]")]
-
-df <- foreach(i = seq_along(clusters),.combine = rbind) %do% {
-num_clus <- length(unique(colData(sce)[,clusters[i]]))
-sil <- approxSilhouette(t(assay(sce, "min_max")), clusters=colData(sce)[,clusters[i]])
-rmsd <- clusterRMSD(t(assay(sce, "min_max")), clusters=colData(sce)[,clusters[i]])
-data.frame(num_clus = num_clus,
-           k = as.numeric(str_split(clusters[i],"_",simplify = TRUE)[,3]), 
-           sil = mean(sil$width), 
-           rmsd = sum(rmsd))
-}
-
-p1 <- ggplot(df, aes(x=k, y=num_clus))+
-  geom_point(aes(k, num_clus, col = num_clus))+
-  geom_line(aes(k, num_clus,col=num_clus))+
-  theme_classic()+
-  scale_color_continuous(type = "viridis")
-
-p2 <- ggplot(df, aes(x=k, y=rmsd))+
-  geom_point(aes(k, rmsd, col = rmsd))+
-  geom_line(aes(k, rmsd,col=rmsd))+
-  theme_classic()+
-  scale_color_continuous(type = "viridis")
-
-p3 <- ggplot(df, aes(x=k, y=sil))+
-  geom_point(aes(k, sil, col = sil))+
-  geom_line(aes(k, sil,col=sil))+
-  theme_classic()+
-  scale_color_continuous(type = "viridis")
-  
-p1+p2+p3 
+pairwiseRand(sce$cluster_90,sce$cluster_130, mode = "index")
 ```
+
 
 ### Visualization 
 
 ```{r}
 # By cluster 
-mean_sce <- aggregateAcrossCells(sce, ids = sce$cluster_som_14, #select cluster of interest
+mean_sce <- aggregateAcrossCells(sce, ids = sce$cluster_som_20, #select cluster of interest
                                  statistics = "mean",
-                                 use.assay.type = "exprs",
+                                 use.assay.type = "min_max",
                                  subset.row = rowData(sce)$sub_cluster)
 
-Heatmap(t(assay(mean_sce, "exprs")), col = viridis(100), clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2")+
-  #Heatmap(t(assay(mean_sce_1, "min_max")), col = viridis(100))+
+Heatmap(t(assay(mean_sce, "min_max")), col = viridis(100), clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2")+
+  Heatmap(scale(t(assay(mean_sce, "min_max"))))+
+  rowAnnotation(id = anno_text(mean_sce$ids))+
+  rowAnnotation(n_cells = anno_barplot(mean_sce$ncells))
+
+mean_sce <- aggregateAcrossCells(sce, ids = sce$cluster_som_18, #select cluster of interest
+                                 statistics = "mean",
+                                 use.assay.type = "min_max",
+                                 subset.row = rowData(sce)$sub_cluster)
+
+Heatmap(t(assay(mean_sce, "min_max")), col = viridis(100), clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2")+
+  Heatmap(scale(t(assay(mean_sce, "min_max"))))+
+  rowAnnotation(id = anno_text(mean_sce$ids))+
+  rowAnnotation(n_cells = anno_barplot(mean_sce$ncells))
+
+mean_sce <- aggregateAcrossCells(sce, ids = sce$cluster_som_16, #select cluster of interest
+                                 statistics = "mean",
+                                 use.assay.type = "min_max",
+                                 subset.row = rowData(sce)$sub_cluster)
+
+Heatmap(t(assay(mean_sce, "min_max")), col = viridis(100), clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2")+
+  Heatmap(scale(t(assay(mean_sce, "min_max"))))+
   rowAnnotation(id = anno_text(mean_sce$ids))+
   rowAnnotation(n_cells = anno_barplot(mean_sce$ncells))
 ```
 
 
-# 2. Astir for automated cell type assignment 
+# 3. Astir for automated cell type assignment 
 
 ### Astir model
 
@@ -331,15 +419,15 @@ mean_sce <- aggregateAcrossCells(sce, ids = sce$astir_immune_combined,
                                  use.assay.type = "min_max",
                                  subset.row = rowData(sce)$use_astir_immune)
 
-Heatmap(t(assay(mean_sce, "min_max")), col = viridis(100), clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2")+
+Heatmap(t(assay(mean_sce, "min_max")), col = viridis(110), clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2")+
   rowAnnotation(id = anno_text(mean_sce$ids))+
   rowAnnotation(n_cells = anno_barplot(mean_sce$ncells))
 ```
 ```{r}
-nr_astir <- colData(sce) %>% as.data.frame %>% select(cluster_1_130, astir_immune_combined) %>% table()
-fr_astir <- as.data.frame(nr_astir) %>% group_by(cluster_1_130) %>% mutate(fra = Freq/sum(Freq)) 
+nr_astir <- colData(sce) %>% as.data.frame %>% select(cluster_130, astir_immune_combined) %>% table()
+fr_astir <- as.data.frame(nr_astir) %>% group_by(cluster_130) %>% mutate(fra = Freq/sum(Freq)) 
 
-fr_astir <- fr_astir %>% select(-Freq) %>% pivot_wider(id_cols = cluster_1_130,names_from = astir_immune_combined,values_from = fra) %>% column_to_rownames("cluster_1_130")
+fr_astir <- fr_astir %>% select(-Freq) %>% pivot_wider(id_cols = cluster_130,names_from = astir_immune_combined,values_from = fra) %>% column_to_rownames("cluster_130")
 ```
 
 Note: NK cells are not correctly identified by astir. (Kick CD56 out of marker file)
@@ -376,24 +464,26 @@ cytoviewer(image = cur_images, mask = cur_masks, object = cur_sce, img_id = "sam
 ```
 
 
-# 3. Immune metacluster
+# 4. Immune metacluster
 
 ### Heatmap 
+
+#### Based on SOM 
 
 Heatmap of clusters with ASTIR information 
 
 ```{r heatmap, message=FALSE, warning=FALSE}
 #Read sce after clustering, astir and GMM
-sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_immune_05.rds")
+#sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_immune_05.rds")
 
 ### 1. Heatmap body ###
 
 # Aggregrate across cells with the mean
-sce$cluster_selected <- sce$cluster_1_130
+sce$cluster_selected <- sce$cluster_som_14
 mean_sce <- aggregateAcrossCells(sce, ids = sce$cluster_selected,
                                  statistics = "mean",
                                  use.assay.type = "min_max",
-                                 subset.row = rowData(sce)$sub_cluster_1)
+                                 subset.row = rowData(sce)$sub_cluster)
 
 other_immune <- c("CD16","HLADR","TMEM173","CD303","CD163","IDO1","DCLAMP","CD11b","CD73","MMP9","CCR2","CD274","Arginase","CXCL13","CD33","VISTA","CD209", "CD206")
 rowData(sce)$other_immune <- rownames(sce) %in% other_immune
@@ -435,25 +525,43 @@ ha_spatial <- HeatmapAnnotation(
     border = TRUE,
     which = "row")
 
-### 2.2 Astir prediction 
+### 2.2 Astir/GMM prediction 
 
-# Astir cell types per cluster
+## Astir cell types per cluster
 astir_anno <- colData(sce) %>% as.data.frame() %>% select(cluster_selected,astir_immune_combined) %>% group_by(cluster_selected) %>% table() %>% as.data.frame
 astir_anno <- astir_anno %>% group_by(cluster_selected) %>% mutate(fra = Freq/sum(Freq)) 
 astir_anno <- astir_anno %>% select(-Freq) %>% pivot_wider(id_cols = cluster_selected,names_from = astir_immune_combined,values_from = fra) %>% column_to_rownames("cluster_selected")
 
 #Create colors for astir cell types 
-astir_col <- setNames(brewer.pal(12,"Paired")[1:9],c("CD4_T_cell", "CD8_T_cell", "Endothelial", "Stromal", "Neutrophil","Myeloid", "Plasma_cell","B_cell","Unknown/Other"))
+astir_col <- setNames(
+  c("#A6CEE3", "#1F78B4", "#B2DF8A", "#33A02C", "#E31A1C", "#E31A1C", "#FB9A99", "#FDBF6F", "#FF7F00", "#CAB2D6"),
+  c("CD4_T_cell", "CD8_T_cell", "Endothelial", "Stromal", "Macro","Macro_DC","Neutrophil", "Plasma_cell","B_cell","Unknown/Other"))
 
 metadata(sce)$colors$astir_col <- astir_col
 metadata(sce)$colors$astir_col <- metadata(sce)$colors$astir_col[match(colnames(astir_anno),names(metadata(sce)$colors$astir_col))]
 
-ha_astir <- HeatmapAnnotation(astir_immune_combined = anno_barplot(astir_anno, width = unit(20, "mm"), gp = gpar(fill = metadata(sce)$colors$astir_col)),
+
+## GMM cell types per cluster
+GMM_anno <- colData(sce) %>% as.data.frame() %>% select(cluster_selected,GMM_immune_combined) %>% group_by(cluster_selected) %>% table() %>% as.data.frame
+GMM_anno <- GMM_anno %>% group_by(cluster_selected) %>% mutate(fra = Freq/sum(Freq)) 
+GMM_anno <- GMM_anno %>% select(-Freq) %>% pivot_wider(id_cols = cluster_selected,names_from = GMM_immune_combined,values_from = fra) %>% column_to_rownames("cluster_selected")
+
+#Create colors for GMM cell types 
+GMM_col <- setNames(
+  c("#A6CEE3", "#1F78B4", "#B2DF8A", "#33A02C", "#E31A1C", "#FB9A99", "#FDBF6F", "#FF7F00", "#CAB2D6"),
+  c("CD4_T_cell", "CD8_T_cell", "Endothelial", "Stromal", "Macrophage","Neutrophil", "Plasma_cell","B_cell","Unknown/Other"))
+
+metadata(sce)$colors$GMM_col <- GMM_col
+metadata(sce)$colors$GMM_col <- metadata(sce)$colors$GMM_col[match(colnames(GMM_anno),names(metadata(sce)$colors$GMM_col))]
+
+
+ha_astir_GMM <- HeatmapAnnotation(
+  astir_immune_combined = anno_barplot(astir_anno, width = unit(20, "mm"), gp = gpar(fill = metadata(sce)$colors$astir_col)),
+  GMM_immune_combined = anno_barplot(GMM_anno, width = unit(20, "mm"), gp = gpar(fill = metadata(sce)$colors$GMM_col)),
                             border = TRUE, 
                             annotation_name_rot = 90,
                             gap = unit(3,"mm"),
                             which = "row")
-
 
 ### 2.3 Metadata features
 
@@ -489,18 +597,16 @@ ha_meta <- HeatmapAnnotation(ISUP = anno_barplot(ISUP, width = unit(12, "mm"),gp
 
 anno <- colData(mean_sce) %>% as.data.frame %>% select(cluster_selected, ncells)
 
-anno <- anno %>% mutate(metacluster = ifelse(cluster_selected %in% c("1","15","11"),"CD8_T_cell",
-                                     ifelse(cluster_selected %in% c("16"),"B_cell",
-                                                   ifelse(cluster_selected %in% c("2"),"CD4_T_cell",
-                                                          ifelse(cluster_selected %in% c("20"),"Plasma_cell",
-                                                                 ifelse(cluster_selected %in% c("9","10","19"),"Mixed",
-                                                                        ifelse(cluster_selected %in% c("6"),"Neutrophil",
-                                                                               ifelse(cluster_selected %in% c("4","3","12","7"),"Myeloid",
-                                                                                      ifelse(cluster_selected %in% c("18","13","17"),"Endothelial",
-                                                                                             ifelse(cluster_selected %in% c("8","5"),"Stromal","Immune_low")
-                                                                                             ))))))))) %>% mutate(metacluster = as.factor(metacluster))
+anno <- anno %>% mutate(metacluster = ifelse(cluster_selected %in% c("11","13"),"CD8_T_cell",
+                                     ifelse(cluster_selected %in% c("14"),"B_cell",
+                                                   ifelse(cluster_selected %in% c("12"),"CD4_T_cell",
+                                                          ifelse(cluster_selected %in% c("9"),"Plasma_cell",
+                                                                 ifelse(cluster_selected %in% c("8","7","10","2"),"Mixed",
+                                                                        ifelse(cluster_selected %in% c("5"),"Neutrophil",
+                                                                               ifelse(cluster_selected %in% c("6","4"),"Macrophage",
+                                                                                      ifelse(cluster_selected %in% c("3","1"),"Stromal","Immune_low")
+                                                                                      )))))))) %>% mutate(metacluster = as.factor(metacluster))
 
-sce$pre_immune_metacluster <- anno$metacluster[match(sce$cluster_selected, anno$cluster_selected)]
 
 ### 4. Plot combined Heatmap
 h <- Heatmap(t(assay(mean_sce, "min_max")),
@@ -510,52 +616,246 @@ h <- Heatmap(t(assay(mean_sce, "min_max")),
         row_names_side = "left",
         show_column_names =  T, 
         row_split = anno$metacluster,
-        #clustering_method_rows = "ward.D2",
+        clustering_method_rows = "ward.D2",
         clustering_method_columns = "ward.D2")+
   Heatmap(t(assay(other_mean_sce, "min_max")), col = col_main)+
-  ha_astir+
+  ha_astir_GMM+
   ha_spatial+
   ha_meta
 
 # Create legends for annotation 
 lgd <- Legend(title = "Astir", at = names(metadata(sce)$colors$astir_col), 
               legend_gp = gpar(fill = metadata(sce)$colors$astir_col))
+lgd_2 <- Legend(title = "GMM", at = names(metadata(sce)$colors$GMM_col), 
+              legend_gp = gpar(fill = metadata(sce)$colors$GMM_col))
 
 # Draw heatmap
-draw(h, annotation_legend_list = list(lgd))
+draw(h, annotation_legend_list = list(lgd, lgd_2))
+
+## Add pre-metacluster to SCE 
+sce$pre_immune_metacluster_SOM <- anno$metacluster[match(sce$cluster_selected, anno$cluster_selected)]
+```
+
+#### Based on Graph
+
+Heatmap of clusters with ASTIR information 
+
+```{r heatmap, message=FALSE, warning=FALSE}
+#Read sce after clustering, astir and GMM
+#sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_immune_05.rds")
+
+### 1. Heatmap body ###
+
+# Aggregrate across cells with the mean
+sce$cluster_selected <- sce$cluster_130
+mean_sce <- aggregateAcrossCells(sce, ids = sce$cluster_selected,
+                                 statistics = "mean",
+                                 use.assay.type = "min_max",
+                                 subset.row = rowData(sce)$sub_cluster)
+
+other_immune <- c("CD16","HLADR","TMEM173","CD303","CD163","IDO1","DCLAMP","CD11b","CD73","MMP9","CCR2","CD274","Arginase","CXCL13","CD33","VISTA","CD209", "CD206")
+rowData(sce)$other_immune <- rownames(sce) %in% other_immune
+
+other_mean_sce <- aggregateAcrossCells(sce, ids = sce$cluster_selected,
+                                 statistics = "mean",
+                                 use.assay.type = "min_max",
+                                 subset.row = rowData(sce)$other_immune)
+
+# Heatmap body color 
+col_main = viridis(100)
+
+### 2. Heatmap annotation ###
+
+### 2.1 Spatial features
+
+#Select spatial features and average over cluster_selecteds 
+spatial <- colData(sce) %>% as.data.frame %>% select(area,eccentricity,n_neighbors, cluster_selected)
+spatial <- spatial %>% select(-cluster_selected) %>% aggregate(by = list(cluster_selected = spatial$cluster_selected), FUN = mean) %>% column_to_rownames("cluster_selected")
+
+#Define color schemes for spatial features and add to metadata
+area_col <- colorRamp2(c(min(spatial$area),median(spatial$area),max(spatial$area)), c(brewer.pal(3,"Blues")[1],brewer.pal(3,"Blues")[2],brewer.pal(3,"Blues")[3]))
+metadata(sce)$colors$area <- area_col
+
+eccentricity_col <- colorRamp2(c(min(spatial$eccentricity),median(spatial$eccentricity),max(spatial$eccentricity)), c(brewer.pal(3,"Purples")[1],brewer.pal(3,"Purples")[2],brewer.pal(3,"Purples")[3]))
+metadata(sce)$colors$eccentricity <- eccentricity_col
+
+n_neighbors_col <- colorRamp2(c(min(spatial$n_neighbors),median(spatial$n_neighbors),max(spatial$n_neighbors)), c(brewer.pal(3,"RdPu")[1],brewer.pal(3,"RdPu")[2],brewer.pal(3,"RdPu")[3]))
+metadata(sce)$colors$n_neighbors <- n_neighbors_col
+
+#Create Spatial Heatmap Annotation
+ha_spatial <- HeatmapAnnotation(
+    area = spatial$area,
+    eccentricity = spatial$eccentricity,
+    n_neighbors = spatial$n_neighbors, 
+    col = list(area = metadata(sce)$colors$area,
+               eccentricity = metadata(sce)$colors$eccentricity,
+               n_neighbors = metadata(sce)$colors$n_neighbors),
+    border = TRUE,
+    which = "row")
+
+### 2.2 Astir/GMM prediction 
+
+## Astir cell types per cluster
+astir_anno <- colData(sce) %>% as.data.frame() %>% select(cluster_selected,astir_immune_combined) %>% group_by(cluster_selected) %>% table() %>% as.data.frame
+astir_anno <- astir_anno %>% group_by(cluster_selected) %>% mutate(fra = Freq/sum(Freq)) 
+astir_anno <- astir_anno %>% select(-Freq) %>% pivot_wider(id_cols = cluster_selected,names_from = astir_immune_combined,values_from = fra) %>% column_to_rownames("cluster_selected")
+
+#Create colors for astir cell types 
+astir_col <- setNames(
+  c("#A6CEE3", "#1F78B4", "#B2DF8A", "#33A02C", "#E31A1C", "#E31A1C", "#FB9A99", "#FDBF6F", "#FF7F00", "#CAB2D6"),
+  c("CD4_T_cell", "CD8_T_cell", "Endothelial", "Stromal", "Macro","Macro_DC","Neutrophil", "Plasma_cell","B_cell","Unknown/Other"))
+
+metadata(sce)$colors$astir_col <- astir_col
+metadata(sce)$colors$astir_col <- metadata(sce)$colors$astir_col[match(colnames(astir_anno),names(metadata(sce)$colors$astir_col))]
+
+
+## GMM cell types per cluster
+GMM_anno <- colData(sce) %>% as.data.frame() %>% select(cluster_selected,GMM_immune_combined) %>% group_by(cluster_selected) %>% table() %>% as.data.frame
+GMM_anno <- GMM_anno %>% group_by(cluster_selected) %>% mutate(fra = Freq/sum(Freq)) 
+GMM_anno <- GMM_anno %>% select(-Freq) %>% pivot_wider(id_cols = cluster_selected,names_from = GMM_immune_combined,values_from = fra) %>% column_to_rownames("cluster_selected")
+
+#Create colors for GMM cell types 
+GMM_col <- setNames(
+  c("#A6CEE3", "#1F78B4", "#B2DF8A", "#33A02C", "#E31A1C", "#FB9A99", "#FDBF6F", "#FF7F00", "#CAB2D6"),
+  c("CD4_T_cell", "CD8_T_cell", "Endothelial", "Stromal", "Macrophage","Neutrophil", "Plasma_cell","B_cell","Unknown/Other"))
+
+metadata(sce)$colors$GMM_col <- GMM_col
+metadata(sce)$colors$GMM_col <- metadata(sce)$colors$GMM_col[match(colnames(GMM_anno),names(metadata(sce)$colors$GMM_col))]
+
+
+ha_astir_GMM <- HeatmapAnnotation(
+  astir_immune_combined = anno_barplot(astir_anno, width = unit(20, "mm"), gp = gpar(fill = metadata(sce)$colors$astir_col)),
+  GMM_immune_combined = anno_barplot(GMM_anno, width = unit(20, "mm"), gp = gpar(fill = metadata(sce)$colors$GMM_col)),
+                            border = TRUE, 
+                            annotation_name_rot = 90,
+                            gap = unit(3,"mm"),
+                            which = "row")
+
+### 2.3 Metadata features
+
+#Number of cells per cluster_selected 
+n_cells <- colData(mean_sce) %>% as.data.frame %>% select(cluster_selected, ncells)
+
+# # Number of contributing patients (at least 5 cells)
+cluster_PID <- colData(sce) %>% as.data.frame() %>% select(cluster_selected,PID) %>% group_by(cluster_selected) %>% table() %>% as.data.frame
+n_PID <- cluster_PID %>% filter(Freq>5) %>% group_by(cluster_selected) %>% count(name = "n_PID") %>% column_to_rownames("cluster_selected")
+
+# Proportion of ISUP grade per cluster
+ISUP <- colData(sce) %>% as.data.frame() %>% select(cluster_selected,ISUP) %>% group_by(cluster_selected) %>% table() %>% as.data.frame
+ISUP <- ISUP %>% group_by(cluster_selected) %>% mutate(fra = Freq/sum(Freq)) 
+ISUP <- ISUP %>% select(-Freq) %>% pivot_wider(id_cols = cluster_selected,names_from = ISUP,values_from = fra) %>% column_to_rownames("cluster_selected")
+
+# Proportion of pT stage per cluster
+pT <- colData(sce) %>% as.data.frame() %>% select(cluster_selected,pT_simple) %>% group_by(cluster_selected) %>% table() %>% as.data.frame
+pT <- pT %>% group_by(cluster_selected) %>% mutate(fra = Freq/sum(Freq)) 
+pT <- pT %>% select(-Freq) %>% pivot_wider(id_cols = cluster_selected,names_from = pT_simple,values_from = fra) %>% column_to_rownames("cluster_selected")
+
+
+ha_meta <- HeatmapAnnotation(ISUP = anno_barplot(ISUP, width = unit(12, "mm"),gp = gpar(fill = metadata(sce)$colors$ISUP)),
+                            pT = anno_barplot(pT, width = unit(12, "mm"),gp = gpar(fill = metadata(sce)$colors$pT_simple)),
+                            n_cells = anno_barplot(n_cells$ncells, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),                        n_PID = anno_barplot(n_PID$n_PID, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),
+
+                            border = TRUE, 
+                            annotation_name_rot = 90,
+                            gap = unit(1,"mm"),
+                            which = "row")
+
+
+### 3. Assign labels to clusters 
+
+anno <- colData(mean_sce) %>% as.data.frame %>% select(cluster_selected, ncells)
+
+anno <- anno %>% mutate(metacluster = ifelse(cluster_selected %in% c("1","10","6"),"CD8_T_cell",
+                                     ifelse(cluster_selected %in% c("16"),"B_cell",
+                                                   ifelse(cluster_selected %in% c("3"),"CD4_T_cell",
+                                                          ifelse(cluster_selected %in% c("20"),"Plasma_cell",
+                                                                 ifelse(cluster_selected %in% c("12","2","4","17"),"Mixed",
+                                                                        ifelse(cluster_selected %in% c("8"),"Neutrophil",
+                                                                               ifelse(cluster_selected %in% c("5","13","15"),"Macrophage",
+                                                                                      ifelse(cluster_selected %in% c("7","9","11"),"Stromal",
+                                                                                             ifelse(cluster_selected %in% c("18","14","19"),"Endothelial", "Immune_low")
+                                                                                      ))))))))) %>% mutate(metacluster = as.factor(metacluster))
+
+
+### 4. Plot combined Heatmap
+h <- Heatmap(t(assay(mean_sce, "min_max")),
+        col = col_main,
+        name = "min-max",
+        show_row_names = T, 
+        row_names_side = "left",
+        show_column_names =  T, 
+        row_split = anno$metacluster,
+        clustering_method_rows = "ward.D2",
+        clustering_method_columns = "ward.D2", 
+        cluster_row_slices = FALSE)+
+  Heatmap(t(assay(other_mean_sce, "min_max")), col = col_main)+
+  ha_astir_GMM+
+  ha_spatial+
+  ha_meta
+
+# Create legends for annotation 
+lgd <- Legend(title = "Astir", at = names(metadata(sce)$colors$astir_col), 
+              legend_gp = gpar(fill = metadata(sce)$colors$astir_col))
+lgd_2 <- Legend(title = "GMM", at = names(metadata(sce)$colors$GMM_col), 
+              legend_gp = gpar(fill = metadata(sce)$colors$GMM_col))
+
+# Draw heatmap
+draw(h, annotation_legend_list = list(lgd, lgd_2))
+
+## Add pre-metacluster to SCE 
+sce$pre_immune_metacluster_graph <- anno$metacluster[match(sce$cluster_selected, anno$cluster_selected)]
 ```
 
 ### Define immune metacluster 
 
+#### Based on SOM 
+
 ```{r ana_cat}
-sce$immune_metacluster <- colData(sce) %>% as.data.frame %>% 
-  select(pre_immune_metacluster, astir_immune_combined) %>% 
-  mutate(immune_metacluster = ifelse(sce$pre_immune_metacluster == "Mixed", ifelse(sce$astir_immune_combined != "Unknown/Other", sce$astir_immune_combined, "Immune_low"), unfactor(sce$pre_immune_metacluster))) %>% pull(immune_metacluster)
+sce$immune_metacluster_SOM <- colData(sce) %>% as.data.frame %>% 
+  select(pre_immune_metacluster_SOM, GMM_immune_combined) %>% 
+  mutate(immune_metacluster = ifelse(sce$pre_immune_metacluster_SOM == "Mixed", ifelse(sce$GMM_immune_combined != "Unknown/Other", sce$GMM_immune_combined, "Immune_low"), unfactor(sce$pre_immune_metacluster_SOM))) %>% pull(immune_metacluster)
 
-sce$immune_metacluster <- factor(sce$immune_metacluster)
+sce$immune_metacluster_SOM <- factor(sce$immune_metacluster_SOM)
 
-# Set color scheme 
-immune_mc_col <- metadata(sce)$colors$astir_col[match(unique(sce$immune_metacluster), names(metadata(sce)$colors$astir_col))]
-
-immune_mc_col[is.na(immune_mc_col)] <- "#CAB2D6"
-names(immune_mc_col)[is.na(names(immune_mc_col))] <- "Immune_low"
-
-metadata(sce)$colors$immune_metacluster <- immune_mc_col
-  
 # Counts per category
-colData(sce) %>% as.data.frame %>% select(immune_metacluster) %>% group_by(immune_metacluster) %>% dplyr::count()
+colData(sce) %>% as.data.frame %>% select(immune_metacluster_SOM) %>% group_by(immune_metacluster_SOM) %>% dplyr::count()
+```
 
-#Visualize in alluvial plot 
+#### Based on Graph
+
+```{r ana_cat}
+sce$immune_metacluster_graph <- colData(sce) %>% as.data.frame %>% 
+  select(pre_immune_metacluster_graph, GMM_immune_combined) %>% 
+  mutate(immune_metacluster_graph = ifelse(sce$pre_immune_metacluster_graph == "Mixed", ifelse(sce$GMM_immune_combined != "Unknown/Other", sce$GMM_immune_combined, "Immune_low"), unfactor(sce$pre_immune_metacluster_graph))) %>% pull(immune_metacluster_graph)
+
+sce$immune_metacluster_graph <- factor(sce$immune_metacluster_graph)
+
+# Counts per category
+colData(sce) %>% as.data.frame %>% select(immune_metacluster_graph) %>% group_by(immune_metacluster_graph) %>% dplyr::count()
+```
+
+```{r}
 library(easyalluvial)
-alluvial_wide(data = colData(sce) %>% as.data.frame %>% select(pre_immune_metacluster, astir_immune_combined, immune_metacluster), 
+alluvial_wide(data = colData(sce) %>% as.data.frame %>% select(immune_metacluster_graph, immune_metacluster_SOM), 
               max_variables = 4,
               fill_by = 'all_flows')+
   theme_classic(base_size = 12, base_line_size = 0.5)
 
-alluvial_wide(data = colData(sce) %>% as.data.frame %>% filter(pre_immune_metacluster == "Mixed") %>% select(pre_immune_metacluster, astir_immune_combined, immune_metacluster), 
-              max_variables = 4,
-              fill_by = 'all_flows')+
-  theme_classic(base_size = 12, base_line_size = 0.5)
+pairwiseRand(sce$immune_metacluster_graph,sce$immune_metacluster_SOM, mode = "index")
+```
+
+#### Combined 
+
+```{r}
+sce$immune_metacluster_combined<- ifelse(sce$immune_metacluster_graph == sce$immune_metacluster_SOM, unfactor(sce$immune_metacluster_SOM), 
+       ifelse(sce$immune_metacluster_graph == "Immune_low" & sce$immune_metacluster_SOM != "Immune_low", unfactor(sce$immune_metacluster_SOM), 
+              ifelse(sce$immune_metacluster_SOM == "Immune_low" & sce$immune_metacluster_graph != "Immune_low", unfactor(sce$immune_metacluster_graph), "Immune_low")))
+
+sce$immune_metacluster_combined <- factor(sce$immune_metacluster_combined)
+
+sce$immune_metacluster <- sce$immune_metacluster_combined
+
+colData(sce) %>% as.data.frame %>% select(immune_metacluster_combined) %>% group_by(immune_metacluster_combined) %>% dplyr::count()
 ```
 
 ### Visualization 
@@ -924,19 +1224,66 @@ sub <- colData(sce) %>% as.data.frame() %>% group_by("sample_id") %>% slice_samp
 sce_sub <- sce[,sub]
 
 #Run UMAP/TSNE
-reducedDim(sce_sub, "UMAP") <- calculateUMAP(sce_sub[rowData(sce_sub)$sub_cluster_1,], n_neighbors = 30, pca = 30,exprs_values = "min_max", external_neighbors=TRUE, BPPARAM = MulticoreParam())
+reducedDim(sce_sub, "UMAP") <- calculateUMAP(sce_sub[rowData(sce_sub)$sub_cluster,], n_neighbors = 50, pca = 50,exprs_values = "min_max", external_neighbors=TRUE, BPPARAM = MulticoreParam())
 
-reducedDim(sce_sub, "TSNE") <- calculateTSNE(sce_sub[rowData(sce_sub)$sub_cluster_1,], exprs_values = "min_max", external_neighbors=TRUE, BPPARAM = MulticoreParam())
+plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "immune_metacluster_SOM")
 
-plotReducedDim(sce_sub, dimred = "TSNE", colour_by = "immune_metacluster")+
-  scale_color_manual(values = metadata(sce)$colors$immune_metacluster)
+plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "immune_metacluster_graph")
 
-plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "immune_metacluster")+
-  scale_color_manual(values = metadata(sce)$colors$immune_metacluster)
+plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "immune_metacluster_combined")
 
+plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "immune_metacluster_overlap")
+
+plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "GMM_immune_combined")
 plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "astir_immune_combined")
-plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "cluster_selected")
-````
+
+plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "CD68")+
+plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "SMA")+
+plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "CD31_vWF")+
+plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "CD8a")+
+  plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "CD20")+
+  plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "MPO")+
+  plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "CD38")
+```
+
+### Unclear cells 
+
+```{r}
+sce$immune_metacluster_overlap <- sce$immune_metacluster_graph == sce$immune_metacluster_SOM
+
+colData(sce) %>% as.data.frame %>% select(immune_metacluster_overlap) %>% group_by(immune_metacluster_overlap) %>% dplyr::count()
+
+sce_unclear <- sce[,sce$immune_metacluster_overlap == FALSE]
+
+library(CATALYST)
+
+# Run FlowSOM and ConsensusClusterPlus clustering
+set.seed(220410)
+sce_unclear <- cluster(sce_unclear, 
+               features = rownames(sce_unclear)[rowData(sce_unclear)$sub_cluster],
+               maxK = 30)
+
+# Assess cluster stability
+delta_area(sce_unclear)
+
+delta_area(sce_unclear)+
+  coord_cartesian(ylim = c(0,0.01), xlim = c(4, 25))# select k = 8
+
+sce_unclear$cluster_som_16 <- cluster_ids(sce_unclear, "meta16")
+
+# By cluster 
+mean_sce_unclear <- aggregateAcrossCells(sce_unclear, ids = sce_unclear$cluster_som_10, #select cluster of interest
+                                 statistics = "mean",
+                                 use.assay.type = "min_max",
+                                 subset.row = rowData(sce_unclear)$sub_cluster)
+
+Heatmap(t(assay(mean_sce_unclear, "min_max")), col = viridis(100), clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2")+
+  Heatmap(scale(t(assay(mean_sce_unclear, "min_max"))))+
+  rowAnnotation(id = anno_text(mean_sce_unclear$ids))+
+  rowAnnotation(n_cells = anno_barplot(mean_sce_unclear$ncells))
+```
+
+
 
 #### Single-cell heatmaps
 
@@ -982,7 +1329,7 @@ dittoHeatmap(sce_fil,
 ```
 
 
-# 4. Differential abundance analysis 
+# 5. Differential abundance analysis 
 
 ## Loop over categories 
 
@@ -994,7 +1341,7 @@ library(edgeR)
 
 DA <- lapply(c("ISUP_combined", "pT_combined","necrose"), function(x){
 
-abundances <- table(unfactor(sce$immune_metacluster), sce$PID)
+abundances <- table(unfactor(sce$immune_metacluster_combined), sce$PID)
 abundances <- unclass(abundances) 
 
 #relevant patient metadata (Re-level for baseline)
@@ -1133,44 +1480,6 @@ ggplot(DA_out, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
   scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")
 ```
 
-
-## Test overlap of clinical categories 
-
-```{r}
-PID_scores <- list()
-
-PID_scores[[1]] <- colData(sce) %>% as.data.frame %>% filter(ISUP_combined == "3/4") %>% select(PID) %>% unique() %>% pull(PID)
-
-PID_scores[[2]] <- colData(sce) %>% as.data.frame %>% filter(pT_combined == "3/4") %>% select(PID) %>% unique() %>% pull(PID)
-
-PID_scores[[3]] <- colData(sce) %>% as.data.frame %>% filter(necrose == "1") %>% select(PID) %>% unique() %>% pull(PID)
-
-names(PID_scores) <- c("ISUP (3/4)","pT (3/4)","necrose (1)")
-library("ggVennDiagram")
-ggVennDiagram(PID_scores,
-              label_alpha = 0, 
-              set_color = "black")+
-  scale_fill_gradient2()+
-  scale_color_manual(values = c("black","black","black"))
-```
-
-```{r}
-PID_scores <- list()
-
-PID_scores[[1]] <- colData(sce) %>% as.data.frame %>% filter(ISUP_combined == "1/2") %>% select(PID) %>% unique() %>% pull(PID)
-
-PID_scores[[2]] <- colData(sce) %>% as.data.frame %>% filter(pT_combined == "1/2") %>% select(PID) %>% unique() %>% pull(PID)
-
-PID_scores[[3]] <- colData(sce) %>% as.data.frame %>% filter(necrose == "0") %>% select(PID) %>% unique() %>% pull(PID)
-
-names(PID_scores) <- c("ISUP (1/2)","pT (1/2)","necrose (0)")
-library("ggVennDiagram")
-ggVennDiagram(PID_scores,
-              label_alpha = 0, 
-              set_color = "black")+
-  scale_fill_gradient2()+
-  scale_color_manual(values = c("black","black","black"))
-```
 
 ## ISUP grade 
 
@@ -1468,7 +1777,7 @@ ggplot(DA, aes(x = logFC, y = logCPM))+
 
 
 
-# 5. Survival analysis 
+# 6. Survival analysis 
 
 ## Multivariate cox models
 
@@ -1517,7 +1826,7 @@ plot_df_prop <- data.frame(group = rownames(multi_res$coefficients),
 hr_prop <- ggplot(plot_df_prop, aes(x = reorder(group,desc(HR)), y = HR, color = p_value < 0.05))+
 geom_point(size = 4)+
 geom_errorbar(aes(ymax = CI_high, ymin = CI_low))+
-#coord_cartesian(ylim=c(0,20))+
+coord_cartesian(ylim=c(0,20))+
 geom_hline(yintercept = 1,color = "black",linetype = "dashed")+
 scale_color_brewer(palette = "Set1")+
 xlab("Immune metaclusters")+
@@ -1561,6 +1870,7 @@ Cox_df_mean$gender <- as.factor(sce$gender[match(rownames(Cox_df_mean),sce$PID)]
 Cox_df_mean$age <- sce$age[match(rownames(Cox_df_mean),sce$PID)]
 Cox_df_mean$ISUP <- as.factor(sce$ISUP_combined[match(rownames(Cox_df_mean),sce$PID)])
 Cox_df_mean$pT <- as.factor(sce$pT_combined[match(rownames(Cox_df_mean),sce$PID)])
+Cox_df_mean$necrose <- as.factor(sce$necrose[match(rownames(Cox_df_mean),sce$PID)])
 
 #Based on proportions
 covariates <- Cox_df_mean %>% select(-status_OS,-OS_months, -gender, -age, -ISUP, -pT, -Immune_low) %>% colnames
@@ -1666,9 +1976,10 @@ hr_GMM
 
 
 ```{r}
-sce$PID_myeloid_mean <- Cox_df_mean$Myeloid[match(sce$PID, rownames(Cox_df_mean))]
+sce$PID_myeloid_mean <- Cox_df_mean$Macrophage[match(sce$PID, rownames(Cox_df_mean))]
 sce$PID_neutrophil_mean <- Cox_df_mean$Neutrophil[match(sce$PID, rownames(Cox_df_mean))]
 sce$PID_CD8_mean <- Cox_df_mean$CD8_T_cell[match(sce$PID, rownames(Cox_df_mean))]
+sce$PID_B_mean <- Cox_df_mean$B_cell[match(sce$PID, rownames(Cox_df_mean))]
 ```
 
 
@@ -1679,7 +1990,7 @@ sce$PID_CD8_mean <- Cox_df_mean$CD8_T_cell[match(sce$PID, rownames(Cox_df_mean))
 library(survival)
 library(survminer)
 
-cur_surv <- colData(sce) %>% as.data.frame() %>% select(PID, PID_myeloid_mean, PID_neutrophil_mean, PID_CD8_mean, OS_months, status_OS) %>% unique()
+cur_surv <- colData(sce) %>% as.data.frame() %>% select(PID, PID_myeloid_mean, PID_neutrophil_mean, PID_B_mean, PID_CD8_mean, OS_months, status_OS) %>% unique()
 
 #Plot survival curves
 fit <- survfit(Surv(OS_months, status_OS) ~ PID_myeloid_mean, data = cur_surv)
@@ -1713,6 +2024,21 @@ ggsurvplot(fit,
 
 #Plot survival curves
 fit <- survfit(Surv(OS_months, status_OS) ~ PID_CD8_mean, data = cur_surv)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = "Set1",
+          conf.int = TRUE
+)
+
+#Plot survival curves
+fit <- survfit(Surv(OS_months, status_OS) ~ PID_B_mean, data = cur_surv)
 print(fit)
 
 ggsurvplot(fit,
