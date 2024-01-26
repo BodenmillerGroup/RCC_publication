@@ -1125,6 +1125,7 @@ cur_sample_2 <- colData(sce) %>%
   pull(sample_id)
 
 cur_sample <- unique(c(cur_sample_1, cur_sample_2))
+cur_sample <- cur_sample[2:length(cur_sample)]
 
 #Subset data
 cur_images <- images[mcols(images)$sample_id %in% cur_sample]
@@ -1162,7 +1163,7 @@ plotPixels(cur_images,
 library(doParallel)
 registerDoParallel(cores = 2)
 
-foreach(i in c("immune_metacluster_graph_test","immune_metacluster_SOM_test")){
+for(i in c("immune_metacluster_graph_test","immune_metacluster_SOM_test")){
 
 cur_sample_1 <- colData(sce) %>%
   as.data.frame() %>%
@@ -1187,7 +1188,9 @@ cur_sample <- unique(c(cur_sample_1, cur_sample_2))
 #Subset data
 cur_images <- images[mcols(images)$sample_id %in% cur_sample]
 cur_masks <- masks[mcols(masks)$sample_id %in% cur_sample]
+
 cur_sce <- sce[,sce$sample_id %in% cur_sample]
+cur_sce <- cur_sce[,colData(cur_sce)[,i] %in% c("Macrophage", "Neutrophil")]
 
 #Prepare images
 cur_images <- cytomapper::normalize(cur_images, separateImages = TRUE)
@@ -1212,6 +1215,12 @@ plotPixels(cur_images,
 ```
 
 ## 5. Immune metacluster 
+
+For downstream analysis, we will use SOM-Astir-GMM based immune metacluster assignment. 
+
+```{r}
+sce$immune_metacluster <- sce$immune_metacluster_SOM_test
+```
 
 #### Visualization 
 
@@ -1597,6 +1606,9 @@ plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "GMM_immune_combined")
 plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "astir_immune_combined")
 
 plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "cluster_130")
+plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "cluster_110")
+plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "cluster_90")
+
 plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "cluster_som_14")
 
 plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "CD68")+
