@@ -649,7 +649,7 @@ Heatmap of clusters with ASTIR information
 ### 1. Heatmap body ###
 
 # Aggregrate across cells with the mean
-sce$cluster_selected <- sce$cluster_130
+sce$cluster_selected <- sce$cluster_90
 mean_sce <- aggregateAcrossCells(sce, ids = sce$cluster_selected,
                                  statistics = "mean",
                                  use.assay.type = "min_max",
@@ -767,16 +767,15 @@ ha_meta <- HeatmapAnnotation(ISUP = anno_barplot(ISUP, width = unit(12, "mm"),gp
 
 anno <- colData(mean_sce) %>% as.data.frame %>% select(cluster_selected, ncells)
 
-anno <- anno %>% mutate(metacluster = ifelse(cluster_selected %in% c("1","10","6"),"CD8_T_cell",
-                                     ifelse(cluster_selected %in% c("16"),"B_cell",
-                                                   ifelse(cluster_selected %in% c("3"),"CD4_T_cell",
-                                                          ifelse(cluster_selected %in% c("20"),"Plasma_cell",
-                                                                 ifelse(cluster_selected %in% c("12","2","4","17"),"Mixed",
-                                                                        ifelse(cluster_selected %in% c("8"),"Neutrophil",
-                                                                               ifelse(cluster_selected %in% c("5","13","15"),"Macrophage",
-                                                                                      ifelse(cluster_selected %in% c("7","9","11"),"Stromal",
-                                                                                             ifelse(cluster_selected %in% c("18","14","19"),"Endothelial", "Immune_low")
-                                                                                      ))))))))) %>% mutate(metacluster = as.factor(metacluster))
+anno <- anno %>% mutate(metacluster = ifelse(cluster_selected %in% c("2","11"),"CD8_T_cell",
+                                     ifelse(cluster_selected %in% c("17"),"B_cell",
+                                                   ifelse(cluster_selected %in% c("4"),"CD4_T_cell",
+                                                          ifelse(cluster_selected %in% c("22"),"Plasma_cell",
+                                                                        ifelse(cluster_selected %in% c("7"),"Neutrophil",
+                                                                               ifelse(cluster_selected %in% c("3","8","16","14"),"Macrophage",
+                                                                                      ifelse(cluster_selected %in% c("21","9","13"),"Stromal",
+                                                                                             ifelse(cluster_selected %in% c("20","18"),"Endothelial", "Mixed")
+                                                                                      )))))))) %>% mutate(metacluster = as.factor(metacluster))
 
 
 ### 4. Plot combined Heatmap
@@ -790,7 +789,7 @@ h <- Heatmap(t(assay(mean_sce, "min_max")),
         clustering_method_rows = "ward.D2",
         clustering_method_columns = "ward.D2", 
         cluster_row_slices = FALSE)+
-  Heatmap(t(assay(other_mean_sce, "min_max")), col = col_main)+
+  Heatmap(scale(t(assay(mean_sce, "min_max"))))+
   ha_astir_GMM+
   ha_spatial+
   ha_meta
@@ -822,6 +821,10 @@ sce$immune_metacluster_SOM <- factor(sce$immune_metacluster_SOM)
 sce$immune_metacluster_SOM_test <- colData(sce) %>% as.data.frame %>% 
   select(immune_metacluster_SOM, astir_immune_combined) %>% mutate(immune_metacluster_SOM_test = ifelse(sce$immune_metacluster_SOM == "Immune_low", ifelse(sce$astir_immune_combined != "Unknown/Other", sce$astir_immune_combined, "Immune_low"), unfactor(sce$immune_metacluster_SOM))) %>% pull(immune_metacluster_SOM_test)
 
+colData(sce) %>% as.data.frame %>% 
+  select(immune_metacluster_SOM_test, astir_immune_combined) %>% filter(immune_metacluster_SOM_test == "Immune_low")
+
+
 sce$immune_metacluster_SOM_test <- factor(sce$immune_metacluster_SOM_test) 
 
 # Counts per category
@@ -849,6 +852,28 @@ colData(sce) %>% as.data.frame %>% select(immune_metacluster_graph) %>% group_by
 # Counts per category
 colData(sce) %>% as.data.frame %>% select(immune_metacluster_graph_test) %>% group_by(immune_metacluster_graph_test) %>% dplyr::count()
 ```
+
+```{r ana_cat}
+sce$immune_metacluster_graph_1 <- colData(sce) %>% as.data.frame %>% 
+  select(pre_immune_metacluster_graph, GMM_immune_combined) %>% 
+  mutate(immune_metacluster_graph = ifelse(sce$pre_immune_metacluster_graph == "Mixed", ifelse(sce$GMM_immune_combined != "Unknown/Other", sce$GMM_immune_combined, "Immune_low"), unfactor(sce$pre_immune_metacluster_graph))) %>% pull(immune_metacluster_graph)
+
+sce$immune_metacluster_graph_1 <- factor(sce$immune_metacluster_graph_1)
+
+sce$immune_metacluster_graph_test_1 <- colData(sce) %>% as.data.frame %>% 
+  select(immune_metacluster_graph_1, astir_immune_combined) %>% mutate(immune_metacluster_graph_test = ifelse(sce$immune_metacluster_graph_1 == "Immune_low", ifelse(sce$astir_immune_combined != "Unknown/Other", sce$astir_immune_combined, "Immune_low"), unfactor(sce$immune_metacluster_graph_1))) %>% pull(immune_metacluster_graph_test)
+
+sce$immune_metacluster_graph_test_1 <- factor(sce$immune_metacluster_graph_test_1) 
+
+# Counts per category
+colData(sce) %>% as.data.frame %>% select(immune_metacluster_graph_1) %>% group_by(immune_metacluster_graph_1) %>% dplyr::count()
+# Counts per category
+colData(sce) %>% as.data.frame %>% select(immune_metacluster_graph_test_1) %>% group_by(immune_metacluster_graph_test_1) %>% dplyr::count()
+```
+
+
+
+
 
 ```{r}
 library(easyalluvial)
@@ -882,15 +907,14 @@ colData(sce) %>% as.data.frame %>% select(immune_metacluster_combined) %>% group
 cur_dat <- t(assay(sce,"exprs")) %>% as.matrix %>% as.data.frame 
 
 cur_dat$immune_metacluster_SOM_test <- sce$immune_metacluster_SOM_test[match(rownames(cur_dat), sce$cell_id)]
-cur_dat$immune_metacluster_SOM <- sce$immune_metacluster_SOM[match(rownames(cur_dat), sce$cell_id)]
-cur_dat$immune_metacluster_graph <- sce$immune_metacluster_graph[match(rownames(cur_dat), sce$cell_id)]
+cur_dat$immune_metacluster_graph_test_1 <- sce$immune_metacluster_graph_test_1[match(rownames(cur_dat), sce$cell_id)]
 cur_dat$immune_metacluster_graph_test <- sce$immune_metacluster_graph_test[match(rownames(cur_dat), sce$cell_id)]
 
 cur_dat$astir_immune_combined <- sce$astir_immune_combined[match(rownames(cur_dat), sce$cell_id)]
 cur_dat$GMM_immune_combined <- sce$GMM_immune_combined[match(rownames(cur_dat), sce$cell_id)]
 
 ## 1. CD4 and CD8 T cells
-plot_out <- lapply(colnames(cur_dat)[44:49],
+plot_out <- lapply(colnames(cur_dat)[44:48],
                     function(x){
                       cur_out <- cur_dat %>% filter(.[,x] %in% c("CD4_T_cell","CD8_T_cell"))
                       p <- ggplot(cur_out, aes_string(x="CD8a", y="CD4", color = x))+
@@ -906,12 +930,12 @@ plot_out <- lapply(colnames(cur_dat)[44:49],
 cowplot::plot_grid(plotlist = plot_out)
 
 # Check whether categories contain cells with 0 exprs
-CD4_low <- cur_dat %>% pivot_longer(44:49, names_to = "category", values_to = "type") %>% filter(CD4 < 0.1 & type == "CD4_T_cell") %>% group_by(category) %>% count()
-CD8_low <- cur_dat %>% pivot_longer(44:49, names_to = "category", values_to = "type") %>% filter(CD8a < 0.1 & type == "CD8_T_cell") %>% group_by(category) %>% count()
+CD4_low <- cur_dat %>% pivot_longer(44:48, names_to = "category", values_to = "type") %>% filter(CD4 < 0.1 & type == "CD4_T_cell") %>% group_by(category) %>% count()
+CD8_low <- cur_dat %>% pivot_longer(44:48, names_to = "category", values_to = "type") %>% filter(CD8a < 0.1 & type == "CD8_T_cell") %>% group_by(category) %>% count()
 
 
 ## 2. Stromal and Endothelial
-plot_out <- lapply(colnames(cur_dat)[44:49],
+plot_out <- lapply(colnames(cur_dat)[44:48],
                     function(x){
                       cur_out <- cur_dat %>% filter(.[,x] %in% c("Stromal","Endothelial"))
                       p <- ggplot(cur_out, aes_string(x="SMA", y="CD31_vWF", color = x))+
@@ -927,11 +951,11 @@ plot_out <- lapply(colnames(cur_dat)[44:49],
 cowplot::plot_grid(plotlist = plot_out)
 
 # Check whether categories contain cells with 0 exprs
-SMA_low <- cur_dat %>% pivot_longer(44:49, names_to = "category", values_to = "type") %>% filter(SMA < 0.1 & type == "Stromal") %>% group_by(category) %>% count()
-Endo_low <- cur_dat %>% pivot_longer(44:49, names_to = "category", values_to = "type") %>% filter(CD31_vWF < 0.1 & type == "Endothelial") %>% group_by(category) %>% count()
+SMA_low <- cur_dat %>% pivot_longer(44:48, names_to = "category", values_to = "type") %>% filter(SMA < 0.1 & type == "Stromal") %>% group_by(category) %>% count()
+Endo_low <- cur_dat %>% pivot_longer(44:48, names_to = "category", values_to = "type") %>% filter(CD31_vWF < 0.1 & type == "Endothelial") %>% group_by(category) %>% count()
 
 ## 3. B cells and Plasma cells
-plot_out <- lapply(colnames(cur_dat)[44:49],
+plot_out <- lapply(colnames(cur_dat)[44:48],
                     function(x){
                       cur_out <- cur_dat %>% filter(.[,x] %in% c("B_cell","Plasma_cell"))
                       p <- ggplot(cur_out, aes_string(x="CD20", y="CD38", color = x))+
@@ -947,12 +971,12 @@ plot_out <- lapply(colnames(cur_dat)[44:49],
 cowplot::plot_grid(plotlist = plot_out)
 
 # Check whether categories contain cells with 0 exprs
-B_low <- cur_dat %>% pivot_longer(44:49, names_to = "category", values_to = "type") %>% filter(CD20 < 0.1 & type == "B_cell") %>% group_by(category) %>% count()
-Plasma_low <- cur_dat %>% pivot_longer(44:49, names_to = "category", values_to = "type") %>% filter(CD38 < 0.1 & type == "Plasma_cell") %>% group_by(category) %>% count()
+B_low <- cur_dat %>% pivot_longer(44:48, names_to = "category", values_to = "type") %>% filter(CD20 < 0.1 & type == "B_cell") %>% group_by(category) %>% count()
+Plasma_low <- cur_dat %>% pivot_longer(44:48, names_to = "category", values_to = "type") %>% filter(CD38 < 0.1 & type == "Plasma_cell") %>% group_by(category) %>% count()
 
 
 ## 4. Macrophages / Neutrophils
-plot_out <- lapply(colnames(cur_dat)[44:49],
+plot_out <- lapply(colnames(cur_dat)[44:48],
                     function(x){
                       cur_out <- cur_dat %>% filter(.[,x] %in% c("Macrophage","Neutrophil"))
                       p <- ggplot(cur_out, aes_string(x="CD68", y="MPO", color = x))+
@@ -968,8 +992,8 @@ plot_out <- lapply(colnames(cur_dat)[44:49],
 cowplot::plot_grid(plotlist = plot_out)
 
 # Check whether categories contain cells with 0 exprs
-Mac_low <- cur_dat %>% pivot_longer(44:49, names_to = "category", values_to = "type") %>% filter(CD68 < 0.1 & type == "Macrophage") %>% group_by(category) %>% count()
-Plasma_low <- cur_dat %>% pivot_longer(44:49, names_to = "category", values_to = "type") %>% filter(MPO < 0.1 & type == "Neutrophil") %>% group_by(category) %>% count()
+Mac_low <- cur_dat %>% pivot_longer(44:48, names_to = "category", values_to = "type") %>% filter(CD68 < 0.1 & type == "Macrophage") %>% group_by(category) %>% count()
+Plasma_low <- cur_dat %>% pivot_longer(44:48, names_to = "category", values_to = "type") %>% filter(MPO < 0.1 & type == "Neutrophil") %>% group_by(category) %>% count()
 ```
 
 
@@ -987,7 +1011,8 @@ masks <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysi
 library(doParallel)
 registerDoParallel(cores = 2)
 
-for(i in c("immune_metacluster_graph_test","immune_metacluster_SOM_test")){
+#for(i in c("immune_metacluster_graph_test","immune_metacluster_SOM_test")){
+for(i in c("immune_metacluster_graph_test_1")){
 
 cur_sample_1 <- colData(sce) %>%
   as.data.frame() %>%
@@ -1045,8 +1070,9 @@ plotPixels(cur_images,
 library(doParallel)
 registerDoParallel(cores = 2)
 
-for(i in c("immune_metacluster_graph_test","immune_metacluster_SOM_test")){
-
+#for(i in c("immune_metacluster_graph_test","immune_metacluster_SOM_test")){
+for(i in c("immune_metacluster_graph_test_1")){
+  
 cur_sample_1 <- colData(sce) %>%
   as.data.frame() %>%
   group_by({{i}}) %>%
@@ -1104,8 +1130,9 @@ plotPixels(cur_images,
 library(doParallel)
 registerDoParallel(cores = 2)
 
-for(i in c("immune_metacluster_graph_test","immune_metacluster_SOM_test")){
-
+#for(i in c("immune_metacluster_graph_test","immune_metacluster_SOM_test")){
+for(i in c("immune_metacluster_graph_test_1")){
+  
 cur_sample_1 <- colData(sce) %>%
   as.data.frame() %>%
   group_by({{i}}) %>%
@@ -1163,8 +1190,9 @@ plotPixels(cur_images,
 library(doParallel)
 registerDoParallel(cores = 2)
 
-for(i in c("immune_metacluster_graph_test","immune_metacluster_SOM_test")){
-
+#for(i in c("immune_metacluster_graph_test","immune_metacluster_SOM_test")){
+for(i in c("immune_metacluster_graph_test_1")){
+  
 cur_sample_1 <- colData(sce) %>%
   as.data.frame() %>%
   group_by({{i}}) %>%
@@ -1219,7 +1247,7 @@ plotPixels(cur_images,
 For downstream analysis, we will use SOM-Astir-GMM based immune metacluster assignment. 
 
 ```{r}
-sce$immune_metacluster <- sce$immune_metacluster_SOM_test
+sce$immune_metacluster <- sce$immune_metacluster_graph_test_1
 ```
 
 #### Visualization 
@@ -1599,17 +1627,17 @@ plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "immune_metacluster_SOM")
 plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "immune_metacluster_SOM_test")
 plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "immune_metacluster_graph")
 plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "immune_metacluster_graph_test")
+plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "immune_metacluster_graph_test_1")
+
 
 plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "immune_metacluster_overlap")
 
 plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "GMM_immune_combined")
 plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "astir_immune_combined")
 
-plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "cluster_130")
-plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "cluster_110")
-plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "cluster_90")
-
 plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "cluster_som_14")
+plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "cluster_90")+scale_color_discrete()
+
 
 plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "CD68")+
 plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "SMA")+
@@ -1679,7 +1707,7 @@ library(edgeR)
 
 DA <- lapply(c("ISUP_combined", "pT_combined","necrose"), function(x){
 
-abundances <- table(unfactor(sce$immune_metacluster_SOM_test), sce$PID)
+abundances <- table(unfactor(sce$immune_metacluster), sce$PID)
 abundances <- unclass(abundances) 
 
 #relevant patient metadata (Re-level for baseline)
@@ -1752,7 +1780,7 @@ library(edgeR)
 
 DA <- lapply(c("ISUP_combined", "pT_combined","necrose"), function(x){
 
-abundances <- table(unfactor(sce$cluster_selected), sce$PID)
+abundances <- table(unfactor(sce$cluster_som_14), sce$PID)
 abundances <- unclass(abundances) 
 
 #relevant patient metadata (Re-level for baseline)
@@ -2122,8 +2150,6 @@ ggplot(DA, aes(x = logFC, y = logCPM))+
 ### Continious 
 
 ```{r cox}
-sce$immune_metacluster <- sce$immune_metacluster_SOM
-
 library(survival)
 library(survminer)
 
@@ -2140,15 +2166,18 @@ Cox_df <- PID_metagroups
 Cox_df$status_OS <- sce$status_OS[match(rownames(Cox_df),sce$PID)]
 Cox_df$OS_months <- sce$OS_months[match(rownames(Cox_df),sce$PID)]
 
-Cox_df$gender <- as.factor(sce$gender[match(rownames(Cox_df),sce$PID)])
-Cox_df$age <- sce$age[match(rownames(Cox_df),sce$PID)]
-Cox_df$ISUP <- as.factor(sce$ISUP_combined[match(rownames(Cox_df),sce$PID)])
-Cox_df$pT <- as.factor(sce$pT_combined[match(rownames(Cox_df),sce$PID)])
-Cox_df$necrose <- as.factor(sce$necrose[match(rownames(Cox_df),sce$PID)])
+#Cox_df$gender <- as.factor(sce$gender[match(rownames(Cox_df),sce$PID)])
+#Cox_df$age <- sce$age[match(rownames(Cox_df),sce$PID)]
+#Cox_df$ISUP <- as.factor(sce$ISUP_combined[match(rownames(Cox_df),sce$PID)])
+#Cox_df$pT <- as.factor(sce$pT_combined[match(rownames(Cox_df),sce$PID)])
+#Cox_df$necrose <- as.factor(sce$necrose[match(rownames(Cox_df),sce$PID)])
 #Based on proportions
-covariates <- Cox_df %>% select(-status_OS,-OS_months, -gender, -age, -ISUP, -pT, -Immune_low) %>% colnames
 
-multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~ gender + age + ISUP + pT +", paste(covariates, collapse = " + "),"+ Immune_low"))
+#covariates <- Cox_df %>% select(-status_OS,-OS_months, -gender, -age, -ISUP, -pT, -Immune_low) %>% colnames
+#multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~ gender + age + ISUP + pT +", paste(covariates, collapse = " + "),"+ Immune_low"))
+
+covariates <- Cox_df %>% select(-status_OS,-OS_months, -Stromal) %>% colnames
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + "),"+ Stromal"))
 
 multi_model <- coxph(multi_formula, data = Cox_df)
 
@@ -2206,16 +2235,18 @@ Cox_df_mean <- as.data.frame(Cox_df_mean)
 Cox_df_mean$status_OS <- sce$status_OS[match(rownames(Cox_df_mean),sce$PID)]
 Cox_df_mean$OS_months <- sce$OS_months[match(rownames(Cox_df_mean),sce$PID)]
 
-Cox_df_mean$gender <- as.factor(sce$gender[match(rownames(Cox_df_mean),sce$PID)])
-Cox_df_mean$age <- sce$age[match(rownames(Cox_df_mean),sce$PID)]
-Cox_df_mean$ISUP <- as.factor(sce$ISUP_combined[match(rownames(Cox_df_mean),sce$PID)])
-Cox_df_mean$pT <- as.factor(sce$pT_combined[match(rownames(Cox_df_mean),sce$PID)])
-Cox_df_mean$necrose <- as.factor(sce$necrose[match(rownames(Cox_df_mean),sce$PID)])
+#Cox_df_mean$gender <- as.factor(sce$gender[match(rownames(Cox_df_mean),sce$PID)])
+#Cox_df_mean$age <- sce$age[match(rownames(Cox_df_mean),sce$PID)]
+#Cox_df_mean$ISUP <- as.factor(sce$ISUP_combined[match(rownames(Cox_df_mean),sce$PID)])
+#Cox_df_mean$pT <- as.factor(sce$pT_combined[match(rownames(Cox_df_mean),sce$PID)])
+#Cox_df_mean$necrose <- as.factor(sce$necrose[match(rownames(Cox_df_mean),sce$PID)])
 
 #Based on proportions
-covariates <- Cox_df_mean %>% select(-status_OS,-OS_months, -gender, -age, -ISUP, -pT, -Immune_low) %>% colnames
+#covariates <- Cox_df_mean %>% select(-status_OS,-OS_months, -gender, -age, -ISUP, -pT, -Immune_low) %>% colnames
+#multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~ gender + age + ISUP + pT +", paste(covariates, collapse = " + "),"+ Immune_low"))
 
-multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~ gender + age + ISUP + pT +", paste(covariates, collapse = " + "),"+ Immune_low"))
+covariates <- Cox_df_mean %>% select(-status_OS,-OS_months, -Immune_low) %>% colnames
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + "),"+ Immune_low"))
 
 multi_model <- coxph(multi_formula, data = Cox_df_mean)
 
@@ -2270,15 +2301,17 @@ Cox_df_GMM <- as.data.frame(Cox_df_GMM,stringsAsFactors=TRUE)
 Cox_df_GMM$status_OS <- sce$status_OS[match(rownames(Cox_df_GMM),sce$PID)]
 Cox_df_GMM$OS_months <- sce$OS_months[match(rownames(Cox_df_GMM),sce$PID)]
 
-Cox_df_GMM$gender <- as.factor(sce$gender[match(rownames(Cox_df_GMM),sce$PID)])
-Cox_df_GMM$age <- sce$age[match(rownames(Cox_df_GMM),sce$PID)]
-Cox_df_GMM$ISUP <- as.factor(sce$ISUP_combined[match(rownames(Cox_df_GMM),sce$PID)])
-Cox_df_GMM$pT <- as.factor(sce$pT_combined[match(rownames(Cox_df_GMM),sce$PID)])
+#Cox_df_GMM$gender <- as.factor(sce$gender[match(rownames(Cox_df_GMM),sce$PID)])
+#Cox_df_GMM$age <- sce$age[match(rownames(Cox_df_GMM),sce$PID)]
+#Cox_df_GMM$ISUP <- as.factor(sce$ISUP_combined[match(rownames(Cox_df_GMM),sce$PID)])
+#Cox_df_GMM$pT <- as.factor(sce$pT_combined[match(rownames(Cox_df_GMM),sce$PID)])
 
 #Based on proportions
-covariates <- Cox_df_GMM %>% select(-status_OS,-OS_months, -gender, -age, -ISUP, -pT, -Immune_low) %>% colnames
+#covariates <- Cox_df_GMM %>% select(-status_OS,-OS_months, -gender, -age, -ISUP, -pT, -Immune_low) %>% colnames
+#multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~ gender + age + ISUP + pT +", paste(covariates, collapse = " + "),"+ Immune_low"))
 
-multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~ gender + age + ISUP + pT +", paste(covariates, collapse = " + "),"+ Immune_low"))
+covariates <- Cox_df_GMM %>% select(-status_OS,-OS_months, -Immune_low) %>% colnames
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + "),"+ Immune_low"))
 
 multi_model <- coxph(multi_formula, data = Cox_df_GMM)
 
