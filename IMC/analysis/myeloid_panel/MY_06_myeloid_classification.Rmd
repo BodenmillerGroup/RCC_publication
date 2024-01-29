@@ -90,7 +90,7 @@ rowData(sce)$myeloid_cluster <- rownames(sce) %in% c("CD68","CD11c","MPO", "CD16
 #Alternatively:
 rowData(sce)$myeloid_cluster_1 <- rownames(sce) %in% c("CD68","CD11c","MPO", "CD16","HLADR","CD303","CD163","IDO1","CD11b","MMP9","CCR2","CD274","Arginase","CD33","VISTA","CD209", "CD206","CD15") #kick out DC_LAMP, TMEM173
 
-rowData(sce)$myeloid_cluster_2 <- rownames(sce) %in% c("CD68","CD11c","MPO", "CD16","HLADR","CD303","CD163","CD11b","MMP9","CCR2","Arginase","CD33","CD209", "CD206","CD15", "DC_LAMP") #kick out IDO1, CD274, VISTA, TMEM173
+rowData(sce)$myeloid_cluster_2 <- rownames(sce) %in% c("CD68","CD11c","MPO", "CD16","HLADR","CD303","CD163","CD11b","MMP9","CCR2","Arginase","CD33","CD209", "CD206","CD15","VISTA") #kick out IDO1, CD274, TMEM173, DC_LAMP
 ```
 
 ## Run clustering
@@ -503,19 +503,33 @@ p1+p2+p3
 
 ```{r}
 # By cluster 
-mean_sce <- aggregateAcrossCells(sce, ids = sce$my_cluster_som_21, #select cluster of interest
+mean_sce <- aggregateAcrossCells(sce, ids = sce$my_cluster_2_130, #select cluster of interest
                                  statistics = "mean",
-                                 use.assay.type = "min_max",
+                                 use.assay.type = "exprs",
+                                 subset.row = rowData(sce)$myeloid_cluster_2)
+
+Heatmap(t(assay(mean_sce, "exprs")), col = viridis(100), clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2")+
+  Heatmap(scale(t(assay(mean_sce, "exprs"))))+
+  rowAnnotation(id = anno_text(mean_sce$ids))+
+  rowAnnotation(n_cells = anno_barplot(mean_sce$ncells))
+
+mean_sce <- aggregateAcrossCells(sce, ids = sce$my_cluster_1_110, #select cluster of interest
+                                 statistics = "mean",
+                                 use.assay.type = "exprs",
+                                 subset.row = rowData(sce)$myeloid_cluster_1)
+
+Heatmap(t(assay(mean_sce, "exprs")), col = viridis(100), clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2")+
+  Heatmap(scale(t(assay(mean_sce, "exprs"))))+
+  rowAnnotation(id = anno_text(mean_sce$ids))+
+  rowAnnotation(n_cells = anno_barplot(mean_sce$ncells))
+
+mean_sce <- aggregateAcrossCells(sce, ids = sce$my_cluster_130, #select cluster of interest
+                                 statistics = "mean",
+                                 use.assay.type = "exprs",
                                  subset.row = rowData(sce)$myeloid_cluster)
 
-other_mean_sce <- aggregateAcrossCells(sce, ids = sce$my_cluster_som_21,
-                                 statistics = "mean",
-                                 use.assay.type = "min_max",
-                                 subset.row = rowData(sce)$use_channel)
-
-Heatmap(t(assay(mean_sce, "min_max")), col = viridis(100), clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2")+
-  #Heatmap(t(assay(other_mean_sce, "exprs")), col = viridis(100))+
-  Heatmap(scale(t(assay(mean_sce, "min_max"))))+
+Heatmap(t(assay(mean_sce, "exprs")), col = viridis(100), clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2")+
+  Heatmap(scale(t(assay(mean_sce, "exprs"))))+
   rowAnnotation(id = anno_text(mean_sce$ids))+
   rowAnnotation(n_cells = anno_barplot(mean_sce$ncells))
 ```
@@ -587,7 +601,7 @@ masks <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysi
 set.seed(22)
 cur_sample <- sample(unique(sce$sample_id), 30)
 
-cur_sample <- (colData(sce) %>% as.data.frame %>% select(sample_id, my_cluster_110) %>% group_by(sample_id) %>% filter(my_cluster_110 == "14") %>% count() %>% arrange(desc(n)) %>% pull(sample_id))[1:10]
+cur_sample <- (colData(sce) %>% as.data.frame %>% select(sample_id, my_cluster_2_130) %>% group_by(sample_id) %>% filter(my_cluster_2_130 == "19") %>% count() %>% arrange(desc(n)) %>% pull(sample_id))[1:10]
 
 cur_images <- images[mcols(images)$sample_id %in% cur_sample]
 cur_masks <- masks[mcols(masks)$sample_id %in% cur_sample]
@@ -1042,11 +1056,7 @@ cytoviewer(image = cur_images, mask = cur_masks, object = cur_sce, img_id = "sam
 #to save time and not get super crowded dimensionality reduction plots
 
 #Run UMAP/TSNE
-reducedDim(sce, "UMAP") <- calculateUMAP(sce[rowData(sce)$myeloid_cluster,], n_neighbors = 30, pca = 30,exprs_values = "min_max", external_neighbors=TRUE, BPPARAM = MulticoreParam())
-
-reducedDim(sce, "TSNE") <- calculateTSNE(sce[rowData(sce)$myeloid_cluster,], exprs_values = "min_max", external_neighbors=TRUE, BPPARAM = MulticoreParam())
-
-plotReducedDim(sce, dimred = "TSNE", colour_by = "my_cluster_110")
+reducedDim(sce, "UMAP") <- calculateUMAP(sce[rowData(sce)$myeloid_cluster,], n_neighbors = 50, pca = 50,exprs_values = "min_max", external_neighbors=TRUE, BPPARAM = MulticoreParam())
 
 plotReducedDim(sce, dimred = "UMAP", colour_by = "my_cluster_110")
 plotReducedDim(sce, dimred = "UMAP", colour_by = "my_cluster_130")
@@ -1056,6 +1066,15 @@ plotReducedDim(sce, dimred = "UMAP", colour_by = "my_cluster_selected")+
 
 plotReducedDim(sce, dimred = "UMAP", colour_by = "myeloid_metacluster")+
   scale_color_manual(values = metadata(sce)$colors$myeloid_metacluster)
+
+plotReducedDim(sce, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "CD68")+
+plotReducedDim(sce, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "CD11b")+
+plotReducedDim(sce, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "HLADR")+
+plotReducedDim(sce, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "MPO")+
+  plotReducedDim(sce, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "CD16")+
+  plotReducedDim(sce, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "CD163")
+
+
 ```
 
 #### Single-cell heatmaps
@@ -1151,7 +1170,7 @@ library(edgeR)
 
 DA <- lapply(c("ISUP_combined", "pT_combined","necrose"), function(x){
 
-abundances <- table(unfactor(sce$my_cluster_110), sce$PID)
+abundances <- table(unfactor(sce$my_cluster_90), sce$PID)
 abundances <- unclass(abundances) 
 
 #relevant patient metadata (Re-level for baseline)
