@@ -4,7 +4,7 @@ author: "Lasse Meyer"
 date: "`r Sys.Date()`"
 output: html_document
 editor_options: 
-  chunk_output_type: console
+  chunk_output_type: inline
 ---
 
 ```{r setup, include=FALSE}
@@ -75,7 +75,7 @@ sce
 
 ```{r filter sce, message=FALSE}
 #based on immune MC categories
-sce <- sce[,sce$immune_metacluster %in% c("Myeloid","Neutrophil")]
+sce <- sce[,sce$immune_metacluster %in% c("Macrophage","Neutrophil")]
 sce
 ```
 
@@ -94,6 +94,8 @@ rowData(sce)$myeloid_cluster_2 <- rownames(sce) %in% c("CD68","CD11c","MPO", "CD
 ```
 
 ## Run clustering
+
+### Graph-based 
 
 Next, we will run Rphenoannoy (Jaccard-based weights, Louvain clustering as community detection algorithm) clustering with different resolution parameters. 
 
@@ -375,6 +377,41 @@ gc()
 ```
 
 
+### FlowSOM 
+
+Not very useful in this scenario. 
+
+```{r}
+library(CATALYST)
+
+# Run FlowSOM and ConsensusClusterPlus clustering
+set.seed(220410)
+sce <- cluster(sce, 
+               features = rownames(sce)[rowData(sce)$myeloid_cluster],
+               maxK = 30)
+
+# Assess cluster stability
+delta_area(sce)
+
+delta_area(sce)+
+  coord_cartesian(ylim = c(0,0.1), xlim = c(4, 25))# select k = 8
+
+#saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_immune_05.rds")
+```
+
+```{r}
+# Add new SOM clusters to SCE (select pretty high k for "overclustering")
+sce$my_cluster_som_16 <- cluster_ids(sce, "meta16")
+sce$my_cluster_som_21 <- cluster_ids(sce, "meta21")
+```
+
+
+
+
+
+
+
+
 ```{r}
 sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_06.rds")
 ```
@@ -466,12 +503,12 @@ p1+p2+p3
 
 ```{r}
 # By cluster 
-mean_sce <- aggregateAcrossCells(sce, ids = sce$my_cluster_2_110, #select cluster of interest
+mean_sce <- aggregateAcrossCells(sce, ids = sce$my_cluster_som_21, #select cluster of interest
                                  statistics = "mean",
                                  use.assay.type = "min_max",
-                                 subset.row = rowData(sce)$myeloid_cluster_2)
+                                 subset.row = rowData(sce)$myeloid_cluster)
 
-other_mean_sce <- aggregateAcrossCells(sce, ids = sce$my_cluster_110,
+other_mean_sce <- aggregateAcrossCells(sce, ids = sce$my_cluster_som_21,
                                  statistics = "mean",
                                  use.assay.type = "min_max",
                                  subset.row = rowData(sce)$use_channel)
