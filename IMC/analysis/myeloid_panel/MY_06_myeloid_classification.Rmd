@@ -79,18 +79,134 @@ sce <- sce[,sce$immune_metacluster %in% c("Macrophage","Neutrophil")]
 sce
 ```
 
+```{r}
+# Cluster channel marker correlation (all markers - does not show distribution which is usually recommended)
+cur_sce <- sce#[,sce$immune_metacluster == "Macrophage"]
+
+cor_sce <- as.data.frame(t(assay(cur_sce,"exprs")[rowData(cur_sce)$myeloid_cluster,]))
+
+corrplot(cor(cor_sce,method = "pearson"), method="color", col=brewer.pal(n=8, name="RdBu"),  
+         type="upper", order="hclust",hclust.method = "ward.D2", 
+         addCoef.col = "black", addCoefasPercent = F,# Add coefficient of correlation
+         tl.col="black", tl.srt=40, #Text label color and rotation
+         # Combine with significance
+         #p.mat = , sig.level = 0.01, insig = "blank", 
+         # hide correlation coefficient on the principal diagonal
+         diag=F
+)
+
+# For specific markers of interest (also shows the value distribution which is recommended)
+#pairs.panels(cor_sce[,c("CK5","KRT14")],
+#             method = "spearman",
+#             hist.col = "royalblue1",
+#             digits = 2)
+```
+
+
+
+```{r, fig.height=25, fig.width=6}
+plotExpression(sce, 
+               features = rownames(sce)[rowData(sce)$myeloid_cluster],
+               x = "immune_metacluster", 
+               exprs_values = "exprs", 
+               colour_by = "immune_metacluster") +
+    theme(axis.text.x =  element_text(angle = 90))+
+    scale_color_manual(values = metadata(sce)$colors$immune_metacluster)
+```
+
+
+
+```{r}
+## Scatterplot for key markers
+sce_sub <- sce#[,sce$immune_metacluster == "Neutrophil"]
+
+cur_dat <- t(assay(sce_sub,"exprs")) %>% as.matrix %>% as.data.frame 
+
+#cur_dat$my_cluster_90 <- sce$my_cluster_90[match(rownames(cur_dat), sce$cell_id)]
+
+ggplot(cur_dat, aes(x=CD303, y=CD68))+
+  geom_point(alpha = 0.5, color = "#377EB8")+
+  geom_density2d(color = "#E41A1C")+
+  geom_hline(yintercept = 1, color = "yellow")+
+  geom_vline(xintercept = 1, color = "yellow")+
+  coord_cartesian(ylim = c(0,4), xlim = c(0,4))+
+  theme_classic()
+
+ggplot(cur_dat, aes(x=VISTA, y=CD68))+
+  geom_point(alpha = 0.5, color = "#377EB8")+
+  geom_density2d(color = "#E41A1C")+
+  geom_hline(yintercept = 1, color = "yellow")+
+  geom_vline(xintercept = 1, color = "yellow")+
+  coord_cartesian(ylim = c(0,4), xlim = c(0,4))+
+  theme_classic()
+
+ggplot(cur_dat, aes(x=CD274, y=CD68))+
+  geom_point(alpha = 0.5, color = "#377EB8")+
+  geom_density2d(color = "#E41A1C")+
+  geom_hline(yintercept = 1, color = "yellow")+
+  geom_vline(xintercept = 1, color = "yellow")+
+  coord_cartesian(ylim = c(0,4), xlim = c(0,4))+
+  theme_classic()
+
+ggplot(cur_dat, aes(x=IDO1, y=CD68))+
+  geom_point(alpha = 0.5, color = "#377EB8")+
+  geom_density2d(color = "#E41A1C")+
+  geom_hline(yintercept = 1, color = "yellow")+
+  geom_vline(xintercept = 1, color = "yellow")+
+  coord_cartesian(ylim = c(0,4), xlim = c(0,4))+
+  theme_classic()
+
+ggplot(cur_dat, aes(x=CD38, y=CD68))+
+  geom_point(alpha = 0.5, color = "#377EB8")+
+  geom_density2d(color = "#E41A1C")+
+  geom_hline(yintercept = 1, color = "yellow")+
+  geom_vline(xintercept = 1, color = "yellow")+
+  coord_cartesian(ylim = c(0,4), xlim = c(0,4))+
+  theme_classic()
+
+ggplot(cur_dat, aes_string(x="MPO", y="CD15"))+
+  geom_point(alpha = 0.5, color = "#377EB8")+
+  geom_density2d(color = "#E41A1C")+
+  geom_hline(yintercept = 1, color = "yellow")+
+  geom_vline(xintercept = 1, color = "yellow")+
+  guides(color = "none")+
+  coord_cartesian(ylim = c(0,4), xlim = c(0,4))+
+  theme_classic()
+
+ggplot(cur_dat, aes_string(x="CD68", y="HLADR"))+
+  geom_point(alpha = 0.5, color = "#377EB8")+
+  geom_density2d(color = "#E41A1C")+
+  geom_hline(yintercept = 1, color = "yellow")+
+  geom_vline(xintercept = 1, color = "yellow")+
+  guides(color = "none")+
+  coord_cartesian(ylim = c(0,4), xlim = c(0,4))+
+  theme_classic()
+
+
+# Check whether categories contain cells with 0 exprs
+CD4_low <- cur_dat %>% pivot_longer(44:47, names_to = "category", values_to = "type") %>% filter(CD4 < 0.1 & type == "CD4_T_cell") %>% group_by(category) %>% count()
+CD8_low <- cur_dat %>% pivot_longer(44:47, names_to = "category", values_to = "type") %>% filter(CD8a < 0.1 & type == "CD8_T_cell") %>% group_by(category) %>% count()
+```
+
+
+
 # 1. Clustering
 
 ## Define markers for clustering
 
 ```{r immune_markers, message = FALSE, warning = FALSE}
 # We will again use predefined markers 
+# Option 1: 
 rowData(sce)$myeloid_cluster <- rownames(sce) %in% c("CD68","CD11c","MPO", "CD16","HLADR","TMEM173","CD303","CD163","IDO1","DCLAMP","CD11b","MMP9","CCR2","CD274","Arginase","CD33","VISTA","CD209", "CD206","CD15")
 
-#Alternatively:
-rowData(sce)$myeloid_cluster_1 <- rownames(sce) %in% c("CD68","CD11c","MPO", "CD16","HLADR","CD303","CD163","IDO1","CD11b","MMP9","CCR2","CD274","Arginase","CD33","VISTA","CD209", "CD206","CD15") #kick out DC_LAMP, TMEM173
+#Option 2:
+rowData(sce)$myeloid_cluster_1 <- rownames(sce) %in% c("CD68","CD11c","MPO", "CD16","HLADR","CD163","CD11b","MMP9","CCR2","Arginase","CD33","CD209", "CD206","CD15") #kick out IDO1, CD274, TMEM173, DC_LAMP, VISTA, CD303
 
-rowData(sce)$myeloid_cluster_2 <- rownames(sce) %in% c("CD68","CD11c","MPO", "CD16","HLADR","CD303","CD163","CD11b","MMP9","CCR2","Arginase","CD33","CD209", "CD206","CD15","VISTA") #kick out IDO1, CD274, TMEM173, DC_LAMP
+#Option 3: 
+rowData(sce)$myeloid_cluster_2 <- rownames(sce) %in% c("CD68","CD11c","MPO", "CD16","HLADR","CD303","CD163","CD11b","MMP9","CCR2","Arginase","CD33","CD209", "CD206","CD15") #kick out IDO1, CD274, TMEM173, DC_LAMP, VISTA
+
+#Option 4: 
+rowData(sce)$myeloid_cluster_3 <- rownames(sce) %in% c("CD68","CD11c","MPO", "CD16","HLADR","CD163","CD11b","MMP9","CCR2","Arginase","CD33","CD209", "CD206","CD15","CD38") #kick out IDO1, CD274, TMEM173, DC_LAMP, VISTA # include CD38
 ```
 
 ## Run clustering
@@ -376,6 +492,98 @@ saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sc
 gc()
 ```
 
+Alternatively (Option 3)
+
+```{r cluster, message=FALSE}
+library(Rphenoannoy)
+set.seed(22)
+
+mat <- t(assay(sce, "exprs")[rowData(sce)$myeloid_cluster_3,])
+
+#k=30
+out <- Rphenoannoy(mat, k = 30)
+
+clusters <- factor(membership(out[[2]]))
+
+sce$my_cluster_3_30 <- clusters
+
+unique(sce$my_cluster_3_30)
+
+#Save SCEs after clustering
+saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_06.rds")
+
+gc()
+
+#k=50
+out <- Rphenoannoy(mat, k = 50)
+
+clusters <- factor(membership(out[[2]]))
+
+sce$my_cluster_3_50 <- clusters
+
+unique(sce$my_cluster_3_50)
+
+#Save SCEs after clustering
+saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_06.rds")
+
+gc()
+
+#k=70
+out <- Rphenoannoy(mat, k = 70)
+
+clusters <- factor(membership(out[[2]]))
+
+sce$my_cluster_3_70 <- clusters
+
+unique(sce$my_cluster_3_70)
+
+#Save SCEs after clustering
+saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_06.rds")
+
+gc()
+
+#k=90
+out <- Rphenoannoy(mat, k = 90)
+
+clusters <- factor(membership(out[[2]]))
+
+sce$my_cluster_3_90 <- clusters
+
+unique(sce$my_cluster_3_90)
+
+#Save SCEs after clustering
+saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_06.rds")
+
+gc()
+
+#k=110
+out <- Rphenoannoy(mat, k = 110)
+
+clusters <- factor(membership(out[[2]]))
+
+sce$my_cluster_3_110 <- clusters
+
+unique(sce$my_cluster_3_110)
+
+#Save SCEs after clustering
+saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_06.rds")
+
+gc()
+
+#k=130
+out <- Rphenoannoy(mat, k = 130)
+
+clusters <- factor(membership(out[[2]]))
+
+sce$my_cluster_3_130 <- clusters
+
+unique(sce$my_cluster_3_130)
+
+#Save SCEs after clustering
+saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_06.rds")
+
+gc()
+```
 
 ### FlowSOM 
 
@@ -503,12 +711,12 @@ p1+p2+p3
 
 ```{r}
 # By cluster 
-mean_sce <- aggregateAcrossCells(sce, ids = sce$my_cluster_2_130, #select cluster of interest
+mean_sce <- aggregateAcrossCells(sce, ids = sce$my_cluster_2_90, #select cluster of interest
                                  statistics = "mean",
                                  use.assay.type = "exprs",
                                  subset.row = rowData(sce)$myeloid_cluster_2)
 
-Heatmap(t(assay(mean_sce, "exprs")), col = viridis(100), clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2")+
+Heatmap(t(assay(mean_sce, "exprs")), col = viridis(100), clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2", row_split = 9)+
   Heatmap(scale(t(assay(mean_sce, "exprs"))))+
   rowAnnotation(id = anno_text(mean_sce$ids))+
   rowAnnotation(n_cells = anno_barplot(mean_sce$ncells))
@@ -523,13 +731,13 @@ Heatmap(t(assay(mean_sce, "exprs")), col = viridis(100), clustering_method_rows 
   rowAnnotation(id = anno_text(mean_sce$ids))+
   rowAnnotation(n_cells = anno_barplot(mean_sce$ncells))
 
-mean_sce <- aggregateAcrossCells(sce, ids = sce$my_cluster_130, #select cluster of interest
+mean_sce <- aggregateAcrossCells(sce, ids = sce$my_cluster_110, #select cluster of interest
                                  statistics = "mean",
-                                 use.assay.type = "exprs",
+                                 use.assay.type = "min_max",
                                  subset.row = rowData(sce)$myeloid_cluster)
 
-Heatmap(t(assay(mean_sce, "exprs")), col = viridis(100), clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2")+
-  Heatmap(scale(t(assay(mean_sce, "exprs"))))+
+Heatmap(t(assay(mean_sce, "min_max")), col = viridis(100),clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2", row_split = 8)+
+  Heatmap(scale(t(assay(mean_sce, "min_max"))))+
   rowAnnotation(id = anno_text(mean_sce$ids))+
   rowAnnotation(n_cells = anno_barplot(mean_sce$ncells))
 ```
@@ -601,7 +809,7 @@ masks <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysi
 set.seed(22)
 cur_sample <- sample(unique(sce$sample_id), 30)
 
-cur_sample <- (colData(sce) %>% as.data.frame %>% select(sample_id, my_cluster_2_130) %>% group_by(sample_id) %>% filter(my_cluster_2_130 == "19") %>% count() %>% arrange(desc(n)) %>% pull(sample_id))[1:10]
+cur_sample <- (colData(sce) %>% as.data.frame %>% select(sample_id, my_cluster_110) %>% group_by(sample_id) %>% filter(my_cluster_110 == "19") %>% count() %>% arrange(desc(n)) %>% pull(sample_id))[1:10]
 
 cur_images <- images[mcols(images)$sample_id %in% cur_sample]
 cur_masks <- masks[mcols(masks)$sample_id %in% cur_sample]
@@ -1034,7 +1242,7 @@ cur_sample <- sample(colData(sce) %>% as.data.frame %>% select(sample_id, subtyp
 
 cur_sample <- (colData(sce) %>% as.data.frame %>% select(sample_id, astir_immune_combined) %>% group_by(sample_id) %>% filter(astir_immune_combined == "B_cell") %>% count() %>% arrange(desc(n)) %>% pull(sample_id))[1:10]
 
-cur_sample <- (colData(sce) %>% as.data.frame %>% select(sample_id, cluster_selected) %>% group_by(sample_id) %>% filter(cluster_selected == "7") %>% count() %>% arrange(desc(n)) %>% pull(sample_id))[1:10]
+cur_sample <- (colData(sce) %>% as.data.frame %>% select(sample_id, my_cluster_2_130) %>% group_by(sample_id) %>% filter(my_cluster_2_130 == "19") %>% count() %>% arrange(desc(n)) %>% pull(sample_id))[1:10]
 
 cur_sample <- (colData(sce) %>% as.data.frame %>% select(sample_id, immune_metacluster) %>% group_by(sample_id) %>% filter(immune_metacluster == "CD8_T_cell") %>% count() %>% arrange(desc(n)) %>% pull(sample_id))[1:10]
 
@@ -1056,7 +1264,7 @@ cytoviewer(image = cur_images, mask = cur_masks, object = cur_sce, img_id = "sam
 #to save time and not get super crowded dimensionality reduction plots
 
 #Run UMAP/TSNE
-reducedDim(sce, "UMAP") <- calculateUMAP(sce[rowData(sce)$myeloid_cluster,], n_neighbors = 50, pca = 50,exprs_values = "min_max", external_neighbors=TRUE, BPPARAM = MulticoreParam())
+reducedDim(sce, "UMAP") <- calculateUMAP(sce[rowData(sce)$myeloid_cluster_2,], n_neighbors = 50, pca = 50,exprs_values = "exprs", external_neighbors=TRUE, BPPARAM = MulticoreParam())
 
 plotReducedDim(sce, dimred = "UMAP", colour_by = "my_cluster_110")
 plotReducedDim(sce, dimred = "UMAP", colour_by = "my_cluster_130")
