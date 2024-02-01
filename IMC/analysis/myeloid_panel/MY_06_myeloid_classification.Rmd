@@ -642,6 +642,7 @@ pairwiseRand(sce$my_cluster_110,sce$my_cluster_130, mode = "index")
 my_clusters <- colnames(colData(sce))[str_detect(colnames(colData(sce)),"my_cluster_[:digit:]")]
 my_clusters <- my_clusters[!str_detect(my_clusters, "_1_")]
 my_clusters <- my_clusters[!str_detect(my_clusters, "_2_")]
+my_clusters <- my_clusters[!str_detect(my_clusters, "_3_")]
 
 df <- foreach(i = seq_along(my_clusters),.combine = rbind) %do% {
 num_clus <- length(unique(colData(sce)[,my_clusters[i]]))
@@ -680,7 +681,20 @@ data.frame(num_clus = num_clus,
            type = "myeloid_cluster_2")
 }
 
-df_out <- rbind(df, df_1, df_2)
+my_clusters <- colnames(colData(sce))[str_detect(colnames(colData(sce)),"my_cluster_3_[:digit:]")]
+
+df_3 <- foreach(i = seq_along(my_clusters),.combine = rbind) %do% {
+num_clus <- length(unique(colData(sce)[,my_clusters[i]]))
+sil <- approxSilhouette(t(assay(sce, "exprs")), clusters=colData(sce)[,my_clusters[i]])
+rmsd <- clusterRMSD(t(assay(sce, "exprs")), clusters=colData(sce)[,my_clusters[i]])
+data.frame(num_clus = num_clus,
+           k = as.numeric(str_split(my_clusters[i],"_",simplify = TRUE)[,4]), 
+           sil = mean(sil$width), 
+           rmsd = sum(rmsd),
+           type = "myeloid_cluster_3")
+}
+
+df_out <- rbind(df, df_1, df_2, df_3)
 
 
 p1 <- ggplot(df_out, aes(x=k, y=num_clus, color = type))+
@@ -721,20 +735,20 @@ Heatmap(t(assay(mean_sce, "exprs")), col = viridis(100), clustering_method_rows 
   rowAnnotation(id = anno_text(mean_sce$ids))+
   rowAnnotation(n_cells = anno_barplot(mean_sce$ncells))
 
-mean_sce <- aggregateAcrossCells(sce, ids = sce$my_cluster_1_110, #select cluster of interest
+mean_sce <- aggregateAcrossCells(sce, ids = sce$my_cluster_1_90, #select cluster of interest
                                  statistics = "mean",
                                  use.assay.type = "exprs",
                                  subset.row = rowData(sce)$myeloid_cluster_1)
 
-Heatmap(t(assay(mean_sce, "exprs")), col = viridis(100), clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2")+
-  Heatmap(scale(t(assay(mean_sce, "exprs"))))+
+Heatmap(scale(t(assay(mean_sce, "exprs"))), clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2", row_split = 8)+
+  Heatmap(t(assay(mean_sce, "exprs")),col = viridis(100))+
   rowAnnotation(id = anno_text(mean_sce$ids))+
   rowAnnotation(n_cells = anno_barplot(mean_sce$ncells))
 
-mean_sce <- aggregateAcrossCells(sce, ids = sce$my_cluster_110, #select cluster of interest
+mean_sce <- aggregateAcrossCells(sce, ids = sce$my_cluster_3_110, #select cluster of interest
                                  statistics = "mean",
                                  use.assay.type = "min_max",
-                                 subset.row = rowData(sce)$myeloid_cluster)
+                                 subset.row = rowData(sce)$myeloid_cluster_3)
 
 Heatmap(t(assay(mean_sce, "min_max")), col = viridis(100),clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2", row_split = 8)+
   Heatmap(scale(t(assay(mean_sce, "min_max"))))+
@@ -822,8 +836,92 @@ library(cytoviewer)
 cytoviewer(image = cur_images, mask = cur_masks, object = cur_sce, img_id = "sample_id", cell_id = "ObjectNumber")
 ```
 
+# 2. Astir for automated cell type assignment 
 
-# 2. Myeloid metacluster
+### Astir model
+
+see [here](https://www.sciencedirect.com/science/article/pii/S2405471221003355?via%3Dihub) for full publication (Geuenich et al.,2021, Cell Systems).
+
+```{r astir-expo}
+#Export arsinh normalized expression matrix as csv
+expr_astir <- assay(sce,"exprs") %>% t() %>% as.data.frame() %>% mutate(PID = sce$PID)
+
+write.csv(expr_astir, file = "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/06_my/expr_ccRCC_myeloid_astir.csv",row.names = TRUE)
+```
+
+`Next: Run Astir in Python.`
+
+```{r astir-ana, message = FALSE,warning=FALSE}
+#Import Astir cell type assignments
+astir_type <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/06_my/astir_ccRCC_myeloid_celltypes_TME.csv",col_names = c("ID","cell_type"),skip = 1)
+
+astir_sum <- astir_type %>% as.data.frame %>% group_by(cell_type) %>% dplyr::count()
+
+# Add to sce
+sce$astir_myeloid_type <- astir_type$cell_type[match(sce$cell_id, astir_type$ID)]
+
+# Create combined category
+sce$astir_myeloid_combined <- ifelse(sce$astir_myeloid_type %in% c("Unknown","Other"), "Unknown/Other", sce$astir_myeloid_type)
+
+#Mark channels used for cell type assignment 
+astir_myeloid_channel = c("CD68","CD163","CD11b","CD15","Arginase","HLADR")
+
+rowData(sce)$use_astir_myeloid <- rowData(sce) %>% as.data.frame() %>% mutate(use_astir = ifelse(rownames(sce) %in% astir_myeloid_channel,TRUE,FALSE)) %>% pull(use_astir)
+```
+
+
+### Visualization 
+
+```{r}
+# per combined type 
+mean_sce <- aggregateAcrossCells(sce, ids = sce$astir_myeloid_combined,
+                                 statistics = "mean",
+                                 use.assay.type = "min_max",
+                                 subset.row = rowData(sce)$use_astir_myeloid)
+
+Heatmap(t(assay(mean_sce, "min_max")), col = viridis(110), clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2")+
+  rowAnnotation(id = anno_text(mean_sce$ids))+
+  rowAnnotation(n_cells = anno_barplot(mean_sce$ncells))
+```
+```{r}
+nr_astir <- colData(sce) %>% as.data.frame %>% select(my_cluster_1_90, astir_myeloid_combined) %>% table()
+fr_astir <- as.data.frame(nr_astir) %>% group_by(my_cluster_1_90) %>% mutate(fra = Freq/sum(Freq)) 
+
+fr_astir <- fr_astir %>% select(-Freq) %>% pivot_wider(id_cols = my_cluster_1_90,names_from = astir_myeloid_combined,values_from = fra) %>% column_to_rownames("my_cluster_1_90")
+```
+
+### cytoviewer visualization
+
+```{r}
+images <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/images.rds")
+masks <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/masks.rds")
+```
+
+```{r}
+# Select images of interest
+set.seed(22)
+cur_sample <- sample(unique(sce$sample_id), 30)
+
+cur_sample <- sample(colData(sce) %>% as.data.frame %>% select(sample_id, subtype_combined) %>% unique() %>% filter(subtype_combined == "ccRCC") %>% pull(sample_id), 30)
+
+cur_sample <- (colData(sce) %>% as.data.frame %>% select(sample_id, astir_immune_combined) %>% group_by(sample_id) %>% filter(astir_immune_combined == "B_cell") %>% count() %>% arrange(desc(n)) %>% pull(sample_id))[1:10]
+
+cur_sample <- (colData(sce) %>% as.data.frame %>% select(sample_id, cluster_1_130) %>% group_by(sample_id) %>% filter(cluster_1_130 == "11") %>% count() %>% arrange(desc(n)) %>% pull(sample_id))[1:10]
+
+cur_sample <- (colData(sce) %>% as.data.frame %>% select(sample_id, immune_metacluster) %>% group_by(sample_id) %>% filter(immune_metacluster == "CD8_T_cell") %>% count() %>% arrange(desc(n)) %>% pull(sample_id))[1:10]
+
+cur_images <- images[mcols(images)$sample_id %in% cur_sample]
+cur_masks <- masks[mcols(masks)$sample_id %in% cur_sample]
+cur_sce <- sce[,sce$sample_id %in% cur_sample]
+```
+
+
+```{r}
+library(cytoviewer)
+cytoviewer(image = cur_images, mask = cur_masks, object = cur_sce, img_id = "sample_id", cell_id = "ObjectNumber")
+```
+
+# 3. Myeloid metacluster
 
 ### Rich heatmap 
 
@@ -831,16 +929,16 @@ Heatmap of clusters
 
 ```{r heatmap, message=FALSE, warning=FALSE}
 #Read sce after clustering, astir and GMM
-sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_06.rds")
+#sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_06.rds")
 
 ### 1. Heatmap body ###
 
 # Aggregrate across cells with the mean
-sce$my_cluster_selected <- sce$my_cluster_110
+sce$my_cluster_selected <- sce$my_cluster_1_90
 mean_sce <- aggregateAcrossCells(sce, ids = sce$my_cluster_selected,
                                  statistics = "mean",
                                  use.assay.type = "exprs",
-                                 subset.row = rowData(sce)$myeloid_cluster)
+                                 subset.row = rowData(sce)$myeloid_cluster_1)
 
 # Heatmap body color 
 col_main = viridis(100)
@@ -874,6 +972,28 @@ ha_spatial <- HeatmapAnnotation(
     border = TRUE,
     which = "row")
 
+### 2.2 Astir prediction 
+
+## Astir cell types per cluster
+astir_anno <- colData(sce) %>% as.data.frame() %>% select(my_cluster_selected,astir_myeloid_combined) %>% group_by(my_cluster_selected) %>% table() %>% as.data.frame
+astir_anno <- astir_anno %>% group_by(my_cluster_selected) %>% mutate(fra = Freq/sum(Freq)) 
+astir_anno <- astir_anno %>% select(-Freq) %>% pivot_wider(id_cols = my_cluster_selected,names_from = astir_myeloid_combined,values_from = fra) %>% column_to_rownames("my_cluster_selected")
+
+#Create colors for astir cell types 
+astir_col <- setNames(c("#E31A1C","#A6CEE3","#FB9A99","#FDBF6F","#B2DF8A","#33A02C","#CAB2D6"), 
+                      c("M2_like", "C_M", "Neutro_MDSC","Neutro", "M1_like", "Ag_M","Other"))
+
+metadata(sce)$colors$my_astir_col <- astir_col
+metadata(sce)$colors$my_astir_col <- metadata(sce)$colors$my_astir_col[match(colnames(astir_anno),names(metadata(sce)$colors$my_astir_col))]
+
+
+ha_astir <- HeatmapAnnotation(
+  astir_myeloid_combined = anno_barplot(astir_anno, width = unit(20, "mm"), gp = gpar(fill = metadata(sce)$colors$my_astir_col)),
+                            border = TRUE, 
+                            annotation_name_rot = 90,
+                            gap = unit(3,"mm"),
+                            which = "row")
+
 ### 2.2 Metadata features
 
 #Number of cells per my_cluster_selected 
@@ -881,7 +1001,7 @@ n_cells <- colData(mean_sce) %>% as.data.frame %>% select(my_cluster_selected, n
 
 # # Number of contributing patients (at least 1 cell)
 cluster_PID <- colData(sce) %>% as.data.frame() %>% select(my_cluster_selected,PID) %>% group_by(my_cluster_selected) %>% table() %>% as.data.frame
-n_PID <- cluster_PID %>% filter(Freq>0) %>% group_by(my_cluster_selected) %>% count(name = "n_PID") %>% column_to_rownames("my_cluster_selected")
+n_PID <- cluster_PID %>% filter(Freq>=5) %>% group_by(my_cluster_selected) %>% count(name = "n_PID") %>% column_to_rownames("my_cluster_selected")
 
 # Proportion of ISUP grade per cluster
 ISUP <- colData(sce) %>% as.data.frame() %>% select(my_cluster_selected,ISUP) %>% group_by(my_cluster_selected) %>% table() %>% as.data.frame
@@ -912,40 +1032,50 @@ ha_meta <- HeatmapAnnotation(ISUP = anno_barplot(ISUP, width = unit(12, "mm"),gp
 
 ### 3. Define broader categories
 
-library(clValid)
+### 3. Assign labels to clusters 
 
-#Internal measures
-set.seed(22)
-testCL<- clValid(t(assay(mean_sce, "exprs")),nClust = 4:10,clMethods = c("hierarchical","agnes","kmeans","pam"),validation="internal",metric="euclidean", method = "ward")
-summary(testCL)
-plot(testCL, legend = FALSE)
-
-#Stability measures 
-testCL_1<- clValid(t(assay(mean_sce, "exprs")),nClust = 4:10,clMethods = c("hierarchical","agnes","kmeans","pam"),validation="stability",metric="euclidean", method = "ward")
-summary(testCL_1)
-plot(testCL_1, legend = FALSE)
-
-#chosen method: hierarchical, k=4
 anno <- colData(mean_sce) %>% as.data.frame %>% select(my_cluster_selected, ncells)
 
-# Define colors 
+anno <- anno %>% mutate(my_metacluster = ifelse(my_cluster_selected %in% c("1","6","13"),"M2_like",
+                                     ifelse(my_cluster_selected %in% c("4","9"),"Neutro_MDSC",
+                                                   ifelse(my_cluster_selected %in% c("18","16","7"),"C_M",
+                                                          ifelse(my_cluster_selected %in% c("8"),"Neutro",
+                                                                        ifelse(my_cluster_selected %in% c("12","10","11","14","5"),"Ag_M","M1_like")
+                                                                                      ))))) %>% mutate(my_metacluster = as.factor(my_metacluster))
 
-row_order_clusters <- unlist(row_order(Heatmap(t(assay(mean_sce, "exprs")),
-        col = col_main,
-        name = "exprs",
-        clustering_method_rows = "ward.D2",
-        clustering_method_columns = "ward.D2", 
-        row_split = 4,
-        cluster_row_slices = FALSE)))
-
-cluster_col <- setNames(colorRampPalette(brewer.pal(9, "Paired"))(length(unique(anno$my_cluster_selected))),row_order_clusters)
-
-cluster_col[names(cluster_col) == "11"] <- "#E63127"
-cluster_col[names(cluster_col) == "4"] <- "orange"
-cluster_col[names(cluster_col) == "12"] <- "#FE880F"
-cluster_col[names(cluster_col) == "1"] <- "grey"
-
-metadata(sce)$colors$my_cluster_selected <- cluster_col
+# library(clValid)
+# 
+# #Internal measures
+# set.seed(22)
+# testCL<- clValid(t(assay(mean_sce, "exprs")),nClust = 4:10,clMethods = c("hierarchical","agnes","kmeans","pam"),validation="internal",metric="euclidean", method = "ward")
+# summary(testCL)
+# plot(testCL, legend = FALSE)
+# 
+# #Stability measures 
+# testCL_1<- clValid(t(assay(mean_sce, "exprs")),nClust = 4:10,clMethods = c("hierarchical","agnes","kmeans","pam"),validation="stability",metric="euclidean", method = "ward")
+# summary(testCL_1)
+# plot(testCL_1, legend = FALSE)
+# 
+# #chosen method: hierarchical, k=4
+# 
+# # Define colors 
+# 
+# row_order_clusters <- unlist(row_order(Heatmap(t(assay(mean_sce, "exprs")),
+#         col = col_main,
+#         name = "exprs",
+#         clustering_method_rows = "ward.D2",
+#         clustering_method_columns = "ward.D2", 
+#         row_split = 4,
+#         cluster_row_slices = FALSE)))
+# 
+# cluster_col <- setNames(colorRampPalette(brewer.pal(9, "Paired"))(length(unique(anno$my_cluster_selected))),row_order_clusters)
+# 
+# cluster_col[names(cluster_col) == "11"] <- "#E63127"
+# cluster_col[names(cluster_col) == "4"] <- "orange"
+# cluster_col[names(cluster_col) == "12"] <- "#FE880F"
+# cluster_col[names(cluster_col) == "1"] <- "grey"
+# 
+# metadata(sce)$colors$my_cluster_selected <- cluster_col
 
 ### 4. Plot combined Heatmap
 h <- Heatmap(t(assay(mean_sce, "exprs")),
@@ -954,13 +1084,14 @@ h <- Heatmap(t(assay(mean_sce, "exprs")),
         show_row_names = T, 
         row_names_side = "left",
         show_column_names =  T,
-        row_split = 4,
-        row_title = c("Neutro/MDSC","M2-like","HLADR","Other"),
+        row_split = anno$my_metacluster,
+        #row_title = c("Neutro/MDSC","M2-like","HLADR","Other"),
         clustering_method_rows = "ward.D2",
         clustering_method_columns = "ward.D2",
-        cluster_row_slices = FALSE)+
+        cluster_row_slices = TRUE)+
   Heatmap(scale(t(assay(mean_sce, "exprs"))))+
-  rowAnnotation(cluster = anno_simple(unfactor(anno$my_cluster_selected), col = metadata(sce)$colors$my_cluster_selected, border = TRUE))+
+  ha_astir+
+  #rowAnnotation(cluster = anno_simple(unfactor(anno$my_cluster_selected), col = metadata(sce)$colors$my_cluster_selected, border = TRUE))+
   ha_spatial+
   ha_meta
 
@@ -970,6 +1101,11 @@ h <- Heatmap(t(assay(mean_sce, "exprs")),
 
 # Draw heatmap
 draw(h) #annotation_legend_list = list(lgd))
+
+## Add myeloid_metacluster to SCE 
+sce$myeloid_metacluster <- anno$my_metacluster[match(sce$my_cluster_selected, anno$my_cluster_selected)]
+
+colData(sce) %>% as.data.frame %>% group_by(myeloid_metacluster) %>% count()
 ```
 
 ### Define myeloid metacluster 
@@ -1378,7 +1514,7 @@ library(edgeR)
 
 DA <- lapply(c("ISUP_combined", "pT_combined","necrose"), function(x){
 
-abundances <- table(unfactor(sce$my_cluster_90), sce$PID)
+abundances <- table(unfactor(sce$my_cluster_1_90), sce$PID)
 abundances <- unclass(abundances) 
 
 #relevant patient metadata (Re-level for baseline)
@@ -2090,7 +2226,7 @@ PID_myeloid_metacluster <- PID_myeloid_metacluster %>% group_by(PID) %>% mutate(
 PID_metagroups <- PID_myeloid_metacluster %>% pivot_wider(id_cols = "PID",names_from = "myeloid_metacluster",values_from = "fra") %>% column_to_rownames("PID")
 
 Cox_df <- PID_metagroups
-colnames(Cox_df) <- paste0("MY_", colnames(Cox_df))
+#colnames(Cox_df) <- paste0("MY_", colnames(Cox_df))
 
 ## Based on categories (mean or median division of cluster proportions) 
 Cox_df_mean <- foreach(i = colnames(Cox_df),.combine = "cbind")%do%{
@@ -2112,9 +2248,9 @@ Cox_df_mean$ISUP <- as.factor(sce$ISUP_combined[match(rownames(Cox_df_mean),sce$
 Cox_df_mean$pT <- as.factor(sce$pT_combined[match(rownames(Cox_df_mean),sce$PID)])
 
 #Based on proportions
-covariates <- Cox_df_mean %>% select(-status_OS,-OS_months, -gender, -age, -ISUP, -pT, -MY_Other) %>% colnames
+covariates <- Cox_df_mean %>% select(-status_OS,-OS_months, -gender, -age, -ISUP, -pT, -M1_like) %>% colnames
 
-multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~ gender + age + ISUP + pT +", paste(covariates, collapse = " + "),"+ MY_Other"))
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~ gender + age + ISUP + pT +", paste(covariates, collapse = " + "),"+ M1_like"))
 
 multi_model <- coxph(multi_formula, data = Cox_df_mean)
 
