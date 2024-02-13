@@ -1082,6 +1082,9 @@ astir_anno <- astir_anno %>% select(-Freq) %>% pivot_wider(id_cols = my_cluster_
 astir_col <- setNames(c("#E31A1C","#A6CEE3","#FB9A99","#FDBF6F","#B2DF8A","#33A02C","#CAB2D6"), 
                       c("M2_like", "C_M", "Neutro_MDSC","Granu", "M1_like", "Ag_M","Other"))
 
+#astir_col <- setNames(c("#E31A1C", "#EB4445", "#F36F6F", "#FB9A99", "#CA7194", "#994A8F", "#68228B"), 
+#                     c("M2_like", "M1_like", "Neutro_MDSC","Granu", "C_M", "Ag_M", "Other"))
+
 metadata(sce)$colors$my_astir_col <- astir_col
 metadata(sce)$colors$my_astir_col <- metadata(sce)$colors$my_astir_col[match(colnames(astir_anno),names(metadata(sce)$colors$my_astir_col))]
 
@@ -1102,15 +1105,15 @@ n_cells <- colData(mean_sce) %>% as.data.frame %>% select(my_cluster_selected, n
 cluster_PID <- colData(sce) %>% as.data.frame() %>% select(my_cluster_selected,PID) %>% group_by(my_cluster_selected) %>% table() %>% as.data.frame
 n_PID <- cluster_PID %>% filter(Freq>=5) %>% group_by(my_cluster_selected) %>% count(name = "n_PID") %>% column_to_rownames("my_cluster_selected")
 
-# Proportion of ISUP grade per cluster
-ISUP <- colData(sce) %>% as.data.frame() %>% select(my_cluster_selected,ISUP) %>% group_by(my_cluster_selected) %>% table() %>% as.data.frame
-ISUP <- ISUP %>% group_by(my_cluster_selected) %>% mutate(fra = Freq/sum(Freq)) 
-ISUP <- ISUP %>% select(-Freq) %>% pivot_wider(id_cols = my_cluster_selected,names_from = ISUP,values_from = fra) %>% column_to_rownames("my_cluster_selected")
+# Proportion of ISUP_combined grade per cluster
+ISUP_combined <- colData(sce) %>% as.data.frame() %>% select(my_cluster_selected,ISUP_combined) %>% group_by(my_cluster_selected) %>% table() %>% as.data.frame
+ISUP_combined <- ISUP_combined %>% group_by(my_cluster_selected) %>% mutate(fra = Freq/sum(Freq)) 
+ISUP_combined <- ISUP_combined %>% select(-Freq) %>% pivot_wider(id_cols = my_cluster_selected,names_from = ISUP_combined,values_from = fra) %>% column_to_rownames("my_cluster_selected")
 
-# Proportion of pT stage per cluster
-pT <- colData(sce) %>% as.data.frame() %>% select(my_cluster_selected,pT_simple) %>% group_by(my_cluster_selected) %>% table() %>% as.data.frame
-pT <- pT %>% group_by(my_cluster_selected) %>% mutate(fra = Freq/sum(Freq)) 
-pT <- pT %>% select(-Freq) %>% pivot_wider(id_cols = my_cluster_selected,names_from = pT_simple,values_from = fra) %>% column_to_rownames("my_cluster_selected")
+# Proportion of pT_combined stage per cluster
+pT_combined <- colData(sce) %>% as.data.frame() %>% select(my_cluster_selected,pT_combined) %>% group_by(my_cluster_selected) %>% table() %>% as.data.frame
+pT_combined <- pT_combined %>% group_by(my_cluster_selected) %>% mutate(fra = Freq/sum(Freq)) 
+pT_combined <- pT_combined %>% select(-Freq) %>% pivot_wider(id_cols = my_cluster_selected,names_from = pT_combined,values_from = fra) %>% column_to_rownames("my_cluster_selected")
 
 # Proportion of necrose per cluster
 necrose <- colData(sce) %>% as.data.frame() %>% select(my_cluster_selected,necrose) %>% group_by(my_cluster_selected) %>% table() %>% as.data.frame
@@ -1118,8 +1121,8 @@ necrose <- necrose %>% group_by(my_cluster_selected) %>% mutate(fra = Freq/sum(F
 necrose <- necrose %>% select(-Freq) %>% pivot_wider(id_cols = my_cluster_selected,names_from = necrose,values_from = fra) %>% column_to_rownames("my_cluster_selected")
 
 
-ha_meta <- HeatmapAnnotation(ISUP = anno_barplot(ISUP, width = unit(12, "mm"),gp = gpar(fill = metadata(sce)$colors$ISUP)),
-                            pT = anno_barplot(pT, width = unit(12, "mm"),gp = gpar(fill = metadata(sce)$colors$pT_simple)),
+ha_meta <- HeatmapAnnotation(ISUP_combined = anno_barplot(ISUP_combined, width = unit(12, "mm"),gp = gpar(fill = metadata(sce)$colors$ISUP_combined)),
+                            pT_combined = anno_barplot(pT_combined, width = unit(12, "mm"),gp = gpar(fill = metadata(sce)$colors$pT_combined)),
                             necrose = anno_barplot(necrose, width = unit(12, "mm"),gp = gpar(fill = metadata(sce)$colors$necrose)),
                             n_cells = anno_barplot(n_cells$ncells, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),                        n_PID = anno_barplot(n_PID$n_PID, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),
 
@@ -1187,6 +1190,9 @@ anno <- anno %>% mutate(my_metacluster = ifelse(my_cluster_selected %in% c("1","
 meta_col <- setNames(c("#E31A1C","#A6CEE3","#FB9A99","#FDBF6F","#B2DF8A","#33A02C","#CAB2D6"), 
                       c("M2_like", "C_M", "Neutro_MDSC","Granu", "M1_like", "Ag_M", "Other"))
 
+#meta_col <- setNames(c("#E31A1C", "#EB4445", "#F36F6F", "#FB9A99", "#CA7194", "#994A8F", "#68228B"), 
+#                      c("M2_like", "M1_like", "Neutro_MDSC","Granu", "C_M", "Ag_M", "Other"))
+
 metadata(sce)$colors$myeloid_metacluster <- meta_col
 
 ### 4. Plot combined Heatmap
@@ -1205,10 +1211,10 @@ h <- Heatmap(t(assay(mean_sce, "exprs")),
   #Heatmap(scale(t(assay(mean_sce, "exprs"))))+
   #Heatmap(t(assay(state_sce, "exprs")), col = col_main)+
   rowAnnotation(metacluster = anno_simple(unfactor(anno$my_metacluster), col = metadata(sce)$colors$myeloid_metacluster, border = TRUE))+
-  rowAnnotation(names = anno_text(anno$my_cluster_names))+
   ha_astir+
+  rowAnnotation(names = anno_text(anno$my_cluster_names))+
   ha_spatial+
-  ha_state+
+  #ha_state+
   ha_meta
 
 
@@ -1541,6 +1547,7 @@ dittoHeatmap(sce[,sce$myeloid_metacluster == "M2_like"],
              cluster_cols = FALSE, 
              annot.by = c("my_cluster_selected"))
 ```
+
 #### Alluvial
 
 ```{r}
@@ -1553,6 +1560,21 @@ alluvial_wide(data = colData(sce) %>% as.data.frame %>% select(immune_metacluste
 pairwiseRand(sce$immune_metacluster_graph_test,sce$immune_metacluster_SOM_test, mode = "index")
 ```
 
+#### Violin Expression 
+
+```{r}
+# Violin Plot - plotExpression
+set.seed(22)
+cur_cells <- sample(seq_len(ncol(sce)), 10000)
+
+plotExpression(sce[,cur_cells], 
+               features = rownames(sce)[rowData(sce)$myeloid_cluster_1],
+               x = "myeloid_metacluster", 
+               exprs_values = "exprs", 
+               colour_by = "myeloid_metacluster") +
+    theme(axis.text.x =  element_text(angle = 90))+
+  scale_color_manual(values = metadata(sce)$colors$myeloid_metacluster)
+```
 
 # 5. Differential abundance analysis 
 
@@ -2033,9 +2055,9 @@ Cox_df$ISUP <- as.factor(sce$ISUP_combined[match(rownames(Cox_df),sce$PID)])
 Cox_df$pT <- as.factor(sce$pT_combined[match(rownames(Cox_df),sce$PID)])
 
 #Based on proportions
-covariates <- Cox_df %>% select(-OS_months, -status_OS,-CD68) %>% colnames
+covariates <- Cox_df %>% select(-OS_months, -status_OS,-CD68_low) %>% colnames
 
-multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + "),"+ CD68"))
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + "),"+ CD68_low"))
 
 multi_model <- coxph(multi_formula, data = Cox_df)
 
@@ -2082,7 +2104,7 @@ Cox_df <- PID_metagroups
 ## Based on categories (mean or median division of cluster proportions) 
 
 Cox_df_mean <- foreach(i = colnames(Cox_df),.combine = "cbind")%do%{
-Cox_df %>% select(all_of(i)) %>% mutate(mean = ifelse(Cox_df[,i] > mean(Cox_df[,i]),"B","A")) %>% pull(mean)
+Cox_df %>% select(all_of(i)) %>% mutate(mean = ifelse(Cox_df[,i] > median(Cox_df[,i]),"B","A")) %>% pull(mean)
 }
 
 colnames(Cox_df_mean) <- colnames(Cox_df)
@@ -2281,7 +2303,7 @@ Cox_df <- PID_metagroups
 
 ## Based on categories (mean or median division of cluster proportions) 
 Cox_df_mean <- foreach(i = colnames(Cox_df),.combine = "cbind")%do%{
-Cox_df %>% select(all_of(i)) %>% mutate(mean = ifelse(Cox_df[,i] > mean(Cox_df[,i]),"B","A")) %>% pull(mean)
+Cox_df %>% select(all_of(i)) %>% mutate(mean = ifelse(Cox_df[,i] > median(Cox_df[,i]),"B","A")) %>% pull(mean)
 }
 
 colnames(Cox_df_mean) <- colnames(Cox_df)
@@ -2358,10 +2380,10 @@ Cox_df_GMM <- as.data.frame(Cox_df_GMM,stringsAsFactors=TRUE)
 Cox_df_GMM$status_OS <- sce$status_OS[match(rownames(Cox_df_GMM),sce$PID)]
 Cox_df_GMM$OS_months <- sce$OS_months[match(rownames(Cox_df_GMM),sce$PID)]
 
-#Cox_df_GMM$gender <- as.factor(sce$gender[match(rownames(Cox_df_GMM),sce$PID)])
-#Cox_df_GMM$age <- sce$age[match(rownames(Cox_df_GMM),sce$PID)]
-#Cox_df_GMM$ISUP <- as.factor(sce$ISUP_combined[match(rownames(Cox_df_GMM),sce$PID)])
-#Cox_df_GMM$pT <- as.factor(sce$pT_combined[match(rownames(Cox_df_GMM),sce$PID)])
+Cox_df_GMM$gender <- as.factor(sce$gender[match(rownames(Cox_df_GMM),sce$PID)])
+Cox_df_GMM$age <- sce$age[match(rownames(Cox_df_GMM),sce$PID)]
+Cox_df_GMM$ISUP <- as.factor(sce$ISUP_combined[match(rownames(Cox_df_GMM),sce$PID)])
+Cox_df_GMM$pT <- as.factor(sce$pT_combined[match(rownames(Cox_df_GMM),sce$PID)])
 
 #Based on proportions
 covariates <- Cox_df_GMM %>% select(-status_OS,-OS_months) %>% colnames

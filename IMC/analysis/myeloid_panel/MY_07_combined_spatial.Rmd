@@ -85,11 +85,11 @@ sce_MY
 ```{r}
 # New information from TME sce 
 colnames(colData(sce_TME))[!colnames(colData(sce_TME)) %in% colnames(colData(sce))]
-## To transfer: astir_immune_combined, cluster_selected, immune_metacluster
+## To transfer: astir_immune_combined, GMM_immune_combined, cluster_selected, immune_metacluster
 
 # New information from myeloid sce 
 colnames(colData(sce_MY))[!colnames(colData(sce_MY)) %in% colnames(colData(sce_TME))]
-## To transfer: my_cluster_selected, myeloid_metacluster
+## To transfer: my_cluster_selected, astir_myeloid_type, myeloid_metacluster, my_cluster_names
 ```
 
 ## Combine myeloid and TME cluster/metacluster/color information
@@ -97,18 +97,25 @@ colnames(colData(sce_MY))[!colnames(colData(sce_MY)) %in% colnames(colData(sce_T
 ```{r combine tumor TME, message=FALSE,warning=FALSE}
 ## 1. Cell type information 
 ### 1. TME
-TME_info <- colData(sce_TME) %>% as.data.frame %>% mutate(immune_cluster_selected = paste0("immune_",sce_TME$cluster_selected)) %>% select(cell_id, astir_immune_combined, immune_cluster_selected, immune_metacluster)
+TME_info <- colData(sce_TME) %>% as.data.frame %>% mutate(immune_cluster_selected = paste0("immune_",sce_TME$cluster_selected)) %>% select(cell_id, astir_immune_combined, GMM_immune_combined, immune_cluster_selected, immune_metacluster)
 
 ### 2. MY
-MY_info <- colData(sce_MY) %>% as.data.frame %>% mutate(myeloid_metacluster = paste0("MY_",sce_MY$myeloid_metacluster)) %>% select(cell_id, my_cluster_selected, myeloid_metacluster)
+MY_info <- colData(sce_MY) %>% as.data.frame %>% 
+  mutate(myeloid_metacluster = paste0("MY_",sce_MY$myeloid_metacluster), 
+         my_cluster_selected = paste0("MY_",sce_MY$my_cluster_selected),
+         my_cluster_names = paste0("MY_",sce_MY$my_cluster_names)) %>% 
+  select(cell_id, my_cluster_selected, astir_myeloid_type, myeloid_metacluster, my_cluster_names)
 
 ### Add to sce
 sce$astir_immune_combined <- TME_info$astir_immune_combined[match(sce$cell_id, TME_info$cell_id)]
+sce$GMM_immune_combined <- TME_info$GMM_immune_combined[match(sce$cell_id, TME_info$cell_id)]
 sce$immune_cluster_selected <- TME_info$immune_cluster_selected[match(sce$cell_id, TME_info$cell_id)]
 sce$immune_metacluster <- TME_info$immune_metacluster[match(sce$cell_id, TME_info$cell_id)]
 
 sce$my_cluster_selected <- MY_info$my_cluster_selected[match(sce$cell_id, MY_info$cell_id)]
+sce$astir_myeloid_type <- MY_info$astir_myeloid_type[match(sce$cell_id, MY_info$cell_id)]
 sce$myeloid_metacluster <- MY_info$myeloid_metacluster[match(sce$cell_id, MY_info$cell_id)]
+sce$my_cluster_names <- MY_info$my_cluster_names[match(sce$cell_id, MY_info$cell_id)]
 
 ## 2. Color mapping
 metadata(sce)$colors$immune_metacluster <- metadata(sce_TME)$colors$immune_metacluster
@@ -117,8 +124,8 @@ metadata(sce)$colors$myeloid_metacluster <- metadata(sce_MY)$colors$myeloid_meta
 names(metadata(sce)$colors$myeloid_metacluster) <- paste0("MY_", names(metadata(sce)$colors$myeloid_metacluster))
 
 ## 3. Cluster channels 
-rowData(sce)$immune_cluster_channel <- rowData(sce_TME)$sub_cluster_1
-rowData(sce)$MY_cluster_channel <- rowData(sce_MY)$myeloid_cluster
+rowData(sce)$immune_cluster_channel <- rowData(sce_TME)$sub_cluster
+rowData(sce)$MY_cluster_channel <- rowData(sce_MY)$myeloid_cluster_1
 ```
 
 
@@ -126,6 +133,12 @@ rowData(sce)$MY_cluster_channel <- rowData(sce_MY)$myeloid_cluster
 ## Create combined cell type category 
 sce$celltype_combined <- ifelse(!is.na(sce$myeloid_metacluster), sce$myeloid_metacluster,
        ifelse(!is.na(sce$immune_metacluster), unfactor(sce$immune_metacluster), sce$analysis_cat))
+
+sce$celltype_combined_fine <- ifelse(!is.na(sce$my_cluster_names), sce$my_cluster_names,
+       ifelse(!is.na(sce$immune_metacluster), unfactor(sce$immune_metacluster), sce$analysis_cat))
+
+unique(sce$celltype_combined)
+unique(sce$celltype_combined_fine)
 ```
 
 
@@ -140,8 +153,10 @@ saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sc
 
 ## Differential interaction testing 
 
+### Celltype 
+
 ```{r}
-sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/others/myeloid_panel_old/data_analysis/sce_ccRCC_MY_07.rds")
+#sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/others/myeloid_panel_old/data_analysis/sce_ccRCC_MY_07.rds")
 
 ### General phenotype interaction difference
 
@@ -181,7 +196,7 @@ spicyTest <- spicy(cells_sc,
       BPPARAM = BiocParallel::MulticoreParam())
 
 
-topPairs(spicyTest, cutoff = 0.05, n=20)
+topPairs(spicyTest, cutoff = 0.05, n=40)
 
 out_ISUP <- signifPlot(spicyTest,
            type = "heatmap",
@@ -222,10 +237,9 @@ cells_sc
 spicyTest_1 <- spicy(cells_sc, 
       condition = "pT", 
       subject = "PID", 
-      BPPARAM = BiocParallel::MulticoreParam(),
-      includeZeroCells = TRUE)
+      BPPARAM = BiocParallel::MulticoreParam())
 
-topPairs(spicyTest_1, cutoff = 0.05, n=20)
+topPairs(spicyTest_1, cutoff = 0.1, n=20)
 
 out_pT <- signifPlot(spicyTest_1,
            type = "heatmap",
@@ -266,10 +280,9 @@ cells_sc
 spicyTest_2 <- spicy(cells_sc, 
       condition = "necrose", 
       subject = "PID", 
-      BPPARAM = BiocParallel::MulticoreParam(),
-      includeZeroCells = TRUE)
+      BPPARAM = BiocParallel::MulticoreParam())
 
-topPairs(spicyTest_2, cutoff = 0.05, n=20)
+topPairs(spicyTest_2, cutoff = 0.05, n=75)
 
 out_necrose <- signifPlot(spicyTest_2,
            type = "heatmap",
@@ -279,7 +292,401 @@ out_necrose <- signifPlot(spicyTest_2,
 
 out_necrose
 
+out_ISUP <- signifPlot(spicyTest,
+           type = "heatmap",
+           #breaks=c(-2, 2, 0.25),
+           fdr = TRUE,
+           marksToPlot = unique(sce$celltype_combined))
 
+out_pT <- signifPlot(spicyTest_1,
+           type = "heatmap",
+           #breaks=c(-2, 2, 0.25),
+           fdr = TRUE,
+           marksToPlot = unique(sce$celltype_combined))
+
+out_necrose <- signifPlot(spicyTest_2,
+           type = "heatmap",
+           #breaks=c(-2, 2, 0.25),
+           fdr = TRUE,
+           marksToPlot = unique(sce$celltype_combined))
+out_ISUP
+out_pT
+out_necrose
+
+spicyR::bind(spicyTest)
+
+spicyTest$coefficient[,1]
+spicyTest$coefficient[,1]+spicyTest$coefficient[,2]
+```
+
+
+```{r}
+results <- spicyTest
+marksToPlot <- unique(sce$celltype_combined)
+breaks <- NULL
+comparisonGroup <- NULL
+colours = c("#4575B4", "white", "#D73027")
+cutoff = 0.05
+fdr = TRUE
+
+if (is.null(comparisonGroup)) {
+    coef <- 2
+  } else {
+    coef <- which(levels(results$condition) == comparisonGroup)
+  }
+  marks <- unique(results$comparisons$from)
+  
+  if (is.null(breaks)) breaks <- c(-3, 3, 0.5)
+  breaks <- seq(from = breaks[1], to = breaks[2], by = breaks[3])
+  pal <- grDevices::colorRampPalette(colours)(length(breaks))
+  col <- colorRamp2(breaks, pal)
+
+  pVal <- results$p.value[, coef]
+
+  if (min(pVal, na.rm = TRUE) == 0) {
+    pVal[pVal == 0] <-
+      pVal[pVal == 0] + 10^floor(log10(min(pVal[pVal > 0], na.rm = TRUE)))
+  }
+
+  if (fdr) {
+    pVal <- stats::p.adjust(pVal, method = "fdr")
+  }
+
+  isGreater <- results$coefficient[, coef] > 0
+
+  results$coefficient[, 1]
+  results$coefficient[, coef]
+  
+  pVal <- log10(pVal)
+
+  pVal[isGreater] <- abs(pVal[isGreater])
+
+  pVal <- matrix(pVal, nrow = length(marks))
+  colnames(pVal) <- marks
+  rownames(pVal) <- marks
+  
+  pVal[abs(pVal) < -log10(0.1)] <- 0
+  
+  anno <- data.frame(celltypes = marksToPlot)
+  
+  anno$type <- ifelse(str_detect(anno$celltypes, "MY"),"MY","Not_MY")
+  
+  Heatmap(pVal,
+          col = col,
+          name = "log10(p)",
+          row_split = anno$type,
+          column_split = anno$type,
+          cluster_columns = FALSE, 
+          cluster_rows = FALSE, 
+          border = TRUE, 
+          row_title = "From", 
+          column_title = "To")
+  
+results <- spicyTest_1
+marksToPlot <- unique(sce$celltype_combined)
+breaks <- NULL
+comparisonGroup <- NULL
+colours = c("#4575B4", "white", "#D73027")
+cutoff = 0.05
+fdr = TRUE
+
+if (is.null(comparisonGroup)) {
+    coef <- 2
+  } else {
+    coef <- which(levels(results$condition) == comparisonGroup)
+  }
+  marks <- unique(results$comparisons$from)
+  
+  if (is.null(breaks)) breaks <- c(-3, 3, 0.5)
+  breaks <- seq(from = breaks[1], to = breaks[2], by = breaks[3])
+  pal <- grDevices::colorRampPalette(colours)(length(breaks))
+  col <- colorRamp2(breaks, pal)
+
+  pVal <- results$p.value[, coef]
+
+  if (min(pVal, na.rm = TRUE) == 0) {
+    pVal[pVal == 0] <-
+      pVal[pVal == 0] + 10^floor(log10(min(pVal[pVal > 0], na.rm = TRUE)))
+  }
+
+  if (fdr) {
+    pVal <- stats::p.adjust(pVal, method = "fdr")
+  }
+
+  isGreater <- results$coefficient[, coef] > 0
+
+  results$coefficient[, 1]
+  results$coefficient[, coef]
+  
+  pVal <- log10(pVal)
+
+  pVal[isGreater] <- abs(pVal[isGreater])
+
+  pVal <- matrix(pVal, nrow = length(marks))
+  colnames(pVal) <- marks
+  rownames(pVal) <- marks
+  
+  pVal[abs(pVal) < -log10(0.1)] <- 0
+  
+  anno <- data.frame(celltypes = marksToPlot)
+  
+  anno$type <- ifelse(str_detect(anno$celltypes, "MY"),"MY","Not_MY")
+  
+  Heatmap(pVal, 
+          col = col,
+          name = "log10(p)",
+          row_split = anno$type,
+          column_split = anno$type,
+          cluster_columns = FALSE, 
+          cluster_rows = FALSE, 
+          border = TRUE, 
+          row_title = "From", 
+          column_title = "To")
+
+results <- spicyTest_2
+marksToPlot <- unique(sce$celltype_combined)
+breaks <- NULL
+comparisonGroup <- NULL
+colours = c("#4575B4", "white", "#D73027")
+cutoff = 0.05
+fdr = TRUE
+
+if (is.null(comparisonGroup)) {
+    coef <- 2
+  } else {
+    coef <- which(levels(results$condition) == comparisonGroup)
+  }
+  marks <- unique(results$comparisons$from)
+  
+  if (is.null(breaks)) breaks <- c(-3, 3, 0.5)
+  breaks <- seq(from = breaks[1], to = breaks[2], by = breaks[3])
+  pal <- grDevices::colorRampPalette(colours)(length(breaks))
+  
+  col <- colorRamp2(breaks, pal)
+
+  pVal <- results$p.value[, coef]
+
+  if (min(pVal, na.rm = TRUE) == 0) {
+    pVal[pVal == 0] <-
+      pVal[pVal == 0] + 10^floor(log10(min(pVal[pVal > 0], na.rm = TRUE)))
+  }
+
+  if (fdr) {
+    pVal <- stats::p.adjust(pVal, method = "fdr")
+  }
+
+  isGreater <- results$coefficient[, coef] > 0
+
+  results$coefficient[, 1]
+  results$coefficient[, coef]
+  
+  pVal <- log10(pVal)
+
+  pVal[isGreater] <- abs(pVal[isGreater])
+
+  pVal <- matrix(pVal, nrow = length(marks))
+  colnames(pVal) <- marks
+  rownames(pVal) <- marks
+  
+  pVal[abs(pVal) < -log10(0.1)] <- 0
+  
+  anno <- data.frame(celltypes = marksToPlot)
+  
+  anno$type <- ifelse(str_detect(anno$celltypes, "MY"),"MY","Not_MY")
+  
+  Heatmap(pVal, 
+          col = col,
+          name = "log10(p)",
+          row_split = anno$type,
+          column_split = anno$type,
+          cluster_columns = FALSE, 
+          cluster_rows = FALSE, 
+          border = TRUE, 
+          row_title = "From", 
+          column_title = "To")
+```
+
+
+
+
+```{r}
+df_out <- rbind(topPairs(spicyTest_2, cutoff = 0.1, n=100),
+                topPairs(spicyTest_1, cutoff = 0.1, n=100),
+                topPairs(spicyTest, cutoff = 0.1, n=100))
+                
+#df_out <- topPairs(spicyTest_1, cutoff = 0.05, n=100)
+#?df_out <- topPairs(spicyTest, cutoff = 0.05, n=100)
+
+df_plot <- df_out %>% select(from, to) %>% pivot_longer(1:2,values_to = "celltype", names_to = "direction") %>% group_by(celltype) %>% count() %>% arrange(desc(n)) %>% filter(str_detect(celltype,"MY"))
+
+ggplot(df_plot, aes(x = reorder(celltype,-n), y = n, fill = celltype))+
+  geom_bar(stat = "identity", color = "black")+
+  scale_fill_manual(values = metadata(sce)$colors$myeloid_metacluster)+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+```
+
+
+
+### Celltype - fine
+
+```{r}
+#sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/others/myeloid_panel_old/data_analysis/sce_ccRCC_MY_07.rds")
+
+### General phenotype interaction difference
+
+library(spicyR)
+library(lisaClust)
+
+## ISUP 
+
+# Generate segmentedCells object 
+cur_sce <- sce
+
+cells <- data.frame(row.names = colnames(cur_sce))
+cells$x <- cur_sce$Pos_X
+cells$y <- cur_sce$Pos_Y
+cells$imageID <- cur_sce$sample_id
+cells$imageCellID <- cur_sce$ObjectNumber
+cells$cellType <- cur_sce$celltype_combined_fine
+
+cells_sc <- SegmentedCells(cells, cellProfiler = TRUE)
+
+# Add condition and patient id
+unique(cur_sce$ISUP_combined)
+
+cat <- relevel(x=factor(cur_sce$ISUP_combined), ref = "1/2")
+
+imagePheno(cells_sc) <- DataFrame(imageID = cur_sce$sample_id, 
+          PID = cur_sce$PID,
+          ISUP = cat
+          )
+
+cells_sc
+
+# Run differential interaction analysis 
+spicyTest <- spicy(cells_sc, 
+      condition = "ISUP", 
+      subject = "PID", 
+      BPPARAM = BiocParallel::MulticoreParam())
+
+
+topPairs(spicyTest, cutoff = 0.05, n=20)
+
+out_ISUP <- signifPlot(spicyTest,
+           type = "heatmap",
+           #breaks=c(-1, 1, 0.25),
+           fdr = TRUE,
+           marksToPlot = unique(sce$celltype_combined_fine))
+
+out_ISUP
+
+
+## Tumor stage
+
+# Generate segmentedCells object 
+cur_sce <- sce
+
+cells <- data.frame(row.names = colnames(cur_sce))
+cells$x <- cur_sce$Pos_X
+cells$y <- cur_sce$Pos_Y
+cells$imageID <- cur_sce$sample_id
+cells$imageCellID <- cur_sce$ObjectNumber
+cells$cellType <- cur_sce$celltype_combined_fine
+
+cells_sc <- SegmentedCells(cells, cellProfiler = TRUE)
+
+# Add condition and patient id
+unique(cur_sce$pT_combined)
+
+cat <- relevel(x=factor(cur_sce$pT_combined), ref = "1/2")
+
+imagePheno(cells_sc) <- DataFrame(imageID = cur_sce$sample_id, 
+          PID = cur_sce$PID,
+          pT = cat
+          )
+
+cells_sc
+
+# Run differential interaction analysis 
+spicyTest_1 <- spicy(cells_sc, 
+      condition = "pT", 
+      subject = "PID", 
+      BPPARAM = BiocParallel::MulticoreParam(),
+      includeZeroCells = TRUE)
+
+topPairs(spicyTest_1, cutoff = 0.1, n=20)
+
+out_pT <- signifPlot(spicyTest_1,
+           type = "heatmap",
+           #breaks=c(-1, 1, 0.25),
+           fdr = TRUE,
+           marksToPlot = unique(sce$celltype_combined_fine))
+
+out_pT
+
+
+## Necrose
+
+# Generate segmentedCells object 
+cur_sce <- sce
+
+cells <- data.frame(row.names = colnames(cur_sce))
+cells$x <- cur_sce$Pos_X
+cells$y <- cur_sce$Pos_Y
+cells$imageID <- cur_sce$sample_id
+cells$imageCellID <- cur_sce$ObjectNumber
+cells$cellType <- cur_sce$celltype_combined_fine
+
+cells_sc <- SegmentedCells(cells, cellProfiler = TRUE)
+
+# Add condition and patient id
+unique(cur_sce$necrose)
+
+cat <- relevel(x=factor(cur_sce$necrose), ref = "0")
+
+imagePheno(cells_sc) <- DataFrame(imageID = cur_sce$sample_id, 
+          PID = cur_sce$PID,
+          necrose = cat
+          )
+
+cells_sc
+
+# Run differential interaction analysis 
+spicyTest_2 <- spicy(cells_sc, 
+      condition = "necrose", 
+      subject = "PID", 
+      BPPARAM = BiocParallel::MulticoreParam(),
+      includeZeroCells = TRUE)
+
+topPairs(spicyTest_2, cutoff = 0.05, n=20)
+
+out_necrose <- signifPlot(spicyTest_2,
+           type = "heatmap",
+           #breaks=c(-1, 1, 0.25),
+           fdr = TRUE,
+           marksToPlot = unique(sce$celltype_combined_fine))
+
+out_necrose
+
+out_ISUP <- signifPlot(spicyTest,
+           type = "heatmap",
+           breaks=c(-2, 2, 0.25),
+           fdr = TRUE,
+           marksToPlot = unique(sce$celltype_combined_fine))
+
+out_pT <- signifPlot(spicyTest_1,
+           type = "heatmap",
+           breaks=c(-2, 2, 0.25),
+           fdr = TRUE,
+           marksToPlot = unique(sce$celltype_combined_fine))
+
+out_necrose <- signifPlot(spicyTest_2,
+           type = "heatmap",
+           breaks=c(-2, 2, 0.25),
+           fdr = TRUE,
+           marksToPlot = unique(sce$celltype_combined_fine))
 out_ISUP
 out_pT
 out_necrose
