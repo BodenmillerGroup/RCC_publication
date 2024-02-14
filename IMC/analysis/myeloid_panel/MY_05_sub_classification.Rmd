@@ -2451,7 +2451,14 @@ ggsurvplot(fit,
 )
 ```
 
+### Export fraction of tumor and TME cells per PID 
 
+```{r}
+immune_cell_PID <- colData(sce) %>% as.data.frame() %>% select(PID,immune_metacluster) %>% group_by(PID) %>% table() %>% as.data.frame
+immune_cell_PID <- immune_cell_PID %>% group_by(PID) %>% mutate(fra = ((Freq/sum(Freq))*100))
+
+write_csv(immune_cell_PID, file = "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/05_sub/immune_metacluster_PID.csv")
+```
 
 # Save SCE objects
 

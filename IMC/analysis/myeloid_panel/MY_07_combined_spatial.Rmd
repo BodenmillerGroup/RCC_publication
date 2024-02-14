@@ -156,7 +156,7 @@ saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sc
 ### Celltype 
 
 ```{r}
-#sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/others/myeloid_panel_old/data_analysis/sce_ccRCC_MY_07.rds")
+sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_07.rds")
 
 ### General phenotype interaction difference
 
@@ -164,6 +164,8 @@ library(spicyR)
 library(lisaClust)
 
 ## ISUP 
+
+set.seed(22)
 
 # Generate segmentedCells object 
 cur_sce <- sce
@@ -194,7 +196,6 @@ spicyTest <- spicy(cells_sc,
       condition = "ISUP", 
       subject = "PID", 
       BPPARAM = BiocParallel::MulticoreParam())
-
 
 topPairs(spicyTest, cutoff = 0.05, n=40)
 
@@ -312,11 +313,6 @@ out_necrose <- signifPlot(spicyTest_2,
 out_ISUP
 out_pT
 out_necrose
-
-spicyR::bind(spicyTest)
-
-spicyTest$coefficient[,1]
-spicyTest$coefficient[,1]+spicyTest$coefficient[,2]
 ```
 
 
@@ -371,7 +367,9 @@ if (is.null(comparisonGroup)) {
   
   anno$type <- ifelse(str_detect(anno$celltypes, "MY"),"MY","Not_MY")
   
-  Heatmap(pVal,
+  pVal_ISUP <- pVal
+  
+  Heatmap(pVal_ISUP,
           col = col,
           name = "log10(p)",
           row_split = anno$type,
@@ -432,7 +430,9 @@ if (is.null(comparisonGroup)) {
   
   anno$type <- ifelse(str_detect(anno$celltypes, "MY"),"MY","Not_MY")
   
-  Heatmap(pVal, 
+  pVal_T <- pVal
+  
+  Heatmap(pVal_T, 
           col = col,
           name = "log10(p)",
           row_split = anno$type,
@@ -494,7 +494,9 @@ if (is.null(comparisonGroup)) {
   
   anno$type <- ifelse(str_detect(anno$celltypes, "MY"),"MY","Not_MY")
   
-  Heatmap(pVal, 
+  pVal_necrose <- pVal
+  
+  Heatmap(pVal_necrose, 
           col = col,
           name = "log10(p)",
           row_split = anno$type,
@@ -506,26 +508,130 @@ if (is.null(comparisonGroup)) {
           column_title = "To")
 ```
 
+```{r}
+test <- data.frame(coefficient = spicyTest$pairwiseAssoc$, 
+           sample_id = unique(sce$sample_id))
+
+test$PID <- sce$PID[match(test$sample_id, sce$sample_id)]
+
+test <- test %>% group_by(PID) %>% summarize(coef = mean(coefficient))
+
+test_out <- test %>% mutate(cat = ifelse(coef < quantile(test$coef, probs = seq(0,1,1/3), na.rm = TRUE)[2], "low", ifelse(coef > quantile(test$coef, probs = seq(0,1,1/3), na.rm = TRUE)[3], "high","medium")))
 
 
+sce$PID_group_M2CD8 <- test_out$cat[match(sce$PID, test_out$PID)]
+```
 
 ```{r}
-df_out <- rbind(topPairs(spicyTest_2, cutoff = 0.1, n=100),
-                topPairs(spicyTest_1, cutoff = 0.1, n=100),
-                topPairs(spicyTest, cutoff = 0.1, n=100))
-                
-#df_out <- topPairs(spicyTest_1, cutoff = 0.05, n=100)
-#?df_out <- topPairs(spicyTest, cutoff = 0.05, n=100)
+#Assess survival impact 
+library(survival)
+library(survminer)
 
-df_plot <- df_out %>% select(from, to) %>% pivot_longer(1:2,values_to = "celltype", names_to = "direction") %>% group_by(celltype) %>% count() %>% arrange(desc(n)) %>% filter(str_detect(celltype,"MY"))
+cur_surv <- colData(sce) %>% as.data.frame() %>% select(PID, PID_group_M2CD8, OS_months, status_OS) %>% unique()
 
-ggplot(df_plot, aes(x = reorder(celltype,-n), y = n, fill = celltype))+
-  geom_bar(stat = "identity", color = "black")+
-  scale_fill_manual(values = metadata(sce)$colors$myeloid_metacluster)+
-  theme_classic()+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+#Plot survival curves
+fit <- survfit(Surv(OS_months, status_OS) ~ PID_group_M2CD8, data = cur_surv)
+print(fit)
 
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = "Set1",
+          conf.int = TRUE
+)
 ```
+
+```{r}
+pVal <- rbind(pVal_ISUP, pVal_necrose, pVal_T)
+
+# Increased 
+df_MY_int <- pVal %>% as.data.frame %>% rownames_to_column("from") %>% pivot_longer(2:16, values_to = "coef", names_to = "to") %>% filter(coef != 0 & coef > 0) %>% pivot_longer(1:2, names_to = "direction", values_to = "celltype") %>% mutate(celltype = str_split(celltype,"\\.", simplify = TRUE)[,1]) %>% filter(str_detect(celltype, "MY")) %>% group_by(celltype) %>% count() %>% arrange(desc(n))
+
+df_NotMY_int <- pVal %>% as.data.frame %>% rownames_to_column("from") %>% pivot_longer(2:16, values_to = "coef", names_to = "to") %>% filter(coef != 0 & coef > 0) %>% pivot_longer(1:2, names_to = "direction", values_to = "celltype") %>% mutate(celltype = str_split(celltype,"\\.", simplify = TRUE)[,1]) %>% filter(!str_detect(celltype, "MY")) %>% group_by(celltype) %>% count() %>% arrange(desc(n))
+
+ggplot(df_MY_int, aes(x = reorder(celltype,-n), y = n))+
+  geom_bar(stat = "identity", color = "black", fill = "#DD524BFF")+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  xlab("celltype")+
+  coord_cartesian(ylim = c(0,50))+
+ggplot(df_NotMY_int, aes(x = reorder(celltype,-n), y = n))+
+  geom_bar(stat = "identity", color = "black", fill = "#DD524BFF")+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  xlab("celltype")+
+  coord_cartesian(ylim = c(0,50))
+
+# Decreased
+df_MY_dec <- pVal %>% as.data.frame %>% rownames_to_column("from") %>% pivot_longer(2:16, values_to = "coef", names_to = "to") %>% filter(coef != 0 & coef < 0) %>% pivot_longer(1:2, names_to = "direction", values_to = "celltype") %>% mutate(celltype = str_split(celltype,"\\.", simplify = TRUE)[,1]) %>% filter(str_detect(celltype, "MY")) %>% group_by(celltype) %>% count() %>% arrange(desc(n))
+
+df_NotMY_dec <- pVal %>% as.data.frame %>% rownames_to_column("from") %>% pivot_longer(2:16, values_to = "coef", names_to = "to") %>% filter(coef != 0 & coef < 0) %>% pivot_longer(1:2, names_to = "direction", values_to = "celltype") %>% mutate(celltype = str_split(celltype,"\\.", simplify = TRUE)[,1]) %>% filter(!str_detect(celltype, "MY")) %>% group_by(celltype) %>% count() %>% arrange(desc(n))
+
+ggplot(df_MY_dec, aes(x = reorder(celltype,-n), y = n))+
+  geom_bar(stat = "identity", color = "black", fill = "#83A3CDFF")+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  xlab("celltype")+
+  coord_cartesian(ylim = c(0,50))+
+ggplot(df_NotMY_dec, aes(x = reorder(celltype,-n), y = n))+
+  geom_bar(stat = "identity", color = "black", fill = "#83A3CDFF")+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  xlab("celltype")+
+  coord_cartesian(ylim = c(0,50))
+```
+```{r}
+# Increased
+pair_increase <- pVal %>% as.data.frame %>% rownames_to_column("from") %>% pivot_longer(2:16, values_to = "coef", names_to = "to") %>% filter(coef != 0 & coef > 0) %>% mutate(to = str_split(to,"\\.", simplify = TRUE)[,1]) %>% mutate(from = str_split(from,"\\.", simplify = TRUE)[,1]) %>% mutate(sorted_type = ifelse(from < to, paste0(from, "_",to), paste0(to, "_",from))) %>% group_by(sorted_type) %>% count() %>% arrange(desc(n))
+
+ggplot(pair_increase, aes(x = reorder(sorted_type,-n), y = n))+
+  geom_bar(stat = "identity", color = "black", fill = "#DD524BFF")+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  xlab("celltype_pair")
+
+# Decreased 
+pair_decrease <- pVal %>% as.data.frame %>% rownames_to_column("from") %>% pivot_longer(2:16, values_to = "coef", names_to = "to") %>% filter(coef != 0 & coef < 0) %>% mutate(to = str_split(to,"\\.", simplify = TRUE)[,1]) %>% mutate(from = str_split(from,"\\.", simplify = TRUE)[,1]) %>% mutate(sorted_type = ifelse(from < to, paste0(from, "_",to), paste0(to, "_",from))) %>% group_by(sorted_type) %>% count() %>% arrange(desc(n))
+
+ggplot(pair_decrease, aes(x = reorder(sorted_type,-n), y = n))+
+  geom_bar(stat = "identity", color = "black", fill = "#83A3CDFF")+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  xlab("celltype_pair")
+```
+#### Heterotypic tumor interactions 
+
+```{r}
+### Neighborhood expansion graph
+sce <- aggregateNeighbors(sce, colPairName = "neighborhood", aggregate_by = "metadata", count_by = "celltype_combined", proportions = FALSE, name = "count_neighbors")
+```
+
+```{r}
+## Step 1: Retrieve neighbors table
+cur_dat <- sce$count_neighbors %>% as.data.frame
+rownames(cur_dat) <- sce$cell_id
+cur_dat$PID <- sce$PID
+cur_dat$celltype_combined <- sce$celltype_combined
+cur_dat$ISUP_combined <- sce$ISUP_combined
+
+out_1 <- cur_dat %>% filter(celltype_combined == "tumor") %>% rownames_to_column("cell_id") %>% pivot_longer(2:16, names_to = "celltype_int", values_to = "int_n") %>% filter(celltype_int != "tumor") %>% group_by(cell_id) %>% mutate(n_sum = sum(int_n)) %>% ungroup() 
+
+out_2 <- out_1 %>% select(cell_id, PID, ISUP_combined, n_sum) %>% unique() %>% group_by(PID) %>% mutate(n_av = mean(n_sum)) %>% select(PID, ISUP_combined, n_av) %>% unique() %>% filter(!is.na(ISUP_combined))
+
+ggplot(out_2, aes(x = ISUP_combined, y = n_av, fill = ISUP_combined))+
+  geom_boxplot()+
+  scale_fill_manual(values = metadata(sce)$colors$ISUP_combined)+
+  theme_classic()+
+  stat_compare_means()
+```
+
+
+
+
 
 
 
@@ -703,7 +809,7 @@ sce <- minDistToCells(sce,
                x_cells = sce$celltype_combined == "MY_M2_like", 
                img_id = "sample_id", 
                name = "DistToM2", 
-               BPPARAM = MulticoreParam())
+               BPPARAM = MulticoreParam(workers = 20))
 ```
 
 
@@ -804,7 +910,7 @@ ggplot(distCells_PID, aes(x = M2_CD8_dist_category, y = mean_dist_PID))+
 library(survival)
 library(survminer)
 
-cur_surv <- colData(sce) %>% as.data.frame() %>% select(PID, ratio_category, M2_CD8_dist_category, OS_months, status_OS) %>% unique()
+cur_surv <- colData(sce) %>% as.data.frame() %>% select(PID, M2_CD8_dist_category, OS_months, status_OS) %>% unique()
 
 
 #Plot survival curves
@@ -818,22 +924,7 @@ ggsurvplot(fit,
           linetype = "strata", # Change line type by groups
           surv.median.line = "hv", # Specify median survival
           ggtheme = theme_classic(), # Change ggplot2 theme
-          palette = "Reds",
-          conf.int = TRUE
-)
-
-#Plot survival curves
-fit <- survfit(Surv(OS_months, status_OS) ~ ratio_category, data = cur_surv)
-print(fit)
-
-ggsurvplot(fit,
-          pval = TRUE,
-          risk.table = TRUE, # Add risk table
-          risk.table.col = "strata", # Change risk table color by groups
-          linetype = "strata", # Change line type by groups
-          surv.median.line = "hv", # Specify median survival
-          ggtheme = theme_classic(), # Change ggplot2 theme
-          palette = "Reds",
+          palette = "Set1",
           conf.int = TRUE
 )
 ```
@@ -1411,10 +1502,10 @@ cur_dat$PID <- sce$PID
 cur_dat$celltype_combined <- sce$celltype_combined
 
 # Step 2: Define index and test cell and count interactions per PID
-test_cell <- "MY_Neutro_MDSC"
+test_cell <- "MY_M2_like"
 index_cell <- "tumor"
 
-cur_int <- cur_dat %>% filter(celltype_combined == test_cell) %>% rownames_to_column("cell_id") %>% pivot_longer(2:13, names_to = "interacting_celltype", values_to = "n_int") %>% filter(interacting_celltype == index_cell) %>% group_by(PID) %>% summarise(n_int = sum(n_int))
+cur_int <- cur_dat %>% filter(celltype_combined == test_cell) %>% rownames_to_column("cell_id") %>% pivot_longer(2:15, names_to = "interacting_celltype", values_to = "n_int") %>% filter(interacting_celltype == index_cell) %>% group_by(PID) %>% summarise(n_int = sum(n_int))
   
 # Step 3: Add the total count of cells per PID
 ## Total number of test cells
@@ -1435,7 +1526,7 @@ cur_final <- cur_int %>% mutate(score_int_int = n_int/n_total_int) %>% mutate(sc
 ## Optional: Split a score by the mean 
 cur_final$int_mean_split <- ifelse(cur_final$score_int_total > mean(cur_final$score_int_total, na.rm = TRUE), "high", "low")
 
-#sce$int_mean_split <- cur_final$int_mean_split[match(sce$PID, cur_final$PID)]
+sce$int_mean_split <- cur_final$int_mean_split[match(sce$PID, cur_final$PID)]
 ```
 
 
@@ -1451,12 +1542,12 @@ cur_dat$celltype_combined <- sce$celltype_combined
 out_df <- data.frame(PID = unique(cur_dat$PID))
 
 celltypes <- unique(cur_dat$celltype_combined)
-celltypes <- celltypes[!celltypes %in% c("tumor","Stromal","Endothelial","CD8_T_cell", "CD4_T_cell", "Immune_low", "B_cell","Plasma_cell")]
+celltypes <- celltypes[!celltypes %in% c("tumor","Stromal","Endothelial","CD8_T_cell", "CD4_T_cell", "Unknown_Other", "B_cell","Plasma_cell")]
 
 for(test_cell in celltypes){
 index_cell <- "tumor"
 
-cur_int <- cur_dat %>% filter(celltype_combined == test_cell) %>% rownames_to_column("cell_id") %>% pivot_longer(2:13, names_to = "interacting_celltype", values_to = "n_int") %>% filter(interacting_celltype == index_cell) %>% group_by(PID) %>% summarise(n_int = sum(n_int))
+cur_int <- cur_dat %>% filter(celltype_combined == test_cell) %>% rownames_to_column("cell_id") %>% pivot_longer(2:15, names_to = "interacting_celltype", values_to = "n_int") %>% filter(interacting_celltype == index_cell) %>% group_by(PID) %>% summarise(n_int = sum(n_int))
   
 count_int <- colData(sce) %>% as.data.frame %>% group_by(PID, celltype_combined) %>% count() %>% filter(celltype_combined == test_cell)
 cur_int$n_total_int <- count_int$n[match(cur_int$PID, count_int$PID)]
@@ -1492,11 +1583,11 @@ Cox_df <- out_df
 Cox_df$status_OS <- sce$status_OS[match(rownames(Cox_df),sce$PID)]
 Cox_df$OS_months <- sce$OS_months[match(rownames(Cox_df),sce$PID)]
 
-#Cox_df$gender <- as.factor(sce$gender[match(rownames(Cox_df),sce$PID)])
-#Cox_df$age <- sce$age[match(rownames(Cox_df),sce$PID)]
-#Cox_df$ISUP <- as.factor(sce$ISUP_combined[match(rownames(Cox_df),sce$PID)])
-#Cox_df$pT <- as.factor(sce$pT_combined[match(rownames(Cox_df),sce$PID)])
-#Cox_df$necrose <- as.factor(sce$necrose[match(rownames(Cox_df),sce$PID)])
+Cox_df$gender <- as.factor(sce$gender[match(rownames(Cox_df),sce$PID)])
+Cox_df$age <- sce$age[match(rownames(Cox_df),sce$PID)]
+Cox_df$ISUP <- as.factor(sce$ISUP_combined[match(rownames(Cox_df),sce$PID)])
+Cox_df$pT <- as.factor(sce$pT_combined[match(rownames(Cox_df),sce$PID)])
+Cox_df$necrose <- as.factor(sce$necrose[match(rownames(Cox_df),sce$PID)])
 
 #Based on patient groups
 covariates <- Cox_df %>% select(-status_OS,-OS_months, -PID) %>% colnames
@@ -1577,6 +1668,9 @@ GMM_df <- data.frame(class_PDL1 = ifelse(GMM_CD274$classification == 2 & GMM_CD2
 # Define PDL1 positivity by exprs > 1 
 GMM_df$class_PDL1_1 <- ifelse(GMM_df$CD274_exprs > 1, "CD274+", "CD274-") 
 
+cut_off_GMM <- mean((GMM_df %>% filter(class_PDL1 == "CD274+") %>% arrange(CD274_exprs) %>% pull(CD274_exprs))[1],
+(GMM_df %>% filter(class_PDL1 == "CD274-") %>% arrange(desc(CD274_exprs)) %>% pull(CD274_exprs))[1])
+
 #Visualize GMM
 ggplot(GMM_df, aes(x = CD274_exprs, fill = class_PDL1_1))+
   geom_density()+
@@ -1589,6 +1683,9 @@ ggplot(GMM_df, aes(x = CD274_exprs, fill = class_PDL1_1))+
 # Add PDL1 group 
 sce_tumor$tumor_CD274_GMM <- GMM_df$class_PDL1[match(colnames(sce_tumor), rownames(GMM_df))]
 sce_tumor$tumor_CD274_1 <- GMM_df$class_PDL1_1[match(colnames(sce_tumor), rownames(GMM_df))]
+
+sce$tumor_CD274_GMM <- GMM_df$class_PDL1[match(colnames(sce), rownames(GMM_df))]
+sce$tumor_CD274_1 <- GMM_df$class_PDL1_1[match(colnames(sce), rownames(GMM_df))]
 
 n_cat <- colData(sce_tumor) %>% as.data.frame() %>% group_by(tumor_CD274_1) %>% count()
 n_cat <- n_cat %>% ungroup() %>% mutate(sum = sum(n)) %>% mutate(fra = (n/sum)*100)
@@ -1636,9 +1733,9 @@ GMM_df <- data.frame(class_PDL1 = ifelse(GMM_CD274$classification == 2 & GMM_CD2
 GMM_df$class_PDL1_1 <- ifelse(GMM_df$CD274_exprs > 1, "CD274+", "CD274-") 
 
 #Visualize GMM
-ggplot(GMM_df, aes(x = CD274_exprs, fill = class_PDL1_1))+
+ggplot(GMM_df, aes(x = CD274_exprs, fill = class_PDL1))+
   geom_density()+
-  geom_rug(aes(color = class_PDL1_1))+
+  geom_rug(aes(color = class_PDL1))+
   theme_classic(base_size = 15)+
   theme(axis.title.x = element_blank())+
   scale_fill_brewer(palette = "Set1")+
@@ -1745,8 +1842,8 @@ ggsurvplot(fit,
 ### cytoviewer visualization
 
 ```{r}
-images <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/others/myeloid_panel_old/data_analysis/images.rds")
-masks <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/others/myeloid_panel_old/data_analysis/masks.rds")
+images <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/images.rds")
+masks <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/masks.rds")
 ```
 
 ```{r}
@@ -1756,10 +1853,9 @@ cur_PID <- unfactor(cur_PID %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq)) %
   
 cur_sample <- (colData(sce) %>% as.data.frame %>% select(PID, sample_id) %>% filter(PID %in%cur_PID) %>% pull(sample_id) %>% unique())
 
-
 cur_images <- images[mcols(images)$sample_id %in% cur_sample]
 cur_masks <- masks[mcols(masks)$sample_id %in% cur_sample]
-cur_sce <- sce_tumor[,sce_tumor$sample_id %in% cur_sample]
+cur_sce <- sce[,sce$sample_id %in% cur_sample]
 ```
 
 
@@ -3513,13 +3609,12 @@ hr_GMM
 A) Classical method: "How many neighbors of type B does a cell of type A have on average?"
 
 ```{r interaction testing}
-library(scales)
 out <- testInteractions(sce, 
                         method = "classic",
-                        group_by = "PID",
-                        label = "metacluster_combined", 
+                        group_by = "sample_id",
+                        label = "celltype_combined", 
                         colPairName = "neighborhood",
-                        BPPARAM = MulticoreParam())
+                        BPPARAM = MulticoreParam(workers = 20))
 head(out)
 ```
 
@@ -3531,10 +3626,99 @@ out_viz <- out %>% as_tibble() %>%
   pivot_wider(id_cols = "from_label", names_from = "to_label", values_from = "sum_sigval") %>%
   column_to_rownames("from_label")
 
-Heatmap(out_viz,
+# ISUP combined 
+test <- out %>% as.data.frame()
+test$ISUP_combined <- sce$ISUP_combined[match(test$group_by, sce$sample_id)]
+
+test_viz_1 <- test %>% filter(ISUP_combined == "3/4") %>%
+    group_by(from_label, to_label) %>%
+    summarize(sum_sigval = sum(sigval, na.rm = TRUE)) %>% 
+  pivot_wider(id_cols = "from_label", names_from = "to_label", values_from = "sum_sigval") %>%
+  column_to_rownames("from_label")
+
+test_viz_0 <- test %>% filter(ISUP_combined == "1/2") %>%
+    group_by(from_label, to_label) %>%
+    summarize(sum_sigval = sum(sigval, na.rm = TRUE)) %>% 
+  pivot_wider(id_cols = "from_label", names_from = "to_label", values_from = "sum_sigval") %>%
+  column_to_rownames("from_label")
+
+test_viz <- test_viz_1-test_viz_0
+
+anno <- data.frame(celltypes = unique(sce$celltype_combined))
+anno$type <- ifelse(str_detect(anno$celltypes, "MY"),"MY","Not_MY")
+
+anno <- anno[match(colnames(test_viz), anno$celltypes),]
+
+Heatmap(test_viz,
         name = "Interaction_score",
         row_title = "from_label",
         column_title = "to_label",
+        row_split = anno$type,
+        column_split = anno$type,
+        cluster_columns = FALSE,
+        cluster_rows = FALSE)
+
+# necrose
+test <- out %>% as.data.frame()
+test$necrose <- sce$necrose[match(test$group_by, sce$sample_id)]
+
+test_viz_1 <- test %>% filter(necrose == "1") %>%
+    group_by(from_label, to_label) %>%
+    summarize(sum_sigval = sum(sigval, na.rm = TRUE)) %>% 
+  pivot_wider(id_cols = "from_label", names_from = "to_label", values_from = "sum_sigval") %>%
+  column_to_rownames("from_label")
+
+test_viz_0 <- test %>% filter(necrose == "0") %>%
+    group_by(from_label, to_label) %>%
+    summarize(sum_sigval = sum(sigval, na.rm = TRUE)) %>% 
+  pivot_wider(id_cols = "from_label", names_from = "to_label", values_from = "sum_sigval") %>%
+  column_to_rownames("from_label")
+
+test_viz <- test_viz_1-test_viz_0
+
+anno <- data.frame(celltypes = unique(sce$celltype_combined))
+anno$type <- ifelse(str_detect(anno$celltypes, "MY"),"MY","Not_MY")
+
+anno <- anno[match(colnames(test_viz), anno$celltypes),]
+
+Heatmap(test_viz,
+        name = "Interaction_score",
+        row_title = "from_label",
+        column_title = "to_label",
+        row_split = anno$type,
+        column_split = anno$type,
+        cluster_columns = FALSE,
+        cluster_rows = FALSE)
+
+# pT
+test <- out %>% as.data.frame()
+test$pT_combined <- sce$pT_combined[match(test$group_by, sce$sample_id)]
+
+test_viz_1 <- test %>% filter(pT_combined == "3/4") %>%
+    group_by(from_label, to_label) %>%
+    summarize(sum_sigval = sum(sigval, na.rm = TRUE)) %>% 
+  pivot_wider(id_cols = "from_label", names_from = "to_label", values_from = "sum_sigval") %>%
+  column_to_rownames("from_label")
+
+test_viz_0 <- test %>% filter(pT_combined == "1/2") %>%
+    group_by(from_label, to_label) %>%
+    summarize(sum_sigval = sum(sigval, na.rm = TRUE)) %>% 
+  pivot_wider(id_cols = "from_label", names_from = "to_label", values_from = "sum_sigval") %>%
+  column_to_rownames("from_label")
+
+test_viz <- test_viz_1-test_viz_0
+
+anno <- data.frame(celltypes = unique(sce$celltype_combined))
+anno$type <- ifelse(str_detect(anno$celltypes, "MY"),"MY","Not_MY")
+
+anno <- anno[match(colnames(test_viz), anno$celltypes),]
+
+Heatmap(test_viz,
+        name = "Interaction_score",
+        row_title = "from_label",
+        column_title = "to_label",
+        row_split = anno$type,
+        column_split = anno$type,
         cluster_columns = FALSE,
         cluster_rows = FALSE)
 ```
