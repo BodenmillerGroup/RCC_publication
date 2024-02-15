@@ -1578,6 +1578,17 @@ plotExpression(sce[,cur_cells],
 
 # 5. Differential abundance analysis 
 
+```{r}
+# Add PDL1 category 
+sce_add <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_07.rds")
+
+sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_06.rds")
+
+sce$PDL1_score <- factor(sce_add$PDL1_score_all_GMM_1[match(sce$PID, sce_add$PID)])
+
+sce$PDL1_score <- ifelse(sce$PDL1_score == "PDL1_pos","1","0")
+```
+
 ## Loop over categories 
 
 ### Myeloid cluster 
@@ -1586,7 +1597,7 @@ plotExpression(sce[,cur_cells],
 ### Differential abundance analysis based on edgeR
 library(edgeR)
 
-DA <- lapply(c("ISUP_combined", "pT_combined","necrose"), function(x){
+DA <- lapply(c("ISUP_combined", "pT_combined","necrose","PDL1_score"), function(x){
 
 abundances <- table(unfactor(sce$my_cluster_names), sce$PID)
 abundances <- unclass(abundances) 
@@ -1594,7 +1605,7 @@ abundances <- unclass(abundances)
 #relevant patient metadata (Re-level for baseline)
 meta <- colData(sce)[match(colnames(abundances), sce$PID),]
 
-if(x == "necrose"){
+if(x %in% c("necrose","PDL1_score")){
   meta[,x] <- relevel(x=factor(meta[,x]), ref = "0")
 }else{
   meta[,x] <- relevel(x=factor(meta[,x]), ref = "1/2")
@@ -1642,7 +1653,7 @@ DA_out <- do.call(rbind, DA)
 ```{r}
 library(ggnewscale)
 
-DA_out$category <- factor(DA_out$category,levels = c("necrose","pT_combined","ISUP_combined"))
+DA_out$category <- factor(DA_out$category,levels = c("PDL1_score","necrose","pT_combined","ISUP_combined"))
 #DA_out <- DA_out %>% filter(category %in% c("pT_combined","ISUP_combined"))
 
 ggplot(DA_out, aes(x = cluster, y = category, col = logFC, size = -log10(FDR))) +
@@ -1662,7 +1673,7 @@ ggplot(DA_out, aes(x = cluster, y = category, col = logFC, size = -log10(FDR))) 
 ### Differential abundance analysis based on edgeR
 library(edgeR)
 
-DA <- lapply(c("ISUP_combined", "pT_combined","necrose"), function(x){
+DA <- lapply(c("ISUP_combined", "pT_combined","necrose","PDL1_score"), function(x){
 
 abundances <- table(unfactor(sce$myeloid_metacluster), sce$PID)
 abundances <- unclass(abundances) 
@@ -1670,7 +1681,7 @@ abundances <- unclass(abundances)
 #relevant patient metadata (Re-level for baseline)
 meta <- colData(sce)[match(colnames(abundances), sce$PID),]
 
-if(x == "necrose"){
+if(x %in% c("necrose","PDL1_score")){
   meta[,x] <- relevel(x=factor(meta[,x]), ref = "0")
 }else{
   meta[,x] <- relevel(x=factor(meta[,x]), ref = "1/2")
@@ -1716,7 +1727,7 @@ DA_out <- do.call(rbind, DA)
 
 
 ```{r}
-DA_out$category <- factor(DA_out$category,levels = c("necrose","pT_combined","ISUP_combined"))
+DA_out$category <- factor(DA_out$category,levels = c("PDL1_score", "necrose","pT_combined","ISUP_combined"))
 #DA_out <- DA_out %>% filter(category %in% c("pT_combined","ISUP_combined"))
 
 ggplot(DA_out, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
