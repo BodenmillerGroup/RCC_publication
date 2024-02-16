@@ -1664,6 +1664,331 @@ EnhancedVolcano(data,
     colCustom = keyvals)
 ```
 
+
+## 5. Create Clinical PDL1 like score 
+
+see Rosellini et al. (Nature Reviews Urology, 2022) - Describes different clinical studies and their respective cut-offs
+
+```{r}
+sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_04.rds")
+```
+
+### Tumor cells 
+
+```{r}
+# 1. Tumor cells only 
+# Define PDL1 positivity by GMM
+set.seed(22)
+sce_tumor <- sce[,sce$analysis_cat == "tumor"] 
+
+# CD274
+GMM_CD274 <- Mclust(assay(sce_tumor, "exprs")["CD274",], G = 2)
+
+
+GMM_df <- data.frame(class_PDL1 = ifelse(GMM_CD274$classification == 2 & GMM_CD274$uncertainty == 0, 
+                                        "CD274+",
+                                        "CD274-"), 
+                     CD274_exprs = assay(sce_tumor, "exprs")["CD274",],
+                     uncertainty = GMM_CD274$uncertainty)
+
+# Define PDL1 positivity by exprs > 1 
+GMM_df$class_PDL1_1 <- ifelse(GMM_df$CD274_exprs > 1, "CD274+", "CD274-") 
+
+cut_off_GMM <- mean((GMM_df %>% filter(class_PDL1 == "CD274+") %>% arrange(CD274_exprs) %>% pull(CD274_exprs))[1],
+(GMM_df %>% filter(class_PDL1 == "CD274-") %>% arrange(desc(CD274_exprs)) %>% pull(CD274_exprs))[1])
+
+#Visualize GMM
+ggplot(GMM_df, aes(x = CD274_exprs, fill = class_PDL1_1))+
+  geom_density()+
+  geom_rug(aes(color = class_PDL1_1))+
+  theme_classic(base_size = 15)+
+  theme(axis.title.x = element_blank())+
+  scale_fill_brewer(palette = "Set1")+
+  scale_color_brewer(palette = "Set1")
+
+# Add PDL1 group 
+sce_tumor$tumor_CD274_GMM <- GMM_df$class_PDL1[match(colnames(sce_tumor), rownames(GMM_df))]
+sce_tumor$tumor_CD274_1 <- GMM_df$class_PDL1_1[match(colnames(sce_tumor), rownames(GMM_df))]
+
+n_cat <- colData(sce_tumor) %>% as.data.frame() %>% group_by(tumor_CD274_1) %>% count()
+n_cat <- n_cat %>% ungroup() %>% mutate(sum = sum(n)) %>% mutate(fra = (n/sum)*100)
+n_cat
+```
+
+```{r}
+# Define PDL1 positive patients 
+
+# Based on GMM
+# More than 1% of tumor cells 
+cur_PID <- colData(sce_tumor) %>% as.data.frame() %>% select(tumor_CD274_GMM,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+cur_PID_out <- cur_PID %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq)) %>% filter(tumor_CD274_GMM == "CD274+" & fra >= 0.01) %>% arrange(desc(fra)) %>% pull(PID) %>% unfactor()
+
+sce$PDL1_score_tumor_GMM_1 <- ifelse(sce$PID %in% cur_PID_out, "PDL1_pos", "PDL1_neg")
+
+# Based on exprs cut-off
+# More than 1% of tumor cells 
+cur_PID <- colData(sce_tumor) %>% as.data.frame() %>% select(tumor_CD274_1,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+cur_PID_out <- cur_PID %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq)) %>% filter(tumor_CD274_1 == "CD274+" & fra >= 0.01) %>% arrange(desc(fra)) %>% pull(PID) %>% unfactor()
+
+# Add to SCE 
+sce$PDL1_score_tumor_1_1 <- ifelse(sce$PID %in% cur_PID_out, "PDL1_pos", "PDL1_neg")
+```
+
+### All cells 
+
+```{r}
+# 2. All cells
+# Define PDL1 positivity by GMM
+set.seed(22)
+sce_all <- sce 
+
+# CD274
+GMM_CD274 <- Mclust(assay(sce_all, "exprs")["CD274",], G = 2)
+
+
+GMM_df <- data.frame(class_PDL1 = ifelse(GMM_CD274$classification == 2 & GMM_CD274$uncertainty == 0, 
+                                        "CD274+",
+                                        "CD274-"), 
+                     CD274_exprs = assay(sce_all, "exprs")["CD274",],
+                     uncertainty = GMM_CD274$uncertainty)
+
+# Define PDL1 positivity by exprs > 1 
+GMM_df$class_PDL1_1 <- ifelse(GMM_df$CD274_exprs > 1, "CD274+", "CD274-") 
+
+#Visualize GMM
+ggplot(GMM_df, aes(x = CD274_exprs, fill = class_PDL1))+
+  geom_density()+
+  geom_rug(aes(color = class_PDL1))+
+  theme_classic(base_size = 15)+
+  theme(axis.title.x = element_blank())+
+  scale_fill_brewer(palette = "Set1")+
+  scale_color_brewer(palette = "Set1")
+
+# Add HLA group 
+sce_all$all_CD274_GMM <- GMM_df$class_PDL1[match(colnames(sce_all), rownames(GMM_df))]
+sce_all$all_CD274_1 <- GMM_df$class_PDL1_1[match(colnames(sce_all), rownames(GMM_df))]
+
+n_cat <- colData(sce_all) %>% as.data.frame() %>% group_by(all_CD274_GMM) %>% count()
+n_cat <- n_cat %>% ungroup() %>% mutate(sum = sum(n)) %>% mutate(fra = (n/sum)*100)
+n_cat
+```
+
+```{r}
+# Define PDL1 positive patients 
+
+# Based on GMM
+# More than 1% of tumor cells 
+cur_PID <- colData(sce_all) %>% as.data.frame() %>% select(all_CD274_GMM,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+cur_PID_out <- cur_PID %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq)) %>% filter(all_CD274_GMM == "CD274+" & fra >= 0.01) %>% arrange(desc(fra)) %>% pull(PID) %>% unfactor()
+
+sce$PDL1_score_all_GMM_1 <- ifelse(sce$PID %in% cur_PID_out, "PDL1_pos", "PDL1_neg")
+
+# Based on exprs cut-off
+# More than 1% of tumor cells 
+cur_PID <- colData(sce_all) %>% as.data.frame() %>% select(all_CD274_1,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+cur_PID_out <- cur_PID %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq)) %>% filter(all_CD274_1 == "CD274+" & fra >= 0.01) %>% arrange(desc(fra)) %>% pull(PID) %>% unfactor()
+
+# Add to SCE 
+sce$PDL1_score_all_1_1 <- ifelse(sce$PID %in% cur_PID_out, "PDL1_pos", "PDL1_neg")
+```
+
+### Survival impact 
+
+```{r}
+#Assess survival impact 
+library(survival)
+library(survminer)
+
+cur_surv <- colData(sce) %>% as.data.frame() %>% select(PID, PDL1_score_all_GMM_1, PDL1_score_tumor_GMM_1,PDL1_score_all_1_1,PDL1_score_tumor_1_1, OS_months, status_OS) %>% unique()
+
+#Plot survival curves
+fit <- survfit(Surv(OS_months, status_OS) ~ PDL1_score_tumor_GMM_1, data = cur_surv)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = c("#AADBAB","#00441B"),
+          conf.int = TRUE
+)
+
+#Plot survival curves
+fit <- survfit(Surv(OS_months, status_OS) ~ PDL1_score_tumor_1_1, data = cur_surv)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = c("#AADBAB","#00441B"),
+          conf.int = TRUE
+)
+
+#Plot survival curves
+fit <- survfit(Surv(OS_months, status_OS) ~ PDL1_score_all_GMM_1, data = cur_surv)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = c("#AADBAB","#00441B"),
+          conf.int = TRUE
+)
+
+# Plot survival curves
+fit <- survfit(Surv(OS_months, status_OS) ~ PDL1_score_all_1_1, data = cur_surv)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = c("#AADBAB","#00441B"),
+          conf.int = TRUE
+)
+
+```
+
+### cytoviewer visualization
+
+```{r}
+images <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/images.rds")
+masks <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/masks.rds")
+```
+
+```{r}
+# Select images
+cur_PID <- colData(sce_tumor) %>% as.data.frame() %>% select(tumor_CD274_GMM,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+cur_PID <- unfactor(cur_PID %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq)) %>% filter(tumor_CD274_GMM == "CD274+" & fra > 0.1) %>% arrange(desc(fra)) %>% pull(PID))[1:10]
+  
+cur_sample <- (colData(sce) %>% as.data.frame %>% select(PID, sample_id) %>% filter(PID %in%cur_PID) %>% pull(sample_id) %>% unique())
+
+cur_images <- images[mcols(images)$sample_id %in% cur_sample]
+cur_masks <- masks[mcols(masks)$sample_id %in% cur_sample]
+cur_sce <- sce[,sce$sample_id %in% cur_sample]
+```
+
+
+```{r}
+library(cytoviewer)
+cytoviewer(image = cur_images, mask = cur_masks, object = cur_sce, img_id = "sample_id", cell_id = "ObjectNumber")
+```
+
+### cytomapper 
+
+```{r}
+#### Extract images 
+images <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/images.rds")
+masks <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/masks.rds")
+```
+
+```{r}
+# Select images
+cur_PID <- colData(sce) %>% as.data.frame() %>% select(all_CD274_GMM,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+cur_PID <- unfactor(cur_PID %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq)) %>% filter(all_CD274_GMM == "CD274+" & fra > 0.1) %>% arrange(desc(fra)) %>% pull(PID))[1:15]
+  
+cur_sample <- (colData(sce) %>% as.data.frame %>% select(PID, sample_id) %>% filter(PID %in%cur_PID) %>% pull(sample_id) %>% unique())
+
+cur_images <- images[mcols(images)$sample_id %in% cur_sample]
+cur_masks <- masks[mcols(masks)$sample_id %in% cur_sample]
+cur_sce <- sce[,sce$sample_id %in% cur_sample]
+```
+
+Combined Positive Score (CPS) VS. Tumor Positive Score (TPS)
+
+```{r}
+##Visualize clusters on images
+library(doParallel)
+registerDoParallel(cores = 2)
+
+#for(i in c("immune_metacluster_graph_test","immune_metacluster_SOM_test")){
+foreach(i = c("all_CD274_GMM", "all_CD274_1"))%dopar%{
+
+#Prepare images
+#cur_images <- cytomapper::normalize(cur_images, separateImages = FALSE)
+#cur_images <- cytomapper::normalize(cur_images, inputRange = c(0, 0.2))
+
+plotPixels(cur_images,
+           mask = cur_masks,
+           object = cur_sce,
+           img_id = "sample_id",
+           cell_id = "ObjectNumber",
+           missing_colour = "white",
+           colour_by = c("CD274"),
+           outline_by = i,
+           colour = list("CD274" = c("black", "magenta")),
+           bcg = list(CD274 = c(2, 4.5, 1.8)),
+           thick = FALSE,
+           legend = list(colour_by.title.cex = 0.7,
+                         colour_by.labels.cex = 0.7),
+           save_plot = list(filename = paste0("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/07_comb/PDL1score_ccRCC_",i,".png"), scale = 2)
+           )
+}
+
+foreach(i = c("tumor_CD274_GMM", "tumor_CD274_1"))%dopar%{
+
+#Subset to tumor cells
+cur_sce_tumor <- cur_sce[,cur_sce$celltype_combined == "tumor"]
+
+#Prepare images
+#cur_images <- cytomapper::normalize(cur_images, separateImages = FALSE)
+#cur_images <- cytomapper::normalize(cur_images, inputRange = c(0, 0.2))
+
+plotPixels(cur_images,
+           mask = cur_masks,
+           object = cur_sce_tumor,
+           img_id = "sample_id",
+           cell_id = "ObjectNumber",
+           missing_colour = "white",
+           colour_by = c("CD274"),
+           outline_by = i,
+           colour = list("CD274" = c("black", "magenta")),
+           bcg = list(CD274 = c(2, 4.5, 1.8)),
+           thick = FALSE,
+           legend = list(colour_by.title.cex = 0.7,
+                         colour_by.labels.cex = 0.7),
+           save_plot = list(filename = paste0("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/07_comb/PDL1score_ccRCC_",i,".png"), scale = 2)
+           )
+}
+```
+
+### Decision for PDL1 cutoff 
+
+We will use the GMM-based combined positive score (CPS) for downstream analysis.
+
+```{r}
+# Cell based score
+sce$PDL1_score_cells <- sce_all$all_CD274_GMM[match(sce$cell_id, sce_all$cell_id)]
+
+# Patient based score
+sce$PDL1_score <- sce$PDL1_score_all_GMM_1[match(sce$PID, sce_all$PID)]
+sce$PDL1_score <- ifelse(sce$PDL1_score == "PDL1_pos","1","0")
+```
+
+
+```{r}
+# Set colors 
+metadata(sce)$colors$PDL1_score <- setNames(c("#00441B","#AADBAB"),unique(sce$PDL1_score))
+metadata(sce)$colors$PDL1_score_cells <- setNames(c("#AADBAB","#00441B"),unique(sce$PDL1_score_cells))
+```
+
+
+## 6. Other QC
+
 ### Estimate fraction of tumor cells for each image
 
 ```{r tumor cell fraction}

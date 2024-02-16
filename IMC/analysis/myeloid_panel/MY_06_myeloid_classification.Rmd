@@ -1120,10 +1120,15 @@ necrose <- colData(sce) %>% as.data.frame() %>% select(my_cluster_selected,necro
 necrose <- necrose %>% group_by(my_cluster_selected) %>% mutate(fra = Freq/sum(Freq)) 
 necrose <- necrose %>% select(-Freq) %>% pivot_wider(id_cols = my_cluster_selected,names_from = necrose,values_from = fra) %>% column_to_rownames("my_cluster_selected")
 
+PDL1_score <- colData(sce) %>% as.data.frame() %>% select(my_cluster_selected,PDL1_score) %>% group_by(my_cluster_selected) %>% table() %>% as.data.frame
+PDL1_score <- PDL1_score %>% group_by(my_cluster_selected) %>% mutate(fra = Freq/sum(Freq)) 
+PDL1_score <- PDL1_score %>% select(-Freq) %>% pivot_wider(id_cols = my_cluster_selected,names_from = PDL1_score,values_from = fra) %>% column_to_rownames("my_cluster_selected")
+
 
 ha_meta <- HeatmapAnnotation(ISUP_combined = anno_barplot(ISUP_combined, width = unit(12, "mm"),gp = gpar(fill = metadata(sce)$colors$ISUP_combined)),
                             pT_combined = anno_barplot(pT_combined, width = unit(12, "mm"),gp = gpar(fill = metadata(sce)$colors$pT_combined)),
                             necrose = anno_barplot(necrose, width = unit(12, "mm"),gp = gpar(fill = metadata(sce)$colors$necrose)),
+                            PDL1_score = anno_barplot(PDL1_score, width = unit(12, "mm"),gp = gpar(fill = metadata(sce)$colors$PDL1_score)),
                             n_cells = anno_barplot(n_cells$ncells, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),                        n_PID = anno_barplot(n_PID$n_PID, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),
 
                             border = TRUE, 
@@ -1576,18 +1581,276 @@ plotExpression(sce[,cur_cells],
   scale_color_manual(values = metadata(sce)$colors$myeloid_metacluster)
 ```
 
-# 5. Differential abundance analysis 
+# 5. Myeloid neighborhood
+
+## Build graphs 
 
 ```{r}
-# Add PDL1 category 
-sce_add <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_07.rds")
+## Aggregate neighbors
+# Build spatial knn graph
+sce <- buildSpatialGraph(sce, img_id = "sample_id", type = "knn", k = 20, 
+                         coords = c("Pos_X",  "Pos_Y"),
+                         #max_dist = 30,
+                         BPPARAM = MulticoreParam(workers = 10))
 
-sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_06.rds")
-
-sce$PDL1_score <- factor(sce_add$PDL1_score_all_GMM_1[match(sce$PID, sce_add$PID)])
-
-sce$PDL1_score <- ifelse(sce$PDL1_score == "PDL1_pos","1","0")
+## Neighborhood graph already build with steinbock 
 ```
+
+## Detect CN
+
+In the next section, we will define cellular neighborhoods by clustering myeloid cells based on their neighboring cells.
+
+### Based on Metacluster
+
+```{r neighborhood-1, message=FALSE, warning=FALSE}
+library(imcRtools)
+library(bluster)
+
+# Aggregate neighbors 
+
+### A: Neighborhood expansion graph
+sce <- aggregateNeighbors(sce, colPairName = "neighborhood", aggregate_by = "metadata", count_by = "myeloid_metacluster", proportions = FALSE, name = "count_neighbors")
+
+### B: KNN graph
+sce <- aggregateNeighbors(sce, colPairName = "knn_interaction_graph", aggregate_by = "metadata", count_by = "myeloid_metacluster", proportions = FALSE, name = "count_neighbors_knn")
+```
+
+```{r}
+# A) Perform cluster sweep for kmeans (silhouette width, wcss)
+set.seed(22)
+clust_list <- lapply(2:20, function(k){
+  cur_km <- kmeans(sce$count_neighbors, centers = k)
+  return(list(wss = sum(cur_km$withinss),
+           clusters = cur_km$cluster))
+})
+
+sil <- vapply(lapply(clust_list, `[[`, 2), 
+              function(x) mean(approxSilhouette(sce$count_neighbors, x)$width), 
+              0)
+
+ggplot(data.frame(k = 2:20, sil = sil))+
+  geom_point(aes(k, sil, col = sil))+
+  geom_line(aes(k, sil,col=sil))+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  xlab("k")+
+  ylab("Mean silhouette width")+
+  scale_color_continuous(type = "viridis")
+
+ggplot(data.frame(k = 2:20,wss = unlist(lapply(clust_list, `[[`, 1))))+
+  geom_point(aes(k, wss, col = wss))+
+  geom_line(aes(k, wss, col = wss))+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  xlab("k")+
+  ylab("Total WCSS")+
+  scale_color_continuous(type = "viridis")
+
+# Select 13 clusters
+set.seed(22)
+cur_clusters <- kmeans(sce$count_neighbors, centers = 10, nstart = 100)$cluster
+
+sce$myeloid_neighborhood <- as.factor(cur_clusters)
+
+########
+
+# B) Perform cluster sweep for kmeans (silhouette width, wcss)
+set.seed(22)
+clust_list <- lapply(2:20, function(k){
+  cur_km <- kmeans(sce$count_neighbors_knn, centers = k)
+  return(list(wss = sum(cur_km$withinss),
+           clusters = cur_km$cluster))
+})
+
+sil <- vapply(lapply(clust_list, `[[`, 2), 
+              function(x) mean(approxSilhouette(sce$count_neighbors_knn, x)$width), 
+              0)
+
+ggplot(data.frame(k = 2:20, sil = sil))+
+  geom_point(aes(k, sil, col = sil))+
+  geom_line(aes(k, sil,col=sil))+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  xlab("k")+
+  ylab("Mean silhouette width")+
+  scale_color_continuous(type = "viridis")
+
+ggplot(data.frame(k = 2:20,wss = unlist(lapply(clust_list, `[[`, 1))))+
+  geom_point(aes(k, wss, col = wss))+
+  geom_line(aes(k, wss, col = wss))+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  xlab("k")+
+  ylab("Total WCSS")+
+  scale_color_continuous(type = "viridis")
+
+# Select 13 clusters
+#set.seed(22)
+#cur_clusters <- kmeans(sce$count_neighbors_knn, centers = 15, nstart = 100)$cluster
+
+#sce$cellular_neighborhood <- as.factor(cur_clusters)
+
+```
+
+```{r}
+library(tidyverse)
+for_plot <- colData(sce) %>% as_tibble() %>%
+    group_by(myeloid_neighborhood, myeloid_metacluster) %>%
+    summarize(count = n()) %>%
+    mutate(freq = count / sum(count)) %>%
+    pivot_wider(id_cols = myeloid_neighborhood, names_from = myeloid_metacluster, 
+                values_from = freq, values_fill = 0) %>%
+    ungroup() %>%
+    select(-myeloid_neighborhood)
+
+pheatmap(for_plot, #color = colorRampPalette(c("dark blue", "white", "dark red"))(100), 
+         scale = "column", show_rownames = TRUE)
+
+for_plot <- table(as.character(sce$myeloid_neighborhood), sce$myeloid_metacluster)
+
+pheatmap(for_plot, 
+         color = viridis(100), display_numbers = TRUE, 
+         number_color = "white", number_format = "%.0f")
+
+for_plot <- prop.table(table(as.character(sce$myeloid_neighborhood), sce$myeloid_metacluster), margin = 1)
+
+pheatmap(for_plot, 
+         color = viridis(100), display_numbers = TRUE, 
+         number_color = "white", number_format = "%.2f")
+
+pheatmap(for_plot, 
+         color = colorRampPalette(c("dark blue", "white", "dark red"))(100), 
+         scale = "column")
+```
+
+### Based on Cluster
+
+```{r neighborhood-1, message=FALSE, warning=FALSE}
+library(imcRtools)
+library(bluster)
+
+# Aggregate neighbors 
+
+### A: Neighborhood expansion graph
+sce <- aggregateNeighbors(sce, colPairName = "neighborhood", aggregate_by = "metadata", count_by = "my_cluster_names", proportions = FALSE, name = "count_neighbors")
+
+### B: KNN graph
+sce <- aggregateNeighbors(sce, colPairName = "knn_interaction_graph", aggregate_by = "metadata", count_by = "myeloid_metacluster", proportions = FALSE, name = "count_neighbors_knn")
+```
+
+
+```{r}
+# A) Perform cluster sweep for kmeans (silhouette width, wcss)
+set.seed(22)
+clust_list <- lapply(2:20, function(k){
+  cur_km <- kmeans(sce$count_neighbors, centers = k)
+  return(list(wss = sum(cur_km$withinss),
+           clusters = cur_km$cluster))
+})
+
+sil <- vapply(lapply(clust_list, `[[`, 2), 
+              function(x) mean(approxSilhouette(sce$count_neighbors, x)$width), 
+              0)
+
+ggplot(data.frame(k = 2:20, sil = sil))+
+  geom_point(aes(k, sil, col = sil))+
+  geom_line(aes(k, sil,col=sil))+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  xlab("k")+
+  ylab("Mean silhouette width")+
+  scale_color_continuous(type = "viridis")
+
+ggplot(data.frame(k = 2:20,wss = unlist(lapply(clust_list, `[[`, 1))))+
+  geom_point(aes(k, wss, col = wss))+
+  geom_line(aes(k, wss, col = wss))+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  xlab("k")+
+  ylab("Total WCSS")+
+  scale_color_continuous(type = "viridis")
+
+# Select 13 clusters
+set.seed(22)
+cur_clusters <- kmeans(sce$count_neighbors, centers = 7, nstart = 100)$cluster
+
+sce$myeloid_neighborhood <- as.factor(cur_clusters)
+
+########
+
+# B) Perform cluster sweep for kmeans (silhouette width, wcss)
+set.seed(22)
+clust_list <- lapply(2:20, function(k){
+  cur_km <- kmeans(sce$count_neighbors_knn, centers = k)
+  return(list(wss = sum(cur_km$withinss),
+           clusters = cur_km$cluster))
+})
+
+sil <- vapply(lapply(clust_list, `[[`, 2), 
+              function(x) mean(approxSilhouette(sce$count_neighbors_knn, x)$width), 
+              0)
+
+ggplot(data.frame(k = 2:20, sil = sil))+
+  geom_point(aes(k, sil, col = sil))+
+  geom_line(aes(k, sil,col=sil))+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  xlab("k")+
+  ylab("Mean silhouette width")+
+  scale_color_continuous(type = "viridis")
+
+ggplot(data.frame(k = 2:20,wss = unlist(lapply(clust_list, `[[`, 1))))+
+  geom_point(aes(k, wss, col = wss))+
+  geom_line(aes(k, wss, col = wss))+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  xlab("k")+
+  ylab("Total WCSS")+
+  scale_color_continuous(type = "viridis")
+
+# Select 13 clusters
+#set.seed(22)
+#cur_clusters <- kmeans(sce$count_neighbors_knn, centers = 15, nstart = 100)$cluster
+
+#sce$cellular_neighborhood <- as.factor(cur_clusters)
+
+```
+
+```{r}
+library(tidyverse)
+for_plot <- colData(sce) %>% as_tibble() %>%
+    group_by(myeloid_neighborhood, my_cluster_names) %>%
+    summarize(count = n()) %>%
+    mutate(freq = count / sum(count)) %>%
+    pivot_wider(id_cols = myeloid_neighborhood, names_from = my_cluster_names, 
+                values_from = freq, values_fill = 0) %>%
+    ungroup() %>%
+    select(-myeloid_neighborhood)
+
+pheatmap(for_plot, #color = colorRampPalette(c("dark blue", "white", "dark red"))(100), 
+         scale = "column", show_rownames = TRUE)
+
+for_plot <- table(as.character(sce$myeloid_neighborhood), sce$my_cluster_names)
+
+pheatmap(for_plot, 
+         color = viridis(100), display_numbers = TRUE, 
+         number_color = "white", number_format = "%.0f")
+
+for_plot <- prop.table(table(as.character(sce$myeloid_neighborhood), sce$my_cluster_names), margin = 1)
+
+pheatmap(for_plot, 
+         color = viridis(100), display_numbers = TRUE, 
+         number_color = "white", number_format = "%.2f")
+
+pheatmap(for_plot, 
+         color = colorRampPalette(c("dark blue", "white", "dark red"))(100), 
+         scale = "column")
+```
+
+
+
+# 5. Differential abundance analysis 
+
 
 ## Loop over categories 
 
@@ -1599,7 +1862,7 @@ library(edgeR)
 
 DA <- lapply(c("ISUP_combined", "pT_combined","necrose","PDL1_score"), function(x){
 
-abundances <- table(unfactor(sce$my_cluster_names), sce$PID)
+abundances <- table(unfactor(sce$myeloid_neighborhood), sce$PID)
 abundances <- unclass(abundances) 
 
 #relevant patient metadata (Re-level for baseline)
@@ -2573,6 +2836,27 @@ ggsurvplot(fit,
           conf.int = TRUE
 )
 ```
+
+```{r}
+# Add PDL1 category 
+sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_06.rds")
+
+sce_add <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_immune_05.rds")
+
+sce$PDL1_score <- factor(sce_add$PDL1_score[match(sce$PID, sce_add$PID)])
+sce$PDL1_score_cells <- factor(sce_add$PDL1_score_cells[match(sce$PID, sce_add$PID)])
+
+metadata(sce)$colors$PDL1_score <- metadata(sce_add)$colors$PDL1_score
+metadata(sce)$colors$PDL1_score_cells <- metadata(sce_add)$colors$PDL1_score_cells
+
+saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_06.rds")
+```
+
+
+
+
+
+
 # 6. Supervised analysis 
 
 ## HLADR GMM on myeloid cells 

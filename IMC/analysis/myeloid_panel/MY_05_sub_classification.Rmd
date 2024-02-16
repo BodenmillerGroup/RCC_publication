@@ -1332,10 +1332,15 @@ necrose <- colData(sce) %>% as.data.frame() %>% select(immune_metacluster,necros
 necrose <- necrose %>% group_by(immune_metacluster) %>% mutate(fra = Freq/sum(Freq)) 
 necrose <- necrose %>% select(-Freq) %>% pivot_wider(id_cols = immune_metacluster,names_from = necrose,values_from = fra) %>% column_to_rownames("immune_metacluster")
 
+PDL1_score <- colData(sce) %>% as.data.frame() %>% select(immune_metacluster,PDL1_score) %>% group_by(immune_metacluster) %>% table() %>% as.data.frame
+PDL1_score <- PDL1_score %>% group_by(immune_metacluster) %>% mutate(fra = Freq/sum(Freq)) 
+PDL1_score <- PDL1_score %>% select(-Freq) %>% pivot_wider(id_cols = immune_metacluster,names_from = PDL1_score,values_from = fra) %>% column_to_rownames("immune_metacluster")
+
 
 ha_meta <- HeatmapAnnotation(ISUP_combined = anno_barplot(ISUP_combined, width = unit(12, "mm"),gp = gpar(fill = metadata(sce)$colors$ISUP_combined)),
                               pT_combined = anno_barplot(pT, width = unit(12, "mm"),gp = gpar(fill = metadata(sce)$colors$pT_combined)),
                             necrose = anno_barplot(necrose, width = unit(12, "mm"),gp = gpar(fill = metadata(sce)$colors$necrose)),
+                            PDL1_score = anno_barplot(PDL1_score, width = unit(12, "mm"),gp = gpar(fill = metadata(sce)$colors$PDL1_score)),
                             n_cells = anno_barplot(n_cells$ncells, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),                        n_PID = anno_barplot(n_PID$n_PID, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),
 
                             border = TRUE, 
@@ -1349,7 +1354,7 @@ ha_meta <- HeatmapAnnotation(ISUP_combined = anno_barplot(ISUP_combined, width =
 anno <- colData(mean_sce) %>% as.data.frame %>% select(immune_metacluster, ncells)
 
 anno$immune_cat <- ifelse(anno$immune_metacluster %in% c("Stromal","Endothelial"), "Stromal", 
-       ifelse(anno$immune_metacluster == "Unknown/Other", "Undefined", 
+       ifelse(anno$immune_metacluster == "Unknown_Other", "Undefined", 
               ifelse(anno$immune_metacluster %in% c("Macrophage", "Neutrophil"), "Macrophage", "Lymphoid")))
 
 
@@ -1731,7 +1736,6 @@ EnhancedVolcano(data,
     colCustom = keyvals)
 ```
 
-
 # 5. Differential abundance analysis 
 
 ## Loop over categories 
@@ -1742,7 +1746,7 @@ EnhancedVolcano(data,
 ### Differential abundance analysis based on edgeR
 library(edgeR)
 
-DA <- lapply(c("ISUP_combined", "pT_combined","necrose"), function(x){
+DA <- lapply(c("ISUP_combined", "pT_combined","necrose","PDL1_score"), function(x){
 
 abundances <- table(unfactor(sce$immune_metacluster), sce$PID)
 abundances <- unclass(abundances) 
@@ -1750,7 +1754,7 @@ abundances <- unclass(abundances)
 #relevant patient metadata (Re-level for baseline)
 meta <- colData(sce)[match(colnames(abundances), sce$PID),]
 
-if(x == "necrose"){
+if(x %in% c("necrose","PDL1_score")){
   meta[,x] <- relevel(x=factor(meta[,x]), ref = "0")
 }else{
   meta[,x] <- relevel(x=factor(meta[,x]), ref = "1/2")
@@ -1797,7 +1801,7 @@ DA_out <- do.call(rbind, DA)
 ```{r}
 library(ggnewscale)
 
-DA_out$category <- factor(DA_out$category,levels = c("necrose","pT_combined","ISUP_combined"))
+DA_out$category <- factor(DA_out$category,levels = c("PDL1_score","necrose","pT_combined","ISUP_combined"))
 #DA_out <- DA_out %>% filter(category %in% c("pT_combined","ISUP_combined"))
 
 ggplot(DA_out, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+

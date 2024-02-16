@@ -2551,6 +2551,7 @@ pheatmap(for_plot,
          color = colorRampPalette(c("dark blue", "white", "dark red"))(100), 
          scale = "column")
 ```
+
 Rich heatmap visualization 
 
 ```{r rich heatmap}
