@@ -148,7 +148,6 @@ saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sc
 ```
 
 
-
 # 2. Spatial analysis 
 
 ## Differential interaction testing 

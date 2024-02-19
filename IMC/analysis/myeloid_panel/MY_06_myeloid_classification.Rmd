@@ -1583,15 +1583,43 @@ plotExpression(sce[,cur_cells],
 
 # 5. Myeloid neighborhood
 
-## Build graphs 
+## Filter for myeloid low images 
+
+```{r}
+# Filter samples that contain at least 5 myeloid cells
+cur_sample <- colData(sce) %>% as.data.frame %>% group_by(sample_id) %>% count() %>% ungroup() %>% mutate(mean(n)) %>% arrange(n) %>% filter(n >=5) %>% pull(sample_id)
+
+sce_spatial <- sce[,sce$sample_id %in% cur_sample]
+```
+
+## Build different spatial graphs 
 
 ```{r}
 ## Aggregate neighbors
 # Build spatial knn graph
-sce <- buildSpatialGraph(sce, img_id = "sample_id", type = "knn", k = 20, 
+sce_spatial <- buildSpatialGraph(sce_spatial, img_id = "sample_id", type = "knn", k = 20, 
                          coords = c("Pos_X",  "Pos_Y"),
-                         #max_dist = 30,
-                         BPPARAM = MulticoreParam(workers = 10))
+                         max_dist = 30,
+                         name = "knn_20",
+                         BPPARAM = MulticoreParam(workers = 20))
+
+sce_spatial <- buildSpatialGraph(sce_spatial, img_id = "sample_id", type = "knn", k = 40, 
+                         coords = c("Pos_X",  "Pos_Y"),
+                         max_dist = 60,
+                         name = "knn_40",
+                         BPPARAM = MulticoreParam(workers = 20))
+
+sce_spatial <- buildSpatialGraph(sce_spatial, img_id = "sample_id", type = "expansion", 
+                                 threshold = 20,
+                         coords = c("Pos_X",  "Pos_Y"),
+                         name = "expansion_20",
+                         BPPARAM = MulticoreParam(workers = 20))
+
+sce_spatial <- buildSpatialGraph(sce_spatial, img_id = "sample_id", type = "expansion", 
+                                 threshold = 40,
+                         coords = c("Pos_X",  "Pos_Y"),
+                         name = "expansion_40",
+                         BPPARAM = MulticoreParam(workers = 20))
 
 ## Neighborhood graph already build with steinbock 
 ```
@@ -1607,94 +1635,83 @@ library(imcRtools)
 library(bluster)
 
 # Aggregate neighbors 
+### A: KNN graph
+sce_spatial <- aggregateNeighbors(sce_spatial, colPairName = "knn_20", aggregate_by = "metadata", count_by = "myeloid_metacluster", proportions = FALSE, name = "count_knn_20")
 
-### A: Neighborhood expansion graph
-sce <- aggregateNeighbors(sce, colPairName = "neighborhood", aggregate_by = "metadata", count_by = "myeloid_metacluster", proportions = FALSE, name = "count_neighbors")
+sce_spatial <- aggregateNeighbors(sce_spatial, colPairName = "knn_40", aggregate_by = "metadata", count_by = "myeloid_metacluster", proportions = FALSE, name = "count_knn_40")
 
-### B: KNN graph
-sce <- aggregateNeighbors(sce, colPairName = "knn_interaction_graph", aggregate_by = "metadata", count_by = "myeloid_metacluster", proportions = FALSE, name = "count_neighbors_knn")
+### B: Neighborhood expansion graph
+sce_spatial <- aggregateNeighbors(sce_spatial, colPairName = "neighborhood", aggregate_by = "metadata", count_by = "myeloid_metacluster", proportions = FALSE, name = "count_steinbock")
+
+sce_spatial <- aggregateNeighbors(sce_spatial, colPairName = "expansion_20", aggregate_by = "metadata", count_by = "myeloid_metacluster", proportions = FALSE, name = "count_exp_20")
+
+sce_spatial <- aggregateNeighbors(sce_spatial, colPairName = "expansion_40", aggregate_by = "metadata", count_by = "myeloid_metacluster", proportions = FALSE, name = "count_exp_40")
 ```
 
 ```{r}
 # A) Perform cluster sweep for kmeans (silhouette width, wcss)
+library(doParallel)
+registerDoParallel(cores = 5)
+
+out_test <- foreach(i = c("count_knn_20","count_knn_40","count_steinbock", "count_exp_40", "count_exp_20"), .combine = rbind)%dopar%{
+
 set.seed(22)
 clust_list <- lapply(2:20, function(k){
-  cur_km <- kmeans(sce$count_neighbors, centers = k)
+  cur_km <- kmeans(colData(sce_spatial)[,i], centers = k, nstart = 10)
   return(list(wss = sum(cur_km$withinss),
            clusters = cur_km$cluster))
 })
 
 sil <- vapply(lapply(clust_list, `[[`, 2), 
-              function(x) mean(approxSilhouette(sce$count_neighbors, x)$width), 
+              function(x) mean(approxSilhouette(colData(sce_spatial)[,i], x)$width), 
               0)
 
-ggplot(data.frame(k = 2:20, sil = sil))+
-  geom_point(aes(k, sil, col = sil))+
-  geom_line(aes(k, sil,col=sil))+
+data.frame(k = 2:20, 
+           sil = sil,
+           wss = unlist(lapply(clust_list, `[[`, 1)), 
+           type = i)
+}
+
+
+ggplot(out_test, aes(x = k, y = sil, color = type))+
+  geom_point(size = 3)+
+  geom_line()+
   theme_classic()+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   xlab("k")+
   ylab("Mean silhouette width")+
-  scale_color_continuous(type = "viridis")
+  scale_color_brewer(palette = "Paired")
 
-ggplot(data.frame(k = 2:20,wss = unlist(lapply(clust_list, `[[`, 1))))+
-  geom_point(aes(k, wss, col = wss))+
-  geom_line(aes(k, wss, col = wss))+
-  theme_classic()+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
-  xlab("k")+
-  ylab("Total WCSS")+
-  scale_color_continuous(type = "viridis")
-
-# Select 13 clusters
-set.seed(22)
-cur_clusters <- kmeans(sce$count_neighbors, centers = 10, nstart = 100)$cluster
-
-sce$myeloid_neighborhood <- as.factor(cur_clusters)
-
-########
-
-# B) Perform cluster sweep for kmeans (silhouette width, wcss)
-set.seed(22)
-clust_list <- lapply(2:20, function(k){
-  cur_km <- kmeans(sce$count_neighbors_knn, centers = k)
-  return(list(wss = sum(cur_km$withinss),
-           clusters = cur_km$cluster))
-})
-
-sil <- vapply(lapply(clust_list, `[[`, 2), 
-              function(x) mean(approxSilhouette(sce$count_neighbors_knn, x)$width), 
-              0)
-
-ggplot(data.frame(k = 2:20, sil = sil))+
-  geom_point(aes(k, sil, col = sil))+
-  geom_line(aes(k, sil,col=sil))+
+ggplot(out_test, aes(x = k, y = wss, color = type))+
+  geom_point(size = 3)+
+  geom_line()+
   theme_classic()+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   xlab("k")+
-  ylab("Mean silhouette width")+
-  scale_color_continuous(type = "viridis")
+  ylab("Total WCSS")+
+  scale_color_brewer(palette = "Paired")
 
-ggplot(data.frame(k = 2:20,wss = unlist(lapply(clust_list, `[[`, 1))))+
-  geom_point(aes(k, wss, col = wss))+
-  geom_line(aes(k, wss, col = wss))+
+ggplot(out_test %>% filter(!type %in% c("count_knn_40","count_knn_20")), aes(x = k, y = wss, color = type))+
+  geom_point(size = 3)+
+  geom_line()+
   theme_classic()+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   xlab("k")+
   ylab("Total WCSS")+
-  scale_color_continuous(type = "viridis")
+  scale_color_brewer(palette = "Paired")
+
 
 # Select 13 clusters
-#set.seed(22)
-#cur_clusters <- kmeans(sce$count_neighbors_knn, centers = 15, nstart = 100)$cluster
+set.seed(22)
+cur_clusters <- kmeans(sce_spatial$count_exp_20, centers = 8, nstart = 100)$cluster
 
-#sce$cellular_neighborhood <- as.factor(cur_clusters)
+sce_spatial$myeloid_neighborhood <- as.factor(cur_clusters)
 
 ```
 
 ```{r}
 library(tidyverse)
-for_plot <- colData(sce) %>% as_tibble() %>%
+for_plot <- colData(sce_spatial) %>% as_tibble() %>%
     group_by(myeloid_neighborhood, myeloid_metacluster) %>%
     summarize(count = n()) %>%
     mutate(freq = count / sum(count)) %>%
@@ -1706,13 +1723,19 @@ for_plot <- colData(sce) %>% as_tibble() %>%
 pheatmap(for_plot, #color = colorRampPalette(c("dark blue", "white", "dark red"))(100), 
          scale = "column", show_rownames = TRUE)
 
-for_plot <- table(as.character(sce$myeloid_neighborhood), sce$myeloid_metacluster)
+for_plot <- table(as.character(sce_spatial$myeloid_neighborhood), sce_spatial$myeloid_metacluster)
 
 pheatmap(for_plot, 
          color = viridis(100), display_numbers = TRUE, 
          number_color = "white", number_format = "%.0f")
 
-for_plot <- prop.table(table(as.character(sce$myeloid_neighborhood), sce$myeloid_metacluster), margin = 1)
+for_plot <- prop.table(table(as.character(sce_spatial$myeloid_neighborhood), sce_spatial$myeloid_metacluster), margin = 2)
+
+pheatmap(for_plot, 
+         color = viridis(100), display_numbers = TRUE, 
+         number_color = "white", number_format = "%.2f")
+
+for_plot <- prop.table(table(as.character(sce_spatial$myeloid_neighborhood), sce_spatial$myeloid_metacluster), margin = 1)
 
 pheatmap(for_plot, 
          color = viridis(100), display_numbers = TRUE, 
@@ -1730,95 +1753,83 @@ library(imcRtools)
 library(bluster)
 
 # Aggregate neighbors 
+### A: KNN graph
+sce_spatial <- aggregateNeighbors(sce_spatial, colPairName = "knn_20", aggregate_by = "metadata", count_by = "my_cluster_names", proportions = FALSE, name = "count_knn_20")
 
-### A: Neighborhood expansion graph
-sce <- aggregateNeighbors(sce, colPairName = "neighborhood", aggregate_by = "metadata", count_by = "my_cluster_names", proportions = FALSE, name = "count_neighbors")
+sce_spatial <- aggregateNeighbors(sce_spatial, colPairName = "knn_40", aggregate_by = "metadata", count_by = "my_cluster_names", proportions = FALSE, name = "count_knn_40")
 
-### B: KNN graph
-sce <- aggregateNeighbors(sce, colPairName = "knn_interaction_graph", aggregate_by = "metadata", count_by = "myeloid_metacluster", proportions = FALSE, name = "count_neighbors_knn")
+### B: Neighborhood expansion graph
+sce_spatial <- aggregateNeighbors(sce_spatial, colPairName = "neighborhood", aggregate_by = "metadata", count_by = "my_cluster_names", proportions = FALSE, name = "count_steinbock")
+
+sce_spatial <- aggregateNeighbors(sce_spatial, colPairName = "expansion_20", aggregate_by = "metadata", count_by = "my_cluster_names", proportions = FALSE, name = "count_exp_20")
+
+sce_spatial <- aggregateNeighbors(sce_spatial, colPairName = "expansion_40", aggregate_by = "metadata", count_by = "my_cluster_names", proportions = FALSE, name = "count_exp_40")
 ```
-
 
 ```{r}
 # A) Perform cluster sweep for kmeans (silhouette width, wcss)
+library(doParallel)
+registerDoParallel(cores = 5)
+
+out_test <- foreach(i = c("count_knn_20","count_knn_40","count_steinbock", "count_exp_40", "count_exp_20"), .combine = rbind)%dopar%{
+
 set.seed(22)
 clust_list <- lapply(2:20, function(k){
-  cur_km <- kmeans(sce$count_neighbors, centers = k)
+  cur_km <- kmeans(colData(sce_spatial)[,i], centers = k, nstart = 10)
   return(list(wss = sum(cur_km$withinss),
            clusters = cur_km$cluster))
 })
 
 sil <- vapply(lapply(clust_list, `[[`, 2), 
-              function(x) mean(approxSilhouette(sce$count_neighbors, x)$width), 
+              function(x) mean(approxSilhouette(colData(sce_spatial)[,i], x)$width), 
               0)
 
-ggplot(data.frame(k = 2:20, sil = sil))+
-  geom_point(aes(k, sil, col = sil))+
-  geom_line(aes(k, sil,col=sil))+
+data.frame(k = 2:20, 
+           sil = sil,
+           wss = unlist(lapply(clust_list, `[[`, 1)), 
+           type = i)
+}
+
+
+ggplot(out_test, aes(x = k, y = sil, color = type))+
+  geom_point(size = 3)+
+  geom_line()+
   theme_classic()+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   xlab("k")+
   ylab("Mean silhouette width")+
-  scale_color_continuous(type = "viridis")
+  scale_color_brewer(palette = "Paired")
 
-ggplot(data.frame(k = 2:20,wss = unlist(lapply(clust_list, `[[`, 1))))+
-  geom_point(aes(k, wss, col = wss))+
-  geom_line(aes(k, wss, col = wss))+
-  theme_classic()+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
-  xlab("k")+
-  ylab("Total WCSS")+
-  scale_color_continuous(type = "viridis")
-
-# Select 13 clusters
-set.seed(22)
-cur_clusters <- kmeans(sce$count_neighbors, centers = 7, nstart = 100)$cluster
-
-sce$myeloid_neighborhood <- as.factor(cur_clusters)
-
-########
-
-# B) Perform cluster sweep for kmeans (silhouette width, wcss)
-set.seed(22)
-clust_list <- lapply(2:20, function(k){
-  cur_km <- kmeans(sce$count_neighbors_knn, centers = k)
-  return(list(wss = sum(cur_km$withinss),
-           clusters = cur_km$cluster))
-})
-
-sil <- vapply(lapply(clust_list, `[[`, 2), 
-              function(x) mean(approxSilhouette(sce$count_neighbors_knn, x)$width), 
-              0)
-
-ggplot(data.frame(k = 2:20, sil = sil))+
-  geom_point(aes(k, sil, col = sil))+
-  geom_line(aes(k, sil,col=sil))+
+ggplot(out_test, aes(x = k, y = wss, color = type))+
+  geom_point(size = 3)+
+  geom_line()+
   theme_classic()+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   xlab("k")+
-  ylab("Mean silhouette width")+
-  scale_color_continuous(type = "viridis")
+  ylab("Total WCSS")+
+  scale_color_brewer(palette = "Paired")
 
-ggplot(data.frame(k = 2:20,wss = unlist(lapply(clust_list, `[[`, 1))))+
-  geom_point(aes(k, wss, col = wss))+
-  geom_line(aes(k, wss, col = wss))+
+ggplot(out_test %>% filter(!type %in% c("count_knn_40","count_knn_20")), aes(x = k, y = wss, color = type))+
+  geom_point(size = 3)+
+  geom_line()+
   theme_classic()+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   xlab("k")+
   ylab("Total WCSS")+
-  scale_color_continuous(type = "viridis")
+  scale_color_brewer(palette = "Paired")
+
 
 # Select 13 clusters
-#set.seed(22)
-#cur_clusters <- kmeans(sce$count_neighbors_knn, centers = 15, nstart = 100)$cluster
+set.seed(22)
+cur_clusters <- kmeans(sce_spatial$count_exp_40, centers = 9, nstart = 100)$cluster
 
-#sce$cellular_neighborhood <- as.factor(cur_clusters)
-
+sce_spatial$myeloid_neighborhood <- as.factor(cur_clusters)
+sce$myeloid_neighborhood <- factor(paste0("D_",sce_spatial$myeloid_neighborhood[match(sce$cell_id, sce_spatial$cell_id)]))
 ```
 
 ```{r}
 library(tidyverse)
-for_plot <- colData(sce) %>% as_tibble() %>%
+for_plot <- colData(sce_spatial) %>% as_tibble() %>%
     group_by(myeloid_neighborhood, my_cluster_names) %>%
     summarize(count = n()) %>%
     mutate(freq = count / sum(count)) %>%
@@ -1830,13 +1841,19 @@ for_plot <- colData(sce) %>% as_tibble() %>%
 pheatmap(for_plot, #color = colorRampPalette(c("dark blue", "white", "dark red"))(100), 
          scale = "column", show_rownames = TRUE)
 
-for_plot <- table(as.character(sce$myeloid_neighborhood), sce$my_cluster_names)
+for_plot <- table(as.character(sce_spatial$myeloid_neighborhood), sce_spatial$my_cluster_names)
 
 pheatmap(for_plot, 
          color = viridis(100), display_numbers = TRUE, 
          number_color = "white", number_format = "%.0f")
 
-for_plot <- prop.table(table(as.character(sce$myeloid_neighborhood), sce$my_cluster_names), margin = 1)
+for_plot <- prop.table(table(as.character(sce_spatial$myeloid_neighborhood), sce_spatial$my_cluster_names), margin = 2)
+
+pheatmap(for_plot, 
+         color = viridis(100), display_numbers = TRUE, 
+         number_color = "white", number_format = "%.2f")
+
+for_plot <- prop.table(table(as.character(sce_spatial$myeloid_neighborhood), sce_spatial$my_cluster_names), margin = 1)
 
 pheatmap(for_plot, 
          color = viridis(100), display_numbers = TRUE, 
@@ -2309,11 +2326,11 @@ ggplot(DA, aes(x = logFC, y = logCPM))+
 library(survival)
 library(survminer)
 
-PID_my_cluster_names <- colData(sce) %>% as.data.frame() %>% select(my_cluster_names,PID) %>% group_by(PID) %>% table() %>% as.data.frame
-PID_my_cluster_names <- PID_my_cluster_names %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq))
+PID_myeloid_neighborhood <- colData(sce) %>% as.data.frame() %>% select(myeloid_neighborhood,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_myeloid_neighborhood <- PID_myeloid_neighborhood %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq))
 
 ### Multivariate cox proportional hazard model on multiple covariates (here proportion of phenotypes)
-PID_metagroups <- PID_my_cluster_names %>% pivot_wider(id_cols = "PID",names_from = "my_cluster_names",values_from = "fra") %>% column_to_rownames("PID")
+PID_metagroups <- PID_myeloid_neighborhood %>% pivot_wider(id_cols = "PID",names_from = "myeloid_neighborhood",values_from = "fra") %>% column_to_rownames("PID")
 #colnames(PID_metagroups) <- paste0("MY_",colnames(PID_metagroups))
 
 ## 1. Based on continuous cluster proportions
@@ -2323,15 +2340,15 @@ Cox_df <- PID_metagroups
 Cox_df$status_OS <- sce$status_OS[match(rownames(Cox_df),sce$PID)]
 Cox_df$OS_months <- sce$OS_months[match(rownames(Cox_df),sce$PID)]
 
-Cox_df$gender <- as.factor(sce$gender[match(rownames(Cox_df),sce$PID)])
-Cox_df$age <- sce$age[match(rownames(Cox_df),sce$PID)]
-Cox_df$ISUP <- as.factor(sce$ISUP_combined[match(rownames(Cox_df),sce$PID)])
-Cox_df$pT <- as.factor(sce$pT_combined[match(rownames(Cox_df),sce$PID)])
+#Cox_df$gender <- as.factor(sce$gender[match(rownames(Cox_df),sce$PID)])
+#Cox_df$age <- sce$age[match(rownames(Cox_df),sce$PID)]
+#Cox_df$ISUP <- as.factor(sce$ISUP_combined[match(rownames(Cox_df),sce$PID)])
+#Cox_df$pT <- as.factor(sce$pT_combined[match(rownames(Cox_df),sce$PID)])
 
 #Based on proportions
-covariates <- Cox_df %>% select(-OS_months, -status_OS,-CD68_low) %>% colnames
+covariates <- Cox_df %>% select(-OS_months, -status_OS,-1) %>% colnames
 
-multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + "),"+ CD68_low"))
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + "),"+ 1"))
 
 multi_model <- coxph(multi_formula, data = Cox_df)
 
@@ -2366,14 +2383,14 @@ hr_prop
 library(survival)
 library(survminer)
 
-PID_my_cluster_names <- colData(sce) %>% as.data.frame() %>% select(my_cluster_names,PID) %>% group_by(PID) %>% table() %>% as.data.frame
-PID_my_cluster_names <- PID_my_cluster_names %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq))
+PID_myeloid_neighborhood <- colData(sce) %>% as.data.frame() %>% select(myeloid_neighborhood,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_myeloid_neighborhood <- PID_myeloid_neighborhood %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq))
 
 ### Multivariate cox proportional hazard model on multiple covariates (here proportion of phenotypes)
-PID_metagroups <- PID_my_cluster_names %>% pivot_wider(id_cols = "PID",names_from = "my_cluster_names",values_from = "fra") %>% column_to_rownames("PID")
+PID_metagroups <- PID_myeloid_neighborhood %>% pivot_wider(id_cols = "PID",names_from = "myeloid_neighborhood",values_from = "fra") %>% column_to_rownames("PID")
 
 Cox_df <- PID_metagroups
-#colnames(Cox_df) <- paste0("MY", colnames(Cox_df))
+colnames(Cox_df) <- paste0("MY", colnames(Cox_df))
 
 ## Based on categories (mean or median division of cluster proportions) 
 
@@ -2431,14 +2448,14 @@ hr_mean
 ### GMM
 
 ```{r}
-PID_my_cluster_names <- colData(sce) %>% as.data.frame() %>% select(my_cluster_names,PID) %>% group_by(PID) %>% table() %>% as.data.frame
-PID_my_cluster_names <- PID_my_cluster_names %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq))
+PID_myeloid_neighborhood <- colData(sce) %>% as.data.frame() %>% select(myeloid_neighborhood,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_myeloid_neighborhood <- PID_myeloid_neighborhood %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq))
 
 ### Multivariate cox proportional hazard model on multiple covariates (here proportion of phenotypes)
-PID_metagroups <- PID_my_cluster_names %>% pivot_wider(id_cols = "PID",names_from = "my_cluster_names",values_from = "fra") %>% column_to_rownames("PID")
+PID_metagroups <- PID_myeloid_neighborhood %>% pivot_wider(id_cols = "PID",names_from = "myeloid_neighborhood",values_from = "fra") %>% column_to_rownames("PID")
 
 Cox_df <- PID_metagroups
-#colnames(Cox_df) <- paste0("MY", colnames(Cox_df))
+colnames(Cox_df) <- paste0("MY", colnames(Cox_df))
 
 ## Based on categories (GMM division of cluster proportions)
 Cox_df_GMM <- foreach(i = colnames(Cox_df),.combine = "cbind")%do%{
@@ -2455,10 +2472,10 @@ Cox_df_GMM <- as.data.frame(Cox_df_GMM,stringsAsFactors=TRUE)
 Cox_df_GMM$status_OS <- sce$status_OS[match(rownames(Cox_df_GMM),sce$PID)]
 Cox_df_GMM$OS_months <- sce$OS_months[match(rownames(Cox_df_GMM),sce$PID)]
 
-Cox_df_GMM$gender <- as.factor(sce$gender[match(rownames(Cox_df_GMM),sce$PID)])
-Cox_df_GMM$age <- sce$age[match(rownames(Cox_df_GMM),sce$PID)]
-Cox_df_GMM$ISUP <- as.factor(sce$ISUP_combined[match(rownames(Cox_df_GMM),sce$PID)])
-Cox_df_GMM$pT <- as.factor(sce$pT_combined[match(rownames(Cox_df_GMM),sce$PID)])
+#Cox_df_GMM$gender <- as.factor(sce$gender[match(rownames(Cox_df_GMM),sce$PID)])
+#Cox_df_GMM$age <- sce$age[match(rownames(Cox_df_GMM),sce$PID)]
+#Cox_df_GMM$ISUP <- as.factor(sce$ISUP_combined[match(rownames(Cox_df_GMM),sce$PID)])
+#Cox_df_GMM$pT <- as.factor(sce$pT_combined[match(rownames(Cox_df_GMM),sce$PID)])
 
 #Based on proportions
 covariates <- Cox_df_GMM %>% select(-status_OS,-OS_months) %>% colnames
@@ -2481,7 +2498,7 @@ plot_df_GMM <- data.frame(group = rownames(multi_res$coefficients),
 hr_GMM <- ggplot(plot_df_GMM, aes(x = reorder(group,desc(HR)), y = HR, color = p_value < 0.05))+
 geom_point(size = 4)+
 geom_errorbar(aes(ymax = CI_high, ymin = CI_low))+
-coord_cartesian(ylim=c(0,20))+
+#coord_cartesian(ylim=c(0,20))+
 geom_hline(yintercept = 1,color = "black",linetype = "dashed")+
 scale_color_brewer(palette = "Set1")+
 xlab("Immune metaclusters")+
