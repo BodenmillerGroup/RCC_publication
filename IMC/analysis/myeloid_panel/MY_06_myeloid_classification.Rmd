@@ -107,18 +107,18 @@ corrplot(cor(cor_sce,method = "pearson"), method="color", col=brewer.pal(n=8, na
 ```{r, fig.height=25, fig.width=6}
 plotExpression(sce, 
                features = rownames(sce)[rowData(sce)$myeloid_cluster],
-               x = "immune_metacluster", 
+               x = "my_cluster_names", 
                exprs_values = "exprs", 
-               colour_by = "immune_metacluster") +
+               colour_by = "my_cluster_names") +
     theme(axis.text.x =  element_text(angle = 90))+
-    scale_color_manual(values = metadata(sce)$colors$immune_metacluster)
+    scale_color_manual(values = metadata(sce)$colors$my_cluster_names)
 ```
 
 
 
 ```{r}
 ## Scatterplot for key markers
-sce_sub <- sce#[,sce$immune_metacluster == "Neutrophil"]
+sce_sub <- sce#[,sce$my_cluster_names == "Neutrophil"]
 
 cur_dat <- t(assay(sce_sub,"exprs")) %>% as.matrix %>% as.data.frame 
 
@@ -871,6 +871,28 @@ astir_myeloid_channel = c("CD68","CD163","CD11b","CD15","Arginase","HLADR")
 rowData(sce)$use_astir_myeloid <- rowData(sce) %>% as.data.frame() %>% mutate(use_astir = ifelse(rownames(sce) %in% astir_myeloid_channel,TRUE,FALSE)) %>% pull(use_astir)
 ```
 
+```{r}
+#Import Astir cell type assignments
+astir_type <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/06_my/astir_ccRCC_myeloid_celltypes_TME_1.csv",col_names = c("ID","cell_type"),skip = 1)
+
+astir_sum <- astir_type_1 %>% as.data.frame %>% group_by(cell_type) %>% dplyr::count()
+
+astir_type$cell_type[astir_type$cell_type == "Neutro"] <- "Granu"
+
+# Add to sce
+sce$astir_myeloid_type <- astir_type$cell_type[match(sce$cell_id, astir_type$ID)]
+
+# Create combined category
+sce$astir_myeloid_combined <- ifelse(sce$astir_myeloid_type %in% c("Unknown","Other"), "Unknown/Other", sce$astir_myeloid_type)
+
+#Mark channels used for cell type assignment 
+astir_myeloid_channel = c("CD68","CD163","CD11b","CD15","Arginase","HLADR")
+
+rowData(sce)$use_astir_myeloid <- rowData(sce) %>% as.data.frame() %>% mutate(use_astir = ifelse(rownames(sce) %in% astir_myeloid_channel,TRUE,FALSE)) %>% pull(use_astir)
+```
+
+
+
 
 ### Visualization 
 
@@ -910,7 +932,7 @@ cur_sample <- (colData(sce) %>% as.data.frame %>% select(sample_id, astir_immune
 
 cur_sample <- (colData(sce) %>% as.data.frame %>% select(sample_id, cluster_1_130) %>% group_by(sample_id) %>% filter(cluster_1_130 == "11") %>% count() %>% arrange(desc(n)) %>% pull(sample_id))[1:10]
 
-cur_sample <- (colData(sce) %>% as.data.frame %>% select(sample_id, immune_metacluster) %>% group_by(sample_id) %>% filter(immune_metacluster == "CD8_T_cell") %>% count() %>% arrange(desc(n)) %>% pull(sample_id))[1:10]
+cur_sample <- (colData(sce) %>% as.data.frame %>% select(sample_id, my_cluster_names) %>% group_by(sample_id) %>% filter(my_cluster_names == "CD163_CD206") %>% count() %>% arrange(desc(n)) %>% pull(sample_id))[1:10]
 
 cur_images <- images[mcols(images)$sample_id %in% cur_sample]
 cur_masks <- masks[mcols(masks)$sample_id %in% cur_sample]
@@ -924,94 +946,68 @@ cytoviewer(image = cur_images, mask = cur_masks, object = cur_sce, img_id = "sam
 ```
 
 
-# 3. State marker scores 
-
-Probably good to define on all cells? 
+# 3. GMM for all type-relevant markers 
 
 ```{r}
-set.seed(22)
+## Gaussian mixture model for all markers relevant for initial celltype assignment 
+type_markers <- rownames(sce)[rowData(sce)$myeloid_cluster_1]
 
-## 1. PD-L1 positivity 
+plot_list <- list()
 
-# Define PDL1 positivity by GMM
-GMM_CD274 <- Mclust(assay(sce, "exprs")["CD274",], G = 2)
+library(doParallel)
+registerDoParallel(cores = 14)
 
-
-GMM_df <- data.frame(GMM_class_PDL1 = ifelse(GMM_CD274$classification == 2 & GMM_CD274$uncertainty < 0.01, 
-                                        "CD274+",
-                                        "CD274-"), 
-                     CD274_exprs = assay(sce, "exprs")["CD274",],
-                     uncertainty = GMM_CD274$uncertainty)
-
-cut_off_GMM <- mean((GMM_df %>% filter(GMM_class_PDL1 == "CD274+") %>% arrange(CD274_exprs) %>% pull(CD274_exprs))[1],
-(GMM_df %>% filter(GMM_class_PDL1 == "CD274-") %>% arrange(desc(CD274_exprs)) %>% pull(CD274_exprs))[1])
-
-# Define PDL1 positivity by exprs > 1 
-GMM_df$cut_class_PDL1 <- ifelse(GMM_df$CD274_exprs > 1, "CD274+", "CD274-") 
-
-GMM_df$final_class_PDL1 <- if(cut_off_GMM > 1) GMM_df$GMM_class_PDL1 else GMM_df$cut_class_PDL1
-
-cut_off_final <- ifelse(cut_off_GMM > 1, cut_off_GMM, 1)
-cut_off_final
-
-#Visualize GMM
-ggplot(GMM_df, aes(x = CD274_exprs,fill = final_class_PDL1))+
+out_list <- foreach (x = type_markers) %dopar%{ #replace with for-loop to also access plot_list (slower)
+  
+  GMM_marker <- Mclust(assay(sce, "exprs")[x,], G = 2)
+  
+  GMM_df <- data.frame(class_marker = ifelse(GMM_marker$classification == 2 & GMM_marker$uncertainty < 0.01, paste0(x, "_pos"), paste0(x, "_neg")), 
+                     marker_exprs = assay(sce, "exprs")[x,],
+                     uncertainty = GMM_marker$uncertainty)
+  
+  plot_list[[x]] <- ggplot(GMM_df, aes(x = marker_exprs))+
   geom_density()+
-  geom_rug(aes(color = final_class_PDL1))+
-  geom_vline(xintercept = cut_off_final, color = "grey")+
-  theme_classic(base_size = 15)+
-  theme(axis.title.x = element_blank())+
-  scale_fill_brewer(palette = "Set1")+
-  scale_color_brewer(palette = "Set1")
+  geom_rug(aes(color = class_marker))+
+  theme_classic()+
+  scale_fill_brewer(palette = "Set1")
+  
+  return(GMM_df$class_marker)
+}
 
-# Add PDL1 group 
-sce$MY_CD274_score <- GMM_df$final_class_PDL1[match(colnames(sce), rownames(GMM_df))]
-
-n_cat <- colData(sce) %>% as.data.frame() %>% group_by(MY_CD274_score) %>% count()
-n_cat <- n_cat %>% ungroup() %>% mutate(sum = sum(n)) %>% mutate(fra = (n/sum)*100)
-n_cat
-
-
-## 2. VISTA positivity 
-
-# Define VISTA positivity by GMM
-GMM_VISTA <- Mclust(assay(sce, "exprs")["VISTA",], G = 2)
-
-
-GMM_df <- data.frame(GMM_class_VISTA = ifelse(GMM_VISTA$classification == 2 & GMM_VISTA$uncertainty < 0.01, 
-                                        "VISTA+",
-                                        "VISTA-"), 
-                     VISTA_exprs = assay(sce, "exprs")["VISTA",],
-                     uncertainty = GMM_VISTA$uncertainty)
-
-cut_off_GMM <- mean((GMM_df %>% filter(GMM_class_VISTA == "VISTA+") %>% arrange(VISTA_exprs) %>% pull(VISTA_exprs))[1],
-(GMM_df %>% filter(GMM_class_VISTA == "VISTA-") %>% arrange(desc(VISTA_exprs)) %>% pull(VISTA_exprs))[1])
-
-# Define VISTA positivity by exprs > 1 
-GMM_df$cut_class_VISTA <- ifelse(GMM_df$VISTA_exprs > 1, "VISTA+", "VISTA-") 
-
-GMM_df$final_class_VISTA <- if(cut_off_GMM > 1) GMM_df$GMM_class_VISTA else GMM_df$cut_class_VISTA
-
-cut_off_final <- ifelse(cut_off_GMM > 1, cut_off_GMM, 1)
-cut_off_final
-
-#Visualize GMM
-ggplot(GMM_df, aes(x = VISTA_exprs,fill = final_class_VISTA))+
-  geom_density()+
-  geom_rug(aes(color = final_class_VISTA))+
-  geom_vline(xintercept = cut_off_final, color = "grey")+
-  theme_classic(base_size = 15)+
-  theme(axis.title.x = element_blank())+
-  scale_fill_brewer(palette = "Set1")+
-  scale_color_brewer(palette = "Set1")
-
-# Add VISTA group 
-sce$MY_VISTA_score <- GMM_df$final_class_VISTA[match(colnames(sce), rownames(GMM_df))]
-
-n_cat <- colData(sce) %>% as.data.frame() %>% group_by(MY_VISTA_score) %>% count()
-n_cat <- n_cat %>% ungroup() %>% mutate(sum = sum(n)) %>% mutate(fra = (n/sum)*100)
-n_cat
+for (i in seq_along(out_list)){
+  colData(sce)[,paste0(type_markers[i],"_GMM")] <- out_list[[i]]
+}
 ```
+
+```{r}
+# Convert the data.frame 
+data_dt <- colData(sce) %>% as.data.frame %>% select("HLADR_GMM", "CD11b_GMM","CD15_GMM","CD163_GMM","Arginase_GMM") 
+
+data_numeric_out <- data_dt %>%
+  mutate(across(everything(), ~as.numeric(str_detect(., "_pos")))) %>% 
+  mutate(CD11b_CD15_Arginase_GMM = ifelse(CD11b_GMM & CD15_GMM & Arginase_GMM, 1, 0)) %>% # MDSC = CD11b+ / CD15+ / Arginase+
+  mutate(CD11b_GMM_new = ifelse(CD11b_GMM & !CD15_GMM & !Arginase_GMM, 1, 0)) %>% # C_M = CD11b+ / CD15- / Arginase-
+  select(-CD15_GMM, -Arginase_GMM, -CD11b_GMM) %>% 
+  mutate(sum = rowSums(.)) %>% filter(sum == 1) %>% 
+  rownames_to_column("cell_id") %>% 
+  pivot_longer(2:5, names_to = "GMM", values_to = "count") %>% 
+  filter(count == 1) %>% select(cell_id, GMM)
+
+data_numeric_out$GMM[data_numeric_out$GMM == "CD163_GMM"] <- "M2_like"
+data_numeric_out$GMM[data_numeric_out$GMM == "HLADR_GMM"] <- "Ag_M"
+data_numeric_out$GMM[data_numeric_out$GMM == "CD11b_CD15_Arginase_GMM"] <- "Neutro_MDSC"
+data_numeric_out$GMM[data_numeric_out$GMM == "CD11b_GMM_new"] <- "C_M"
+
+#Add to sce
+sce$GMM_myeloid_combined <- data_numeric_out$GMM[match(sce$cell_id, data_numeric_out$cell_id)]
+
+sce$GMM_myeloid_combined[is.na(sce$GMM_myeloid_combined)] <- "Unknown/Other"
+
+# GMM per category
+GMM_sum <- colData(sce) %>% as.data.frame %>% group_by(GMM_myeloid_combined) %>% dplyr::count()
+GMM_sum
+```
+
 
 
 
@@ -1034,10 +1030,10 @@ mean_sce <- aggregateAcrossCells(sce, ids = sce$my_cluster_selected,
                                  use.assay.type = "exprs",
                                  subset.row = rowData(sce)$myeloid_cluster_1)
 
-state_sce <- aggregateAcrossCells(sce, ids = sce$my_cluster_selected,
-                                 statistics = "mean",
-                                 use.assay.type = "exprs",
-                                 subset.row = rownames(sce) %in% c("CD274","IDO1","VISTA","TMEM173"))
+#state_sce <- aggregateAcrossCells(sce, ids = sce$my_cluster_selected,
+#                                 statistics = "mean",
+#                                 use.assay.type = "exprs",
+#                                 subset.row = rownames(sce) %in% c("CD274","IDO1","VISTA","TMEM173"))
 
 # Heatmap body color 
 col_main = viridis(100)
@@ -1071,7 +1067,7 @@ ha_spatial <- HeatmapAnnotation(
     border = TRUE,
     which = "row")
 
-### 2.2 Astir prediction 
+### 2.2 Astir / GMM prediction 
 
 ## Astir cell types per cluster
 astir_anno <- colData(sce) %>% as.data.frame() %>% select(my_cluster_selected,astir_myeloid_combined) %>% group_by(my_cluster_selected) %>% table() %>% as.data.frame
@@ -1079,8 +1075,8 @@ astir_anno <- astir_anno %>% group_by(my_cluster_selected) %>% mutate(fra = Freq
 astir_anno <- astir_anno %>% select(-Freq) %>% pivot_wider(id_cols = my_cluster_selected,names_from = astir_myeloid_combined,values_from = fra) %>% column_to_rownames("my_cluster_selected")
 
 #Create colors for astir cell types 
-astir_col <- setNames(c("#E31A1C","#A6CEE3","#FB9A99","#FDBF6F","#B2DF8A","#33A02C","#CAB2D6"), 
-                      c("M2_like", "C_M", "Neutro_MDSC","Granu", "M1_like", "Ag_M","Other"))
+astir_col <- setNames(c("#E31A1C","#A6CEE3","#FB9A99","#FDBF6F","#33A02C","#CAB2D6"), 
+                      c("M2_like", "C_M", "Neutro_MDSC", "M1_like", "Ag_M","Unknown/Other"))
 
 #astir_col <- setNames(c("#E31A1C", "#EB4445", "#F36F6F", "#FB9A99", "#CA7194", "#994A8F", "#68228B"), 
 #                     c("M2_like", "M1_like", "Neutro_MDSC","Granu", "C_M", "Ag_M", "Other"))
@@ -1088,9 +1084,24 @@ astir_col <- setNames(c("#E31A1C","#A6CEE3","#FB9A99","#FDBF6F","#B2DF8A","#33A0
 metadata(sce)$colors$my_astir_col <- astir_col
 metadata(sce)$colors$my_astir_col <- metadata(sce)$colors$my_astir_col[match(colnames(astir_anno),names(metadata(sce)$colors$my_astir_col))]
 
+## GMM cell types per cluster
+GMM_anno <- colData(sce) %>% as.data.frame() %>% select(my_cluster_selected,GMM_myeloid_combined) %>% group_by(my_cluster_selected) %>% table() %>% as.data.frame
+GMM_anno <- GMM_anno %>% group_by(my_cluster_selected) %>% mutate(fra = Freq/sum(Freq)) 
+GMM_anno <- GMM_anno %>% select(-Freq) %>% pivot_wider(id_cols = my_cluster_selected,names_from = GMM_myeloid_combined,values_from = fra) %>% column_to_rownames("my_cluster_selected")
 
-ha_astir <- HeatmapAnnotation(
+#Create colors for GMM cell types 
+GMM_col <- setNames(c("#E31A1C","#A6CEE3","#FB9A99","#FDBF6F","#33A02C","#CAB2D6"), 
+                      c("M2_like", "C_M", "Neutro_MDSC", "M1_like", "Ag_M","Unknown/Other"))
+
+#GMM_col <- setNames(c("#E31A1C", "#EB4445", "#F36F6F", "#FB9A99", "#CA7194", "#994A8F", "#68228B"), 
+#                     c("M2_like", "M1_like", "Neutro_MDSC","Granu", "C_M", "Ag_M", "Other"))
+
+metadata(sce)$colors$my_GMM_col <- GMM_col
+metadata(sce)$colors$my_GMM_col <- metadata(sce)$colors$my_GMM_col[match(colnames(GMM_anno),names(metadata(sce)$colors$my_GMM_col))]
+
+ha_GMM_astir <- HeatmapAnnotation(
   astir_myeloid = anno_barplot(astir_anno, width = unit(20, "mm"), gp = gpar(fill = metadata(sce)$colors$my_astir_col)),
+  GMM_myeloid = anno_barplot(GMM_anno, width = unit(20, "mm"), gp = gpar(fill = metadata(sce)$colors$my_GMM_col)),
                             border = TRUE, 
                             annotation_name_rot = 90,
                             gap = unit(3,"mm"),
@@ -1128,33 +1139,13 @@ PDL1_score <- PDL1_score %>% select(-Freq) %>% pivot_wider(id_cols = my_cluster_
 ha_meta <- HeatmapAnnotation(ISUP_combined = anno_barplot(ISUP_combined, width = unit(12, "mm"),gp = gpar(fill = metadata(sce)$colors$ISUP_combined)),
                             pT_combined = anno_barplot(pT_combined, width = unit(12, "mm"),gp = gpar(fill = metadata(sce)$colors$pT_combined)),
                             necrose = anno_barplot(necrose, width = unit(12, "mm"),gp = gpar(fill = metadata(sce)$colors$necrose)),
-                            PDL1_score = anno_barplot(PDL1_score, width = unit(12, "mm"),gp = gpar(fill = metadata(sce)$colors$PDL1_score)),
+                            PDL1_score = anno_barplot(PDL1_score, width = unit(12, "mm"),gp = gpar(fill = rev(metadata(sce)$colors$PDL1_score))),
                             n_cells = anno_barplot(n_cells$ncells, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),                        n_PID = anno_barplot(n_PID$n_PID, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),
 
                             border = TRUE, 
                             annotation_name_rot = 90,
                             gap = unit(1,"mm"),
                             which = "row")
-
-
-### 2.2 State features
-
-# Proportion of PDL1-pos per cluster 
-MY_CD274_score <- colData(sce) %>% as.data.frame() %>% select(my_cluster_selected,MY_CD274_score) %>% group_by(my_cluster_selected) %>% table() %>% as.data.frame
-MY_CD274_score <- MY_CD274_score %>% group_by(my_cluster_selected) %>% mutate(fra = Freq/sum(Freq)) 
-MY_CD274_score <- MY_CD274_score %>% select(-Freq) %>% pivot_wider(id_cols = my_cluster_selected,names_from = MY_CD274_score,values_from = fra) %>% column_to_rownames("my_cluster_selected")
-
-# Proportion of PDL1-pos per cluster 
-MY_VISTA_score <- colData(sce) %>% as.data.frame() %>% select(my_cluster_selected,MY_VISTA_score) %>% group_by(my_cluster_selected) %>% table() %>% as.data.frame
-MY_VISTA_score <- MY_VISTA_score %>% group_by(my_cluster_selected) %>% mutate(fra = Freq/sum(Freq)) 
-MY_VISTA_score <- MY_VISTA_score %>% select(-Freq) %>% pivot_wider(id_cols = my_cluster_selected,names_from = MY_VISTA_score,values_from = fra) %>% column_to_rownames("my_cluster_selected")
-
-ha_state <- HeatmapAnnotation(CD274_pos = anno_barplot(MY_CD274_score, width = unit(12, "mm"),gp = gpar(fill = c("#D9D9D9","#BC80BD"), col = 1)),
-                             VISTA_pos = anno_barplot(MY_VISTA_score, width = unit(12, "mm"),gp = gpar(fill = c("#D9D9D9","#BC80BD"), col = 1)),
-                             border = TRUE, 
-                             annotation_name_rot = 90,
-                             gap = unit(1,"mm"),
-                             which = "row")
 
 
 ### 3. Define broader categories
@@ -1170,30 +1161,29 @@ anno$my_cluster_names[anno$my_cluster_names == "4"] <- "CD15_CD11b"
 anno$my_cluster_names[anno$my_cluster_names == "5"] <- "HLADR_low"
 anno$my_cluster_names[anno$my_cluster_names == "6"] <- "CD163"
 anno$my_cluster_names[anno$my_cluster_names == "7"] <- "CD11b_HLADR"
-anno$my_cluster_names[anno$my_cluster_names == "8"] <- "CD15"
+anno$my_cluster_names[anno$my_cluster_names == "8"] <- "CD68_CD15"
 anno$my_cluster_names[anno$my_cluster_names == "9"] <- "CD15_CD11b_MMP9"
 anno$my_cluster_names[anno$my_cluster_names == "10"] <- "HLADR_hi_CD15"
 anno$my_cluster_names[anno$my_cluster_names == "11"] <- "HLADR_hi"
 anno$my_cluster_names[anno$my_cluster_names == "12"] <- "HLADR_hi_CD11c"
-anno$my_cluster_names[anno$my_cluster_names == "13"] <- "CD163_HLADR"
+anno$my_cluster_names[anno$my_cluster_names == "13"] <- "CD163_CD206_HLADR"
 anno$my_cluster_names[anno$my_cluster_names == "14"] <- "HLADR_med"
-anno$my_cluster_names[anno$my_cluster_names == "15"] <- "Arginase_CCR2"
+anno$my_cluster_names[anno$my_cluster_names == "15"] <- "CD68_Arginase_CCR2"
 anno$my_cluster_names[anno$my_cluster_names == "16"] <- "CD11b"
-anno$my_cluster_names[anno$my_cluster_names == "17"] <- "CD68_CD11c_CD206"
+anno$my_cluster_names[anno$my_cluster_names == "17"] <- "CD11b_CD11c_CD206"
 anno$my_cluster_names[anno$my_cluster_names == "18"] <- "CD11b_MMP9"
 
 
 anno <- anno %>% mutate(my_metacluster = ifelse(my_cluster_selected %in% c("1","6","13"),"M2_like",
                                      ifelse(my_cluster_selected %in% c("4","9"),"Neutro_MDSC",
-                                                   ifelse(my_cluster_selected %in% c("18","16","7"),"C_M",
-                                                          ifelse(my_cluster_selected %in% c("8"),"Granu",
-                                                                 ifelse(my_cluster_selected %in% c("2","17"),"M1_like",
-                                                                        ifelse(my_cluster_selected %in% c("12","10","11"),"Ag_M","Other")
-                                                                                      )))))) %>% mutate(my_metacluster = as.factor(my_metacluster))
+                                                   ifelse(my_cluster_selected %in% c("18","16","7","17"),"C_M",
+                                                                 ifelse(my_cluster_selected %in% c("2","15","3","8"),"M1_like",
+                                                                        ifelse(my_cluster_selected %in% c("12","10","11","14","5"),"Ag_M","Other")
+                                                                                      ))))) %>% mutate(my_metacluster = as.factor(my_metacluster))
 
 #Create colors for myeloid metacluster
-meta_col <- setNames(c("#E31A1C","#A6CEE3","#FB9A99","#FDBF6F","#B2DF8A","#33A02C","#CAB2D6"), 
-                      c("M2_like", "C_M", "Neutro_MDSC","Granu", "M1_like", "Ag_M", "Other"))
+meta_col <- setNames(c("#E31A1C","#A6CEE3","#FB9A99","#FDBF6F","#33A02C"), 
+                      c("M2_like", "C_M", "Neutro_MDSC", "M1_like", "Ag_M"))
 
 #meta_col <- setNames(c("#E31A1C", "#EB4445", "#F36F6F", "#FB9A99", "#CA7194", "#994A8F", "#68228B"), 
 #                      c("M2_like", "M1_like", "Neutro_MDSC","Granu", "C_M", "Ag_M", "Other"))
@@ -1213,13 +1203,12 @@ h <- Heatmap(t(assay(mean_sce, "exprs")),
         clustering_method_rows = "ward.D2",
         clustering_method_columns = "ward.D2",
         cluster_row_slices = TRUE)+
-  #Heatmap(scale(t(assay(mean_sce, "exprs"))))+
+  Heatmap(scale(t(assay(mean_sce, "exprs"))))+
   #Heatmap(t(assay(state_sce, "exprs")), col = col_main)+
   rowAnnotation(metacluster = anno_simple(unfactor(anno$my_metacluster), col = metadata(sce)$colors$myeloid_metacluster, border = TRUE))+
-  ha_astir+
+  ha_GMM_astir+
   rowAnnotation(names = anno_text(anno$my_cluster_names))+
   ha_spatial+
-  #ha_state+
   ha_meta
 
 
@@ -1227,8 +1216,8 @@ h <- Heatmap(t(assay(mean_sce, "exprs")),
 lgd <- Legend(title = "metacluster", at = names(metadata(sce)$colors$myeloid_metacluster), 
                legend_gp = gpar(fill = metadata(sce)$colors$myeloid_metacluster))
  
-lgd_1 <- Legend(title = "astir", at = c("HLADR+","CD11b+","CD15+","CD68+","CD68+/CD163+","CD11b+/CD15+/Arginase+"), 
-               legend_gp = gpar(fill = metadata(sce)$colors$my_astir_col[1:6]))
+lgd_1 <- Legend(title = "astir/GMM", at = names(metadata(sce)$colors$my_astir_col), 
+               legend_gp = gpar(fill = metadata(sce)$colors$my_astir_col))
 
 # Draw heatmap
 draw(h, annotation_legend_list = list(lgd, lgd_1))
@@ -1445,7 +1434,7 @@ for (i in clus_select) {
 
   i = "CD8_T_cell"
 ##Visualize clusters on images - select 10 images for each category with highest number of cells
-cur_sample <- colData(sce) %>% as.data.frame %>% group_by(immune_metacluster) %>% filter(immune_metacluster == i) %>% count(sample_id) %>% arrange(desc(n)) %>% slice(1:20) %>% pull(sample_id)
+cur_sample <- colData(sce) %>% as.data.frame %>% group_by(my_cluster_names) %>% filter(my_cluster_names == i) %>% count(sample_id) %>% arrange(desc(n)) %>% slice(1:20) %>% pull(sample_id)
 
 #Prepare images
 cur_images <- images[cur_sample]
@@ -1453,7 +1442,7 @@ cur_images <- cytomapper::normalize(cur_images, separateImages = TRUE)
 cur_images <- cytomapper::normalize(cur_images, inputRange = c(0, 0.2))
 
 #Subset sce
-cur_sce <- sce[,sce$immune_metacluster == i]
+cur_sce <- sce[,sce$my_cluster_names == i]
 
 #Plot 
 plotPixels(cur_images,
@@ -1462,12 +1451,12 @@ plotPixels(cur_images,
            img_id = "sample_id",
            cell_id = "ObjectNumber",
            missing_colour = "white",
-           outline_by = "immune_metacluster",
+           outline_by = "my_cluster_names",
            colour_by = c("CD8a","CD4"),
            thick = FALSE,
            legend = list(colour_by.title.cex = 0.7,
                          colour_by.labels.cex = 0.7)
-           #save_plot = list(filename = paste0("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/05_sub/TME_immune_metacluster_",i,".png"), scale = 2)
+           #save_plot = list(filename = paste0("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/05_sub/TME_my_cluster_names_",i,".png"), scale = 2)
            )
  
 }
@@ -1486,7 +1475,7 @@ cur_sample <- (colData(sce) %>% as.data.frame %>% select(sample_id, astir_immune
 
 cur_sample <- (colData(sce) %>% as.data.frame %>% select(sample_id, my_cluster_2_130) %>% group_by(sample_id) %>% filter(my_cluster_2_130 == "19") %>% count() %>% arrange(desc(n)) %>% pull(sample_id))[1:10]
 
-cur_sample <- (colData(sce) %>% as.data.frame %>% select(sample_id, immune_metacluster) %>% group_by(sample_id) %>% filter(immune_metacluster == "CD8_T_cell") %>% count() %>% arrange(desc(n)) %>% pull(sample_id))[1:10]
+cur_sample <- (colData(sce) %>% as.data.frame %>% select(sample_id, my_cluster_names) %>% group_by(sample_id) %>% filter(my_cluster_names %in% c("CD15")) %>% count() %>% arrange(desc(n)) %>% pull(sample_id))[1:10]
 
 cur_images <- images[mcols(images)$sample_id %in% cur_sample]
 cur_masks <- masks[mcols(masks)$sample_id %in% cur_sample]
@@ -1557,12 +1546,12 @@ dittoHeatmap(sce[,sce$myeloid_metacluster == "M2_like"],
 
 ```{r}
 library(easyalluvial)
-alluvial_wide(data = colData(sce) %>% as.data.frame %>% select(immune_metacluster, myeloid_metacluster), 
+alluvial_wide(data = colData(sce) %>% as.data.frame %>% select(my_cluster_names, myeloid_metacluster), 
               max_variables = 4,
               fill_by = 'all_flows')+
   theme_classic(base_size = 12, base_line_size = 0.5)
 
-pairwiseRand(sce$immune_metacluster_graph_test,sce$immune_metacluster_SOM_test, mode = "index")
+pairwiseRand(sce$my_cluster_names_graph_test,sce$my_cluster_names_SOM_test, mode = "index")
 ```
 
 #### Violin Expression 
@@ -1775,13 +1764,13 @@ out_test <- foreach(i = c("count_knn_20","count_knn_40","count_steinbock", "coun
 
 set.seed(22)
 clust_list <- lapply(2:20, function(k){
-  cur_km <- kmeans(colData(sce_spatial)[,i], centers = k, nstart = 10)
+  cur_km <- kmeans(scale(colData(sce_spatial)[,i]), centers = k, nstart = 10)
   return(list(wss = sum(cur_km$withinss),
            clusters = cur_km$cluster))
 })
 
 sil <- vapply(lapply(clust_list, `[[`, 2), 
-              function(x) mean(approxSilhouette(colData(sce_spatial)[,i], x)$width), 
+              function(x) mean(approxSilhouette(scale(colData(sce_spatial)[,i]), x)$width), 
               0)
 
 data.frame(k = 2:20, 
@@ -1821,11 +1810,28 @@ ggplot(out_test %>% filter(!type %in% c("count_knn_40","count_knn_20")), aes(x =
 
 # Select 13 clusters
 set.seed(22)
-cur_clusters <- kmeans(sce_spatial$count_exp_40, centers = 9, nstart = 100)$cluster
+cur_clusters <- kmeans(scale(sce_spatial$count_knn_20), centers = 12, nstart = 100)$cluster
 
 sce_spatial$myeloid_neighborhood <- as.factor(cur_clusters)
 sce$myeloid_neighborhood <- factor(paste0("D_",sce_spatial$myeloid_neighborhood[match(sce$cell_id, sce_spatial$cell_id)]))
+
+sce$myeloid_neighborhood[sce$myeloid_neighborhood == "D_NA"] <- NA
 ```
+
+
+```{r}
+
+scale(sce_spatial$count_exp_40)
+
+cur_clusters <- kmeans(scale(sce_spatial$count_exp_40), centers = 15, nstart = 100)$cluster
+sce_spatial$myeloid_neighborhood <- as.factor(cur_clusters)
+```
+
+
+
+
+
+
 
 ```{r}
 library(tidyverse)
@@ -1862,6 +1868,144 @@ pheatmap(for_plot,
 pheatmap(for_plot, 
          color = colorRampPalette(c("dark blue", "white", "dark red"))(100), 
          scale = "column")
+```
+
+# 6. Myeloid community
+
+```{r}
+sce <- buildSpatialGraph(sce, img_id = "sample_id", type = "expansion", 
+                                 threshold = 20,
+                         coords = c("Pos_X",  "Pos_Y"),
+                         name = "expansion_20",
+                         BPPARAM = MulticoreParam(workers = 20))
+```
+
+
+```{r}
+set.seed(22)
+
+sce <- detectCommunity(sce, 
+                       colPairName = "neighborhood", 
+                       size_threshold = 5,
+                       name = "myeloid_community_lv",cluster_fun = "louvain",
+                       BPPARAM = MulticoreParam(workers = 20, RNGseed = 123))
+
+sce <- detectCommunity(sce, 
+                       colPairName = "expansion_20", 
+                       size_threshold = 5,
+                       name = "myeloid_community_lv_new",cluster_fun = "louvain",
+                       BPPARAM = MulticoreParam(workers = 20, RNGseed = 123))
+
+length(unique(sce$myeloid_community))
+```
+
+```{r}
+set.seed(22)
+cur_sample <- sample(sce$sample_id, 10)
+
+plotSpatial(sce[,sce$sample_id %in% cur_sample], 
+            node_color_by = "myeloid_metacluster", 
+            img_id = "sample_id", 
+            node_size_fix = 0.5) +
+    ggtitle("Spatial myeloid communities")
+
+plotSpatial(sce[,sce$sample_id %in% cur_sample], 
+            node_color_by = "myeloid_community", 
+            img_id = "sample_id", 
+            node_size_fix = 0.5) +
+    theme(legend.position = "none") +
+    ggtitle("Spatial myeloid communities")
+
+plotSpatial(sce[,sce$sample_id %in% cur_sample], 
+            node_color_by = "myeloid_community_lv_new", 
+            img_id = "sample_id", 
+            node_size_fix = 0.5) +
+    theme(legend.position = "none") +
+    ggtitle("Spatial myeloid communities")
+```
+
+```{r}
+for_plot <- prop.table(table(sce$myeloid_community_lv_new, sce$myeloid_metacluster), margin = 1)
+for_plot_1 <- prop.table(table(sce$myeloid_community_lv_new, sce$my_cluster_names), margin = 1)
+
+Heatmap(for_plot, col = viridis(100), name = "Fraction per community", clustering_method_columns = "ward.D2", clustering_method_rows = "ward.D2")+
+  Heatmap(scale(for_plot), clustering_method_columns = "ward.D2", clustering_method_rows = "ward.D2")
+
+Heatmap(scale(for_plot), clustering_method_columns = "ward.D2", clustering_method_rows = "ward.D2")+
+Heatmap(for_plot, col = viridis(100), name = "Fraction per community", clustering_method_columns = "ward.D2", clustering_method_rows = "ward.D2")
+
+```
+
+
+```{r}
+library(clValid)
+
+#Internal measures
+set.seed(22)
+testCL<- clValid(as.matrix.data.frame(for_plot),nClust = 4:20,clMethods = c("hierarchical","agnes","kmeans","pam"),validation="internal",metric="euclidean", method = "ward", maxitems = 3000)
+summary(testCL)
+plot(testCL, legend = FALSE)
+
+#Stability measures 
+testCL_1<- clValid(as.matrix.data.frame(for_plot),nClust = 4:20,clMethods = c("hierarchical","agnes","kmeans","pam"),validation="stability",metric="euclidean", method = "ward", maxitems = 3000)
+summary(testCL_1)
+plot(testCL_1, legend = FALSE)
+
+#chosen method: kmeans, k=8
+```
+
+
+```{r}
+set.seed(22)
+
+h_com <- Heatmap(for_plot, 
+        col = viridis(100), 
+        name = "Fraction per community", 
+        clustering_method_columns = "ward.D2", 
+        clustering_method_rows = "ward.D2", 
+        row_km = 9, row_km_repeats = 100)+
+  Heatmap(scale(for_plot), clustering_method_columns = "ward.D2", clustering_method_rows = "ward.D2")+
+  Heatmap(for_plot_1,col = viridis(100), clustering_method_columns = "ward.D2", clustering_method_rows = "ward.D2")
+
+h_com <- draw(h_com)
+```
+
+```{r}
+row_order_h_com <- row_order(h_com)
+
+anno <- data.frame(myeloid_community = rownames(for_plot), position = seq_along(rownames(for_plot)))
+
+anno$metacluster <- NA
+foreach(i = seq_along(row_order_h_com))%do%{
+anno$metacluster <- as.factor((ifelse(anno$position %in% row_order_h_com[[i]], i,anno$metacluster)))
+}
+
+sce$myeloid_district <- paste0("D_",anno$metacluster[match(sce$myeloid_community, anno$myeloid_community)])
+#sce$myeloid_district[sce$myeloid_district == "D_NA"] <- NA
+```
+
+```{r}
+for_district <- prop.table(table(sce$myeloid_district, sce$myeloid_metacluster), margin = 1)
+
+Heatmap(for_district, col = viridis(100))
+```
+
+
+
+```{r}
+## Specifically spatial metacommunity 3
+cur_sample <- colData(sce) %>% as.data.frame %>% group_by(myeloid_district) %>% filter(myeloid_district == "D_4") %>% count(sample_id) %>% arrange(desc(n)) %>% slice(1:12) %>% pull(sample_id)
+
+plotSpatial(sce[,sce$sample_id %in% cur_sample], 
+            node_color_by = "myeloid_metacluster", 
+            img_id = "sample_id", 
+            node_size_fix = 0.5)+
+  scale_color_manual(values = metadata(sce)$colors$myeloid_metacluster)
+
+plotSpatial(sce[,sce$sample_id %in% cur_sample], 
+            node_color_by = "myeloid_district", 
+            img_id = "sample_id", 
+            node_size_fix = 0.5)
 ```
 
 
@@ -2018,6 +2162,84 @@ ggplot(DA_out, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
   new_scale_colour() +
   geom_point(data = DA_out,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
   scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+
+### Myeloid districts 
+
+```{r}
+### Differential abundance analysis based on edgeR
+library(edgeR)
+
+DA <- lapply(c("ISUP_combined", "pT_combined","necrose","PDL1_score"), function(x){
+
+abundances <- table(sce$myeloid_district, sce$PID)
+abundances <- unclass(abundances) 
+abundances <- abundances[,colnames(abundances) %in% names(colSums(abundances))[colSums(abundances) != 0]]
+
+#relevant patient metadata (Re-level for baseline)
+meta <- colData(sce)[match(colnames(abundances), sce$PID),]
+
+if(x %in% c("necrose","PDL1_score")){
+  meta[,x] <- relevel(x=factor(meta[,x]), ref = "0")
+}else{
+  meta[,x] <- relevel(x=factor(meta[,x]), ref = "1/2")
+}
+
+#filter
+meta <- meta[!is.na(meta[,x]),]
+abundances <- abundances[,colnames(abundances) %in% meta$PID]
+
+#create DGEList - based on edgeR package
+y.ab <- DGEList(abundances, samples=meta, group = meta[,x])
+
+#Design matrix
+design <- model.matrix(~group, data = y.ab$samples)
+
+#Visualize
+# logCPM of abundances per cluster
+cur_mat <- edgeR::cpm(abundances,prior.count = 1,log = TRUE)
+
+# Estimate NB and QL dispersion 
+y.ab <- estimateDisp(y.ab, design, trend="none")
+
+fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
+
+# Test for differential abundance of clusters between tumor stages
+res <- glmQLFTest(fit.ab, coef=ncol(design))
+
+DA <- res$table
+
+DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
+
+DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.05, result = ifelse(DA$logFC > 0 & DA$FDR < 0.05, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.05, "DOWN", "NOTSIG"))) %>% 
+  arrange(desc(logFC))
+
+DA$cluster <- factor(DA$cluster, levels = DA$cluster)
+DA$category <- x
+
+return(DA)
+})
+
+DA_out <- do.call(rbind, DA)
+```
+
+
+```{r}
+library(ggnewscale)
+
+DA_out$category <- factor(DA_out$category,levels = c("PDL1_score","necrose","pT_combined","ISUP_combined"))
+#DA_out <- DA_out %>% filter(category %in% c("pT_combined","ISUP_combined"))
+
+ggplot(DA_out, aes(x = cluster, y = category, col = logFC, size = -log10(FDR))) +
+  geom_point() +
+  theme_classic() +
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8") +
+  scale_size(range = c(2, 10)) +
+  new_scale_colour() +
+  geom_point(data = DA_out, shape = 1, aes(size = -log10(FDR), col = result), stroke = 1.5) +
+  scale_color_manual(values = c("UP" = "#E41A1C", "NOTSIG" = "snow2", "DOWN" = "#377EB8"), name = "Direction") +
   theme(axis.text.x = element_text(angle = 90, hjust = 1))
 ```
 
@@ -2326,11 +2548,11 @@ ggplot(DA, aes(x = logFC, y = logCPM))+
 library(survival)
 library(survminer)
 
-PID_myeloid_neighborhood <- colData(sce) %>% as.data.frame() %>% select(myeloid_neighborhood,PID) %>% group_by(PID) %>% table() %>% as.data.frame
-PID_myeloid_neighborhood <- PID_myeloid_neighborhood %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq))
+PID_myeloid_district <- colData(sce) %>% as.data.frame() %>% select(myeloid_district,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_myeloid_district <- PID_myeloid_district %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq))
 
 ### Multivariate cox proportional hazard model on multiple covariates (here proportion of phenotypes)
-PID_metagroups <- PID_myeloid_neighborhood %>% pivot_wider(id_cols = "PID",names_from = "myeloid_neighborhood",values_from = "fra") %>% column_to_rownames("PID")
+PID_metagroups <- PID_myeloid_district %>% pivot_wider(id_cols = "PID",names_from = "myeloid_district",values_from = "fra") %>% column_to_rownames("PID")
 #colnames(PID_metagroups) <- paste0("MY_",colnames(PID_metagroups))
 
 ## 1. Based on continuous cluster proportions
@@ -2346,9 +2568,9 @@ Cox_df$OS_months <- sce$OS_months[match(rownames(Cox_df),sce$PID)]
 #Cox_df$pT <- as.factor(sce$pT_combined[match(rownames(Cox_df),sce$PID)])
 
 #Based on proportions
-covariates <- Cox_df %>% select(-OS_months, -status_OS,-1) %>% colnames
+covariates <- Cox_df %>% select(-OS_months, -status_OS,-D_NA) %>% colnames
 
-multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + "),"+ 1"))
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + "),"+ D_NA"))
 
 multi_model <- coxph(multi_formula, data = Cox_df)
 
@@ -2366,7 +2588,7 @@ plot_df_prop <- data.frame(group = rownames(multi_res$coefficients),
 hr_prop <- ggplot(plot_df_prop, aes(x = reorder(group,desc(HR)), y = HR, color = p_value < 0.05))+
 geom_point(size = 4)+
 geom_errorbar(aes(ymax = CI_high, ymin = CI_low))+
-coord_cartesian(ylim=c(0,20))+
+#coord_cartesian(ylim=c(0,20))+
 geom_hline(yintercept = 1,color = "black",linetype = "dashed")+
 scale_color_brewer(palette = "Set1")+
 xlab("Immune metaclusters")+
@@ -2383,11 +2605,11 @@ hr_prop
 library(survival)
 library(survminer)
 
-PID_myeloid_neighborhood <- colData(sce) %>% as.data.frame() %>% select(myeloid_neighborhood,PID) %>% group_by(PID) %>% table() %>% as.data.frame
-PID_myeloid_neighborhood <- PID_myeloid_neighborhood %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq))
+PID_myeloid_district <- colData(sce) %>% as.data.frame() %>% select(myeloid_district,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_myeloid_district <- PID_myeloid_district %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq))
 
 ### Multivariate cox proportional hazard model on multiple covariates (here proportion of phenotypes)
-PID_metagroups <- PID_myeloid_neighborhood %>% pivot_wider(id_cols = "PID",names_from = "myeloid_neighborhood",values_from = "fra") %>% column_to_rownames("PID")
+PID_metagroups <- PID_myeloid_district %>% pivot_wider(id_cols = "PID",names_from = "myeloid_district",values_from = "fra") %>% column_to_rownames("PID")
 
 Cox_df <- PID_metagroups
 colnames(Cox_df) <- paste0("MY", colnames(Cox_df))
@@ -2395,7 +2617,7 @@ colnames(Cox_df) <- paste0("MY", colnames(Cox_df))
 ## Based on categories (mean or median division of cluster proportions) 
 
 Cox_df_mean <- foreach(i = colnames(Cox_df),.combine = "cbind")%do%{
-Cox_df %>% select(all_of(i)) %>% mutate(mean = ifelse(Cox_df[,i] > median(Cox_df[,i]),"B","A")) %>% pull(mean)
+Cox_df %>% select(all_of(i)) %>% mutate(mean = ifelse(Cox_df[,i] > mean(Cox_df[,i]),"B","A")) %>% pull(mean)
 }
 
 colnames(Cox_df_mean) <- colnames(Cox_df)
@@ -2448,11 +2670,11 @@ hr_mean
 ### GMM
 
 ```{r}
-PID_myeloid_neighborhood <- colData(sce) %>% as.data.frame() %>% select(myeloid_neighborhood,PID) %>% group_by(PID) %>% table() %>% as.data.frame
-PID_myeloid_neighborhood <- PID_myeloid_neighborhood %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq))
+PID_myeloid_district <- colData(sce) %>% as.data.frame() %>% select(myeloid_district,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_myeloid_district <- PID_myeloid_district %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq))
 
 ### Multivariate cox proportional hazard model on multiple covariates (here proportion of phenotypes)
-PID_metagroups <- PID_myeloid_neighborhood %>% pivot_wider(id_cols = "PID",names_from = "myeloid_neighborhood",values_from = "fra") %>% column_to_rownames("PID")
+PID_metagroups <- PID_myeloid_district %>% pivot_wider(id_cols = "PID",names_from = "myeloid_district",values_from = "fra") %>% column_to_rownames("PID")
 
 Cox_df <- PID_metagroups
 colnames(Cox_df) <- paste0("MY", colnames(Cox_df))
@@ -2546,9 +2768,9 @@ Cox_df$ISUP <- as.factor(sce$ISUP_combined[match(rownames(Cox_df),sce$PID)])
 Cox_df$pT <- as.factor(sce$pT_combined[match(rownames(Cox_df),sce$PID)])
 
 #Based on proportions
-covariates <- Cox_df %>% select(-status_OS,-OS_months, -Other) %>% colnames
+covariates <- Cox_df %>% select(-status_OS,-OS_months, -Ag_M) %>% colnames
 
-multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~",paste(covariates, collapse = " + "),"+ Other"))
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~",paste(covariates, collapse = " + "),"+ Ag_M"))
 
 multi_model <- coxph(multi_formula, data = Cox_df)
 
@@ -2606,11 +2828,11 @@ Cox_df_mean <- as.data.frame(Cox_df_mean)
 Cox_df_mean$status_OS <- sce$status_OS[match(rownames(Cox_df_mean),sce$PID)]
 Cox_df_mean$OS_months <- sce$OS_months[match(rownames(Cox_df_mean),sce$PID)]
 
-Cox_df_mean$gender <- as.factor(sce$gender[match(rownames(Cox_df_mean),sce$PID)])
-Cox_df_mean$age <- sce$age[match(rownames(Cox_df_mean),sce$PID)]
-Cox_df_mean$ISUP <- as.factor(sce$ISUP_combined[match(rownames(Cox_df_mean),sce$PID)])
-Cox_df_mean$pT <- as.factor(sce$pT_combined[match(rownames(Cox_df_mean),sce$PID)])
-Cox_df_mean$necrose <- as.factor(sce$necrose[match(rownames(Cox_df_mean),sce$PID)])
+#Cox_df_mean$gender <- as.factor(sce$gender[match(rownames(Cox_df_mean),sce$PID)])
+#Cox_df_mean$age <- sce$age[match(rownames(Cox_df_mean),sce$PID)]
+#Cox_df_mean$ISUP <- as.factor(sce$ISUP_combined[match(rownames(Cox_df_mean),sce$PID)])
+#Cox_df_mean$pT <- as.factor(sce$pT_combined[match(rownames(Cox_df_mean),sce$PID)])
+#Cox_df_mean$necrose <- as.factor(sce$necrose[match(rownames(Cox_df_mean),sce$PID)])
 
 #Based on proportions
 covariates <- Cox_df_mean %>% select(-status_OS,-OS_months,) %>% colnames
@@ -2671,10 +2893,10 @@ Cox_df_GMM <- as.data.frame(Cox_df_GMM,stringsAsFactors=TRUE)
 Cox_df_GMM$status_OS <- sce$status_OS[match(rownames(Cox_df_GMM),sce$PID)]
 Cox_df_GMM$OS_months <- sce$OS_months[match(rownames(Cox_df_GMM),sce$PID)]
 
-Cox_df_GMM$gender <- as.factor(sce$gender[match(rownames(Cox_df_GMM),sce$PID)])
-Cox_df_GMM$age <- sce$age[match(rownames(Cox_df_GMM),sce$PID)]
-Cox_df_GMM$ISUP <- as.factor(sce$ISUP_combined[match(rownames(Cox_df_GMM),sce$PID)])
-Cox_df_GMM$pT <- as.factor(sce$pT_combined[match(rownames(Cox_df_GMM),sce$PID)])
+#Cox_df_GMM$gender <- as.factor(sce$gender[match(rownames(Cox_df_GMM),sce$PID)])
+#Cox_df_GMM$age <- sce$age[match(rownames(Cox_df_GMM),sce$PID)]
+#Cox_df_GMM$ISUP <- as.factor(sce$ISUP_combined[match(rownames(Cox_df_GMM),sce$PID)])
+#Cox_df_GMM$pT <- as.factor(sce$pT_combined[match(rownames(Cox_df_GMM),sce$PID)])
 
 #Based on proportions
 covariates <- Cox_df_GMM %>% select(-status_OS,-OS_months) %>% colnames

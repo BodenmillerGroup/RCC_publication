@@ -3518,15 +3518,6 @@ saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/07
 ## Image visualization
 
 ```{r}
-set.seed(22)
-cur_sam <- sample(unique(sce$sample_id), 6)
-
-# Spatial_metacommunity
-plotSpatial(sce[,sce$sample_id %in% cur_sam], 
-            node_color_by = "spatial_metacommunity", 
-            img_id = "sample_id", 
-            node_size_fix = 0.5)
-
 ## Specifically spatial metacommunity 3
 cur_sample <- colData(sce) %>% as.data.frame %>% group_by(spatial_metacommunity) %>% filter(spatial_metacommunity == "tumor_SMC_8") %>% count(sample_id) %>% arrange(desc(n)) %>% slice(1:15) %>% pull(sample_id)
 
