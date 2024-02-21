@@ -1870,7 +1870,9 @@ pheatmap(for_plot,
          scale = "column")
 ```
 
-# 6. Myeloid community
+# 6. Myeloid districts
+
+## Build spatial graph 
 
 ```{r}
 sce <- buildSpatialGraph(sce, img_id = "sample_id", type = "expansion", 
@@ -1878,26 +1880,55 @@ sce <- buildSpatialGraph(sce, img_id = "sample_id", type = "expansion",
                          coords = c("Pos_X",  "Pos_Y"),
                          name = "expansion_20",
                          BPPARAM = MulticoreParam(workers = 20))
+
+sce <- buildSpatialGraph(sce, img_id = "sample_id", type = "expansion", 
+                                 threshold = 30,
+                         coords = c("Pos_X",  "Pos_Y"),
+                         name = "expansion_30",
+                         BPPARAM = MulticoreParam(workers = 20))
+
+## Neighborhood graph already built with steinbock
 ```
 
+## Detect community 
 
 ```{r}
 set.seed(22)
 
 sce <- detectCommunity(sce, 
                        colPairName = "neighborhood", 
-                       size_threshold = 5,
+                       size_threshold = 4,
                        name = "myeloid_community_lv",cluster_fun = "louvain",
                        BPPARAM = MulticoreParam(workers = 20, RNGseed = 123))
 
+length(unique(sce$myeloid_community_lv))
+
 sce <- detectCommunity(sce, 
                        colPairName = "expansion_20", 
-                       size_threshold = 5,
-                       name = "myeloid_community_lv_new",cluster_fun = "louvain",
+                       size_threshold = 4,
+                       name = "myeloid_community_lv_20",cluster_fun = "louvain",
                        BPPARAM = MulticoreParam(workers = 20, RNGseed = 123))
 
-length(unique(sce$myeloid_community))
+length(unique(sce$myeloid_community_lv_20))
+
+sce <- detectCommunity(sce, 
+                       colPairName = "expansion_30", 
+                       size_threshold = 4,
+                       name = "myeloid_community_lv_30",cluster_fun = "louvain",
+                       BPPARAM = MulticoreParam(workers = 20, RNGseed = 123))
+
+length(unique(sce$myeloid_community_lv_30))
+
+sce <- detectCommunity(sce, 
+                       colPairName = "expansion_40", 
+                       size_threshold = 4,
+                       name = "myeloid_community_lv_40",cluster_fun = "louvain",
+                       BPPARAM = MulticoreParam(workers = 20, RNGseed = 123))
+
+length(unique(sce$myeloid_community_lv_40))
 ```
+
+### Visualization 
 
 ```{r}
 set.seed(22)
@@ -1910,14 +1941,28 @@ plotSpatial(sce[,sce$sample_id %in% cur_sample],
     ggtitle("Spatial myeloid communities")
 
 plotSpatial(sce[,sce$sample_id %in% cur_sample], 
-            node_color_by = "myeloid_community", 
+            node_color_by = "myeloid_community_lv", 
             img_id = "sample_id", 
             node_size_fix = 0.5) +
     theme(legend.position = "none") +
     ggtitle("Spatial myeloid communities")
 
 plotSpatial(sce[,sce$sample_id %in% cur_sample], 
-            node_color_by = "myeloid_community_lv_new", 
+            node_color_by = "myeloid_community_lv_20", 
+            img_id = "sample_id", 
+            node_size_fix = 0.5) +
+    theme(legend.position = "none") +
+    ggtitle("Spatial myeloid communities")
+
+plotSpatial(sce[,sce$sample_id %in% cur_sample], 
+            node_color_by = "myeloid_community_lv_30", 
+            img_id = "sample_id", 
+            node_size_fix = 0.5) +
+    theme(legend.position = "none") +
+    ggtitle("Spatial myeloid communities")
+
+plotSpatial(sce[,sce$sample_id %in% cur_sample], 
+            node_color_by = "myeloid_community_lv_40", 
             img_id = "sample_id", 
             node_size_fix = 0.5) +
     theme(legend.position = "none") +
@@ -1925,76 +1970,161 @@ plotSpatial(sce[,sce$sample_id %in% cur_sample],
 ```
 
 ```{r}
-for_plot <- prop.table(table(sce$myeloid_community_lv_new, sce$myeloid_metacluster), margin = 1)
-for_plot_1 <- prop.table(table(sce$myeloid_community_lv_new, sce$my_cluster_names), margin = 1)
+for_plot <- prop.table(table(sce$myeloid_community_lv_30, sce$myeloid_metacluster), margin = 1)
+
+Heatmap(for_plot, col = viridis(100), name = "Fraction per community", clustering_method_columns = "ward.D2", clustering_method_rows = "ward.D2", row_split = 11)+
+  Heatmap(scale(for_plot), clustering_method_columns = "ward.D2", clustering_method_rows = "ward.D2")
+
+for_plot <- prop.table(table(sce$myeloid_community_lv_20, sce$myeloid_metacluster), margin = 1)
 
 Heatmap(for_plot, col = viridis(100), name = "Fraction per community", clustering_method_columns = "ward.D2", clustering_method_rows = "ward.D2")+
   Heatmap(scale(for_plot), clustering_method_columns = "ward.D2", clustering_method_rows = "ward.D2")
 
-Heatmap(scale(for_plot), clustering_method_columns = "ward.D2", clustering_method_rows = "ward.D2")+
-Heatmap(for_plot, col = viridis(100), name = "Fraction per community", clustering_method_columns = "ward.D2", clustering_method_rows = "ward.D2")
+for_plot <- prop.table(table(sce$myeloid_community_lv, sce$myeloid_metacluster), margin = 1)
+
+Heatmap(for_plot, col = viridis(100), name = "Fraction per community", clustering_method_columns = "ward.D2", clustering_method_rows = "ward.D2")+
+  Heatmap(scale(for_plot), clustering_method_columns = "ward.D2", clustering_method_rows = "ward.D2")
 
 ```
 
+### Patient number estimation 
+
+```{r}
+abundances <- table(sce$myeloid_community_lv_20, sce$PID)
+abundances <- unclass(abundances) 
+summary(colSums(abundances) == 0)
+```
+
+### Select community 
+
+```{r}
+# test certain community 
+sce$myeloid_community <- sce$myeloid_community_lv
+
+for_plot <- prop.table(table(sce$myeloid_community, sce$myeloid_metacluster), margin = 1)
+```
+
+## Detect district 
+
+### Test k 
 
 ```{r}
 library(clValid)
 
 #Internal measures
 set.seed(22)
-testCL<- clValid(as.matrix.data.frame(for_plot),nClust = 4:20,clMethods = c("hierarchical","agnes","kmeans","pam"),validation="internal",metric="euclidean", method = "ward", maxitems = 3000)
+testCL<- clValid(as.matrix.data.frame(for_plot),nClust = 4:20,clMethods = c("hierarchical","agnes","kmeans"),validation="internal",metric="euclidean", method = "ward", maxitems = 5000)
 summary(testCL)
 plot(testCL, legend = FALSE)
 
 #Stability measures 
-testCL_1<- clValid(as.matrix.data.frame(for_plot),nClust = 4:20,clMethods = c("hierarchical","agnes","kmeans","pam"),validation="stability",metric="euclidean", method = "ward", maxitems = 3000)
-summary(testCL_1)
-plot(testCL_1, legend = FALSE)
+#testCL_1<- clValid(as.matrix.data.frame(for_plot),nClust = 4:20,clMethods = c("hierarchical","agnes","kmeans"),validation="stability",metric="euclidean", method = "ward", maxitems = 3000)
+#summary(testCL_1)
+#plot(testCL_1, legend = FALSE)
 
 #chosen method: kmeans, k=8
+
+library(dendextend)
+avg_dend_obj_MCP <- as.dendrogram(agnes(for_plot,metric = "euclidean",method = "ward"))
+avg_col_dend_MCP <- color_branches(avg_dend_obj_MCP, k = 10)
+plot(avg_col_dend_MCP)
 ```
-
-
 ```{r}
 set.seed(22)
 
 h_com <- Heatmap(for_plot, 
         col = viridis(100), 
-        name = "Fraction per community", 
         clustering_method_columns = "ward.D2", 
         clustering_method_rows = "ward.D2", 
-        row_km = 9, row_km_repeats = 100)+
-  Heatmap(scale(for_plot), clustering_method_columns = "ward.D2", clustering_method_rows = "ward.D2")+
-  Heatmap(for_plot_1,col = viridis(100), clustering_method_columns = "ward.D2", clustering_method_rows = "ward.D2")
+        #row_km = 11, row_km_repeats = 100, 
+        cluster_rows = avg_col_dend_MCP,
+        row_split = 10,
+        name = "Fraction per community")+
+  Heatmap(scale(for_plot), clustering_method_columns = "ward.D2", clustering_method_rows = "ward.D2")
+  #Heatmap(for_plot_1,col = viridis(100), clustering_method_columns = "ward.D2", clustering_method_rows = "ward.D2")
 
 h_com <- draw(h_com)
+row_order_h_com <- row_order(h_com)
 ```
+### Extract district 
 
 ```{r}
-row_order_h_com <- row_order(h_com)
-
 anno <- data.frame(myeloid_community = rownames(for_plot), position = seq_along(rownames(for_plot)))
 
 anno$metacluster <- NA
+anno$metacluster_1 <- NA
+
+# From Heatmap order 
+row_order_h_com
 foreach(i = seq_along(row_order_h_com))%do%{
-anno$metacluster <- as.factor((ifelse(anno$position %in% row_order_h_com[[i]], i,anno$metacluster)))
+anno$metacluster <- ifelse(anno$position %in% row_order_h_com[[i]], i,anno$metacluster)
 }
 
+# From dendrogram (only relevant for agnes)
+branches <- cutree(avg_col_dend_MCP, k = 10)
+
+samples_per_branch <- lapply(unique(branches), function(branch) {
+  names(branches)[branches == branch]
+})
+
+foreach(i = seq_along(samples_per_branch))%do%{
+anno$metacluster_1 <- ifelse(anno$myeloid_community %in% samples_per_branch[[i]], i,anno$metacluster_1)
+}
+
+#all.equal(anno$metacluster, anno$metacluster_1)
+
+## Add to SCE 
 sce$myeloid_district <- paste0("D_",anno$metacluster[match(sce$myeloid_community, anno$myeloid_community)])
-#sce$myeloid_district[sce$myeloid_district == "D_NA"] <- NA
+sce$myeloid_district[sce$myeloid_district == "D_NA"] <- NA
 ```
+
+### Visualization 
+
+#### Rich heatmap 
 
 ```{r}
 for_district <- prop.table(table(sce$myeloid_district, sce$myeloid_metacluster), margin = 1)
+for_district_fine <- prop.table(table(sce$myeloid_district, sce$my_cluster_names), margin = 1)
 
-Heatmap(for_district, col = viridis(100))
+# Proportion of myeloid_metacluster per district
+myeloid_metacluster <- colData(sce) %>% as.data.frame() %>% select(myeloid_district,myeloid_metacluster) %>% group_by(myeloid_district) %>% table() %>% as.data.frame
+myeloid_metacluster <- myeloid_metacluster %>% group_by(myeloid_district) %>% mutate(fra = Freq/sum(Freq)) 
+myeloid_metacluster <- myeloid_metacluster %>% select(-Freq) %>% pivot_wider(id_cols = myeloid_district,names_from = myeloid_metacluster,values_from = fra) %>% column_to_rownames("myeloid_district")
+
+col <- metadata(sce)$colors$myeloid_metacluster[match(colnames(myeloid_metacluster), names(metadata(sce)$colors$myeloid_metacluster))]
+
+ha_my <- HeatmapAnnotation(
+  myeloid_metacluster = anno_barplot(myeloid_metacluster, width = unit(20, "mm"), gp = gpar(fill = col)),
+                            border = TRUE, 
+                            annotation_name_rot = 90,
+                            gap = unit(3,"mm"),
+                            which = "row")
+
+# Number of cells and PID 
+n_PID <- colData(sce) %>% as.data.frame() %>% select(myeloid_district,PID) %>% group_by(myeloid_district) %>% table() %>% as.data.frame %>% filter(Freq != 0) %>% group_by(myeloid_district) %>% count()
+
+n_cell_id <- colData(sce) %>% as.data.frame() %>% select(myeloid_district,cell_id) %>% group_by(myeloid_district) %>% table() %>% as.data.frame %>% filter(Freq != 0) %>% group_by(myeloid_district) %>% count()
+
+ha_meta <- HeatmapAnnotation(n_cells = anno_barplot(n_cell_id$n, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),                        
+                             n_PID = anno_barplot(n_PID$n, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),
+                             border = TRUE, 
+                             annotation_name_rot = 90,
+                             gap = unit(1,"mm"),
+                             which = "row")
+
+
+Heatmap(for_district, col = viridis(100))+
+  ha_my+
+  ha_meta+
+  Heatmap(for_district_fine, col = viridis(100))
+  #Heatmap(t(scale(t(for_district))))
 ```
 
-
+#### Spatial plots
 
 ```{r}
 ## Specifically spatial metacommunity 3
-cur_sample <- colData(sce) %>% as.data.frame %>% group_by(myeloid_district) %>% filter(myeloid_district == "D_4") %>% count(sample_id) %>% arrange(desc(n)) %>% slice(1:12) %>% pull(sample_id)
+cur_sample <- colData(sce) %>% as.data.frame %>% group_by(myeloid_district) %>% filter(myeloid_district == "D_6") %>% count(sample_id) %>% arrange(desc(n)) %>% slice(1:8) %>% pull(sample_id)
 
 plotSpatial(sce[,sce$sample_id %in% cur_sample], 
             node_color_by = "myeloid_metacluster", 
@@ -2007,6 +2137,54 @@ plotSpatial(sce[,sce$sample_id %in% cur_sample],
             img_id = "sample_id", 
             node_size_fix = 0.5)
 ```
+
+
+```{r}
+##1. by ISUP
+ISUP_cluster <- colData(sce) %>% as.data.frame() %>% select(sample_id,myeloid_district,ISUP_combined) %>% filter(!is.na(ISUP_combined)) %>% group_by(sample_id,myeloid_district, ISUP_combined) %>% count()
+
+ISUP_cluster <- ISUP_cluster %>% filter(!is.na(myeloid_district)) %>% group_by(sample_id) %>% mutate(fra = n/sum(n)) 
+
+#Statistical testing
+ISUP_cluster_kruskal <- compare_means(fra ~ ISUP_combined,ISUP_cluster, group.by = "myeloid_district", method = "kruskal.test", p.adjust.method = "BH")
+ISUP_cluster_anova <- compare_means(fra ~ ISUP_combined,ISUP_cluster, group.by = "myeloid_district", method = "anova", p.adjust.method = "BH")
+
+#Plot
+ISUP_cluster_p <- ggplot(ISUP_cluster, aes(x=ISUP_combined,y=fra))+
+  facet_wrap(~myeloid_district)+
+  geom_boxplot(outlier.colour = NA)+
+  geom_jitter(aes(color = myeloid_district), size = 2, position=position_jitter(w=0.1,h=0.1))+
+  guides(color = FALSE)+
+  theme_classic()+
+  ylab("Sample cluster fraction")+
+  xlab("ISUP_grading")+
+  geom_text(ISUP_cluster_anova, mapping = aes(x = "1/2",y = 1, label = p.adj),inherit.aes = FALSE)
+
+ISUP_cluster_p
+
+##2. by pT_simple
+pT_cluster <- colData(sce) %>% as.data.frame() %>% select(sample_id,myeloid_district,pT_merg) %>% filter(!is.na(pT_merg)) %>% group_by(sample_id,myeloid_district, pT_merg) %>% count()
+pT_cluster <- pT_cluster %>% group_by(sample_id) %>% mutate(fra = n/sum(n))
+
+#Statistical testing
+pT_cluster_wil <- compare_means(fra ~ pT_merg,pT_cluster, group.by = "myeloid_district", method = "wilcox.test", p.adjust.method = "BH")
+pT_cluster_t <- compare_means(fra ~ pT_merg,pT_cluster, group.by = "myeloid_district", method = "t.test", p.adjust.method = "BH")
+
+#Plot
+pT_cluster_p <- ggplot(pT_cluster, aes(x=pT_merg,y=fra))+
+  facet_wrap(~myeloid_district)+
+  geom_boxplot(outlier.colour = NA)+
+  geom_jitter(aes(color = myeloid_district), size = 2, position=position_jitter(w=0.1,h=0.1))+
+  guides(color = FALSE)+
+  scale_color_manual(values = col_clusters$myeloid_district)+
+  theme_classic()+
+  ylab("Sample cluster fraction")+
+  xlab("pT_staging")+
+  geom_text(pT_cluster_wil, mapping = aes(x = "1/2",y = 1, label = p.adj),inherit.aes = FALSE)
+
+ISUP_cluster_p+pT_cluster_p
+```
+
 
 
 
@@ -2213,7 +2391,7 @@ DA <- res$table
 
 DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
 
-DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.05, result = ifelse(DA$logFC > 0 & DA$FDR < 0.05, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.05, "DOWN", "NOTSIG"))) %>% 
+DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.1, result = ifelse(DA$logFC > 0 & DA$FDR < 0.1, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.1, "DOWN", "NOTSIG"))) %>% 
   arrange(desc(logFC))
 
 DA$cluster <- factor(DA$cluster, levels = DA$cluster)
@@ -2611,13 +2789,14 @@ PID_myeloid_district <- PID_myeloid_district %>% group_by(PID) %>% mutate(fra = 
 ### Multivariate cox proportional hazard model on multiple covariates (here proportion of phenotypes)
 PID_metagroups <- PID_myeloid_district %>% pivot_wider(id_cols = "PID",names_from = "myeloid_district",values_from = "fra") %>% column_to_rownames("PID")
 
+PID_metagroups <- na.omit(PID_metagroups)
+
 Cox_df <- PID_metagroups
 colnames(Cox_df) <- paste0("MY", colnames(Cox_df))
 
 ## Based on categories (mean or median division of cluster proportions) 
-
 Cox_df_mean <- foreach(i = colnames(Cox_df),.combine = "cbind")%do%{
-Cox_df %>% select(all_of(i)) %>% mutate(mean = ifelse(Cox_df[,i] > mean(Cox_df[,i]),"B","A")) %>% pull(mean)
+Cox_df %>% select(all_of(i)) %>% mutate(mean = ifelse(Cox_df[,i] > median(Cox_df[,i]),"B","A")) %>% pull(mean)
 }
 
 colnames(Cox_df_mean) <- colnames(Cox_df)
@@ -2675,6 +2854,7 @@ PID_myeloid_district <- PID_myeloid_district %>% group_by(PID) %>% mutate(fra = 
 
 ### Multivariate cox proportional hazard model on multiple covariates (here proportion of phenotypes)
 PID_metagroups <- PID_myeloid_district %>% pivot_wider(id_cols = "PID",names_from = "myeloid_district",values_from = "fra") %>% column_to_rownames("PID")
+PID_metagroups <- na.omit(PID_metagroups)
 
 Cox_df <- PID_metagroups
 colnames(Cox_df) <- paste0("MY", colnames(Cox_df))
@@ -2694,9 +2874,9 @@ Cox_df_GMM <- as.data.frame(Cox_df_GMM,stringsAsFactors=TRUE)
 Cox_df_GMM$status_OS <- sce$status_OS[match(rownames(Cox_df_GMM),sce$PID)]
 Cox_df_GMM$OS_months <- sce$OS_months[match(rownames(Cox_df_GMM),sce$PID)]
 
-#Cox_df_GMM$gender <- as.factor(sce$gender[match(rownames(Cox_df_GMM),sce$PID)])
-#Cox_df_GMM$age <- sce$age[match(rownames(Cox_df_GMM),sce$PID)]
-#Cox_df_GMM$ISUP <- as.factor(sce$ISUP_combined[match(rownames(Cox_df_GMM),sce$PID)])
+Cox_df_GMM$gender <- as.factor(sce$gender[match(rownames(Cox_df_GMM),sce$PID)])
+Cox_df_GMM$age <- sce$age[match(rownames(Cox_df_GMM),sce$PID)]
+Cox_df_GMM$ISUP <- as.factor(sce$ISUP_combined[match(rownames(Cox_df_GMM),sce$PID)])
 #Cox_df_GMM$pT <- as.factor(sce$pT_combined[match(rownames(Cox_df_GMM),sce$PID)])
 
 #Based on proportions
