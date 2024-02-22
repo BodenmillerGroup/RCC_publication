@@ -133,8 +133,8 @@ ggplot(fraction_combined, aes(x = fra_my, y = fra_T))+
   geom_smooth(method='lm', formula= y~x, se = TRUE, color = "black")+
   scale_color_manual(values=metadata(sce)$colors$PID)+
   guides(color = "none")+
-  ylab("B cell fraction (T cell)")+
-  xlab("B cell fraction (Myeloid)")+
+  ylab("CD8 cell fraction (T cell)")+
+  xlab("CD8 cell fraction (Myeloid)")+
   theme_classic()+
   ggtitle(paste("Pearson = ",round(cor_test$estimate, digits = 2)))
 ```
@@ -155,11 +155,12 @@ data.frame(immune_metacluster = i, cor = cor_test$estimate, category = "celltype
 ```
 
 ```{r}
-out_cor <- out_cor %>% filter(immune_metacluster != "Unknown_Other")
+# Optional: kick out Unknown/Other
+#out_cor <- out_cor %>% filter(immune_metacluster != "Unknown_Other")
 
 ggplot(out_cor, aes(x = category, y = cor))+  
-  geom_boxplot(outlier.colour = NA)+
-  geom_jitter(aes(color = immune_metacluster), size = 3)+ #position=position_jitter(w=0.3,h=0.3))+
+  geom_jitter(aes(color = immune_metacluster), size = 5)+
+  geom_boxplot(outlier.colour = NA, alpha = 0.5)+#position=position_jitter(w=0.3,h=0.3))+
   scale_color_manual(values=metadata(sce)$colors$immune_metacluster)+
   ylab("PCC")+
   xlab("Per celltype")+
@@ -169,51 +170,36 @@ ggplot(out_cor, aes(x = category, y = cor))+
 ```
 
 
-## TODO 
+#### Per patient
 
 ```{r}
-# METACLUSTER 
+fraction_combined <- fraction_my %>% mutate(fra_my = fra) %>% select(PID, immune_metacluster, fra_my) %>% mutate(PID_mc = paste0(PID, "_",immune_metacluster))
 
-## Correlation of metacluster fractions for each PID (2-6 images per PID)
-SID_metacluster <- colData(sce) %>% as.data.frame() %>% select(myeloid_metacluster,sample_id) %>% group_by(sample_id) %>% table() %>% as.data.frame
-SID_metacluster <- SID_metacluster %>% group_by(sample_id) %>% mutate(fra = Freq/sum(Freq))
+fraction_combined_1 <- fraction_T %>% mutate(fra_T = fra) %>% select(PID, immune_metacluster, fra_T) %>% mutate(PID_mc = paste0(PID, "_",immune_metacluster))
 
-# Cluster fraction correlation for each PID
-## by cluster
-SID_metacluster_cor <- SID_metacluster
-SID_metacluster_cor$PID <- sce$PID[match(SID_metacluster$sample_id,sce$sample_id)]
+fraction_combined$fra_T <- fraction_combined_1$fra_T[match(fraction_combined$PID_mc, fraction_combined_1$PID_mc)]
+```
 
-SID_metacluster_cor <- foreach(i = unique(colData(sce)$PID),.combine = "rbind")%do%{
-SID <- SID_metacluster_cor %>% filter(PID %in% i) %>% select(-Freq,-PID) %>% pivot_wider(id_cols = myeloid_metacluster,names_from = sample_id,values_from = fra) %>% column_to_rownames("myeloid_metacluster")
-cor <- cor(SID, method = "spearman")
-#cor[2] # only works for two images per patient 
-n <- length(colnames(SID))
-if(n > 1){
-mean(cor[2:n,1])
-}else{NA}
+
+```{r}
+PID_cor <- foreach(i = unique(fraction_combined$PID), .combine = "rbind")%do%{
+PID_out <- fraction_combined %>% filter(PID %in% i) %>% select(- PID, - immune_metacluster, - PID_mc)
+cor <- cor.test(PID_out$fra_my, PID_out$fra_T, method = "pearson")
+data.frame(PID = i, cor = cor$estimate, category = "PID")
 }
+```
 
-SID_metacluster_cor <- as.data.frame(SID_metacluster_cor) 
-SID_metacluster_cor$PID <- unique(colData(sce)$PID) 
-SID_metacluster_cor$category <- "PID"
-out <- colData(sce) %>% as.data.frame %>% select(sample_id, PID) %>% unique() %>% group_by(PID) %>% count()
-SID_metacluster_cor$n_images <- out$n[match(SID_metacluster_cor$PID, out$PID)]
-
-# Filter samples with 1 image only - Correlation = NA 
-SID_metacluster_cor <- SID_metacluster_cor %>% filter(n_images > 1)
-
-SID_metacluster_cor_plot <- ggplot(SID_metacluster_cor, aes(x = category, y = V1))+
+```{r}
+ggplot(PID_cor, aes(x = category, y = cor))+  
+  geom_jitter(aes(color = PID), size = 3)+
   geom_boxplot(outlier.colour = NA)+
-  geom_jitter(aes(color = PID, size = n_images), position=position_jitter(w=0.1,h=0.1))+
+  scale_color_manual(values=metadata(sce)$colors$PID)+
   guides(color = "none")+
-  scale_color_manual(values = metadata(sce)$colors$PID)+
-  theme_classic(base_size = 12)+
-  theme(axis.title.x = element_blank())+
-  scale_size_continuous(range = c(3, 6))+
-  ylab("Correlation of metacluster fractions per PID (n=2-6)")+
-  ggtitle(paste("Spearman rho = ",round(median(SID_metacluster_cor$V1, na.rm = TRUE), digits = 2)))
-
-SID_metacluster_cor_plot
+  ylab("PCC")+
+  xlab("Per PID")+
+  theme_classic()+
+  #coord_cartesian(ylim = c(0.5,1.1))+
+  ggtitle(paste("Mean PCC = ",round(mean(PID_cor$cor), digits = 2)))
 ```
 
 
