@@ -156,7 +156,7 @@ data.frame(immune_metacluster = i, cor = cor_test$estimate, category = "celltype
 
 ```{r}
 # Optional: kick out Unknown/Other
-#out_cor <- out_cor %>% filter(immune_metacluster != "Unknown_Other")
+out_cor <- out_cor %>% filter(immune_metacluster != "Unknown_Other")
 
 ggplot(out_cor, aes(x = category, y = cor))+  
   geom_jitter(aes(color = immune_metacluster), size = 5)+
