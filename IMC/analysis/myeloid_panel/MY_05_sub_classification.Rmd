@@ -2186,6 +2186,37 @@ ggplot(DA, aes(x = logFC, y = logCPM))+
 
 # 6. Survival analysis 
 
+## Multicollinearity test
+
+```{r}
+library(survival)
+library(survminer)
+
+# Select all clinically relevant categories 
+cox_df <- colData(sce) %>% as.data.frame() %>% select(PID, OS_months, status_OS, age, gender, ISUP_combined, pT_combined, necrose, PDL1_score) %>% unique() %>% select(-PID)
+
+cox_df <- na.omit(cox_df)
+
+# Basic cox model
+basic_model <- coxph(Surv(OS_months, status_OS) ~ age + gender + pT_combined + necrose, data = cox_df)
+
+# Larger cox model 
+multi_model <- coxph(Surv(OS_months, status_OS) ~ age + gender + pT_combined + necrose + ISUP_combined + PDL1_score, data = cox_df)
+
+# Log-likelihood ratio test to compare models 
+anova(basic_model, multi_model)
+
+# Test for multicollinearity using variance inflation factor 
+## VIF > 5 would be concerning 
+## Note that interpretation of VIF for categorical predictors is unclear 
+
+library(faraway)
+faraway::vif(model.matrix(basic_model))
+```
+
+Conclusion: For multivariate cox models, we should use (age + gender +) pT_combined + necrose as co-variates.
+
+
 ## Multivariate cox models
 
 ### Continious 

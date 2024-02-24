@@ -770,7 +770,7 @@ ggsurvplot(fit_3,
 )
 ```
 
-## Test overlap of clinical categories 
+## Test overlap and association of clinical categories 
 
 ```{r}
 PID_scores <- list()
@@ -787,7 +787,7 @@ library("ggVennDiagram")
 ggVennDiagram(PID_scores,
               label_alpha = 0, 
               set_color = "black")+
-  scale_fill_gradient2(high = "gray50")+
+  scale_fill_gradient2(high = "purple4")+
   scale_color_manual(values = c("black","black","black"))
 ```
 
@@ -806,12 +806,59 @@ ggVennDiagram(PID_scores,
               label_alpha = 0, 
               set_color = "black",
               label_color = "black")+
-  scale_fill_gradient2(high = "gray50")+
+  scale_fill_gradient2(high = "purple4")+
   scale_color_manual(values = c("black","black","black"))
 ```
 
+#### Statistical association of clinical categories 
 
-### Survival of Mutation IHC
+```{r}
+# Proportion of scores per PID groups 
+out_p <- list()
+
+for(i in c("ISUP_combined", "pT_combined", "necrose", "PDL1_score")){
+  for(y in c("ISUP_combined", "pT_combined", "necrose", "PDL1_score")){
+    if(i != y){
+    out <- colData(sce) %>% as.data.frame %>% select(PID, any_of(i), any_of(y)) %>% unique %>% select(-PID) %>% group_by(all_of(i)) %>% table() %>%
+      as.data.frame
+    cur_test <- out %>% pivot_wider(names_from = i, id_cols = y, values_from = Freq) %>% column_to_rownames(y)
+    cur_test_out <- chisq.test(cur_test)
+    out_p[paste0(i,"_",y)] <- cur_test_out$p.value
+    }
+  }
+}
+
+# Extract direct comparison p-values
+direct_comp <- matrix(NA, nrow = 4, ncol = 4, dimnames = list(c("ISUP_combined", "pT_combined", "necrose", "PDL1_score"), c("ISUP_combined", "pT_combined", "necrose", "PDL1_score")))
+
+for (i in c("ISUP_combined", "pT_combined", "necrose", "PDL1_score")) {
+  for (j in c("ISUP_combined", "pT_combined", "necrose", "PDL1_score")) {
+    if (i == j) {
+      direct_comp[i, j] <- 1
+    } else {
+      comp_name <- paste(i, j, sep = "_")
+      rev_comp_name <- paste(j, i, sep = "_")
+      if (comp_name %in% names(out_p)) {
+        direct_comp[i, j] <- out_p[[comp_name]]
+      } else if (rev_comp_name %in% names(out_p)) {
+        direct_comp[i, j] <- out_p[[rev_comp_name]]
+      }
+    }
+  }
+}
+
+# Print the square matrix
+corrplot(-log10(direct_comp), 
+         is.corr = FALSE, 
+         diag = FALSE, 
+         tl.col = "black",
+         type="upper", 
+         col = COL1("Purples",100),
+         method = "shade",
+         bg = "lightgrey", addCoef.col = "black")
+```
+
+## Survival of Mutation IHC
 
 ```{r}
 ## Assess survival impact of mutation status
