@@ -1,5 +1,5 @@
 ---
-title: "00_seg_mesmer_QC"
+title: "00_image_artefact_QC"
 author: "Lasse Meyer"
 date: "1/24/2022"
 output: html_document
@@ -58,20 +58,21 @@ images
 
 ```{r save-objects-read-data}
 saveRDS(images, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/images_before_correction.rds")
+#images <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/images_before_correction.rds")
 ```
 
-## Images with artefacts 
+## Images with artefacts (Test code)
 
 ```{r}
 library(cytomapper)
 library(EBImage)
 
-#Artefacts: 
+#Test image artefacts: 
 #202207_TMA224.1_BlockB_SE_106.tiff
 #202207_TMA224.1_BlockA_SE_075.tiff
 #202207_TMA224.1_BlockB_SE_069.tiff
 
-cur_img <- loadImages("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/img/202207_TMA224.1_BlockB_SE_106.tiff")
+cur_img <- loadImages("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/img/202207_TMA224.1_BlockB_SE_069.tiff")
 channelNames(cur_img) <- paste0("ch", 1:dim(cur_img[[1]])[3])
 
 # Visualize artefacts
@@ -118,7 +119,7 @@ img_1[pixels_wrong] <- 0
 display(img_1)
 
 # Step 3: Replace artificial pixels by median
-img_median <- medianFilter(img_1, size = 1)
+img_median <- medianFilter(img_1, size = 2)
 
 img_1[test_img] <- img_median[test_img]
 
@@ -173,13 +174,13 @@ removePixelArtifacts <- function(images,
     img_cor[pixels_wrong] <- img_median[pixels_wrong]
 
     writeImage(as.array(img_cor)/(2^16 - 1), 
-               paste0("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/img_cor/",names(images[x]), ".tiff"), #directory currently hard-coded
+               paste0("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/img_cor/",names(images[x]), ".tiff"), #directory currently hard-coded - has to be created
                bits.per.sample = 16)
     
     }else{
       
       writeImage(as.array(images[[x]])/(2^16 - 1), 
-                 paste0("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/img_cor/",names(images[x]), ".tiff"),#directory currently hard-coded
+                 paste0("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/img_cor/",names(images[x]), ".tiff"),#directory currently hard-coded - has to be created
                  bits.per.sample = 16)
       
     }
@@ -199,13 +200,13 @@ images <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analys
 
 ```{r}
 # Run function across all images
-removePixelArtifacts(images, BPPARAM = MulticoreParam(workers = 20))
+removePixelArtifacts(images, BPPARAM = MulticoreParam(workers = 20)) #please copy the function print out into an excel file
 ```
 
 ```{r}
 # Summary for pixel removal part
 library(readxl)
-out <- read_excel("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/summary_pixel_removal.xlsx")
+out <- read_excel("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/summary_pixelremoval.xlsx") # created by coyping the function print out into excel 
 
 out$Image <- str_replace(out$Image, ":", "")
 out$Image <- str_replace(out$Image, "\"", "")
@@ -221,7 +222,7 @@ hist(out$n_pixels_changed, breaks = 20)
 ```{r read-images}
 #Load images
 images_new <- loadImages("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/img_cor/",
-                         on_disk = TRUE,h5FilesPath = "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/img_cor_h5/", 
+                         on_disk = TRUE,h5FilesPath = "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/img_cor_h5/", #create separate h5_folder
                          as.is = TRUE, # Important to not rescale 16-bit images
                          BPPARAM = MulticoreParam(workers = 25,progressbar = TRUE,stop.on.error = FALSE))
 ```

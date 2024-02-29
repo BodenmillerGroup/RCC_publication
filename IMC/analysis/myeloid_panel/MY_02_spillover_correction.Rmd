@@ -162,6 +162,9 @@ channels <- paste0(panel$channel[panel$keep == 1], "Di")
 channels[!channels %in% rownames(sm)] #Not spotted but included in panel (Iridium channels)
 
 rownames(sm)[which(!rownames(sm) %in% channels)] #Spotted but not included in panel (Dy161)
+
+# Detect channels with highest spillover (113 - 115/162 - 163)
+sm_out <- as.data.frame(sm) %>% rownames_to_column("To") %>% pivot_longer(2:45, names_to = "From", values_to = "Spillover") %>% arrange(desc(Spillover)) %>% filter(Spillover != 1)
 ```
 
 **Observations:**
@@ -225,6 +228,32 @@ smoothScatter(x=assay(sce,"compexprs")[rownames(sce) == "panCK"],
               main="After compensation")
 ```
 
+```{r}
+#For the most affected channels 
+## 113 (H3) - 115 (SMA)
+before <- dittoScatterPlot(sce, x.var = "H3", y.var = "SMA",
+                           assay.x = "exprs", assay.y = "exprs") +
+    ggtitle("Before compensation")
+
+after <- dittoScatterPlot(sce, x.var = "H3", y.var = "SMA",
+                          assay.x = "compexprs", assay.y = "compexprs") +
+    ggtitle("After compensation")
+
+before+after
+
+## 162 (CD274) - 163 (CD45RO_RA) 
+before <- dittoScatterPlot(sce, x.var = "CD45RO_RA", y.var = "Arginase",
+                           assay.x = "exprs", assay.y = "exprs") +
+    ggtitle("Before compensation")
+
+after <- dittoScatterPlot(sce, x.var = "CD45RO_RA", y.var = "Arginase",
+                          assay.x = "compexprs", assay.y = "compexprs") +
+    ggtitle("After compensation")
+
+before+after
+```
+
+
 To facilitate further downstream analysis, the non-compensated assays can now be
 replaced by their compensated counterparts:
 
@@ -232,6 +261,22 @@ replaced by their compensated counterparts:
 assay(sce, "counts") <- assay(sce, "compcounts") 
 assay(sce, "exprs") <- assay(sce, "compexprs") 
 assay(sce, "compcounts") <- assay(sce, "compexprs") <- NULL
+```
+
+## Count winsorization 
+
+Add [0,99.9%] winsorization before asinh transformation. 
+
+```{r}
+library(spatialEco)
+
+# Perform 99.9 % winsorization (per channel)
+assay(sce, "quant") <- t(apply(counts(sce), MARGIN = 1, function(x) winsorize(x,p=c(0,0.999))))
+
+# Perform asinh transformation of winsorized counts with two different co-factors
+assay(sce, "exprs_quant") <- asinh(assay(sce, "quant")/1)
+
+assay(sce, "exprs_quant_5") <- asinh(assay(sce, "quant")/5)
 ```
 
 ## Image compensation
