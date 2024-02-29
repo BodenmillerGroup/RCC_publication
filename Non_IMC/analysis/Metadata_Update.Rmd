@@ -400,4 +400,42 @@ write_csv(meta_fil, file = "~/Desktop/BME330/BME330_Computational_Part/data_anal
 
 
 
+### Check overlap with MALDI-MSI cohort (Erlmeier et al., 2022)
+
+```{r}
+# TMA20 from MALDI cohort
+meta_MALDI_20 <- read_excel("/Users/lasmey/Desktop/PhD Bodenmiller/MALDI_MSI/MALDI_cohort_metadata/ZTMA 20 punch file.xls")
+
+meta_MALDI_20$PID <- str_replace(meta_MALDI_20$`SP Number`, " ","")
+
+# TMA224 from MALDI cohort
+meta_MALDI_224 <- read_excel("/Users/lasmey/Desktop/PhD Bodenmiller/MALDI_MSI/MALDI_cohort_metadata/ZTMA 224 punch file.xlsx",skip = 1)
+
+meta_MALDI_224$PID <- paste0("B20",str_split(meta_MALDI_224$`SP Number`,"B", simplify = TRUE)[,2])
+
+PID_MALDI <- c(meta_MALDI_20$PID, meta_MALDI_224$PID)
+
+## Extract unique PIDs
+PID_MALDI <- PID_MALDI %>% unique()
+```
+
+```{r}
+# IMC metadata
+meta_IMC <- read_csv(file = "/Users/lasmey/Desktop/RCC/Metadaten/Metadata_combined_RCC_onlyPT.csv")
+
+meta_IMC <- read_csv(file = "/Users/lasmey/Desktop/RCC/Metadaten/Metadata_combined_RCC.csv")
+
+meta_IMC$PID_short <- str_split(meta_IMC$PID,"-", simplify = TRUE)
+
+summary(PID_MALDI %in% meta_IMC$PID_short)
+
+PID_MALDI[!PID_MALDI %in% meta_IMC$PID_short]
+
+### Overlap of more than > 98%
+```
+
+
+
+
+
 
