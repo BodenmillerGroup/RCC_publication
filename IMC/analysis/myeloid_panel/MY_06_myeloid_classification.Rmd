@@ -3227,21 +3227,215 @@ hr_mean/
 hr_GMM
 ```
 
+## Myeloid district
+
+### Continious 
+
+```{r cox}
+library(survival)
+library(survminer)
+
+PID_myeloid_district_names <- colData(sce) %>% as.data.frame() %>% select(myeloid_district_names,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_myeloid_district_names <- PID_myeloid_district_names %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq))
+
+### Multivariate cox proportional hazard model on multiple covariates (here proportion of phenotypes)
+PID_metagroups <- PID_myeloid_district_names %>% pivot_wider(id_cols = "PID",names_from = "myeloid_district_names",values_from = "fra") %>% column_to_rownames("PID")
+#colnames(PID_metagroups) <- paste0("MY_",colnames(PID_metagroups))
+
+## 1. Based on continuous cluster proportions
+Cox_df <- PID_metagroups
+
+#add covariates for correction
+Cox_df$status_OS <- sce$status_OS[match(rownames(Cox_df),sce$PID)]
+Cox_df$OS_months <- sce$OS_months[match(rownames(Cox_df),sce$PID)]
+
+#Cox_df$gender <- as.factor(sce$gender[match(rownames(Cox_df),sce$PID)])
+#Cox_df$age <- sce$age[match(rownames(Cox_df),sce$PID)]
+#Cox_df$ISUP <- as.factor(sce$ISUP_combined[match(rownames(Cox_df),sce$PID)])
+#Cox_df$pT <- as.factor(sce$pT_combined[match(rownames(Cox_df),sce$PID)])
+
+#Based on proportions
+covariates <- Cox_df %>% select(-status_OS,-OS_months, -AgM_dom) %>% colnames
+
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~",paste(covariates, collapse = " + "),"+ AgM_dom"))
+
+multi_model <- coxph(multi_formula, data = Cox_df)
+
+multi_res <- summary(multi_model)
+
+plot_df_prop <- data.frame(group = rownames(multi_res$coefficients),
+                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],2),
+                      HR = signif(multi_res$coefficients[,"exp(coef)"],2),
+                      CI_low = signif(multi_res$conf.int[,"lower .95"],2),
+                      CI_high = signif(multi_res$conf.int[,"upper .95"],2),
+                      wald_test = signif(multi_res$waldtest["pvalue"],2))
 
 
-## Kaplan Meier 
+#Plot hazard ratios
+hr_prop <- ggplot(plot_df_prop, aes(x = reorder(group,desc(HR)), y = HR, color = p_value < 0.05))+
+geom_point(size = 4)+
+geom_errorbar(aes(ymax = CI_high, ymin = CI_low))+
+#coord_cartesian(ylim=c(0,20))+
+geom_hline(yintercept = 1,color = "black",linetype = "dashed")+
+scale_color_brewer(palette = "Set1")+
+xlab("Immune metaclusters")+
+ylab("HR for con_prop")+
+theme_classic()+
+theme(axis.text.x = element_text(angle = 90))
+
+hr_prop
+```
+
+### Mean / Median 
 
 ```{r}
-# Metacluster divided by mean
-sce$PID_AGM_mean <- Cox_df_mean$Ag_M[match(sce$PID, rownames(Cox_df_mean))]
-sce$PID_M2_mean <- Cox_df_mean$M2_like[match(sce$PID, rownames(Cox_df_mean))]
-sce$PID_MDSC_mean <- Cox_df_mean$Neutro_MDSC[match(sce$PID, rownames(Cox_df_mean))]
+library(survival)
+library(survminer)
 
-#Relevant clusters 
-## M2_like 
-#sce$PID_MY13_mean <- Cox_df_mean$MY13[match(sce$PID, rownames(Cox_df_mean))]
-#sce$PID_MY6_mean <- Cox_df_mean$MY6[match(sce$PID, rownames(Cox_df_mean))]
-#sce$PID_MY1_mean <- Cox_df_mean$MY1[match(sce$PID, rownames(Cox_df_mean))]
+PID_myeloid_district_names <- colData(sce) %>% as.data.frame() %>% select(myeloid_district_names,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_myeloid_district_names <- PID_myeloid_district_names %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq))
+
+### Multivariate cox proportional hazard model on multiple covariates (here proportion of phenotypes)
+PID_metagroups <- PID_myeloid_district_names %>% pivot_wider(id_cols = "PID",names_from = "myeloid_district_names",values_from = "fra") %>% column_to_rownames("PID")
+
+PID_metagroups <- na.omit(PID_metagroups)
+
+Cox_df <- PID_metagroups
+#colnames(Cox_df) <- paste0("MY_", colnames(Cox_df))
+
+## Based on categories (mean or median division of cluster proportions) 
+Cox_df_mean <- foreach(i = colnames(Cox_df),.combine = "cbind")%do%{
+Cox_df %>% select(all_of(i)) %>% mutate(mean = ifelse(Cox_df[,i] > median(Cox_df[,i]),"B","A")) %>% pull(mean)
+}
+
+colnames(Cox_df_mean) <- colnames(Cox_df)
+rownames(Cox_df_mean) <- rownames(Cox_df)
+
+Cox_df_mean <- as.data.frame(Cox_df_mean)
+
+## Add covariates 
+Cox_df_mean$status_OS <- sce$status_OS[match(rownames(Cox_df_mean),sce$PID)]
+Cox_df_mean$OS_months <- sce$OS_months[match(rownames(Cox_df_mean),sce$PID)]
+
+#Cox_df_mean$gender <- as.factor(sce$gender[match(rownames(Cox_df_mean),sce$PID)])
+#Cox_df_mean$age <- sce$age[match(rownames(Cox_df_mean),sce$PID)]
+#Cox_df_mean$ISUP <- as.factor(sce$ISUP_combined[match(rownames(Cox_df_mean),sce$PID)])
+#Cox_df_mean$pT <- as.factor(sce$pT_combined[match(rownames(Cox_df_mean),sce$PID)])
+#Cox_df_mean$necrose <- as.factor(sce$necrose[match(rownames(Cox_df_mean),sce$PID)])
+
+#Based on proportions
+covariates <- Cox_df_mean %>% select(-status_OS,-OS_months,) %>% colnames
+
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + ")))
+
+multi_model <- coxph(multi_formula, data = Cox_df_mean)
+
+multi_res <- summary(multi_model)
+
+plot_df_mean <- data.frame(group = rownames(multi_res$coefficients),
+                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],2),
+                      HR = signif(multi_res$coefficients[,"exp(coef)"],2),
+                      CI_low = signif(multi_res$conf.int[,"lower .95"],2),
+                      CI_high = signif(multi_res$conf.int[,"upper .95"],2),
+                      wald_test = signif(multi_res$waldtest["pvalue"],2))
+
+
+#Plot hazard ratios
+hr_mean <- ggplot(plot_df_mean, aes(x = reorder(group,desc(HR)), y = HR, color = p_value < 0.05))+
+geom_point(size = 4)+
+geom_errorbar(aes(ymax = CI_high, ymin = CI_low))+
+#coord_cartesian(ylim=c(0,20))+
+geom_hline(yintercept = 1,color = "black",linetype = "dashed")+
+scale_color_brewer(palette = "Set1")+
+xlab("Immune metaclusters")+
+ylab("HR for con_mean")+
+theme_classic()+
+theme(axis.text.x = element_text(angle = 90))
+
+hr_mean
+```
+
+### GMM
+
+```{r}
+PID_myeloid_district_names <- colData(sce) %>% as.data.frame() %>% select(myeloid_district_names,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_myeloid_district_names <- PID_myeloid_district_names %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq))
+
+### Multivariate cox proportional hazard model on multiple covariates (here proportion of phenotypes)
+PID_metagroups <- PID_myeloid_district_names %>% pivot_wider(id_cols = "PID",names_from = "myeloid_district_names",values_from = "fra") %>% column_to_rownames("PID")
+
+PID_metagroups <- na.omit(PID_metagroups)
+Cox_df <- PID_metagroups
+#colnames(Cox_df) <- paste0("MY_", colnames(Cox_df))
+
+## Based on categories (GMM division of cluster proportions)
+Cox_df_GMM <- foreach(i = colnames(Cox_df),.combine = "cbind")%do%{
+GMM_Cox <- Mclust(Cox_df[,i], G = 2)
+as.character(GMM_Cox$classification)
+}
+
+colnames(Cox_df_GMM) <- colnames(Cox_df)
+rownames(Cox_df_GMM) <- rownames(Cox_df)
+
+Cox_df_GMM <- as.data.frame(Cox_df_GMM,stringsAsFactors=TRUE)
+
+## Add covariates 
+Cox_df_GMM$status_OS <- sce$status_OS[match(rownames(Cox_df_GMM),sce$PID)]
+Cox_df_GMM$OS_months <- sce$OS_months[match(rownames(Cox_df_GMM),sce$PID)]
+
+#Cox_df_GMM$gender <- as.factor(sce$gender[match(rownames(Cox_df_GMM),sce$PID)])
+#Cox_df_GMM$age <- sce$age[match(rownames(Cox_df_GMM),sce$PID)]
+#Cox_df_GMM$ISUP <- as.factor(sce$ISUP_combined[match(rownames(Cox_df_GMM),sce$PID)])
+#Cox_df_GMM$pT <- as.factor(sce$pT_combined[match(rownames(Cox_df_GMM),sce$PID)])
+
+#Based on proportions
+covariates <- Cox_df_GMM %>% select(-status_OS,-OS_months) %>% colnames
+
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + ")))
+
+multi_model <- coxph(multi_formula, data = Cox_df_GMM)
+
+multi_res <- summary(multi_model)
+
+plot_df_GMM <- data.frame(group = rownames(multi_res$coefficients),
+                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],2),
+                      HR = signif(multi_res$coefficients[,"exp(coef)"],2),
+                      CI_low = signif(multi_res$conf.int[,"lower .95"],2),
+                      CI_high = signif(multi_res$conf.int[,"upper .95"],2),
+                      wald_test = signif(multi_res$waldtest["pvalue"],2))
+
+
+#Plot hazard ratios
+hr_GMM <- ggplot(plot_df_GMM, aes(x = reorder(group,desc(HR)), y = HR, color = p_value < 0.05))+
+geom_point(size = 4)+
+geom_errorbar(aes(ymax = CI_high, ymin = CI_low))+
+#coord_cartesian(ylim=c(0,20))+
+geom_hline(yintercept = 1,color = "black",linetype = "dashed")+
+scale_color_brewer(palette = "Set1")+
+xlab("Immune metaclusters")+
+ylab("HR for con_GMM")+
+theme_classic()+
+theme(axis.text.x = element_text(angle = 90))
+
+hr_GMM
+```
+
+
+```{r}
+hr_prop/
+hr_mean/
+hr_GMM
+```
+
+## Kaplan Meier
+
+```{r}
+# Color for heatmaps 
+colours <- c("#4575B4", "white", "#D73027")
+breaks <- c(-3, 3, 0.5)
+breaks <- seq(from = breaks[1], to = breaks[2], by = breaks[3])
+pal <- grDevices::colorRampPalette(colours)(length(breaks))
+col <- colorRamp2(breaks, pal)
 ```
 
 ### Cluster-level
@@ -3253,145 +3447,175 @@ library(survminer)
 
 cur_surv <- colData(sce) %>% as.data.frame() %>% select(PID, OS_months, status_OS) %>% unique()
 
+# Extract p-values from log-rank / direction of trend
 cur_surv_out <- foreach(x = colnames(Cox_df_mean %>% select(-status_OS, -OS_months)), .combine = "rbind")%do%{
   cur_surv[,x] <- Cox_df_mean[,x][match(cur_surv$PID, rownames(Cox_df_mean))]
   formula <- as.formula(paste("Surv(OS_months, status_OS) ~ ", x))
   fit <- survdiff(formula, data = cur_surv)
-  data.frame(group = x, p = fit$pvalue)
+  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[2], exp_2 = fit$exp[2])
 }
 
-cur_surv_out %>% mutate(sign = p < 0.05) %>% filter(sign == TRUE)
+# Adjust p-values using BH 
+cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
 
-#Plot survival curves
-fit <- survfit(Surv(OS_months, status_OS) ~ PID_AGM_mean, data = cur_surv)
-print(fit)
+# Create and plot heatmap 
+cur_surv_plot <- cur_surv_out %>% mutate(sign = p_adj < 0.05, direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% mutate(p_out = ifelse(sign == TRUE & direction == "high",  -log10(p_adj), ifelse(sign == TRUE & direction == "low", log10(p_adj), 0))) %>% arrange(desc(p_out))
 
-ggsurvplot(fit,
-          pval = TRUE,
-          risk.table = TRUE, # Add risk table
-          risk.table.col = "strata", # Change risk table color by groups
-          linetype = "strata", # Change line type by groups
-          surv.median.line = "hv", # Specify median survival
-          ggtheme = theme_classic(), # Change ggplot2 theme
-          palette = "Set1",
-          conf.int = TRUE
-)
+cur_surv_plot <- cur_surv_plot %>% pivot_wider(id_cols = type, names_from = group, values_from = p_out) %>% column_to_rownames("type")
 
-#Plot survival curves
-fit <- survfit(Surv(OS_months, status_OS) ~ PID_M2_mean, data = cur_surv)
-print(fit)
-
-ggsurvplot(fit,
-          pval = TRUE,
-          risk.table = TRUE, # Add risk table
-          risk.table.col = "strata", # Change risk table color by groups
-          linetype = "strata", # Change line type by groups
-          surv.median.line = "hv", # Specify median survival
-          ggtheme = theme_classic(), # Change ggplot2 theme
-          palette = "Set1",
-          conf.int = TRUE
-)
-
-#Plot survival curves
-fit <- survfit(Surv(OS_months, status_OS) ~ PID_MDSC_mean, data = cur_surv)
-print(fit)
-
-ggsurvplot(fit,
-          pval = TRUE,
-          risk.table = TRUE, # Add risk table
-          risk.table.col = "strata", # Change risk table color by groups
-          linetype = "strata", # Change line type by groups
-          surv.median.line = "hv", # Specify median survival
-          ggtheme = theme_classic(), # Change ggplot2 theme
-          palette = "Set1",
-          conf.int = TRUE
-)
-```
-
-### HLADR-like clusters 
-
-```{r}
-cur_surv <- colData(sce) %>% as.data.frame() %>% select(PID, PID_MY8_mean, PID_MY11_mean, PID_MY13_mean, PID_HLADR_test, OS_months, status_OS) %>% unique()
-
-#Plot survival curves
-fit <- survfit(Surv(OS_months, status_OS) ~ PID_HLADR_test, data = cur_surv)
-print(fit)
-
-ggsurvplot(fit,
-          pval = TRUE,
-          risk.table = TRUE, # Add risk table
-          risk.table.col = "strata", # Change risk table color by groups
-          linetype = "strata", # Change line type by groups
-          surv.median.line = "hv", # Specify median survival
-          ggtheme = theme_classic(), # Change ggplot2 theme
-          palette = "Set1",
-          conf.int = TRUE
-)
-
-#Plot survival curves
-fit <- survfit(Surv(OS_months, status_OS) ~ PID_MY8_mean, data = cur_surv)
-print(fit)
-
-ggsurvplot(fit,
-          pval = TRUE,
-          risk.table = TRUE, # Add risk table
-          risk.table.col = "strata", # Change risk table color by groups
-          linetype = "strata", # Change line type by groups
-          surv.median.line = "hv", # Specify median survival
-          ggtheme = theme_classic(), # Change ggplot2 theme
-          palette = "Set1",
-          conf.int = TRUE
-)
-
-#Plot survival curves
-fit <- survfit(Surv(OS_months, status_OS) ~ PID_MY11_mean, data = cur_surv)
-print(fit)
-
-ggsurvplot(fit,
-          pval = TRUE,
-          risk.table = TRUE, # Add risk table
-          risk.table.col = "strata", # Change risk table color by groups
-          linetype = "strata", # Change line type by groups
-          surv.median.line = "hv", # Specify median survival
-          ggtheme = theme_classic(), # Change ggplot2 theme
-          palette = "Set1",
-          conf.int = TRUE
-)
-
-#Plot survival curves
-fit <- survfit(Surv(OS_months, status_OS) ~ PID_MY13_mean, data = cur_surv)
-print(fit)
-
-ggsurvplot(fit,
-          pval = TRUE,
-          risk.table = TRUE, # Add risk table
-          risk.table.col = "strata", # Change risk table color by groups
-          linetype = "strata", # Change line type by groups
-          surv.median.line = "hv", # Specify median survival
-          ggtheme = theme_classic(), # Change ggplot2 theme
-          palette = "Set1",
-          conf.int = TRUE
-)
+Heatmap(cur_surv_plot, border = FALSE, cluster_columns = FALSE, rect_gp = gpar(col = "black", lwd = 1), name = "log10(FDR)")
 ```
 
 ```{r}
-# Add PDL1 category 
-sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_06.rds")
+cur_surv <- colData(sce) %>% as.data.frame() %>% select(PID, OS_months, status_OS) %>% unique() 
 
-sce_add <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_immune_05.rds")
+cur_surv$CD163 <- Cox_df_mean$CD163[match(cur_surv$PID, rownames(Cox_df_mean))]
+cur_surv$HLADR_hi_CD11c <- Cox_df_mean$HLADR_hi_CD11c[match(cur_surv$PID, rownames(Cox_df_mean))]
+ 
+#Plot specific survival curves
+fit <- survfit(Surv(OS_months, status_OS) ~ CD163, data = cur_surv)
+print(fit)
 
-sce$PDL1_score <- factor(sce_add$PDL1_score[match(sce$PID, sce_add$PID)])
-sce$PDL1_score_cells <- factor(sce_add$PDL1_score_cells[match(sce$PID, sce_add$PID)])
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = "Set1",
+          conf.int = TRUE
+)
 
-metadata(sce)$colors$PDL1_score <- metadata(sce_add)$colors$PDL1_score
-metadata(sce)$colors$PDL1_score_cells <- metadata(sce_add)$colors$PDL1_score_cells
+#Plot survival curves
+fit <- survfit(Surv(OS_months, status_OS) ~ HLADR_hi_CD11c, data = cur_surv)
+print(fit)
 
-saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_06.rds")
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = "Set1",
+          conf.int = TRUE
+)
 ```
 
 
+### Metacluster-level
 
+```{r}
+#Assess survival impact across categories
+library(survival)
+library(survminer)
 
+cur_surv <- colData(sce) %>% as.data.frame() %>% select(PID, OS_months, status_OS) %>% unique()
+
+# Extract p-values from log-rank / direction of trend
+cur_surv_out <- foreach(x = colnames(Cox_df_mean %>% select(-status_OS, -OS_months)), .combine = "rbind")%do%{
+  cur_surv[,x] <- Cox_df_mean[,x][match(cur_surv$PID, rownames(Cox_df_mean))]
+  formula <- as.formula(paste("Surv(OS_months, status_OS) ~ ", x))
+  fit <- survdiff(formula, data = cur_surv)
+  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[2], exp_2 = fit$exp[2])
+}
+
+# Adjust p-values using BH 
+cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
+
+# Create and plot heatmap 
+cur_surv_plot <- cur_surv_out %>% mutate(sign = p_adj < 0.1, direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% mutate(p_out = ifelse(sign == TRUE & direction == "high",  -log10(p_adj), ifelse(sign == TRUE & direction == "low", log10(p_adj), 0))) %>% arrange(desc(p_out))
+
+cur_surv_plot <- cur_surv_plot %>% pivot_wider(id_cols = type, names_from = group, values_from = p_out) %>% column_to_rownames("type")
+
+Heatmap(cur_surv_plot, border = FALSE, cluster_columns = FALSE, rect_gp = gpar(col = "black", lwd = 1), name = "log10(FDR)")
+```
+
+```{r}
+cur_surv <- colData(sce) %>% as.data.frame() %>% select(PID, OS_months, status_OS) %>% unique() 
+
+cur_surv$M2_like <- Cox_df_mean$M2_like[match(cur_surv$PID, rownames(Cox_df_mean))]
+cur_surv$Ag_M <- Cox_df_mean$Ag_M[match(cur_surv$PID, rownames(Cox_df_mean))]
+ 
+#Plot specific survival curves
+fit <- survfit(Surv(OS_months, status_OS) ~ M2_like, data = cur_surv)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = "Set1",
+          conf.int = TRUE
+)
+
+#Plot survival curves
+fit <- survfit(Surv(OS_months, status_OS) ~ Ag_M, data = cur_surv)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = "Set1",
+          conf.int = TRUE
+)
+```
+### District-level
+
+```{r}
+#Assess survival impact across categories
+library(survival)
+library(survminer)
+
+cur_surv <- colData(sce) %>% as.data.frame() %>% select(PID, OS_months, status_OS) %>% unique()
+
+# Extract p-values from log-rank / direction of trend
+cur_surv_out <- foreach(x = colnames(Cox_df_mean %>% select(-status_OS, -OS_months)), .combine = "rbind")%do%{
+  cur_surv[,x] <- Cox_df_mean[,x][match(cur_surv$PID, rownames(Cox_df_mean))]
+  formula <- as.formula(paste("Surv(OS_months, status_OS) ~ ", x))
+  fit <- survdiff(formula, data = cur_surv)
+  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[2], exp_2 = fit$exp[2])
+}
+
+# Adjust p-values using BH 
+cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
+
+# Create and plot heatmap 
+cur_surv_plot <- cur_surv_out %>% mutate(sign = p_adj < 0.1, direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% mutate(p_out = ifelse(sign == TRUE & direction == "high",  -log10(p_adj), ifelse(sign == TRUE & direction == "low", log10(p_adj), 0))) %>% arrange(desc(p_out))
+
+cur_surv_plot <- cur_surv_plot %>% pivot_wider(id_cols = type, names_from = group, values_from = p_out) %>% column_to_rownames("type")
+
+Heatmap(cur_surv_plot, col = col, border = FALSE, cluster_columns = FALSE, rect_gp = gpar(col = "black", lwd = 1), name = "log10(FDR)")
+```
+
+```{r}
+cur_surv <- colData(sce) %>% as.data.frame() %>% select(PID, OS_months, status_OS) %>% unique() 
+
+cur_surv$M2_dom <- Cox_df_mean$M2_dom[match(cur_surv$PID, rownames(Cox_df_mean))]
+ 
+#Plot specific survival curves
+fit <- survfit(Surv(OS_months, status_OS) ~ M2_dom, data = cur_surv)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = "Set1",
+          conf.int = TRUE
+)
+```
 
 
 # 9. Supervised analysis 
@@ -3805,9 +4029,6 @@ sce$PID_metagroups <- row_groups$PID_group[match(sce$PID,row_groups$PID)]
 ```
 
 
-
-
-
 ```{r}
 #Assess survival impact 
 library(survival)
@@ -3832,7 +4053,7 @@ ggsurvplot(fit,
           surv.median.line = "hv", # Specify median survival
           ggtheme = theme_classic(), # Change ggplot2 theme
           palette = "Set1",
-          conf.int = TRUE)
+          conf.int = FALSE)
 ```
 
 ### Nested model testing 
