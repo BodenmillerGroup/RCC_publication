@@ -154,7 +154,7 @@ saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sc
 
 # 2. Spatial analysis 
 
-## Differential interaction testing 
+## 2A. Differential interaction testing 
 
 ### Celltype 
 
@@ -333,7 +333,7 @@ saveRDS(spicyTest_3, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_ana
 
 topPairs(spicyTest_3, cutoff = 0.05, n=75)
 
-out_PDL1_score <- signifPlot(spicyTest_2,
+out_PDL1_score <- signifPlot(spicyTest_3,
            fdr = TRUE,
            marksToPlot = unique(sce$celltype_combined))
 
@@ -597,6 +597,98 @@ if (is.null(comparisonGroup)) {
           row_title = "From", 
           column_title = "To")
 ```
+
+
+#### Most changing interactors
+
+```{r}
+pVal <- rbind(pVal_ISUP, pVal_necrose, pVal_T, pVal_PDL1)
+
+# Increased 
+df_MY_int <- pVal %>% as.data.frame %>% rownames_to_column("from") %>% pivot_longer(2:14, values_to = "coef", names_to = "to") %>% filter(coef != 0 & coef > 0) %>% pivot_longer(1:2, names_to = "direction", values_to = "celltype") %>% mutate(celltype = str_split(celltype,"\\.", simplify = TRUE)[,1]) %>% filter(str_detect(celltype, "MY")) %>% group_by(celltype) %>% count() %>% arrange(desc(n))
+
+df_NotMY_int <- pVal %>% as.data.frame %>% rownames_to_column("from") %>% pivot_longer(2:14, values_to = "coef", names_to = "to") %>% filter(coef != 0 & coef > 0) %>% pivot_longer(1:2, names_to = "direction", values_to = "celltype") %>% mutate(celltype = str_split(celltype,"\\.", simplify = TRUE)[,1]) %>% filter(!str_detect(celltype, "MY")) %>% group_by(celltype) %>% count() %>% arrange(desc(n))
+
+ggplot(df_MY_int, aes(x = reorder(celltype,-n), y = n))+
+  geom_bar(stat = "identity", color = "black", fill = "#DD524BFF")+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  xlab("celltype")+
+  coord_cartesian(ylim = c(0,55))+
+ggplot(df_NotMY_int, aes(x = reorder(celltype,-n), y = n))+
+  geom_bar(stat = "identity", color = "black", fill = "#DD524BFF")+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  xlab("celltype")+
+  coord_cartesian(ylim = c(0,55))
+
+# Decreased
+df_MY_dec <- pVal %>% as.data.frame %>% rownames_to_column("from") %>% pivot_longer(2:14, values_to = "coef", names_to = "to") %>% filter(coef != 0 & coef < 0) %>% pivot_longer(1:2, names_to = "direction", values_to = "celltype") %>% mutate(celltype = str_split(celltype,"\\.", simplify = TRUE)[,1]) %>% filter(str_detect(celltype, "MY")) %>% group_by(celltype) %>% count() %>% arrange(desc(n))
+
+df_NotMY_dec <- pVal %>% as.data.frame %>% rownames_to_column("from") %>% pivot_longer(2:14, values_to = "coef", names_to = "to") %>% filter(coef != 0 & coef < 0) %>% pivot_longer(1:2, names_to = "direction", values_to = "celltype") %>% mutate(celltype = str_split(celltype,"\\.", simplify = TRUE)[,1]) %>% filter(!str_detect(celltype, "MY")) %>% group_by(celltype) %>% count() %>% arrange(desc(n))
+
+ggplot(df_MY_dec, aes(x = reorder(celltype,-n), y = n))+
+  geom_bar(stat = "identity", color = "black", fill = "#83A3CDFF")+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  xlab("celltype")+
+  coord_cartesian(ylim = c(0,55))+
+ggplot(df_NotMY_dec, aes(x = reorder(celltype,-n), y = n))+
+  geom_bar(stat = "identity", color = "black", fill = "#83A3CDFF")+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  xlab("celltype")+
+  coord_cartesian(ylim = c(0,55))
+```
+
+#### Most changing interacting pairs
+
+```{r}
+# Increased
+pair_increase <- pVal %>% as.data.frame %>% rownames_to_column("from") %>% pivot_longer(2:14, values_to = "coef", names_to = "to") %>% filter(coef != 0 & coef > 0) %>% mutate(to = str_split(to,"\\.", simplify = TRUE)[,1]) %>% mutate(from = str_split(from,"\\.", simplify = TRUE)[,1]) %>% mutate(sorted_type = ifelse(from < to, paste0(from, "_",to), paste0(to, "_",from))) %>% group_by(sorted_type) %>% count() %>% arrange(desc(n))
+
+ggplot(pair_increase, aes(x = reorder(sorted_type,-n), y = n))+
+  geom_bar(stat = "identity", color = "black", fill = "#DD524BFF")+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  xlab("celltype_pair")
+
+# Decreased 
+pair_decrease <- pVal %>% as.data.frame %>% rownames_to_column("from") %>% pivot_longer(2:14, values_to = "coef", names_to = "to") %>% filter(coef != 0 & coef < 0) %>% mutate(to = str_split(to,"\\.", simplify = TRUE)[,1]) %>% mutate(from = str_split(from,"\\.", simplify = TRUE)[,1]) %>% mutate(sorted_type = ifelse(from < to, paste0(from, "_",to), paste0(to, "_",from))) %>% group_by(sorted_type) %>% count() %>% arrange(desc(n))
+
+ggplot(pair_decrease, aes(x = reorder(sorted_type,-n), y = n))+
+  geom_bar(stat = "identity", color = "black", fill = "#83A3CDFF")+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  xlab("celltype_pair")
+```
+
+#### Heterotypic tumor interactions 
+
+```{r}
+### Neighborhood expansion graph
+sce <- aggregateNeighbors(sce, colPairName = "neighborhood", aggregate_by = "metadata", count_by = "celltype_combined", proportions = FALSE, name = "count_neighbors")
+```
+
+```{r}
+## Step 1: Retrieve neighbors table
+cur_dat <- sce$count_neighbors %>% as.data.frame
+rownames(cur_dat) <- sce$cell_id
+cur_dat$PID <- sce$PID
+cur_dat$celltype_combined <- sce$celltype_combined
+cur_dat$ISUP_combined <- sce$ISUP_combined
+
+out_1 <- cur_dat %>% filter(celltype_combined == "tumor") %>% rownames_to_column("cell_id") %>% pivot_longer(2:16, names_to = "celltype_int", values_to = "int_n") %>% filter(celltype_int != "tumor") %>% group_by(cell_id) %>% mutate(n_sum = sum(int_n)) %>% ungroup() 
+
+out_2 <- out_1 %>% select(cell_id, PID, ISUP_combined, n_sum) %>% unique() %>% group_by(PID) %>% mutate(n_av = mean(n_sum)) %>% select(PID, ISUP_combined, n_av) %>% unique() %>% filter(!is.na(ISUP_combined))
+
+ggplot(out_2, aes(x = ISUP_combined, y = n_av, fill = ISUP_combined))+
+  geom_boxplot()+
+  scale_fill_manual(values = metadata(sce)$colors$ISUP_combined)+
+  theme_classic()+
+  stat_compare_means()
+```
+
 #### Survival testing 
 
 ```{r}
@@ -604,12 +696,15 @@ if (is.null(comparisonGroup)) {
 ## This is the same for all different comparisons 
 spicy_out <- spicyTest$dataframe
 
-# Only select interactions FROM myeloid cells
-selected_pairs <- c(TRUE, str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "MY")[2:170], TRUE, TRUE)
+## Different options for selecting interactions
+# A: Only select interactions FROM myeloid cells
+#selected_pairs <- c(TRUE, str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "MY")[2:170], TRUE, TRUE)
+# B: Only select interactions FROM myeloid cells TO non-myeloid cells
+selected_pairs <- c(TRUE, str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "MY")[2:170] & (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "MY")[2:170]), TRUE, TRUE)
 
 spicy_out_selected <- spicy_out[,selected_pairs]
 
-spicy_out_selected_long <- spicy_out_selected %>% pivot_longer(cols = 2:66, names_to = "pair", values_to = "coef")
+spicy_out_selected_long <- spicy_out_selected %>% pivot_longer(cols = 2:41, names_to = "pair", values_to = "coef")
 
 # Perform mean interaction score split for all categories 
 out_df <- data.frame(PID = unique(sce$PID))
@@ -623,14 +718,14 @@ out_df[,i] <- spicy_out_loop$cat[match(out_df$PID, spicy_out_loop$PID)]
 }
 
 ## Add survival information 
-#out_df$status_OS <- sce$status_OS[match(out_df$PID, sce$PID)]
-#out_df$OS_months <- sce$OS_months[match(out_df$PID, sce$PID)]
+out_df$status_OS <- sce$status_OS[match(out_df$PID, sce$PID)]
+out_df$OS_months <- sce$OS_months[match(out_df$PID, sce$PID)]
 ```
 
 ```{r}
 # Color for heatmaps 
 colours <- c("#4575B4", "white", "#D73027")
-breaks <- c(-3, 3, 0.5)
+breaks <- c(-2, 2, 0.5)
 breaks <- seq(from = breaks[1], to = breaks[2], by = breaks[3])
 pal <- grDevices::colorRampPalette(colours)(length(breaks))
 col <- colorRamp2(breaks, pal)
@@ -652,18 +747,19 @@ cur_surv_out <- foreach(x = colnames(out_df %>% select(-PID, -status_OS, -OS_mon
 cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
 
 # Create and plot heatmap 
-cur_surv_plot <- cur_surv_out %>% mutate(sign = p_adj < 0.1, direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% mutate(p_out = ifelse(sign == TRUE & direction == "high",  -log10(p_adj), ifelse(sign == TRUE & direction == "low", log10(p_adj), 0))) %>% arrange(desc(p_out))
+cur_surv_plot <- cur_surv_out %>% mutate(sign = p < 0.05, direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% mutate(p_out = ifelse(sign == TRUE & direction == "high",  -log10(p_adj), ifelse(sign == TRUE & direction == "low", log10(p_adj), 0))) %>% arrange(desc(p_out)) %>% filter(p < 0.05)
 
 cur_surv_plot <- cur_surv_plot %>% pivot_wider(id_cols = type, names_from = group, values_from = p_out) %>% column_to_rownames("type")
 
-Heatmap(cur_surv_plot, col = col, border = FALSE, cluster_columns = FALSE, rect_gp = gpar(col = "black", lwd = 1), name = "log10(FDR)")
+Heatmap(cur_surv_plot, col = col, border = FALSE, cluster_columns = FALSE, rect_gp = gpar(col = "black", lwd = 1), name = "log10(p)")
 ```
+
 ```{r}
 cur_surv <- colData(sce) %>% as.data.frame() %>% select(PID, OS_months, status_OS) %>% unique() 
 
 cur_surv$M2CD8 <- out_df$MY_M2_like__CD8_T_cell[match(cur_surv$PID, out_df$PID)]
 
-cur_surv$MDSCM2 <- out_df$MY_Neutro_MDSC__MY_M2_like[match(cur_surv$PID, out_df$PID)]
+cur_surv$AgMTu <- out_df$MY_Ag_M__tumor[match(cur_surv$PID, out_df$PID)]
 
 #Plot specific survival curves
 fit <- survfit(Surv(OS_months, status_OS) ~ M2CD8, data = cur_surv)
@@ -681,7 +777,7 @@ ggsurvplot(fit,
 )
 
 #Plot specific survival curves
-fit <- survfit(Surv(OS_months, status_OS) ~ MDSCM2, data = cur_surv)
+fit <- survfit(Surv(OS_months, status_OS) ~ AgMTu, data = cur_surv)
 print(fit)
 
 ggsurvplot(fit,
@@ -695,14 +791,109 @@ ggsurvplot(fit,
           conf.int = TRUE
 )
 ```
-##### Lasso Cox Model 
+##### Cox Model 
+
+###### Categorical
+
+```{r}
+## Add covariates 
+out_df
+
+for(i in c(2:41)){
+  out_df[,i] <- as.factor(out_df[,i])
+  out_df[,i] <- relevel(out_df[,i], ref = "low")
+}
+
+#Based on proportions
+covariates <- out_df %>% select(-status_OS,-OS_months,-PID) %>% colnames
+
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + ")))
+
+multi_model <- coxph(multi_formula, data = out_df)
+
+multi_res <- summary(multi_model)
+
+plot_df_mean <- data.frame(group = rownames(multi_res$coefficients),
+                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],2),
+                      HR = signif(multi_res$coefficients[,"exp(coef)"],2),
+                      CI_low = signif(multi_res$conf.int[,"lower .95"],2),
+                      CI_high = signif(multi_res$conf.int[,"upper .95"],2),
+                      wald_test = signif(multi_res$waldtest["pvalue"],2))
+
+
+#Plot hazard ratios
+hr_mean <- ggplot(plot_df_mean, aes(x = reorder(group,desc(HR)), y = HR, color = p_value < 0.05))+
+geom_point(size = 4)+
+geom_errorbar(aes(ymax = CI_high, ymin = CI_low))+
+#coord_cartesian(ylim=c(0,20))+
+geom_hline(yintercept = 1,color = "black",linetype = "dashed")+
+scale_color_brewer(palette = "Set1")+
+xlab("Immune metaclusters")+
+ylab("HR for con_mean")+
+theme_classic()+
+theme(axis.text.x = element_text(angle = 90))
+
+hr_mean
+```
+###### Continious 
+
+```{r}
+## 2. Based on continious interaction scores
+
+# Get mean interaction score per PID
+out_df_1 <- data.frame(PID = unique(sce$PID))
+
+for(i in unique(spicy_out_selected_long$pair)){
+spicy_out_loop <- spicy_out_selected_long %>% filter(pair == i) %>% group_by(PID) %>% mutate(mean_coef = mean(coef,na.rm = TRUE)) %>% select(PID, mean_coef) %>% unique()
+
+out_df_1[,i] <- spicy_out_loop$mean_coef[match(out_df_1$PID, spicy_out_loop$PID)]
+}
+
+## Add survival information 
+out_df_1$status_OS <- sce$status_OS[match(out_df_1$PID, sce$PID)]
+out_df_1$OS_months <- sce$OS_months[match(out_df_1$PID, sce$PID)]
+
+#Based on proportions
+covariates <- out_df_1 %>% select(-status_OS,-OS_months,-PID) %>% colnames
+
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + ")))
+
+multi_model <- coxph(multi_formula, data = out_df_1)
+
+multi_res <- summary(multi_model)
+
+plot_df_mean <- data.frame(group = rownames(multi_res$coefficients),
+                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],3),
+                      HR = signif(multi_res$coefficients[,"exp(coef)"],3),
+                      CI_low = signif(multi_res$conf.int[,"lower .95"],3),
+                      CI_high = signif(multi_res$conf.int[,"upper .95"],3),
+                      wald_test = signif(multi_res$waldtest["pvalue"],3))
+
+
+#Plot hazard ratios
+hr_mean <- ggplot(plot_df_mean, aes(x = reorder(group,desc(HR)), y = HR, color = p_value < 0.05))+
+geom_point(size = 4)+
+geom_errorbar(aes(ymax = CI_high, ymin = CI_low))+
+#coord_cartesian(ylim=c(0,20))+
+geom_hline(yintercept = 1,color = "black",linetype = "dashed")+
+scale_color_brewer(palette = "Set1")+
+xlab("Immune metaclusters")+
+ylab("HR for con_mean")+
+theme_classic()+
+theme(axis.text.x = element_text(angle = 90))
+
+hr_mean
+```
+
+
+
 
 ```{r}
 ## 1. Based on categorical interaction scores
 out_df <- na.omit(out_df)
-out_df$status_OS <- sce$status_OS[match(out_df$PID, sce$PID)]
-out_df$OS_months <- sce$OS_months[match(out_df$PID, sce$PID)]
 out_df <- out_df %>% filter(OS_months != 0)
+
+out_df
 
 x <- data.matrix(out_df %>% select(-PID, -status_OS, -OS_months)) #predictor variables
 
@@ -750,134 +941,39 @@ ggplot(lasso_df, aes(x = reorder(term,-exp(estimate)), y = exp(estimate))) +
   scale_color_brewer(palette = "Set1")
 ```
 
+#### Visualization 
 
 ```{r}
-test <- data.frame(coefficient = spicyTest$pairwiseAssoc$MY_M2_like__CD8_T_cell, 
-           sample_id = unique(sce$sample_id))
+## MY_M2_like__CD8_T_cell
+# High interaction scores
+cur_sample <- (spicy_out_selected_long %>% filter(pair == "MY_M2_like__CD8_T_cell") %>% group_by(imageID) %>% arrange(desc(coef)) %>% pull(imageID))[1:12]
 
-test$PID <- sce$PID[match(test$sample_id, sce$sample_id)]
+plotSpatial(sce[,sce$sample_id %in% cur_sample & sce$celltype_combined %in% c("CD8_T_cell","MY_M2_like")], 
+            node_color_by = "celltype_combined", 
+            img_id = "sample_id", 
+            node_size_fix = 0.5)
 
-test <- test %>% group_by(PID) %>% mutate(coef = mean(coefficient,na.rm = TRUE)) %>% select(PID, coef) %>% unique()
+# Low interaction scores
+cur_sample <- (spicy_out_selected_long %>% filter(pair == "MY_M2_like__CD8_T_cell") %>% group_by(imageID) %>% arrange(coef) %>% pull(imageID))[1:12]
 
-#test_out <- test %>% mutate(cat = ifelse(coef <= quantile(test$coef, probs = seq(0,1,1/3), na.rm = TRUE)[2], "low", ifelse(coef >= quantile(test$coef, probs = seq(0,1,1/3), na.rm = TRUE)[3], "high","medium")))
+plotSpatial(sce[,sce$sample_id %in% cur_sample & sce$celltype_combined %in% c("CD8_T_cell","MY_M2_like")], 
+            node_color_by = "celltype_combined", 
+            img_id = "sample_id", 
+            node_size_fix = 0.5)
 
-test_out <- test %>% mutate(cat = ifelse(coef < mean(test$coef, na.rm = TRUE), "low", "high"))
+## AgM_Bcells
+# High interaction scores
+cur_sample <- (spicy_out_selected_long %>% filter(pair == "MY_Ag_M__B_cell") %>% group_by(imageID) %>% arrange(desc(coef)) %>% pull(imageID))[1:12]
 
-sce$PID_group_M2CD8 <- test_out$cat[match(sce$PID, test_out$PID)]
+plotSpatial(sce[,sce$sample_id %in% cur_sample & sce$celltype_combined %in% c("B_cell","MY_Ag_M")], 
+            node_color_by = "celltype_combined", 
+            img_id = "sample_id", 
+            node_size_fix = 0.5)
 ```
-
-```{r}
-#Assess survival impact 
-library(survival)
-library(survminer)
-
-cur_surv <- colData(sce) %>% as.data.frame() %>% select(PID, PID_group_M2CD8, OS_months, status_OS) %>% unique()
-
-#Plot survival curves
-fit <- survfit(Surv(OS_months, status_OS) ~ PID_group_M2CD8, data = cur_surv)
-print(fit)
-
-ggsurvplot(fit,
-          pval = TRUE,
-          risk.table = TRUE, # Add risk table
-          risk.table.col = "strata", # Change risk table color by groups
-          linetype = "strata", # Change line type by groups
-          surv.median.line = "hv", # Specify median survival
-          ggtheme = theme_classic(), # Change ggplot2 theme
-          palette = "Set1",
-          conf.int = TRUE
-)
-```
-#### Most changing interactors
-
-```{r}
-pVal <- rbind(pVal_ISUP, pVal_necrose, pVal_T, pVal_PDL1)
-
-# Increased 
-df_MY_int <- pVal %>% as.data.frame %>% rownames_to_column("from") %>% pivot_longer(2:14, values_to = "coef", names_to = "to") %>% filter(coef != 0 & coef > 0) %>% pivot_longer(1:2, names_to = "direction", values_to = "celltype") %>% mutate(celltype = str_split(celltype,"\\.", simplify = TRUE)[,1]) %>% filter(str_detect(celltype, "MY")) %>% group_by(celltype) %>% count() %>% arrange(desc(n))
-
-df_NotMY_int <- pVal %>% as.data.frame %>% rownames_to_column("from") %>% pivot_longer(2:14, values_to = "coef", names_to = "to") %>% filter(coef != 0 & coef > 0) %>% pivot_longer(1:2, names_to = "direction", values_to = "celltype") %>% mutate(celltype = str_split(celltype,"\\.", simplify = TRUE)[,1]) %>% filter(!str_detect(celltype, "MY")) %>% group_by(celltype) %>% count() %>% arrange(desc(n))
-
-ggplot(df_MY_int, aes(x = reorder(celltype,-n), y = n))+
-  geom_bar(stat = "identity", color = "black", fill = "#DD524BFF")+
-  theme_classic()+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
-  xlab("celltype")+
-  coord_cartesian(ylim = c(0,55))+
-ggplot(df_NotMY_int, aes(x = reorder(celltype,-n), y = n))+
-  geom_bar(stat = "identity", color = "black", fill = "#DD524BFF")+
-  theme_classic()+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
-  xlab("celltype")+
-  coord_cartesian(ylim = c(0,55))
-
-# Decreased
-df_MY_dec <- pVal %>% as.data.frame %>% rownames_to_column("from") %>% pivot_longer(2:14, values_to = "coef", names_to = "to") %>% filter(coef != 0 & coef < 0) %>% pivot_longer(1:2, names_to = "direction", values_to = "celltype") %>% mutate(celltype = str_split(celltype,"\\.", simplify = TRUE)[,1]) %>% filter(str_detect(celltype, "MY")) %>% group_by(celltype) %>% count() %>% arrange(desc(n))
-
-df_NotMY_dec <- pVal %>% as.data.frame %>% rownames_to_column("from") %>% pivot_longer(2:14, values_to = "coef", names_to = "to") %>% filter(coef != 0 & coef < 0) %>% pivot_longer(1:2, names_to = "direction", values_to = "celltype") %>% mutate(celltype = str_split(celltype,"\\.", simplify = TRUE)[,1]) %>% filter(!str_detect(celltype, "MY")) %>% group_by(celltype) %>% count() %>% arrange(desc(n))
-
-ggplot(df_MY_dec, aes(x = reorder(celltype,-n), y = n))+
-  geom_bar(stat = "identity", color = "black", fill = "#83A3CDFF")+
-  theme_classic()+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
-  xlab("celltype")+
-  coord_cartesian(ylim = c(0,55))+
-ggplot(df_NotMY_dec, aes(x = reorder(celltype,-n), y = n))+
-  geom_bar(stat = "identity", color = "black", fill = "#83A3CDFF")+
-  theme_classic()+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
-  xlab("celltype")+
-  coord_cartesian(ylim = c(0,55))
-```
-#### Most changing interacting pairs
-
-```{r}
-# Increased
-pair_increase <- pVal %>% as.data.frame %>% rownames_to_column("from") %>% pivot_longer(2:14, values_to = "coef", names_to = "to") %>% filter(coef != 0 & coef > 0) %>% mutate(to = str_split(to,"\\.", simplify = TRUE)[,1]) %>% mutate(from = str_split(from,"\\.", simplify = TRUE)[,1]) %>% mutate(sorted_type = ifelse(from < to, paste0(from, "_",to), paste0(to, "_",from))) %>% group_by(sorted_type) %>% count() %>% arrange(desc(n))
-
-ggplot(pair_increase, aes(x = reorder(sorted_type,-n), y = n))+
-  geom_bar(stat = "identity", color = "black", fill = "#DD524BFF")+
-  theme_classic()+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
-  xlab("celltype_pair")
-
-# Decreased 
-pair_decrease <- pVal %>% as.data.frame %>% rownames_to_column("from") %>% pivot_longer(2:14, values_to = "coef", names_to = "to") %>% filter(coef != 0 & coef < 0) %>% mutate(to = str_split(to,"\\.", simplify = TRUE)[,1]) %>% mutate(from = str_split(from,"\\.", simplify = TRUE)[,1]) %>% mutate(sorted_type = ifelse(from < to, paste0(from, "_",to), paste0(to, "_",from))) %>% group_by(sorted_type) %>% count() %>% arrange(desc(n))
-
-ggplot(pair_decrease, aes(x = reorder(sorted_type,-n), y = n))+
-  geom_bar(stat = "identity", color = "black", fill = "#83A3CDFF")+
-  theme_classic()+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
-  xlab("celltype_pair")
-```
-#### Heterotypic tumor interactions 
-
-```{r}
-### Neighborhood expansion graph
-sce <- aggregateNeighbors(sce, colPairName = "neighborhood", aggregate_by = "metadata", count_by = "celltype_combined", proportions = FALSE, name = "count_neighbors")
-```
-
-```{r}
-## Step 1: Retrieve neighbors table
-cur_dat <- sce$count_neighbors %>% as.data.frame
-rownames(cur_dat) <- sce$cell_id
-cur_dat$PID <- sce$PID
-cur_dat$celltype_combined <- sce$celltype_combined
-cur_dat$ISUP_combined <- sce$ISUP_combined
-
-out_1 <- cur_dat %>% filter(celltype_combined == "tumor") %>% rownames_to_column("cell_id") %>% pivot_longer(2:16, names_to = "celltype_int", values_to = "int_n") %>% filter(celltype_int != "tumor") %>% group_by(cell_id) %>% mutate(n_sum = sum(int_n)) %>% ungroup() 
-
-out_2 <- out_1 %>% select(cell_id, PID, ISUP_combined, n_sum) %>% unique() %>% group_by(PID) %>% mutate(n_av = mean(n_sum)) %>% select(PID, ISUP_combined, n_av) %>% unique() %>% filter(!is.na(ISUP_combined))
-
-ggplot(out_2, aes(x = ISUP_combined, y = n_av, fill = ISUP_combined))+
-  geom_boxplot()+
-  scale_fill_manual(values = metadata(sce)$colors$ISUP_combined)+
-  theme_classic()+
-  stat_compare_means()
-```
-
 
 ### Celltype - fine
+
+Note: spicyR is run with "includeZeroCells = TRUE" to be able to account for sparsity of fine-grained myeloid cell types. 
 
 ```{r}
 #sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/others/myeloid_panel_old/data_analysis/sce_ccRCC_MY_07.rds")
@@ -1358,12 +1454,17 @@ ggplot(pair_decrease, aes(x = reorder(sorted_type,-n), y = n))+
 ## This is the same for all different comparisons 
 spicy_out <- spicyTest_fine$dataframe
 
-# Only select interactions FROM myeloid cells
-selected_pairs <- c(TRUE, str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "MY")[2:677], TRUE, TRUE)
+### Selection options:
+# A: Only select interactions FROM myeloid cells
+#selected_pairs <- c(TRUE, str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "MY")[2:677], TRUE, TRUE)
+
+# B: Only select interactions FROM myeloid cells TO non-myeloid cells
+selected_pairs <- c(TRUE, str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "MY")[2:677] & (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "MY")[2:677]), TRUE, TRUE)
+
 
 spicy_out_selected <- spicy_out[,selected_pairs]
 
-spicy_out_selected_long <- spicy_out_selected %>% pivot_longer(cols = 2:469, names_to = "pair", values_to = "coef")
+spicy_out_selected_long <- spicy_out_selected %>% pivot_longer(cols = 2:145, names_to = "pair", values_to = "coef")
 
 # Perform mean interaction score split for all categories 
 out_df <- data.frame(PID = unique(sce$PID))
@@ -1396,11 +1497,11 @@ library(survival)
 library(survminer)
 
 # Remove columns with one level (high/low)
-remove <- apply(out_df[2:469], MARGIN = 2, FUN = function(x){length(unique(x))})
+remove <- apply(out_df[2:145], MARGIN = 2, FUN = function(x){length(unique(x))})
 remove <- names(remove)[remove == 1]
 out_df <- out_df[,!colnames(out_df) %in% remove]
 
-remove_2 <- apply(out_df[2:461], MARGIN = 2, FUN = function(x){sum(x == "high", na.rm = TRUE) < 3})
+remove_2 <- apply(out_df[2:145], MARGIN = 2, FUN = function(x){sum(x == "high", na.rm = TRUE) < 3})
 remove_2 <- names(remove_2)[remove_2 == 1]
 out_df <- out_df[,!colnames(out_df) %in% remove_2]
 
@@ -1415,19 +1516,68 @@ cur_surv_out <- foreach(x = colnames(out_df %>% select(-PID, -status_OS, -OS_mon
 cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
 
 # Create and plot heatmap 
-cur_surv_plot <- cur_surv_out %>% mutate(sign = p_adj < 0.05, direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% mutate(p_out = ifelse(sign == TRUE & direction == "high",  -log10(p_adj), ifelse(sign == TRUE & direction == "low", log10(p_adj), 0))) %>% arrange(desc(p_out))
+cur_surv_plot <- cur_surv_out %>% mutate(sign = p_adj < 0.1, direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% mutate(p_out = ifelse(sign == TRUE & direction == "high",  -log10(p_adj), ifelse(sign == TRUE & direction == "low", log10(p_adj), 0))) %>% arrange(desc(p_out)) %>% filter(p_adj < 0.1)
 
 cur_surv_plot <- cur_surv_plot %>% pivot_wider(id_cols = type, names_from = group, values_from = p_out) %>% column_to_rownames("type")
 
 Heatmap(cur_surv_plot, col = col, border = FALSE, cluster_columns = FALSE, name = "log10(FDR)")
 ```
+```{r}
+cur_surv <- colData(sce) %>% as.data.frame() %>% select(PID, OS_months, status_OS) %>% unique() 
+
+cur_surv$MY_CD163__CD8_T_cell <- out_df$MY_CD163__CD8_T_cell[match(cur_surv$PID, out_df$PID)]
+
+cur_surv$MY_HLADR_hi_CD11c__B_cell <- out_df$MY_HLADR_hi_CD11c__B_cell[match(cur_surv$PID, out_df$PID)]
+
+#Plot specific survival curves
+fit <- survfit(Surv(OS_months, status_OS) ~ MY_CD163__CD8_T_cell, data = cur_surv)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = "Set1",
+          conf.int = TRUE
+)
+
+#Plot specific survival curves
+fit <- survfit(Surv(OS_months, status_OS) ~ MY_HLADR_hi_CD11c__B_cell, data = cur_surv)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = "Set1",
+          conf.int = TRUE
+)
+```
+
+
+
+
+
 
 ##### Lasso Cox Model 
+
+###### Categorical 
 
 ```{r}
 ## 1. Based on categorical interaction scores
 out_df <- na.omit(out_df)
 out_df <- out_df %>% filter(OS_months != 0)
+
+for(i in c(2:145)){
+  out_df[,i] <- as.factor(out_df[,i])
+  out_df[,i] <- relevel(out_df[,i], ref = "low")
+}
 
 x <- data.matrix(out_df %>% select(-PID, -status_OS, -OS_months)) #predictor variables
 
@@ -1439,7 +1589,7 @@ library(glmnet)
 library(broom) 
 
 registerDoMC(cores = 20)
-set.seed(220195)
+set.seed(220196)
 cv.fit <- cv.glmnet(x, y, family="cox", type.measure = "C", nfolds = 100, parallel = TRUE)
 plot(cv.fit)
 
@@ -1471,39 +1621,264 @@ ggplot(lasso_df, aes(x = reorder(term,-exp(estimate)), y = exp(estimate))) +
   xlab("Predictors")+
   theme_classic()+
   theme(axis.text.x = element_text(angle = 90))+
-  ggtitle("DFS")+
-  scale_color_brewer(palette = "Set1")
+  ggtitle("OS")+
+  scale_color_manual(values = c("#377EB8","#E41A1C"))
+```
+
+###### Continious
+
+```{r}
+## 2. Based on continious interaction scores
+
+# Get mean interaction score per PID
+out_df_1 <- data.frame(PID = unique(sce$PID))
+
+for(i in unique(spicy_out_selected_long$pair)){
+spicy_out_loop <- spicy_out_selected_long %>% filter(pair == i) %>% group_by(PID) %>% mutate(mean_coef = mean(coef,na.rm = TRUE)) %>% select(PID, mean_coef) %>% unique()
+
+out_df_1[,i] <- spicy_out_loop$mean_coef[match(out_df_1$PID, spicy_out_loop$PID)]
+}
+
+## Add survival information 
+out_df_1$status_OS <- sce$status_OS[match(out_df_1$PID, sce$PID)]
+out_df_1$OS_months <- sce$OS_months[match(out_df_1$PID, sce$PID)]
+
+out_df_1 <- na.omit(out_df_1)
+out_df_1 <- out_df_1 %>% filter(OS_months != 0)
+
+x <- data.matrix(out_df_1 %>% select(-PID, -status_OS, -OS_months)) #predictor variables
+
+y <- Surv(time = out_df_1$OS_months, event = out_df_1$status_OS) #response variables
+
+## Run lasso 
+require(doMC)
+library(glmnet)
+library(broom) 
+
+registerDoMC(cores = 20)
+set.seed(220196)
+cv.fit <- cv.glmnet(x, y, family="cox", type.measure = "C", nfolds = 100, parallel = TRUE)
+plot(cv.fit)
+
+fit <- glmnet(x, y, family="cox")
+
+coef(fit, s = cv.fit$lambda.min)
+
+# ## Run lasso 10 times (with 10 fold validation each run) and average error curves to be more robust
+# MSEs <- NULL
+# for (i in 1:10){
+#                   cv <- cv.glmnet(x, y, family="cox", type.measure = "C", nfolds = 100, parallel = TRUE)
+#                   MSEs <- cbind(MSEs, cv$cvm)
+#                   }
+# 
+# rownames(MSEs) <- cv$lambda
+# lambda.min <- as.numeric(names(which.min(rowMeans(MSEs))))
+# 
+# fit <- glmnet(x, y, family="cox")
+# coef(fit, s = lambda.min)
+
+#Extract output
+lasso_df <- broom::tidy(fit) %>% filter(lambda == cv.fit$lambda.min)
+
+ggplot(lasso_df, aes(x = reorder(term,-exp(estimate)), y = exp(estimate))) +
+  geom_point(size = 4, aes(color = exp(estimate)>1)) +
+  geom_hline(yintercept = 1,color = "black")+
+  scale_y_continuous(trans="log")+
+  ylab("Lasso HR")+
+  xlab("Predictors")+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90))+
+  ggtitle("OS")+
+  scale_color_manual(values = c("#377EB8","#E41A1C"))
 ```
 
 
-
-
-
+#### Visualization 
 
 ```{r}
-test <- data.frame(coefficient = spicyTest_fine$pairwiseAssoc$MY_CD163__CD8_T_cell, 
-           sample_id = unique(sce$sample_id))
+# High interaction scores
+cur_sample <- (spicy_out_selected_long %>% filter(pair == "MY_CD163__CD8_T_cell") %>% group_by(imageID) %>% arrange(desc(coef)) %>% pull(imageID))[1:16]
 
-test$PID <- sce$PID[match(test$sample_id, sce$sample_id)]
+plotSpatial(sce[,sce$sample_id %in% cur_sample & sce$celltype_combined_fine %in% c("CD8_T_cell","MY_CD163")], 
+            node_color_by = "celltype_combined_fine", 
+            img_id = "sample_id", 
+            node_size_fix = 0.5)
 
-test <- test %>% group_by(PID) %>% mutate(coef = mean(coefficient,na.rm = TRUE)) %>% select(PID, coef) %>% unique()
+cur_sample <- (spicy_out_selected_long %>% filter(pair == "MY_CD163__tumor") %>% group_by(imageID) %>% arrange(desc(coef)) %>% pull(imageID))[1:16]
 
-#test_out <- test %>% mutate(cat = ifelse(coef <= quantile(test$coef, probs = seq(0,1,1/3), na.rm = TRUE)[2], "low", ifelse(coef >= quantile(test$coef, probs = seq(0,1,1/3), na.rm = TRUE)[3], "high","medium")))
+plotSpatial(sce[,sce$sample_id %in% cur_sample & sce$celltype_combined_fine %in% c("tumor","MY_CD163")], 
+            node_color_by = "celltype_combined_fine", 
+            img_id = "sample_id", 
+            node_size_fix = 0.5)
 
-test_out <- test %>% mutate(cat = ifelse(coef < mean(test$coef, na.rm = TRUE), "low", "high"))
+cur_sample <- (spicy_out_selected_long %>% filter(pair == "MY_HLADR_hi_CD15__Endothelial") %>% group_by(imageID) %>% arrange(desc(coef)) %>% pull(imageID))[1:20]
 
-sce$PID_group_M2CD8 <- test_out$cat[match(sce$PID, test_out$PID)]
+plotSpatial(sce[,sce$sample_id %in% cur_sample & sce$celltype_combined_fine %in% c("Endothelial","MY_HLADR_hi_CD15")], 
+            node_color_by = "celltype_combined_fine", 
+            img_id = "sample_id", 
+            node_size_fix = 0.5)
+```
+## 2B. B cell patch analysis 
+
+### CONTINUE HERE 
+
+```{r}
+colPairs(sce)
+
+## Patch detection
+sce <- patchDetection(sce,
+               patch_cells = sce$celltype_combined == "B_cell",
+               colPairName = "neighborhood",
+               min_patch_size = 4,
+               name = "patch_B_cell",
+               expand_by = 0, 
+               img_id = "sample_id", 
+               BPPARAM = MulticoreParam(workers = 20))
+
+## 1. Number of patches per PID 
+n_Bpatch_PID <- colData(sce) %>% as.data.frame %>% select(PID, patch_B_cell) %>% 
+  filter(!is.na(patch_B_cell)) %>% 
+  unique() %>% 
+  group_by(PID) %>% 
+  count() %>% arrange(desc(n))
+
+
+sce$B_patch_present <- sce$PID %in% n_Bpatch_PID$PID
+
+
+
+plot_df <- colData(sce) %>% as.data.frame %>% select(PID, spatial_CD8_pheno_merg) %>% 
+  unique() 
+rownames(plot_df) <- NULL
+plot_df$n_Bpatch <- n_Bpatch_PID$n[match(plot_df$PID, n_Bpatch_PID$PID)]
+plot_df$n_Bpatch[is.na(plot_df$n_Bpatch)] <- 0
+
+plot_df$spatial_CD8_pheno <- sce$spatial_CD8_pheno[match(plot_df$PID, sce$PID)]
+
+library(ggpubr)
+ggplot(plot_df, aes(x = spatial_CD8_pheno, y = n_Bpatch))+
+  geom_boxplot(outlier.colour = NA)+
+  geom_jitter(aes(color = spatial_CD8_pheno), size = 3, position=position_jitter(w=0.1,h=0.1))+
+  guides(color = "none")+
+  scale_color_manual(values = metadata(sce)$colors$spatial_CD8_pheno)+
+  theme_classic(base_size = 12)+
+  coord_cartesian(ylim = c(0,15))+
+  theme(axis.title.x = element_blank())+
+  ylab("Number of B cell patches per PID")+
+  stat_compare_means(method = "kruskal.test")
+  
+
+## 2. Size of B cell patches 
+
+size_Bpatch_PID <- colData(sce) %>% as.data.frame %>% select(PID, spatial_CD8_pheno_merg, patch_B_cell) %>% 
+  filter(!is.na(patch_B_cell)) %>% 
+  group_by(patch_B_cell, PID) %>% 
+  count()
+
+size_Bpatch_PID$spatial_CD8_pheno_merg <- plot_df$spatial_CD8_pheno_merg[match(size_Bpatch_PID$PID, plot_df$PID)]
+size_Bpatch_PID$spatial_CD8_pheno <- sce$spatial_CD8_pheno[match(size_Bpatch_PID$PID, sce$PID)]
+
+ggplot(size_Bpatch_PID, aes(x = spatial_CD8_pheno, y = n))+
+  geom_boxplot(outlier.colour = NA)+
+  geom_jitter(aes(color = spatial_CD8_pheno), size = 3, position=position_jitter(w=0.1,h=0.1))+
+  guides(color = "none")+
+  scale_color_manual(values = metadata(sce)$colors$spatial_CD8_pheno)+
+  theme_classic(base_size = 12)+
+  #coord_cartesian(ylim = c(0,15))+
+  theme(axis.title.x = element_blank())+
+  #scale_y_log10()+
+  ylab("Number of B cells per patch")+
+  stat_compare_means(method = "kruskal.test")
+
+# Define cut-off for small and large B cell follicles - use median (21 B cells per patch)
+summary(size_Bpatch_PID$n)
+
+size_Bpatch_PID <- size_Bpatch_PID %>% mutate(patch_score = ifelse(n > median(size_Bpatch_PID$n), "large", "small"))
+
+PID_large_patches <- size_Bpatch_PID %>% filter(patch_score == "large") %>% pull(PID) %>% unique()
+
+size_Bpatch_PID <- size_Bpatch_PID %>% mutate(large_Bpatch = ifelse(PID %in% PID_large_patches, TRUE, FALSE))
+
+## 3. Create B cell score per PID 
+# No B cells = 1 
+# No B cell patches = 2
+# Small B cell patches = 3
+# Large B cell patches = 4 
+
+B_cells_PID <- colData(sce) %>% as.data.frame %>% select(PID, metacluster_combined) %>% filter(metacluster_combined == "B_cell") %>% group_by(PID, metacluster_combined) %>% count()
+
+plot_df$n_Bcells <- B_cells_PID$n[match(plot_df$PID, B_cells_PID$PID)]
+
+plot_df$n_Bcells[is.na(plot_df$n_Bcells)] <- 0
+
+plot_df$large_Bpatch <- size_Bpatch_PID$large_Bpatch[match(plot_df$PID, size_Bpatch_PID$PID)]
+
+
+plot_df <- plot_df %>% mutate(B_cell_score = ifelse(n_Bcells == 0, "No_B_cell", 
+                                         ifelse(n_Bpatch == 0, "No_B_patch", 
+                                                ifelse(large_Bpatch == FALSE, "Small_B_patch", "Large_B_patch"))))
+
+plot_df$B_cell_score <- factor(plot_df$B_cell_score, levels = c("No_B_cell","No_B_patch", "Small_B_patch", "Large_B_patch"))
+
+
+plot <- plot_df %>%
+  group_by(B_cell_score, spatial_CD8_pheno) %>%
+  summarise(n=n()) %>%
+  group_by(spatial_CD8_pheno) %>%
+  mutate(fraction = n / sum(n)) %>%
+  ungroup()
+
+
+plot_test <- plot %>% pivot_wider(names_from = spatial_CD8_pheno, id_cols = B_cell_score, values_from = n) %>% column_to_rownames("B_cell_score")
+
+plot_test_out <- fisher.test(plot_test, simulate.p.value = TRUE)
+
+round(plot_test_out$p.value, 4)
+
+ggplot(plot) + 
+  geom_col(aes(y=spatial_CD8_pheno, x=fraction, fill=B_cell_score), color = "black") +
+  theme_classic() + 
+  xlab("Fraction of PID") +
+  ylab("")+
+  scale_fill_brewer(palette = "Paired")+
+  ggtitle(paste0("p (Fisher) = ", plot_test_out$p.value))
+
+
+## 4. Add to sce
+sce$B_cell_score <- plot_df$B_cell_score[match(sce$PID, plot_df$PID)]
 ```
 
 ```{r}
-#Assess survival impact 
-library(survival)
-library(survminer)
+cur_sample <- colData(sce) %>% as.data.frame %>% filter(PID %in% n_Bpatch_PID$PID) %>% pull(sample_id) %>% unique()
 
-cur_surv <- colData(sce) %>% as.data.frame() %>% select(PID, PID_group_M2CD8, OS_months, status_OS) %>% unique()
+plotSpatial(sce[,sce$sample_id %in% cur_sample & sce$celltype_combined %in% c("B_cell")], 
+            node_color_by = "celltype_combined", 
+            img_id = "sample_id", 
+            node_size_fix = 0.5)
+```
 
-#Plot survival curves
-fit <- survfit(Surv(OS_months, status_OS) ~ PID_group_M2CD8, data = cur_surv)
+
+```{r}
+images <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/images.rds")
+masks <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/masks.rds")
+
+cur_images <- images[mcols(images)$sample_id %in% cur_sample]
+cur_masks <- masks[mcols(masks)$sample_id %in% cur_sample]
+cur_sce <- sce[,sce$sample_id %in% cur_sample]
+```
+
+
+```{r}
+library(cytoviewer)
+cytoviewer(image = cur_images, mask = cur_masks, object = cur_sce, img_id = "sample_id", cell_id = "ObjectNumber")
+```
+
+
+```{r}
+cur_surv <- colData(sce) %>% as.data.frame() %>% select(PID, B_patch_present, OS_months, status_OS) %>% unique() 
+
+#Plot specific survival curves
+fit <- survfit(Surv(OS_months, status_OS) ~ B_patch_present, data = cur_surv)
 print(fit)
 
 ggsurvplot(fit,
@@ -1519,7 +1894,10 @@ ggsurvplot(fit,
 ```
 
 
-## Distances of M2-like macrophages 
+
+
+
+## 2B. Distances of M2-like macrophages 
 
 ### M2-like vs CD8 
 
@@ -2363,310 +2741,7 @@ ggsurvplot(fit,
 )
 ```
 
-## Clinical PDL1 score 
 
-see Rosellini et al. (Nature Reviews Urology, 2022) - Describes different clinical studies and their respective cut-offs
-
-### Tumor cells 
-
-```{r}
-# 1. Tumor cells only 
-# Define PDL1 positivity by GMM
-set.seed(22)
-sce_tumor <- sce[,sce$celltype_combined == "tumor"] 
-
-# CD274
-GMM_CD274 <- Mclust(assay(sce_tumor, "exprs")["CD274",], G = 2)
-
-
-GMM_df <- data.frame(class_PDL1 = ifelse(GMM_CD274$classification == 2 & GMM_CD274$uncertainty == 0, 
-                                        "CD274+",
-                                        "CD274-"), 
-                     CD274_exprs = assay(sce_tumor, "exprs")["CD274",],
-                     uncertainty = GMM_CD274$uncertainty)
-
-# Define PDL1 positivity by exprs > 1 
-GMM_df$class_PDL1_1 <- ifelse(GMM_df$CD274_exprs > 1, "CD274+", "CD274-") 
-
-cut_off_GMM <- mean((GMM_df %>% filter(class_PDL1 == "CD274+") %>% arrange(CD274_exprs) %>% pull(CD274_exprs))[1],
-(GMM_df %>% filter(class_PDL1 == "CD274-") %>% arrange(desc(CD274_exprs)) %>% pull(CD274_exprs))[1])
-
-#Visualize GMM
-ggplot(GMM_df, aes(x = CD274_exprs, fill = class_PDL1_1))+
-  geom_density()+
-  geom_rug(aes(color = class_PDL1_1))+
-  theme_classic(base_size = 15)+
-  theme(axis.title.x = element_blank())+
-  scale_fill_brewer(palette = "Set1")+
-  scale_color_brewer(palette = "Set1")
-
-# Add PDL1 group 
-sce_tumor$tumor_CD274_GMM <- GMM_df$class_PDL1[match(colnames(sce_tumor), rownames(GMM_df))]
-sce_tumor$tumor_CD274_1 <- GMM_df$class_PDL1_1[match(colnames(sce_tumor), rownames(GMM_df))]
-
-sce$tumor_CD274_GMM <- GMM_df$class_PDL1[match(colnames(sce), rownames(GMM_df))]
-sce$tumor_CD274_1 <- GMM_df$class_PDL1_1[match(colnames(sce), rownames(GMM_df))]
-
-n_cat <- colData(sce_tumor) %>% as.data.frame() %>% group_by(tumor_CD274_1) %>% count()
-n_cat <- n_cat %>% ungroup() %>% mutate(sum = sum(n)) %>% mutate(fra = (n/sum)*100)
-n_cat
-```
-
-```{r}
-# Define PDL1 positive patients 
-
-# Based on GMM
-# More than 1% of tumor cells 
-cur_PID <- colData(sce_tumor) %>% as.data.frame() %>% select(tumor_CD274_GMM,PID) %>% group_by(PID) %>% table() %>% as.data.frame
-cur_PID_out <- cur_PID %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq)) %>% filter(tumor_CD274_GMM == "CD274+" & fra >= 0.01) %>% arrange(desc(fra)) %>% pull(PID) %>% unfactor()
-
-sce$PDL1_score_tumor_GMM_1 <- ifelse(sce$PID %in% cur_PID_out, "PDL1_pos", "PDL1_neg")
-
-# Based on exprs cut-off
-# More than 1% of tumor cells 
-cur_PID <- colData(sce_tumor) %>% as.data.frame() %>% select(tumor_CD274_1,PID) %>% group_by(PID) %>% table() %>% as.data.frame
-cur_PID_out <- cur_PID %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq)) %>% filter(tumor_CD274_1 == "CD274+" & fra >= 0.01) %>% arrange(desc(fra)) %>% pull(PID) %>% unfactor()
-
-# Add to SCE 
-sce$PDL1_score_tumor_1_1 <- ifelse(sce$PID %in% cur_PID_out, "PDL1_pos", "PDL1_neg")
-```
-
-### All cells 
-
-```{r}
-# 2. All cells
-# Define PDL1 positivity by GMM
-set.seed(22)
-sce_all <- sce 
-
-# CD274
-GMM_CD274 <- Mclust(assay(sce_all, "exprs")["CD274",], G = 2)
-
-
-GMM_df <- data.frame(class_PDL1 = ifelse(GMM_CD274$classification == 2 & GMM_CD274$uncertainty == 0, 
-                                        "CD274+",
-                                        "CD274-"), 
-                     CD274_exprs = assay(sce_all, "exprs")["CD274",],
-                     uncertainty = GMM_CD274$uncertainty)
-
-# Define PDL1 positivity by exprs > 1 
-GMM_df$class_PDL1_1 <- ifelse(GMM_df$CD274_exprs > 1, "CD274+", "CD274-") 
-
-#Visualize GMM
-ggplot(GMM_df, aes(x = CD274_exprs, fill = class_PDL1))+
-  geom_density()+
-  geom_rug(aes(color = class_PDL1))+
-  theme_classic(base_size = 15)+
-  theme(axis.title.x = element_blank())+
-  scale_fill_brewer(palette = "Set1")+
-  scale_color_brewer(palette = "Set1")
-
-# Add HLA group 
-sce_all$all_CD274_GMM <- GMM_df$class_PDL1[match(colnames(sce_all), rownames(GMM_df))]
-sce_all$all_CD274_1 <- GMM_df$class_PDL1_1[match(colnames(sce_all), rownames(GMM_df))]
-
-# Add HLA group 
-sce$all_CD274_GMM <- GMM_df$class_PDL1[match(colnames(sce), rownames(GMM_df))]
-sce$all_CD274_1 <- GMM_df$class_PDL1_1[match(colnames(sce), rownames(GMM_df))]
-
-n_cat <- colData(sce_all) %>% as.data.frame() %>% group_by(all_CD274_1) %>% count()
-n_cat <- n_cat %>% ungroup() %>% mutate(sum = sum(n)) %>% mutate(fra = (n/sum)*100)
-n_cat
-```
-
-```{r}
-# Define PDL1 positive patients 
-
-# Based on GMM
-# More than 1% of tumor cells 
-cur_PID <- colData(sce_all) %>% as.data.frame() %>% select(all_CD274_GMM,PID) %>% group_by(PID) %>% table() %>% as.data.frame
-cur_PID_out <- cur_PID %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq)) %>% filter(all_CD274_GMM == "CD274+" & fra >= 0.01) %>% arrange(desc(fra)) %>% pull(PID) %>% unfactor()
-
-sce$PDL1_score_all_GMM_1 <- ifelse(sce$PID %in% cur_PID_out, "PDL1_pos", "PDL1_neg")
-
-# Based on exprs cut-off
-# More than 1% of tumor cells 
-cur_PID <- colData(sce_all) %>% as.data.frame() %>% select(all_CD274_1,PID) %>% group_by(PID) %>% table() %>% as.data.frame
-cur_PID_out <- cur_PID %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq)) %>% filter(all_CD274_1 == "CD274+" & fra >= 0.01) %>% arrange(desc(fra)) %>% pull(PID) %>% unfactor()
-
-# Add to SCE 
-sce$PDL1_score_all_1_1 <- ifelse(sce$PID %in% cur_PID_out, "PDL1_pos", "PDL1_neg")
-```
-
-### Survival impact 
-
-```{r}
-#Assess survival impact 
-library(survival)
-library(survminer)
-
-cur_surv <- colData(sce) %>% as.data.frame() %>% select(PID, PDL1_score_all_GMM_1, PDL1_score_tumor_GMM_1,PDL1_score_all_1_1,PDL1_score_tumor_1_1, OS_months, status_OS) %>% unique()
-
-#Plot survival curves
-fit <- survfit(Surv(OS_months, status_OS) ~ PDL1_score_tumor_GMM_1, data = cur_surv)
-print(fit)
-
-ggsurvplot(fit,
-          pval = TRUE,
-          risk.table = TRUE, # Add risk table
-          risk.table.col = "strata", # Change risk table color by groups
-          linetype = "strata", # Change line type by groups
-          surv.median.line = "hv", # Specify median survival
-          ggtheme = theme_classic(), # Change ggplot2 theme
-          palette = c("#AADBAB","#00441B"),
-          conf.int = TRUE
-)
-
-#Plot survival curves
-fit <- survfit(Surv(OS_months, status_OS) ~ PDL1_score_tumor_1_1, data = cur_surv)
-print(fit)
-
-ggsurvplot(fit,
-          pval = TRUE,
-          risk.table = TRUE, # Add risk table
-          risk.table.col = "strata", # Change risk table color by groups
-          linetype = "strata", # Change line type by groups
-          surv.median.line = "hv", # Specify median survival
-          ggtheme = theme_classic(), # Change ggplot2 theme
-          palette = c("#AADBAB","#00441B"),
-          conf.int = TRUE
-)
-
-#Plot survival curves
-fit <- survfit(Surv(OS_months, status_OS) ~ PDL1_score_all_GMM_1, data = cur_surv)
-print(fit)
-
-ggsurvplot(fit,
-          pval = TRUE,
-          risk.table = TRUE, # Add risk table
-          risk.table.col = "strata", # Change risk table color by groups
-          linetype = "strata", # Change line type by groups
-          surv.median.line = "hv", # Specify median survival
-          ggtheme = theme_classic(), # Change ggplot2 theme
-          palette = c("#AADBAB","#00441B"),
-          conf.int = TRUE
-)
-
-# Plot survival curves
-fit <- survfit(Surv(OS_months, status_OS) ~ PDL1_score_all_1_1, data = cur_surv)
-print(fit)
-
-ggsurvplot(fit,
-          pval = TRUE,
-          risk.table = TRUE, # Add risk table
-          risk.table.col = "strata", # Change risk table color by groups
-          linetype = "strata", # Change line type by groups
-          surv.median.line = "hv", # Specify median survival
-          ggtheme = theme_classic(), # Change ggplot2 theme
-          palette = c("#AADBAB","#00441B"),
-          conf.int = TRUE
-)
-
-```
-
-### cytoviewer visualization
-
-```{r}
-images <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/images.rds")
-masks <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/masks.rds")
-```
-
-```{r}
-# Select images
-cur_PID <- colData(sce_tumor) %>% as.data.frame() %>% select(tumor_CD274_GMM,PID) %>% group_by(PID) %>% table() %>% as.data.frame
-cur_PID <- unfactor(cur_PID %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq)) %>% filter(tumor_CD274_GMM == "CD274+" & fra > 0.1) %>% arrange(desc(fra)) %>% pull(PID))[1:10]
-  
-cur_sample <- (colData(sce) %>% as.data.frame %>% select(PID, sample_id) %>% filter(PID %in%cur_PID) %>% pull(sample_id) %>% unique())
-
-cur_images <- images[mcols(images)$sample_id %in% cur_sample]
-cur_masks <- masks[mcols(masks)$sample_id %in% cur_sample]
-cur_sce <- sce[,sce$sample_id %in% cur_sample]
-```
-
-
-```{r}
-library(cytoviewer)
-cytoviewer(image = cur_images, mask = cur_masks, object = cur_sce, img_id = "sample_id", cell_id = "ObjectNumber")
-```
-
-### cytomapper 
-
-```{r}
-#### Extract images 
-images <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/images.rds")
-masks <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/masks.rds")
-```
-
-```{r}
-# Select images
-cur_PID <- colData(sce) %>% as.data.frame() %>% select(all_CD274_GMM,PID) %>% group_by(PID) %>% table() %>% as.data.frame
-cur_PID <- unfactor(cur_PID %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq)) %>% filter(all_CD274_GMM == "CD274+" & fra > 0.1) %>% arrange(desc(fra)) %>% pull(PID))[1:15]
-  
-cur_sample <- (colData(sce) %>% as.data.frame %>% select(PID, sample_id) %>% filter(PID %in%cur_PID) %>% pull(sample_id) %>% unique())
-
-cur_images <- images[mcols(images)$sample_id %in% cur_sample]
-cur_masks <- masks[mcols(masks)$sample_id %in% cur_sample]
-cur_sce <- sce[,sce$sample_id %in% cur_sample]
-```
-
-Combined Positive Score (CPS) VS. Tumor Positive Score (TPS)
-
-```{r}
-##Visualize clusters on images
-library(doParallel)
-registerDoParallel(cores = 2)
-
-#for(i in c("immune_metacluster_graph_test","immune_metacluster_SOM_test")){
-foreach(i = c("all_CD274_GMM", "all_CD274_1"))%dopar%{
-
-#Prepare images
-#cur_images <- cytomapper::normalize(cur_images, separateImages = FALSE)
-#cur_images <- cytomapper::normalize(cur_images, inputRange = c(0, 0.2))
-
-plotPixels(cur_images,
-           mask = cur_masks,
-           object = cur_sce,
-           img_id = "sample_id",
-           cell_id = "ObjectNumber",
-           missing_colour = "white",
-           colour_by = c("CD274"),
-           outline_by = i,
-           colour = list("CD274" = c("black", "magenta")),
-           bcg = list(CD274 = c(2, 4.5, 1.8)),
-           thick = FALSE,
-           legend = list(colour_by.title.cex = 0.7,
-                         colour_by.labels.cex = 0.7),
-           save_plot = list(filename = paste0("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/07_comb/PDL1score_ccRCC_",i,".png"), scale = 2)
-           )
-}
-
-foreach(i = c("tumor_CD274_GMM", "tumor_CD274_1"))%dopar%{
-
-#Subset to tumor cells
-cur_sce_tumor <- cur_sce[,cur_sce$celltype_combined == "tumor"]
-
-#Prepare images
-#cur_images <- cytomapper::normalize(cur_images, separateImages = FALSE)
-#cur_images <- cytomapper::normalize(cur_images, inputRange = c(0, 0.2))
-
-plotPixels(cur_images,
-           mask = cur_masks,
-           object = cur_sce_tumor,
-           img_id = "sample_id",
-           cell_id = "ObjectNumber",
-           missing_colour = "white",
-           colour_by = c("CD274"),
-           outline_by = i,
-           colour = list("CD274" = c("black", "magenta")),
-           bcg = list(CD274 = c(2, 4.5, 1.8)),
-           thick = FALSE,
-           legend = list(colour_by.title.cex = 0.7,
-                         colour_by.labels.cex = 0.7),
-           save_plot = list(filename = paste0("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/07_comb/PDL1score_ccRCC_",i,".png"), scale = 2)
-           )
-}
-
-```
 
 
 
