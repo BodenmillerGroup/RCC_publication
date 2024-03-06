@@ -791,6 +791,7 @@ ggsurvplot(fit,
           conf.int = TRUE
 )
 ```
+
 ##### Cox Model 
 
 ###### Categorical
@@ -885,7 +886,11 @@ theme(axis.text.x = element_text(angle = 90))
 hr_mean
 ```
 
-
+```{r}
+## Add relevant categories to sce 
+sce$M2_CD8_int_score <- out_df_1$MY_M2_like__CD8_T_cell[match(sce$PID, out_df_1$PID)]
+sce$M2_CD8_int_cat <- out_df$MY_M2_like__CD8_T_cell[match(sce$PID, out_df$PID)]
+```
 
 
 ```{r}
@@ -1720,16 +1725,12 @@ plotSpatial(sce[,sce$sample_id %in% cur_sample & sce$celltype_combined_fine %in%
 ```
 ## 2B. B cell patch analysis 
 
-### CONTINUE HERE 
-
 ```{r}
-colPairs(sce)
-
 ## Patch detection
 sce <- patchDetection(sce,
                patch_cells = sce$celltype_combined == "B_cell",
                colPairName = "neighborhood",
-               min_patch_size = 4,
+               min_patch_size = 5,
                name = "patch_B_cell",
                expand_by = 0, 
                img_id = "sample_id", 
@@ -1742,62 +1743,8 @@ n_Bpatch_PID <- colData(sce) %>% as.data.frame %>% select(PID, patch_B_cell) %>%
   group_by(PID) %>% 
   count() %>% arrange(desc(n))
 
-
 sce$B_patch_present <- sce$PID %in% n_Bpatch_PID$PID
 
-
-
-plot_df <- colData(sce) %>% as.data.frame %>% select(PID, spatial_CD8_pheno_merg) %>% 
-  unique() 
-rownames(plot_df) <- NULL
-plot_df$n_Bpatch <- n_Bpatch_PID$n[match(plot_df$PID, n_Bpatch_PID$PID)]
-plot_df$n_Bpatch[is.na(plot_df$n_Bpatch)] <- 0
-
-plot_df$spatial_CD8_pheno <- sce$spatial_CD8_pheno[match(plot_df$PID, sce$PID)]
-
-library(ggpubr)
-ggplot(plot_df, aes(x = spatial_CD8_pheno, y = n_Bpatch))+
-  geom_boxplot(outlier.colour = NA)+
-  geom_jitter(aes(color = spatial_CD8_pheno), size = 3, position=position_jitter(w=0.1,h=0.1))+
-  guides(color = "none")+
-  scale_color_manual(values = metadata(sce)$colors$spatial_CD8_pheno)+
-  theme_classic(base_size = 12)+
-  coord_cartesian(ylim = c(0,15))+
-  theme(axis.title.x = element_blank())+
-  ylab("Number of B cell patches per PID")+
-  stat_compare_means(method = "kruskal.test")
-  
-
-## 2. Size of B cell patches 
-
-size_Bpatch_PID <- colData(sce) %>% as.data.frame %>% select(PID, spatial_CD8_pheno_merg, patch_B_cell) %>% 
-  filter(!is.na(patch_B_cell)) %>% 
-  group_by(patch_B_cell, PID) %>% 
-  count()
-
-size_Bpatch_PID$spatial_CD8_pheno_merg <- plot_df$spatial_CD8_pheno_merg[match(size_Bpatch_PID$PID, plot_df$PID)]
-size_Bpatch_PID$spatial_CD8_pheno <- sce$spatial_CD8_pheno[match(size_Bpatch_PID$PID, sce$PID)]
-
-ggplot(size_Bpatch_PID, aes(x = spatial_CD8_pheno, y = n))+
-  geom_boxplot(outlier.colour = NA)+
-  geom_jitter(aes(color = spatial_CD8_pheno), size = 3, position=position_jitter(w=0.1,h=0.1))+
-  guides(color = "none")+
-  scale_color_manual(values = metadata(sce)$colors$spatial_CD8_pheno)+
-  theme_classic(base_size = 12)+
-  #coord_cartesian(ylim = c(0,15))+
-  theme(axis.title.x = element_blank())+
-  #scale_y_log10()+
-  ylab("Number of B cells per patch")+
-  stat_compare_means(method = "kruskal.test")
-
-# Define cut-off for small and large B cell follicles - use median (21 B cells per patch)
-summary(size_Bpatch_PID$n)
-
-size_Bpatch_PID <- size_Bpatch_PID %>% mutate(patch_score = ifelse(n > median(size_Bpatch_PID$n), "large", "small"))
-
-PID_large_patches <- size_Bpatch_PID %>% filter(patch_score == "large") %>% pull(PID) %>% unique()
-
-size_Bpatch_PID <- size_Bpatch_PID %>% mutate(large_Bpatch = ifelse(PID %in% PID_large_patches, TRUE, FALSE))
 
 ## 3. Create B cell score per PID 
 # No B cells = 1 
@@ -1805,48 +1752,22 @@ size_Bpatch_PID <- size_Bpatch_PID %>% mutate(large_Bpatch = ifelse(PID %in% PID
 # Small B cell patches = 3
 # Large B cell patches = 4 
 
-B_cells_PID <- colData(sce) %>% as.data.frame %>% select(PID, metacluster_combined) %>% filter(metacluster_combined == "B_cell") %>% group_by(PID, metacluster_combined) %>% count()
+B_cells_PID <- colData(sce) %>% as.data.frame %>% select(PID, celltype_combined) %>% filter(celltype_combined == "B_cell") %>% group_by(PID, celltype_combined) %>% count()
 
-plot_df$n_Bcells <- B_cells_PID$n[match(plot_df$PID, B_cells_PID$PID)]
-
-plot_df$n_Bcells[is.na(plot_df$n_Bcells)] <- 0
-
-plot_df$large_Bpatch <- size_Bpatch_PID$large_Bpatch[match(plot_df$PID, size_Bpatch_PID$PID)]
+B_cells_PID$B_patch <- B_cells_PID$PID %in% n_Bpatch_PID$PID
 
 
-plot_df <- plot_df %>% mutate(B_cell_score = ifelse(n_Bcells == 0, "No_B_cell", 
-                                         ifelse(n_Bpatch == 0, "No_B_patch", 
-                                                ifelse(large_Bpatch == FALSE, "Small_B_patch", "Large_B_patch"))))
-
-plot_df$B_cell_score <- factor(plot_df$B_cell_score, levels = c("No_B_cell","No_B_patch", "Small_B_patch", "Large_B_patch"))
+B_cells_PID$B_score <- ifelse(B_cells_PID$n < 3 & B_cells_PID$B_patch == FALSE, "No_B_cell", "B_cell_patch" ) 
 
 
-plot <- plot_df %>%
-  group_by(B_cell_score, spatial_CD8_pheno) %>%
-  summarise(n=n()) %>%
-  group_by(spatial_CD8_pheno) %>%
-  mutate(fraction = n / sum(n)) %>%
-  ungroup()
+cur_PID <- B_cells_PID %>% filter(B_score == "B_cell_patch") %>% pull(PID)
 
+sce$B_cell_score <- sce$PID %in% cur_PID
 
-plot_test <- plot %>% pivot_wider(names_from = spatial_CD8_pheno, id_cols = B_cell_score, values_from = n) %>% column_to_rownames("B_cell_score")
-
-plot_test_out <- fisher.test(plot_test, simulate.p.value = TRUE)
-
-round(plot_test_out$p.value, 4)
-
-ggplot(plot) + 
-  geom_col(aes(y=spatial_CD8_pheno, x=fraction, fill=B_cell_score), color = "black") +
-  theme_classic() + 
-  xlab("Fraction of PID") +
-  ylab("")+
-  scale_fill_brewer(palette = "Paired")+
-  ggtitle(paste0("p (Fisher) = ", plot_test_out$p.value))
-
-
-## 4. Add to sce
-sce$B_cell_score <- plot_df$B_cell_score[match(sce$PID, plot_df$PID)]
+sce$B_cell_score_fine <- ifelse(sce$B_patch_present, "B_patch", ifelse(sce$B_cell_score, "B_cell", "No_B_cell"))
 ```
+
+### Visualization 
 
 ```{r}
 cur_sample <- colData(sce) %>% as.data.frame %>% filter(PID %in% n_Bpatch_PID$PID) %>% pull(sample_id) %>% unique()
@@ -1874,11 +1795,277 @@ cytoviewer(image = cur_images, mask = cur_masks, object = cur_sce, img_id = "sam
 ```
 
 
+### Survival testing 
+
 ```{r}
-cur_surv <- colData(sce) %>% as.data.frame() %>% select(PID, B_patch_present, OS_months, status_OS) %>% unique() 
+cur_surv <- colData(sce) %>% as.data.frame() %>% select(PID, B_cell_score, B_cell_score_fine, OS_months, status_OS) %>% unique() 
 
 #Plot specific survival curves
-fit <- survfit(Surv(OS_months, status_OS) ~ B_patch_present, data = cur_surv)
+fit <- survfit(Surv(OS_months, status_OS) ~ B_cell_score, data = cur_surv)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = "Set1",
+          conf.int = TRUE
+)
+
+#Plot specific survival curves
+fit <- survfit(Surv(OS_months, status_OS) ~ B_cell_score_fine, data = cur_surv)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = "Set1",
+          conf.int = TRUE
+)
+```
+
+### Differential abundance testing 
+
+#### All celltypes 
+
+```{r}
+sce_MY <- sce[,str_detect(sce$celltype_combined, "MY")]
+
+### Differential abundance analysis based on edgeR
+library(edgeR)
+
+abundances <- table(sce$celltype_combined, sce$PID)
+abundances <- unclass(abundances) 
+head(abundances)
+
+#relevant patient metadata (Relevel so that ISUP 1/2 is baseline)
+meta <- colData(sce)[match(colnames(abundances), sce$PID),]
+meta$B_cell_score <- relevel(x=factor(meta$B_cell_score), ref = "FALSE")
+
+#filter
+meta <- meta[!is.na(meta$B_cell_score),]
+abundances <- abundances[,colnames(abundances) %in% meta$PID]
+
+#create DGEList - based on edgeR package
+y.ab <- DGEList(abundances, samples=meta, group = meta$B_cell_score)
+
+#Design matrix
+design <- model.matrix(~B_cell_score, data = y.ab$samples)
+
+#Visualize
+# logCPM of abundances per cluster
+cur_mat <- cpm(abundances,prior.count = 1,log = TRUE)
+
+Heatmap(cur_mat, 
+        col = viridis(100),
+        column_split = unfactor(meta$B_cell_score))%v%
+  columnAnnotation(B_cell_score = anno_simple(unfactor(meta$B_cell_score)))
+
+
+# Estimate NB and QL dispersion 
+y.ab <- estimateDisp(y.ab, design, trend="none")
+summary(y.ab$common.dispersion)
+plotBCV(y.ab, cex=1)
+
+fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
+summary(fit.ab$var.prior)
+plotQLDisp(fit.ab, cex=1)
+
+# Test for differential abundance of clusters between tumor stages
+res <- glmQLFTest(fit.ab, coef=ncol(design))
+
+res$coefficients
+summary(decideTests(res))
+
+DA <- res$table
+
+DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
+
+DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.05, result = ifelse(DA$logFC > 0 & DA$FDR < 0.05, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.05, "DOWN", "NOTSIG"))) %>% 
+  arrange(desc(logFC))
+
+DA$cluster <- factor(DA$cluster, levels = DA$cluster)
+
+sig <- DA %>% filter(FDR<0.05) %>% pull(cluster) %>% unfactor
+
+## Visualize
+#Barplot
+ggplot(DA, aes(cluster, y = logFC))+
+  geom_col(aes(fill=result), col = "black")+
+  #scale_fill_manual(values = c("#377EB8","lightgrey","#E41A1C"))+
+  ylab("logFC")+
+  xlab("Cluster")+
+  labs(fill = "FDR<0.1")+
+  ggtitle("ISUP 1/2 vs. 3/4")+
+  theme_classic()
+
+#Volcano plot  
+ggplot(DA, aes(x = logFC, y = -log10(FDR)))+
+  geom_point(aes(col=cluster, size = -log10(FDR)))+
+  geom_label_repel(data = DA %>% filter(FDR<0.05), aes(label = cluster))+
+  #scale_color_manual(values = metadata(sce_MY)$colors$my_cluster_130)+
+  xlab("logFC (ISUP 1/2 vs. 3/4)")+
+  ylab("-log10(FDR)")+
+  theme_classic()+
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed")+
+  geom_vline(xintercept = 0, linetype = "dashed")+
+  labs(color = "cluster")
+
+#Abundance vs log fold change
+ggplot(DA, aes(x = logFC, y = logCPM))+
+  geom_point(aes(col= cluster, 
+                 size = -log10(FDR)))+
+  geom_label_repel(data = DA %>% filter(FDR<0.05), aes(label = cluster))+
+  #scale_color_manual(values = metadata(sce_MY)$colors$my_cluster_130)+
+  xlab("logFC (ISUP 1/2 vs. 3/4)")+
+  ylab("Abundance (logCPM)")+
+  theme_classic()+
+  geom_vline(xintercept = 0, linetype = "dashed")+
+  labs(color = "cluster")
+```
+
+#### Myeloid celltypes 
+
+```{r}
+sce_MY <- sce[,str_detect(sce$celltype_combined, "MY")]
+
+### Differential abundance analysis based on edgeR
+library(edgeR)
+
+abundances <- table(sce_MY$celltype_combined, sce_MY$PID)
+abundances <- unclass(abundances) 
+head(abundances)
+
+#relevant patient metadata (Relevel so that ISUP 1/2 is baseline)
+meta <- colData(sce_MY)[match(colnames(abundances), sce_MY$PID),]
+meta$B_cell_score <- relevel(x=factor(meta$B_cell_score), ref = "FALSE")
+
+#filter
+meta <- meta[!is.na(meta$B_cell_score),]
+abundances <- abundances[,colnames(abundances) %in% meta$PID]
+
+#create DGEList - based on edgeR package
+y.ab <- DGEList(abundances, samples=meta, group = meta$B_cell_score)
+
+#Design matrix
+design <- model.matrix(~B_cell_score, data = y.ab$samples)
+
+#Visualize
+# logCPM of abundances per cluster
+cur_mat <- cpm(abundances,prior.count = 1,log = TRUE)
+
+Heatmap(cur_mat, 
+        col = viridis(100),
+        column_split = unfactor(meta$B_cell_score))%v%
+  columnAnnotation(B_cell_score = anno_simple(unfactor(meta$B_cell_score)))
+
+
+# Estimate NB and QL dispersion 
+y.ab <- estimateDisp(y.ab, design, trend="none")
+summary(y.ab$common.dispersion)
+plotBCV(y.ab, cex=1)
+
+fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
+summary(fit.ab$var.prior)
+plotQLDisp(fit.ab, cex=1)
+
+# Test for differential abundance of clusters between tumor stages
+res <- glmQLFTest(fit.ab, coef=ncol(design))
+
+res$coefficients
+summary(decideTests(res))
+
+DA <- res$table
+
+DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
+
+DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.05, result = ifelse(DA$logFC > 0 & DA$FDR < 0.05, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.05, "DOWN", "NOTSIG"))) %>% 
+  arrange(desc(logFC))
+
+DA$cluster <- factor(DA$cluster, levels = DA$cluster)
+
+sig <- DA %>% filter(FDR<0.05) %>% pull(cluster) %>% unfactor
+
+## Visualize
+#Barplot
+ggplot(DA, aes(cluster, y = logFC))+
+  geom_col(aes(fill=result), col = "black")+
+  #scale_fill_manual(values = c("#377EB8","lightgrey","#E41A1C"))+
+  ylab("logFC")+
+  xlab("Cluster")+
+  labs(fill = "FDR<0.1")+
+  ggtitle("ISUP 1/2 vs. 3/4")+
+  theme_classic()
+
+#Volcano plot  
+ggplot(DA, aes(x = logFC, y = -log10(FDR)))+
+  geom_point(aes(col=cluster, size = -log10(FDR)))+
+  geom_label_repel(data = DA %>% filter(FDR<0.05), aes(label = cluster))+
+  #scale_color_manual(values = metadata(sce_MY_MY)$colors$my_cluster_130)+
+  xlab("logFC (ISUP 1/2 vs. 3/4)")+
+  ylab("-log10(FDR)")+
+  theme_classic()+
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed")+
+  geom_vline(xintercept = 0, linetype = "dashed")+
+  labs(color = "cluster")
+
+#Abundance vs log fold change
+ggplot(DA, aes(x = logFC, y = logCPM))+
+  geom_point(aes(col= cluster, 
+                 size = -log10(FDR)))+
+  geom_label_repel(data = DA %>% filter(FDR<0.05), aes(label = cluster))+
+  #scale_color_manual(values = metadata(sce_MY_MY)$colors$my_cluster_130)+
+  xlab("logFC (ISUP 1/2 vs. 3/4)")+
+  ylab("Abundance (logCPM)")+
+  theme_classic()+
+  geom_vline(xintercept = 0, linetype = "dashed")+
+  labs(color = "cluster")
+```
+
+
+
+
+## 2C. M2-CD8 interaction category
+
+```{r}
+sce$M2_CD8_int_cat
+
+out_score <- colData(sce) %>% as.data.frame %>% select(PID, M2_CD8_int_cat, M2_CD8_int_score, OS_months, status_OS) %>% unique()
+
+# Also perform tertile split
+out_score$cat_1 <- ifelse(out_score$M2_CD8_int_score <= quantile(out_score$M2_CD8_int_score,probs = c(1/3,2/3), na.rm = TRUE)[1], "low", 
+       ifelse(out_score$M2_CD8_int_score >= quantile(out_score$M2_CD8_int_score,probs = c(1/3,2/3), na.rm = TRUE)[2], "high", "medium"))
+
+sce$M2_CD8_int_cat_1 <- out_score$cat_1[match(sce$PID, out_score$PID)]
+```
+
+```{r}
+#Plot specific survival curves
+fit <- survfit(Surv(OS_months, status_OS) ~ M2_CD8_int_cat, data = out_score)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = "Set1",
+          conf.int = TRUE
+)
+
+out_score_1 <- out_score #%>% filter(cat_1 %in% c("high", "low"))
+
+#Plot specific survival curves
+fit <- survfit(Surv(OS_months, status_OS) ~ cat_1, data = out_score_1)
 print(fit)
 
 ggsurvplot(fit,
@@ -1894,10 +2081,64 @@ ggsurvplot(fit,
 ```
 
 
+```{r}
+### M2-focus 
+sce_tumor <- sce[,sce$celltype_combined == "tumor"]
+
+# PDL1+ cells
+n_cat <- colData(sce_tumor) %>% as.data.frame() %>% group_by(PDL1_score_cells) %>% count()
+n_cat <- n_cat %>% ungroup() %>% mutate(sum = sum(n)) %>% mutate(fra = (n/sum)*100)
+
+# PDL1+ fine phenotype
+n_cat <- colData(sce_tumor) %>% as.data.frame() %>% group_by(PDL1_score_cells, M2_CD8_int_cat_1) %>% count()
+n_cat <- na.omit(n_cat)
+
+n_cat <- n_cat %>% ungroup() %>% group_by(M2_CD8_int_cat_1) %>% mutate(sum = sum(n)) %>% mutate(fra = (n/sum)*100)
+
+metadata(sce)$colors$PDL1_score_cells <- c("#AADBAB", "#00441B")
+names(metadata(sce)$colors$PDL1_score_cells) <- c("CD274-", "CD274+")
+
+ggplot(n_cat, aes(x = M2_CD8_int_cat_1, y = fra, fill = PDL1_score_cells))+
+  geom_bar(stat = "identity")+
+  coord_cartesian(ylim = c(0,10))+
+  scale_fill_manual(values = metadata(sce)$colors$PDL1_score_cells)+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90))
+```
+
+```{r}
+## Compare fraction of PDL1-positive tumor cells between interaction category
+n_cat <- colData(sce_tumor) %>% as.data.frame() %>% group_by(PID, PDL1_score_cells) %>% count()
+n_cat <- n_cat %>% ungroup() %>% group_by(PID) %>% mutate(sum = sum(n)) %>% mutate(fra = (n/sum)*100) %>% filter(sum >= 5)
+
+cur_PID <- unique(n_cat$PID)
+
+out_dat <- n_cat %>% filter(PDL1_score_cells == "CD274+") %>% select(PID, fra)
+
+out_dat <- data.frame(PID = cur_PID, fra = ifelse(cur_PID %in% out_dat$PID, out_dat$fra, 0))
+
+out_dat$M2_CD8_int_cat  <- as.factor(sce$M2_CD8_int_cat [match(out_dat$PID,sce$PID)])
+
+all_plots <- lapply(c("M2_CD8_int_cat"),
+                    function(x){
+                      out_dat <- out_dat %>% select(PID, fra, all_of(x))
+                      out_dat <- na.omit(out_dat)
+                      p <- ggplot(out_dat, aes_string(x = x, y = "fra", fill = x))+
+                        geom_boxplot()+
+                        stat_compare_means()+
+                        theme_classic()+
+                        #scale_fill_manual(values = metadata(sce)$colors[[x]])+
+                        guides(fill = "none")
+                      return(p)                    
+                    })
+
+cowplot::plot_grid(plotlist = all_plots)
+```
 
 
 
-## 2B. Distances of M2-like macrophages 
+
+## 2D. Distances of M2-like macrophages 
 
 ### M2-like vs CD8 
 
@@ -2547,14 +2788,14 @@ ggsurvplot(fit,
 ```
 
 ```{r}
-colData(sce) %>% 
+
 
 
 plotExpression(sce[,sce$celltype_combined == "tumor"], 
                features = c("IDO1","CD274"),
-               x = "M2_CD8_dist_category", 
+               x = "M2_CD8_int_cat", 
                exprs_values = "exprs", 
-               colour_by = "M2_CD8_dist_category") +
+               colour_by = "M2_CD8_int_cat") +
     theme(axis.text.x =  element_text(angle = 90))
 ```
 
@@ -2741,11 +2982,19 @@ ggsurvplot(fit,
 )
 ```
 
+# Save SCE
+
+
+```{r save_objects, message = FALSE, warning=FALSE}
+#Save sce
+saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_07.rds")
+```
 
 
 
 
 # CONTINUE HERE
+# OLD SCRIPTS BELOW
 
 
 
