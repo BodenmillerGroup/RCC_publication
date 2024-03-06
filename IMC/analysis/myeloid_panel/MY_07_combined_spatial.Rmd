@@ -159,7 +159,7 @@ saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sc
 ### Celltype 
 
 ```{r}
-#sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_07.rds")
+sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_07.rds")
 
 ### General phenotype interaction difference
 
@@ -1831,202 +1831,35 @@ ggsurvplot(fit,
 )
 ```
 
-### Differential abundance testing 
-
-#### All celltypes 
+## 2C. Tumor patch analysis 
 
 ```{r}
-sce_MY <- sce[,str_detect(sce$celltype_combined, "MY")]
-
-### Differential abundance analysis based on edgeR
-library(edgeR)
-
-abundances <- table(sce$celltype_combined, sce$PID)
-abundances <- unclass(abundances) 
-head(abundances)
-
-#relevant patient metadata (Relevel so that ISUP 1/2 is baseline)
-meta <- colData(sce)[match(colnames(abundances), sce$PID),]
-meta$B_cell_score <- relevel(x=factor(meta$B_cell_score), ref = "FALSE")
-
-#filter
-meta <- meta[!is.na(meta$B_cell_score),]
-abundances <- abundances[,colnames(abundances) %in% meta$PID]
-
-#create DGEList - based on edgeR package
-y.ab <- DGEList(abundances, samples=meta, group = meta$B_cell_score)
-
-#Design matrix
-design <- model.matrix(~B_cell_score, data = y.ab$samples)
-
-#Visualize
-# logCPM of abundances per cluster
-cur_mat <- cpm(abundances,prior.count = 1,log = TRUE)
-
-Heatmap(cur_mat, 
-        col = viridis(100),
-        column_split = unfactor(meta$B_cell_score))%v%
-  columnAnnotation(B_cell_score = anno_simple(unfactor(meta$B_cell_score)))
-
-
-# Estimate NB and QL dispersion 
-y.ab <- estimateDisp(y.ab, design, trend="none")
-summary(y.ab$common.dispersion)
-plotBCV(y.ab, cex=1)
-
-fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
-summary(fit.ab$var.prior)
-plotQLDisp(fit.ab, cex=1)
-
-# Test for differential abundance of clusters between tumor stages
-res <- glmQLFTest(fit.ab, coef=ncol(design))
-
-res$coefficients
-summary(decideTests(res))
-
-DA <- res$table
-
-DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
-
-DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.05, result = ifelse(DA$logFC > 0 & DA$FDR < 0.05, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.05, "DOWN", "NOTSIG"))) %>% 
-  arrange(desc(logFC))
-
-DA$cluster <- factor(DA$cluster, levels = DA$cluster)
-
-sig <- DA %>% filter(FDR<0.05) %>% pull(cluster) %>% unfactor
-
-## Visualize
-#Barplot
-ggplot(DA, aes(cluster, y = logFC))+
-  geom_col(aes(fill=result), col = "black")+
-  #scale_fill_manual(values = c("#377EB8","lightgrey","#E41A1C"))+
-  ylab("logFC")+
-  xlab("Cluster")+
-  labs(fill = "FDR<0.1")+
-  ggtitle("ISUP 1/2 vs. 3/4")+
-  theme_classic()
-
-#Volcano plot  
-ggplot(DA, aes(x = logFC, y = -log10(FDR)))+
-  geom_point(aes(col=cluster, size = -log10(FDR)))+
-  geom_label_repel(data = DA %>% filter(FDR<0.05), aes(label = cluster))+
-  #scale_color_manual(values = metadata(sce_MY)$colors$my_cluster_130)+
-  xlab("logFC (ISUP 1/2 vs. 3/4)")+
-  ylab("-log10(FDR)")+
-  theme_classic()+
-  geom_hline(yintercept = -log10(0.05), linetype = "dashed")+
-  geom_vline(xintercept = 0, linetype = "dashed")+
-  labs(color = "cluster")
-
-#Abundance vs log fold change
-ggplot(DA, aes(x = logFC, y = logCPM))+
-  geom_point(aes(col= cluster, 
-                 size = -log10(FDR)))+
-  geom_label_repel(data = DA %>% filter(FDR<0.05), aes(label = cluster))+
-  #scale_color_manual(values = metadata(sce_MY)$colors$my_cluster_130)+
-  xlab("logFC (ISUP 1/2 vs. 3/4)")+
-  ylab("Abundance (logCPM)")+
-  theme_classic()+
-  geom_vline(xintercept = 0, linetype = "dashed")+
-  labs(color = "cluster")
+## Patch detection
+sce <- patchDetection(sce,
+               patch_cells = sce$celltype_combined == "tumor",
+               colPairName = "neighborhood",
+               min_patch_size = 10,
+               name = "patch_tumor",
+               expand_by = 1, 
+               img_id = "sample_id", 
+               BPPARAM = MulticoreParam(workers = 10))
 ```
 
-#### Myeloid celltypes 
+
+
+## CONTOINUE 
 
 ```{r}
-sce_MY <- sce[,str_detect(sce$celltype_combined, "MY")]
-
-### Differential abundance analysis based on edgeR
-library(edgeR)
-
-abundances <- table(sce_MY$celltype_combined, sce_MY$PID)
-abundances <- unclass(abundances) 
-head(abundances)
-
-#relevant patient metadata (Relevel so that ISUP 1/2 is baseline)
-meta <- colData(sce_MY)[match(colnames(abundances), sce_MY$PID),]
-meta$B_cell_score <- relevel(x=factor(meta$B_cell_score), ref = "FALSE")
-
-#filter
-meta <- meta[!is.na(meta$B_cell_score),]
-abundances <- abundances[,colnames(abundances) %in% meta$PID]
-
-#create DGEList - based on edgeR package
-y.ab <- DGEList(abundances, samples=meta, group = meta$B_cell_score)
-
-#Design matrix
-design <- model.matrix(~B_cell_score, data = y.ab$samples)
-
-#Visualize
-# logCPM of abundances per cluster
-cur_mat <- cpm(abundances,prior.count = 1,log = TRUE)
-
-Heatmap(cur_mat, 
-        col = viridis(100),
-        column_split = unfactor(meta$B_cell_score))%v%
-  columnAnnotation(B_cell_score = anno_simple(unfactor(meta$B_cell_score)))
-
-
-# Estimate NB and QL dispersion 
-y.ab <- estimateDisp(y.ab, design, trend="none")
-summary(y.ab$common.dispersion)
-plotBCV(y.ab, cex=1)
-
-fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
-summary(fit.ab$var.prior)
-plotQLDisp(fit.ab, cex=1)
-
-# Test for differential abundance of clusters between tumor stages
-res <- glmQLFTest(fit.ab, coef=ncol(design))
-
-res$coefficients
-summary(decideTests(res))
-
-DA <- res$table
-
-DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
-
-DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.05, result = ifelse(DA$logFC > 0 & DA$FDR < 0.05, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.05, "DOWN", "NOTSIG"))) %>% 
-  arrange(desc(logFC))
-
-DA$cluster <- factor(DA$cluster, levels = DA$cluster)
-
-sig <- DA %>% filter(FDR<0.05) %>% pull(cluster) %>% unfactor
-
-## Visualize
-#Barplot
-ggplot(DA, aes(cluster, y = logFC))+
-  geom_col(aes(fill=result), col = "black")+
-  #scale_fill_manual(values = c("#377EB8","lightgrey","#E41A1C"))+
-  ylab("logFC")+
-  xlab("Cluster")+
-  labs(fill = "FDR<0.1")+
-  ggtitle("ISUP 1/2 vs. 3/4")+
-  theme_classic()
-
-#Volcano plot  
-ggplot(DA, aes(x = logFC, y = -log10(FDR)))+
-  geom_point(aes(col=cluster, size = -log10(FDR)))+
-  geom_label_repel(data = DA %>% filter(FDR<0.05), aes(label = cluster))+
-  #scale_color_manual(values = metadata(sce_MY_MY)$colors$my_cluster_130)+
-  xlab("logFC (ISUP 1/2 vs. 3/4)")+
-  ylab("-log10(FDR)")+
-  theme_classic()+
-  geom_hline(yintercept = -log10(0.05), linetype = "dashed")+
-  geom_vline(xintercept = 0, linetype = "dashed")+
-  labs(color = "cluster")
-
-#Abundance vs log fold change
-ggplot(DA, aes(x = logFC, y = logCPM))+
-  geom_point(aes(col= cluster, 
-                 size = -log10(FDR)))+
-  geom_label_repel(data = DA %>% filter(FDR<0.05), aes(label = cluster))+
-  #scale_color_manual(values = metadata(sce_MY_MY)$colors$my_cluster_130)+
-  xlab("logFC (ISUP 1/2 vs. 3/4)")+
-  ylab("Abundance (logCPM)")+
-  theme_classic()+
-  geom_vline(xintercept = 0, linetype = "dashed")+
-  labs(color = "cluster")
+library(tidyverse)
+colData(spe) %>% as_tibble() %>%
+    group_by(patch_tumor, sample_id) %>%
+    summarize(Tcell_count = sum(celltype_combined == "CD8" | celltype == "CD4"),
+              patch_size = n(),
+              Tcell_freq = Tcell_count / patch_size) %>%
+    filter(!is.na(patch_id)) %>%
+    ggplot() +
+        geom_point(aes(log10(patch_size), Tcell_freq, color = sample_id)) +
+    theme_classic()
 ```
 
 
@@ -2148,7 +1981,7 @@ sce <- minDistToCells(sce,
                x_cells = sce$celltype_combined == "MY_M2_like", 
                img_id = "sample_id", 
                name = "DistToM2", 
-               BPPARAM = MulticoreParam(workers = 20))
+               BPPARAM = MulticoreParam(workers = 10))
 ```
 
 
@@ -2166,7 +1999,7 @@ distCells_hazard <- distCells_PID %>% pivot_wider(names_from = "celltype_combine
 
 ```{r}
 #Per image
-distCells_image <- colData(sce) %>% as.data.frame %>% select(PID, sample_id, ISUP_combined, pT_combined, necrose, celltype_combined, DistToM2) %>% #filter(celltype_combined == "CD8_T_cell") %>% 
+distCells_image <- colData(sce) %>% as.data.frame %>% select(PID, sample_id, ISUP_combined, pT_combined, necrose, celltype_combined, DistToM2) %>% filter(celltype_combined == "CD8_T_cell") %>% 
   group_by(sample_id) %>% mutate(mean_dist_image = mean(DistToM2)) %>% select(PID, sample_id, ISUP_combined, pT_combined, necrose, celltype_combined,mean_dist_image) %>% unique()
 
 #Per PID
@@ -2228,6 +2061,9 @@ distCells_PID$M2_CD8_dist_category <- ifelse(distCells_PID$mean_dist_PID < quant
 
 distCells_PID$M2_CD8_dist_category <- factor(distCells_PID$M2_CD8_dist_category, levels = c("high","medium","low"))
 
+distCells_PID$M2_CD8_dist_category <- ifelse(distCells_PID$mean_dist_PID < median(distCells_PID$mean_dist_PID), "low","high")
+distCells_PID$M2_CD8_dist_category <- factor(distCells_PID$M2_CD8_dist_category, levels = c("high","low"))
+
 sce$M2_CD8_dist_category <- distCells_PID$M2_CD8_dist_category[match(sce$PID,distCells_PID$PID)]
 
 ggplot(distCells_PID, aes(x = M2_CD8_dist_category, y = mean_dist_PID))+
@@ -2268,6 +2104,28 @@ ggsurvplot(fit,
 )
 ```
 
+
+```{r}
+int_dist_comp <- colData(sce) %>% as.data.frame() %>% select(PID, M2_CD8_dist_category, M2_CD8_int_cat,M2_CD8_int_score) %>% unique()
+
+int_dist_comp_bar <- int_dist_comp %>% group_by(M2_CD8_dist_category) %>% count(M2_CD8_int_cat) %>% mutate(fra = n/sum(n))
+
+int_dist_comp_bar <- na.omit(int_dist_comp_bar)
+  
+ggplot(int_dist_comp, aes(x = M2_CD8_dist_category, y = M2_CD8_int_score, color = M2_CD8_int_score))+
+  geom_boxplot()
+
+ggplot(int_dist_comp_bar, aes(x = M2_CD8_dist_category, y = fra, fill = M2_CD8_int_cat))+
+  geom_bar(stat = "identity")+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90))+
+  scale_fill_brewer(palette = "Set1")
+```
+
+
+
+
+
 ```{r}
 library(survival)
 library(survminer)
@@ -2285,11 +2143,11 @@ Cox_df <- PID_metagroups
 Cox_df$status_OS <- sce$status_OS[match(rownames(Cox_df),sce$PID)]
 Cox_df$OS_months <- sce$OS_months[match(rownames(Cox_df),sce$PID)]
 
-Cox_df$M2_CD8_dist_category <- factor(sce$M2_CD8_dist_category[match(rownames(Cox_df),sce$PID)], levels = c("high","medium","low"))
+Cox_df$M2_CD8_dist_category <- factor(sce$M2_CD8_dist_category[match(rownames(Cox_df),sce$PID)], levels = c("high","low"))
 
 Cox_df$gender <- as.factor(sce$gender[match(rownames(Cox_df),sce$PID)])
 Cox_df$age <- sce$age[match(rownames(Cox_df),sce$PID)]
-Cox_df$ISUP <- as.factor(sce$ISUP_combined[match(rownames(Cox_df),sce$PID)])
+#Cox_df$ISUP <- as.factor(sce$ISUP_combined[match(rownames(Cox_df),sce$PID)])
 Cox_df$pT <- as.factor(sce$pT_combined[match(rownames(Cox_df),sce$PID)])
 Cox_df$necrose <- as.factor(sce$necrose[match(rownames(Cox_df),sce$PID)])
 
@@ -2322,6 +2180,201 @@ ylab("HR for con_prop")+
 theme_classic()+
 #scale_y_continuous(trans = "log10")
 theme(axis.text.x = element_text(angle = 90))
+```
+### Differential abundance testing 
+
+#### All celltypes 
+
+```{r}
+### Differential abundance analysis based on edgeR
+library(edgeR)
+
+abundances <- table(sce$celltype_combined, sce$PID)
+abundances <- unclass(abundances) 
+head(abundances)
+
+#relevant patient metadata (Relevel so that ISUP 1/2 is baseline)
+meta <- colData(sce)[match(colnames(abundances), sce$PID),]
+meta$M2_CD8_dist_category <- relevel(x=factor(meta$M2_CD8_dist_category), ref = "low")
+
+#filter
+meta <- meta[!is.na(meta$M2_CD8_dist_category),]
+abundances <- abundances[,colnames(abundances) %in% meta$PID]
+
+#create DGEList - based on edgeR package
+y.ab <- DGEList(abundances, samples=meta, group = meta$M2_CD8_dist_category)
+
+#Design matrix
+design <- model.matrix(~M2_CD8_dist_category, data = y.ab$samples)
+
+#Visualize
+# logCPM of abundances per cluster
+cur_mat <- cpm(abundances,prior.count = 1,log = TRUE)
+
+Heatmap(cur_mat, 
+        col = viridis(100),
+        column_split = unfactor(meta$M2_CD8_dist_category))%v%
+  columnAnnotation(M2_CD8_dist_category = anno_simple(unfactor(meta$M2_CD8_dist_category)))
+
+
+# Estimate NB and QL dispersion 
+y.ab <- estimateDisp(y.ab, design, trend="none")
+summary(y.ab$common.dispersion)
+plotBCV(y.ab, cex=1)
+
+fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
+summary(fit.ab$var.prior)
+plotQLDisp(fit.ab, cex=1)
+
+# Test for differential abundance of clusters between tumor stages
+res <- glmQLFTest(fit.ab, coef=ncol(design))
+
+res$coefficients
+summary(decideTests(res))
+
+DA <- res$table
+
+DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
+
+DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.05, result = ifelse(DA$logFC > 0 & DA$FDR < 0.05, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.05, "DOWN", "NOTSIG"))) %>% 
+  arrange(desc(logFC))
+
+DA$cluster <- factor(DA$cluster, levels = DA$cluster)
+
+sig <- DA %>% filter(FDR<0.05) %>% pull(cluster) %>% unfactor
+
+## Visualize
+#Barplot
+ggplot(DA, aes(cluster, y = logFC))+
+  geom_col(aes(fill=result), col = "black")+
+  #scale_fill_manual(values = c("#377EB8","lightgrey","#E41A1C"))+
+  ylab("logFC")+
+  xlab("Cluster")+
+  labs(fill = "FDR<0.1")+
+  ggtitle("ISUP 1/2 vs. 3/4")+
+  theme_classic()
+
+#Volcano plot  
+ggplot(DA, aes(x = logFC, y = -log10(FDR)))+
+  geom_point(aes(col=cluster, size = -log10(FDR)))+
+  geom_label_repel(data = DA %>% filter(FDR<0.05), aes(label = cluster))+
+  #scale_color_manual(values = metadata(sce_MY)$colors$my_cluster_130)+
+  xlab("logFC (ISUP 1/2 vs. 3/4)")+
+  ylab("-log10(FDR)")+
+  theme_classic()+
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed")+
+  geom_vline(xintercept = 0, linetype = "dashed")+
+  labs(color = "cluster")
+
+#Abundance vs log fold change
+ggplot(DA, aes(x = logFC, y = logCPM))+
+  geom_point(aes(col= cluster, 
+                 size = -log10(FDR)))+
+  geom_label_repel(data = DA %>% filter(FDR<0.05), aes(label = cluster))+
+  #scale_color_manual(values = metadata(sce_MY)$colors$my_cluster_130)+
+  xlab("logFC (ISUP 1/2 vs. 3/4)")+
+  ylab("Abundance (logCPM)")+
+  theme_classic()+
+  geom_vline(xintercept = 0, linetype = "dashed")+
+  labs(color = "cluster")
+```
+
+#### Myeloid celltypes 
+
+```{r}
+sce_MY <- sce[,str_detect(sce$celltype_combined, "MY")]
+
+### Differential abundance analysis based on edgeR
+library(edgeR)
+
+abundances <- table(sce_MY$celltype_combined, sce_MY$PID)
+abundances <- unclass(abundances) 
+head(abundances)
+
+#relevant patient metadata (Relevel so that ISUP 1/2 is baseline)
+meta <- colData(sce_MY)[match(colnames(abundances), sce_MY$PID),]
+meta$M2_CD8_dist_category <- relevel(x=factor(meta$M2_CD8_dist_category), ref = "low")
+
+#filter
+meta <- meta[!is.na(meta$M2_CD8_dist_category),]
+abundances <- abundances[,colnames(abundances) %in% meta$PID]
+
+#create DGEList - based on edgeR package
+y.ab <- DGEList(abundances, samples=meta, group = meta$M2_CD8_dist_category)
+
+#Design matrix
+design <- model.matrix(~M2_CD8_dist_category, data = y.ab$samples)
+
+#Visualize
+# logCPM of abundances per cluster
+cur_mat <- cpm(abundances,prior.count = 1,log = TRUE)
+
+Heatmap(cur_mat, 
+        col = viridis(100),
+        column_split = unfactor(meta$M2_CD8_dist_category))%v%
+  columnAnnotation(M2_CD8_dist_category = anno_simple(unfactor(meta$M2_CD8_dist_category)))
+
+
+# Estimate NB and QL dispersion 
+y.ab <- estimateDisp(y.ab, design, trend="none")
+summary(y.ab$common.dispersion)
+plotBCV(y.ab, cex=1)
+
+fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
+summary(fit.ab$var.prior)
+plotQLDisp(fit.ab, cex=1)
+
+# Test for differential abundance of clusters between tumor stages
+res <- glmQLFTest(fit.ab, coef=ncol(design))
+
+res$coefficients
+summary(decideTests(res))
+
+DA <- res$table
+
+DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
+
+DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.05, result = ifelse(DA$logFC > 0 & DA$FDR < 0.05, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.05, "DOWN", "NOTSIG"))) %>% 
+  arrange(desc(logFC))
+
+DA$cluster <- factor(DA$cluster, levels = DA$cluster)
+
+sig <- DA %>% filter(FDR<0.05) %>% pull(cluster) %>% unfactor
+
+## Visualize
+#Barplot
+ggplot(DA, aes(cluster, y = logFC))+
+  geom_col(aes(fill=result), col = "black")+
+  #scale_fill_manual(values = c("#377EB8","lightgrey","#E41A1C"))+
+  ylab("logFC")+
+  xlab("Cluster")+
+  labs(fill = "FDR<0.1")+
+  ggtitle("ISUP 1/2 vs. 3/4")+
+  theme_classic()
+
+#Volcano plot  
+ggplot(DA, aes(x = logFC, y = -log10(FDR)))+
+  geom_point(aes(col=cluster, size = -log10(FDR)))+
+  geom_label_repel(data = DA %>% filter(FDR<0.05), aes(label = cluster))+
+  #scale_color_manual(values = metadata(sce_MY_MY)$colors$my_cluster_130)+
+  xlab("logFC (ISUP 1/2 vs. 3/4)")+
+  ylab("-log10(FDR)")+
+  theme_classic()+
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed")+
+  geom_vline(xintercept = 0, linetype = "dashed")+
+  labs(color = "cluster")
+
+#Abundance vs log fold change
+ggplot(DA, aes(x = logFC, y = logCPM))+
+  geom_point(aes(col= cluster, 
+                 size = -log10(FDR)))+
+  geom_label_repel(data = DA %>% filter(FDR<0.05), aes(label = cluster))+
+  #scale_color_manual(values = metadata(sce_MY_MY)$colors$my_cluster_130)+
+  xlab("logFC (ISUP 1/2 vs. 3/4)")+
+  ylab("Abundance (logCPM)")+
+  theme_classic()+
+  geom_vline(xintercept = 0, linetype = "dashed")+
+  labs(color = "cluster")
 ```
 
 ### Tumor expression analysis 
@@ -2958,6 +3011,7 @@ theme_classic()+
 scale_y_continuous(trans = "log10")+
 theme(axis.text.x = element_text(angle = 90))
 ```
+
 ```{r}
 #Assess survival impact 
 library(survival)
