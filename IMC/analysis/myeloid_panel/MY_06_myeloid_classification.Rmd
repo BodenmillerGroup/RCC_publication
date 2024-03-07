@@ -755,6 +755,7 @@ Heatmap(t(assay(mean_sce, "min_max")), col = viridis(100),clustering_method_rows
   rowAnnotation(id = anno_text(mean_sce$ids))+
   rowAnnotation(n_cells = anno_barplot(mean_sce$ncells))
 ```
+
 #### Scatterplot 
 
 ```{r}
@@ -3620,6 +3621,395 @@ ggsurvplot(fit,
 
 # 9. Supervised analysis 
 
+## AgM based patient groups
+
+```{r}
+set.seed(22)
+sce$myeloid_metacluster_comb <- ifelse(sce$myeloid_metacluster == "Ag_M", "Ag_M", "Not_Ag_M")
+
+## Define patient groups 
+PID_myeloid_metacluster <- colData(sce) %>% as.data.frame() %>% select(myeloid_metacluster_comb,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_myeloid_metacluster <- PID_myeloid_metacluster %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq))
+
+
+ggplot(PID_myeloid_metacluster, aes(x=PID, y=fra, fill = myeloid_metacluster_comb))+
+  geom_tile(position = "fill")
+
+plot_heat_PID <- PID_myeloid_metacluster %>% pivot_wider(id_cols = PID, values_from = fra, names_from = myeloid_metacluster_comb) %>% column_to_rownames("PID")
+plot_heat_PID[is.na(plot_heat_PID)] <- 0
+
+testCL<- clValid(plot_heat_PID,nClust = 2:20,clMethods = c("hierarchical","agnes","kmeans"),validation="internal",metric="euclidean", method = "ward")
+plot(testCL, legend = FALSE)
+
+#set.seed(22)
+#library(dendextend)
+#avg_dend_obj_MCP <- as.dendrogram(agnes(plot_heat_PID,metric = "euclidean",method = "ward"))
+#avg_col_dend_MCP <- color_branches(avg_dend_obj_MCP, k = 3)
+#plot(avg_col_dend_MCP)
+
+h <- Heatmap(plot_heat_PID,
+             name = "Proportion",
+             col = viridis(100), 
+             row_km = 3, 
+             row_km_repeats = 100,
+             #cluster_rows = avg_col_dend_MCP,
+             #row_split=3,
+             show_row_names = FALSE)
+
+h <- draw(h)
+
+row_order_h <- row_order(h)
+
+anno <- colData(sce) %>% as.data.frame %>% dplyr::select(PID) %>% unique()
+anno$my_HLADR_group <- NA
+
+for(i in seq_along(row_order_h)){
+anno$my_HLADR_group <- as.factor(ifelse(anno$PID %in% rownames(plot_heat_PID)[row_order_h[[i]]], i, anno$my_HLADR_group))
+}
+
+## Add to SCE
+sce$my_AgM_group <- anno$my_HLADR_group[match(sce$PID, anno$PID)]
+
+## Give meaningful names 
+sce$my_AgM_group <- unfactor(sce$my_AgM_group)
+sce$my_AgM_group[sce$my_AgM_group == "1"] <- "AgM_med"
+sce$my_AgM_group[sce$my_AgM_group == "2"] <- "AgM_low"
+sce$my_AgM_group[sce$my_AgM_group == "3"] <- "AgM_high"
+sce$my_AgM_group <- factor(sce$my_AgM_group)
+```
+
+```{r}
+# per combined type 
+mean_sce <- aggregateAcrossCells(sce, ids = sce$my_AgM_group,
+                                 statistics = "mean",
+                                 use.assay.type = "exprs",
+                                 subset.row = rowData(sce)$myeloid_cluster_1)
+
+Heatmap(t(assay(mean_sce, "exprs")), col = viridis(110), clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2")+
+  rowAnnotation(id = anno_text(mean_sce$ids))+
+  rowAnnotation(n_cells = anno_barplot(mean_sce$ncells))
+```
+
+
+
+### Survival testing 
+
+```{r}
+cur_surv <- colData(sce) %>% as.data.frame() %>% select(PID, my_HLADR_group,my_AgM_group, OS_months, status_OS) %>% unique() #%>% filter(my_AgM_group %in% c("2","3"))
+
+#Plot survival curves
+fit <- survfit(Surv(OS_months, status_OS) ~ my_AgM_group, data = cur_surv)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = "Set1",
+          conf.int = TRUE
+)
+```
+
+### Differential abundance testing 
+
+#### Cluster level 
+
+```{r}
+### Differential abundance analysis based on edgeR
+library(edgeR)
+
+sce_selected <- sce[,sce$my_AgM_group %in% c("AgM_low","AgM_high")]
+
+abundances <- table(unfactor(sce_selected$my_cluster_names), sce_selected$PID)
+abundances <- unclass(abundances) 
+head(abundances)
+
+#relevant patient metadata (Relevel so that ISUP 1/2 is baseline)
+meta <- colData(sce_selected)[match(colnames(abundances), sce_selected$PID),]
+meta$my_AgM_group <- relevel(x=factor(meta$my_AgM_group), ref = "AgM_low")
+
+#filter
+meta <- meta[!is.na(meta$my_AgM_group),]
+abundances <- abundances[,colnames(abundances) %in% meta$PID]
+
+#create DGEList - based on edgeR package
+y.ab <- DGEList(abundances, samples=meta, group = meta$my_AgM_group)
+
+#Design matrix
+design <- model.matrix(~my_AgM_group, data = y.ab$samples)
+
+#Visualize
+# logCPM of abundances per cluster
+cur_mat <- cpm(abundances,prior.count = 1,log = TRUE)
+
+Heatmap(cur_mat, 
+        col = viridis(100),
+        column_split = unfactor(meta$my_AgM_group))%v%
+  columnAnnotation(my_AgM_group = anno_simple(unfactor(meta$my_AgM_group)))
+
+
+# Estimate NB and QL dispersion 
+y.ab <- estimateDisp(y.ab, design, trend="none")
+summary(y.ab$common.dispersion)
+plotBCV(y.ab, cex=1)
+
+fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
+summary(fit.ab$var.prior)
+plotQLDisp(fit.ab, cex=1)
+
+# Test for differential abundance of clusters between tumor stages
+res <- glmQLFTest(fit.ab, coef=ncol(design))
+
+res$coefficients
+summary(decideTests(res))
+
+DA <- res$table
+
+DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
+
+DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.05, result = ifelse(DA$logFC > 0 & DA$FDR < 0.05, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.05, "DOWN", "NOTSIG"))) %>% 
+  arrange(desc(logFC))
+
+DA$cluster <- factor(DA$cluster, levels = DA$cluster)
+
+sig <- DA %>% filter(FDR<0.05) %>% pull(cluster) %>% unfactor
+
+## Visualize
+#Barplot
+ggplot(DA, aes(cluster, y = logFC))+
+  geom_col(aes(fill=result), col = "black")+
+  #scale_fill_manual(values = c("#377EB8","lightgrey","#E41A1C"))+
+  ylab("logFC")+
+  xlab("Cluster")+
+  labs(fill = "FDR<0.1")+
+  ggtitle("ISUP 1/2 vs. 3/4")+
+  theme_classic()
+
+#Volcano plot  
+ggplot(DA, aes(x = logFC, y = -log10(FDR)))+
+  geom_point(aes(col=cluster, size = -log10(FDR)))+
+  geom_label_repel(data = DA %>% filter(FDR<0.05), aes(label = cluster))+
+  #scale_color_manual(values = metadata(sce)$colors$my_cluster_130)+
+  xlab("logFC (ISUP 1/2 vs. 3/4)")+
+  ylab("-log10(FDR)")+
+  theme_classic()+
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed")+
+  geom_vline(xintercept = 0, linetype = "dashed")+
+  labs(color = "cluster")
+
+#Abundance vs log fold change
+ggplot(DA, aes(x = logFC, y = logCPM))+
+  geom_point(aes(col= cluster, 
+                 size = -log10(FDR)))+
+  geom_label_repel(data = DA %>% filter(FDR<0.05), aes(label = cluster))+
+  #scale_color_manual(values = metadata(sce)$colors$my_cluster_130)+
+  xlab("logFC (ISUP 1/2 vs. 3/4)")+
+  ylab("Abundance (logCPM)")+
+  theme_classic()+
+  geom_vline(xintercept = 0, linetype = "dashed")+
+  labs(color = "cluster")
+```
+
+#### Metacluster level 
+
+```{r}
+### Differential abundance analysis based on edgeR
+library(edgeR)
+
+sce_selected <- sce[,sce$my_AgM_group %in% c("AgM_low","AgM_high")]
+
+abundances <- table(unfactor(sce_selected$myeloid_metacluster), sce_selected$PID)
+abundances <- unclass(abundances) 
+head(abundances)
+
+#relevant patient metadata (Relevel so that ISUP 1/2 is baseline)
+meta <- colData(sce_selected)[match(colnames(abundances), sce_selected$PID),]
+meta$my_AgM_group <- relevel(x=factor(meta$my_AgM_group), ref = "AgM_low")
+
+#filter
+meta <- meta[!is.na(meta$my_AgM_group),]
+abundances <- abundances[,colnames(abundances) %in% meta$PID]
+
+#create DGEList - based on edgeR package
+y.ab <- DGEList(abundances, samples=meta, group = meta$my_AgM_group)
+
+#Design matrix
+design <- model.matrix(~my_AgM_group, data = y.ab$samples)
+
+#Visualize
+# logCPM of abundances per cluster
+cur_mat <- cpm(abundances,prior.count = 1,log = TRUE)
+
+Heatmap(cur_mat, 
+        col = viridis(100),
+        column_split = unfactor(meta$my_AgM_group))%v%
+  columnAnnotation(my_AgM_group = anno_simple(unfactor(meta$my_AgM_group)))
+
+
+# Estimate NB and QL dispersion 
+y.ab <- estimateDisp(y.ab, design, trend="none")
+summary(y.ab$common.dispersion)
+plotBCV(y.ab, cex=1)
+
+fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
+summary(fit.ab$var.prior)
+plotQLDisp(fit.ab, cex=1)
+
+# Test for differential abundance of clusters between tumor stages
+res <- glmQLFTest(fit.ab, coef=ncol(design))
+
+res$coefficients
+summary(decideTests(res))
+
+DA <- res$table
+
+DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
+
+DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.05, result = ifelse(DA$logFC > 0 & DA$FDR < 0.05, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.05, "DOWN", "NOTSIG"))) %>% 
+  arrange(desc(logFC))
+
+DA$cluster <- factor(DA$cluster, levels = DA$cluster)
+
+sig <- DA %>% filter(FDR<0.05) %>% pull(cluster) %>% unfactor
+
+## Visualize
+#Barplot
+ggplot(DA, aes(cluster, y = logFC))+
+  geom_col(aes(fill=result), col = "black")+
+  #scale_fill_manual(values = c("#377EB8","lightgrey","#E41A1C"))+
+  ylab("logFC")+
+  xlab("Cluster")+
+  labs(fill = "FDR<0.1")+
+  ggtitle("ISUP 1/2 vs. 3/4")+
+  theme_classic()
+
+#Volcano plot  
+ggplot(DA, aes(x = logFC, y = -log10(FDR)))+
+  geom_point(aes(col=cluster, size = -log10(FDR)))+
+  geom_label_repel(data = DA %>% filter(FDR<0.05), aes(label = cluster))+
+  #scale_color_manual(values = metadata(sce)$colors$my_cluster_130)+
+  xlab("logFC (ISUP 1/2 vs. 3/4)")+
+  ylab("-log10(FDR)")+
+  theme_classic()+
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed")+
+  geom_vline(xintercept = 0, linetype = "dashed")+
+  labs(color = "cluster")
+
+#Abundance vs log fold change
+ggplot(DA, aes(x = logFC, y = logCPM))+
+  geom_point(aes(col= cluster, 
+                 size = -log10(FDR)))+
+  geom_label_repel(data = DA %>% filter(FDR<0.05), aes(label = cluster))+
+  #scale_color_manual(values = metadata(sce)$colors$my_cluster_130)+
+  xlab("logFC (ISUP 1/2 vs. 3/4)")+
+  ylab("Abundance (logCPM)")+
+  theme_classic()+
+  geom_vline(xintercept = 0, linetype = "dashed")+
+  labs(color = "cluster")
+```
+
+#### District level 
+
+```{r}
+### Differential abundance analysis based on edgeR
+library(edgeR)
+
+sce_selected <- sce[,sce$my_AgM_group %in% c("AgM_low","AgM_high")]
+
+abundances <- table(unfactor(sce_selected$myeloid_district_names), sce_selected$PID)
+abundances <- unclass(abundances) 
+abundances <- abundances[,colnames(abundances) %in% names(colSums(abundances))[colSums(abundances) != 0]]
+head(abundances)
+
+#relevant patient metadata (Relevel so that ISUP 1/2 is baseline)
+meta <- colData(sce_selected)[match(colnames(abundances), sce_selected$PID),]
+meta$my_AgM_group <- relevel(x=factor(meta$my_AgM_group), ref = "AgM_low")
+
+#filter
+meta <- meta[!is.na(meta$my_AgM_group),]
+abundances <- abundances[,colnames(abundances) %in% meta$PID]
+
+#create DGEList - based on edgeR package
+y.ab <- DGEList(abundances, samples=meta, group = meta$my_AgM_group)
+
+#Design matrix
+design <- model.matrix(~my_AgM_group, data = y.ab$samples)
+
+#Visualize
+# logCPM of abundances per cluster
+cur_mat <- cpm(abundances,prior.count = 1,log = TRUE)
+
+Heatmap(cur_mat, 
+        col = viridis(100),
+        column_split = unfactor(meta$my_AgM_group))%v%
+  columnAnnotation(my_AgM_group = anno_simple(unfactor(meta$my_AgM_group)))
+
+
+# Estimate NB and QL dispersion 
+y.ab <- estimateDisp(y.ab, design, trend="none")
+summary(y.ab$common.dispersion)
+plotBCV(y.ab, cex=1)
+
+fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
+summary(fit.ab$var.prior)
+plotQLDisp(fit.ab, cex=1)
+
+# Test for differential abundance of clusters between tumor stages
+res <- glmQLFTest(fit.ab, coef=ncol(design))
+
+res$coefficients
+summary(decideTests(res))
+
+DA <- res$table
+
+DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
+
+DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.05, result = ifelse(DA$logFC > 0 & DA$FDR < 0.05, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.05, "DOWN", "NOTSIG"))) %>% 
+  arrange(desc(logFC))
+
+DA$cluster <- factor(DA$cluster, levels = DA$cluster)
+
+sig <- DA %>% filter(FDR<0.05) %>% pull(cluster) %>% unfactor
+
+## Visualize
+#Barplot
+ggplot(DA, aes(cluster, y = logFC))+
+  geom_col(aes(fill=result), col = "black")+
+  #scale_fill_manual(values = c("#377EB8","lightgrey","#E41A1C"))+
+  ylab("logFC")+
+  xlab("Cluster")+
+  labs(fill = "FDR<0.1")+
+  ggtitle("ISUP 1/2 vs. 3/4")+
+  theme_classic()
+
+#Volcano plot  
+ggplot(DA, aes(x = logFC, y = -log10(FDR)))+
+  geom_point(aes(col=cluster, size = -log10(FDR)))+
+  geom_label_repel(data = DA %>% filter(FDR<0.05), aes(label = cluster))+
+  #scale_color_manual(values = metadata(sce)$colors$my_cluster_130)+
+  xlab("logFC (ISUP 1/2 vs. 3/4)")+
+  ylab("-log10(FDR)")+
+  theme_classic()+
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed")+
+  geom_vline(xintercept = 0, linetype = "dashed")+
+  labs(color = "cluster")
+
+#Abundance vs log fold change
+ggplot(DA, aes(x = logFC, y = logCPM))+
+  geom_point(aes(col= cluster, 
+                 size = -log10(FDR)))+
+  geom_label_repel(data = DA %>% filter(FDR<0.05), aes(label = cluster))+
+  #scale_color_manual(values = metadata(sce)$colors$my_cluster_130)+
+  xlab("logFC (ISUP 1/2 vs. 3/4)")+
+  ylab("Abundance (logCPM)")+
+  theme_classic()+
+  geom_vline(xintercept = 0, linetype = "dashed")+
+  labs(color = "cluster")
+```
+
 ## HLADR GMM on myeloid cells 
 
 ```{r}
@@ -3637,12 +4027,19 @@ plot_heat_PID[is.na(plot_heat_PID)] <- 0
 testCL<- clValid(plot_heat_PID,nClust = 2:20,clMethods = c("hierarchical","agnes","kmeans"),validation="internal",metric="euclidean", method = "ward")
 plot(testCL, legend = FALSE)
 
+set.seed(22)
+library(dendextend)
+avg_dend_obj_MCP <- as.dendrogram(agnes(plot_heat_PID,metric = "euclidean",method = "ward"))
+avg_col_dend_MCP <- color_branches(avg_dend_obj_MCP, k = 3)
+plot(avg_col_dend_MCP)
+
 h <- Heatmap(plot_heat_PID,
              name = "Proportion",
              col = viridis(100), 
              #row_km = 3, 
              #row_km_repeats = 100,
-             row_split=4,
+             cluster_rows = avg_col_dend_MCP,
+             row_split=3,
              show_row_names = FALSE)
 
 h <- draw(h)
@@ -3660,10 +4057,10 @@ sce$my_HLADR_group <- anno$my_HLADR_group[match(sce$PID, anno$PID)]
 ```
 
 ```{r}
-cur_surv <- colData(sce) %>% as.data.frame() %>% select(PID, my_HLADR_group, OS_months, status_OS) %>% unique() #%>% filter(my_HLADR_group %in% c("1","2"))
+cur_surv <- colData(sce) %>% as.data.frame() %>% select(PID, my_HLADR_group,my_AgM_group, OS_months, status_OS) %>% unique() #%>% filter(my_AgM_group %in% c("2","3"))
 
 #Plot survival curves
-fit <- survfit(Surv(OS_months, status_OS) ~ my_HLADR_group, data = cur_surv)
+fit <- survfit(Surv(OS_months, status_OS) ~ my_AgM_group, data = cur_surv)
 print(fit)
 
 ggsurvplot(fit,
@@ -3695,13 +4092,13 @@ Cox_df <- PID_metagroups
 Cox_df$status_OS <- sce$status_OS[match(rownames(Cox_df),sce$PID)]
 Cox_df$OS_months <- sce$OS_months[match(rownames(Cox_df),sce$PID)]
 
-Cox_df$my_HLADR_group <- factor(sce$my_HLADR_group[match(rownames(Cox_df),sce$PID)], levels = c("1","2","3"))
+Cox_df$my_HLADR_group <- factor(sce$my_HLADR_group[match(rownames(Cox_df),sce$PID)], levels = c("3","2","1"))
 
 Cox_df$gender <- as.factor(sce$gender[match(rownames(Cox_df),sce$PID)])
 Cox_df$age <- sce$age[match(rownames(Cox_df),sce$PID)]
-Cox_df$ISUP <- as.factor(sce$ISUP_combined[match(rownames(Cox_df),sce$PID)])
+#Cox_df$ISUP <- as.factor(sce$ISUP_combined[match(rownames(Cox_df),sce$PID)])
 Cox_df$pT <- as.factor(sce$pT_combined[match(rownames(Cox_df),sce$PID)])
-#Cox_df$necrose <- as.factor(sce$necrose[match(rownames(Cox_df),sce$PID)])
+Cox_df$necrose <- as.factor(sce$necrose[match(rownames(Cox_df),sce$PID)])
 
 #Based on patient groups
 covariates <- Cox_df %>% select(-status_OS,-OS_months, -PID) %>% colnames
