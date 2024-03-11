@@ -669,18 +669,25 @@ oncoPrint(mat, alter_fun = viz_fun, col = viz_col, show_column_names = TRUE, row
           column_title = "To")
 ```
 ```{r}
-pVal_ISUP[pVal_ISUP < 0 ] <- 0
-pVal_T[pVal_T < 0] <- 0
-pVal_necrose[pVal_necrose < 0] <- 0
-pVal_PDL1[pVal_PDL1 < 0] <- 0
+pVal_ISUP_up <- pVal_ISUP
+pVal_T_up <- pVal_T
+pVal_necrose_up <- pVal_necrose
+pVal_PDL1_up <- pVal_PDL1
+
+pVal_ISUP_up[pVal_ISUP_up < 0 ] <- 0
+pVal_T_up[pVal_T_up < 0] <- 0
+pVal_necrose_up[pVal_necrose_up < 0] <- 0
+pVal_PDL1_up[pVal_PDL1_up < 0] <- 0
 
 # List of differential test results
-mat <- list(ISUP = pVal_ISUP,pT = pVal_T, necrose = pVal_necrose, PDL1 = pVal_PDL1)
+mat <- list(ISUP = pVal_ISUP_up,pT = pVal_T_up, necrose = pVal_necrose_up, PDL1 = pVal_PDL1_up)
 names(mat)
 
-viz_col <- setNames(c("#E41A1C","#E41A1C", "#E41A1C","#E41A1C"), 
-                      c("ISUP", "pT", "necrose", "PDL1"))
+#viz_col <- setNames(c("#E41A1C","#E41A1C", "#E41A1C","#E41A1C"), 
+#                      c("ISUP", "pT", "necrose", "PDL1"))
 
+viz_col <- setNames(c("#E41A1C","#377EB8", "#984EA3","#4DAF4A"), 
+                      c("ISUP", "pT", "necrose", "PDL1"))
 # Alter-fun 
 viz_fun <- list(
   background = function(x, y, w, h) grid.rect(x, y, w, h, 
@@ -696,21 +703,30 @@ viz_fun <- list(
         )
 
 
-oncoPrint(mat, alter_fun = viz_fun, col = viz_col, show_column_names = TRUE, row_split = anno$type, column_split = anno$type, row_title = "From", 
+onco_up <- oncoPrint(mat, alter_fun = viz_fun, col = viz_col, show_column_names = TRUE, row_split = anno$type, column_split = anno$type, row_title = "From", 
           column_title = "To")
+onco_up
 ```
 
 ```{r}
-pVal_ISUP[pVal_ISUP > 0 ] <- 0
-pVal_T[pVal_T > 0] <- 0
-pVal_necrose[pVal_necrose > 0] <- 0
-pVal_PDL1[pVal_PDL1 > 0] <- 0
+pVal_ISUP_down <- pVal_ISUP
+pVal_T_down <- pVal_T
+pVal_necrose_down <- pVal_necrose
+pVal_PDL1_down <- pVal_PDL1
+
+pVal_ISUP_down[pVal_ISUP_down > 0 ] <- 0
+pVal_T_down[pVal_T_down > 0] <- 0
+pVal_necrose_down[pVal_necrose_down > 0] <- 0
+pVal_PDL1_down[pVal_PDL1_down > 0] <- 0
 
 # List of differential test results
-mat <- list(ISUP = pVal_ISUP,pT = pVal_T, necrose = pVal_necrose, PDL1 = pVal_PDL1)
+mat <- list(ISUP = pVal_ISUP_down,pT = pVal_T_down, necrose = pVal_necrose_down, PDL1 = pVal_PDL1_down)
 names(mat)
 
-viz_col <- setNames(c("blue","blue", "blue","blue"), 
+#viz_col <- setNames(c("blue","blue", "blue","blue"), 
+#                      c("ISUP", "pT", "necrose", "PDL1"))
+
+viz_col <- setNames(c("#E41A1C","#377EB8", "#984EA3","#4DAF4A"), 
                       c("ISUP", "pT", "necrose", "PDL1"))
 
 # Alter-fun 
@@ -728,8 +744,13 @@ viz_fun <- list(
         )
 
 
-oncoPrint(mat, alter_fun = viz_fun, col = viz_col, show_column_names = TRUE, row_split = anno$type, column_split = anno$type, row_title = "From", 
+onco_down <- oncoPrint(mat, alter_fun = viz_fun, col = viz_col, show_column_names = TRUE, row_split = anno$type, column_split = anno$type, row_title = "From", 
           column_title = "To")
+onco_down
+```
+```{r}
+onco_up
+onco_down
 ```
 
 
