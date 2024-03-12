@@ -668,6 +668,7 @@ metadata(sce)$colors$pT_combined
 oncoPrint(mat, alter_fun = viz_fun, col = viz_col, show_column_names = TRUE, row_split = anno$type, column_split = anno$type, row_title = "From", 
           column_title = "To")
 ```
+
 ```{r}
 pVal_ISUP_up <- pVal_ISUP
 pVal_T_up <- pVal_T
@@ -680,32 +681,29 @@ pVal_necrose_up[pVal_necrose_up < 0] <- 0
 pVal_PDL1_up[pVal_PDL1_up < 0] <- 0
 
 # List of differential test results
-mat <- list(ISUP = pVal_ISUP_up,pT = pVal_T_up, necrose = pVal_necrose_up, PDL1 = pVal_PDL1_up)
-names(mat)
+mat <- list(ISUP_34 = pVal_ISUP_up,pT_34 = pVal_T_up, necrose_1 = pVal_necrose_up, PDL1_1 = pVal_PDL1_up)
 
-#viz_col <- setNames(c("#E41A1C","#E41A1C", "#E41A1C","#E41A1C"), 
-#                      c("ISUP", "pT", "necrose", "PDL1"))
+viz_col_up <- setNames(c("#67000D","#08306B", "#3F007D","#00441B"), 
+                      c("ISUP_34", "pT_34", "necrose_1", "PDL1_1"))
 
-viz_col <- setNames(c("#E41A1C","#377EB8", "#984EA3","#4DAF4A"), 
-                      c("ISUP", "pT", "necrose", "PDL1"))
 # Alter-fun 
-viz_fun <- list(
+viz_fun_up <- list(
   background = function(x, y, w, h) grid.rect(x, y, w, h, 
             gp = gpar(fill = "white", col = "black")),
-  ISUP = function(x, y, w, h) grid.rect(x - 0.25*w, y + 0.25*h, w*0.5, h*0.5, 
-            gp = gpar(fill = viz_col["ISUP"], col = "black")),
-  pT = function(x, y, w, h) grid.rect(x + 0.25*w, y + 0.25*h, w*0.5, h*0.5, 
-            gp = gpar(fill = viz_col["pT"], col = "black")),
-  necrose = function(x, y, w, h) grid.rect(x - 0.25*w, y - 0.25*h, w*0.5, h*0.5, 
-            gp = gpar(fill = viz_col["necrose"], col = "black")),
-  PDL1 = function(x, y, w, h) grid.rect(x + 0.25*w, y - 0.25*h, w*0.5, h*0.5, 
-            gp = gpar(fill = viz_col["PDL1"], col = "black"))
+  ISUP_34 = function(x, y, w, h) grid.rect(x - 0.25*w, y + 0.25*h, w*0.5, h*0.5, 
+            gp = gpar(fill = viz_col_up["ISUP_34"], col = "black")),
+  pT_34 = function(x, y, w, h) grid.rect(x + 0.25*w, y + 0.25*h, w*0.5, h*0.5, 
+            gp = gpar(fill = viz_col_up["pT_34"], col = "black")),
+  necrose_1 = function(x, y, w, h) grid.rect(x - 0.25*w, y - 0.25*h, w*0.5, h*0.5, 
+            gp = gpar(fill = viz_col_up["necrose_1"], col = "black")),
+  PDL1_1 = function(x, y, w, h) grid.rect(x + 0.25*w, y - 0.25*h, w*0.5, h*0.5, 
+            gp = gpar(fill = viz_col_up["PDL1_1"], col = "black"))
         )
 
 
-onco_up <- oncoPrint(mat, alter_fun = viz_fun, col = viz_col, show_column_names = TRUE, row_split = anno$type, column_split = anno$type, row_title = "From", 
-          column_title = "To")
-onco_up
+onco_up <- oncoPrint(mat, alter_fun = viz_fun_up, col = viz_col_up, show_column_names = TRUE, row_split = anno$type, column_split = anno$type, row_title = "From",
+          column_title = "To", alter_fun_is_vectorized = FALSE)
+draw(onco_up)
 ```
 
 ```{r}
@@ -720,36 +718,36 @@ pVal_necrose_down[pVal_necrose_down > 0] <- 0
 pVal_PDL1_down[pVal_PDL1_down > 0] <- 0
 
 # List of differential test results
-mat <- list(ISUP = pVal_ISUP_down,pT = pVal_T_down, necrose = pVal_necrose_down, PDL1 = pVal_PDL1_down)
+mat <- list(ISUP_12 = pVal_ISUP_down,pT_12 = pVal_T_down, necrose_0 = pVal_necrose_down, PDL1_0 = pVal_PDL1_down)
 names(mat)
 
-#viz_col <- setNames(c("blue","blue", "blue","blue"), 
-#                      c("ISUP", "pT", "necrose", "PDL1"))
-
-viz_col <- setNames(c("#E41A1C","#377EB8", "#984EA3","#4DAF4A"), 
-                      c("ISUP", "pT", "necrose", "PDL1"))
+viz_col <- setNames(c("#FC9F81","#ABCFE5", "#d8b2ff","#AADBAB"), 
+                      c("ISUP_12", "pT_12", "necrose_0", "PDL1_0"))
 
 # Alter-fun 
 viz_fun <- list(
   background = function(x, y, w, h) grid.rect(x, y, w, h, 
             gp = gpar(fill = "white", col = "black")),
-  ISUP = function(x, y, w, h) grid.rect(x - 0.25*w, y + 0.25*h, w*0.5, h*0.5, 
-            gp = gpar(fill = viz_col["ISUP"], col = "black")),
-  pT = function(x, y, w, h) grid.rect(x + 0.25*w, y + 0.25*h, w*0.5, h*0.5, 
-            gp = gpar(fill = viz_col["pT"], col = "black")),
-  necrose = function(x, y, w, h) grid.rect(x - 0.25*w, y - 0.25*h, w*0.5, h*0.5, 
-            gp = gpar(fill = viz_col["necrose"], col = "black")),
-  PDL1 = function(x, y, w, h) grid.rect(x + 0.25*w, y - 0.25*h, w*0.5, h*0.5, 
-            gp = gpar(fill = viz_col["PDL1"], col = "black"))
+  ISUP_12 = function(x, y, w, h) grid.rect(x - 0.25*w, y + 0.25*h, w*0.5, h*0.5, 
+            gp = gpar(fill = viz_col["ISUP_12"], col = "black")),
+  pT_12 = function(x, y, w, h) grid.rect(x + 0.25*w, y + 0.25*h, w*0.5, h*0.5, 
+            gp = gpar(fill = viz_col["pT_12"], col = "black")),
+  necrose_0 = function(x, y, w, h) grid.rect(x - 0.25*w, y - 0.25*h, w*0.5, h*0.5, 
+            gp = gpar(fill = viz_col["necrose_0"], col = "black")),
+  PDL1_0 = function(x, y, w, h) grid.rect(x + 0.25*w, y - 0.25*h, w*0.5, h*0.5, 
+            gp = gpar(fill = viz_col["PDL1_0"], col = "black"))
         )
 
-
 onco_down <- oncoPrint(mat, alter_fun = viz_fun, col = viz_col, show_column_names = TRUE, row_split = anno$type, column_split = anno$type, row_title = "From", 
-          column_title = "To")
+          column_title = "To", alter_fun_is_vectorized = FALSE)
 onco_down
 ```
+
 ```{r}
 onco_up
+onco_down
+
+onco_up+
 onco_down
 ```
 
@@ -818,7 +816,9 @@ ggplot(pair_decrease, aes(x = reorder(sorted_type,-n), y = n))+
   xlab("celltype_pair")
 ```
 
-#### Heterotypic tumor interactions 
+#### Heterotypic interactions 
+
+##### Tumor 
 
 ```{r}
 ### Neighborhood expansion graph
@@ -831,18 +831,75 @@ cur_dat <- sce$count_neighbors %>% as.data.frame
 rownames(cur_dat) <- sce$cell_id
 cur_dat$PID <- sce$PID
 cur_dat$celltype_combined <- sce$celltype_combined
+
 cur_dat$ISUP_combined <- sce$ISUP_combined
+cur_dat$pT_combined <- sce$pT_combined
+cur_dat$necrose <- sce$necrose
+cur_dat$PDL1_score <- sce$PDL1_score
 
-out_1 <- cur_dat %>% filter(celltype_combined == "tumor") %>% rownames_to_column("cell_id") %>% pivot_longer(2:16, names_to = "celltype_int", values_to = "int_n") %>% filter(celltype_int != "tumor") %>% group_by(cell_id) %>% mutate(n_sum = sum(int_n)) %>% ungroup() 
+cur_dat$ISUP_combined[cur_dat$ISUP_combined == "3/4"] <- "1"
+cur_dat$ISUP_combined[cur_dat$ISUP_combined == "1/2"] <- "0"
+cur_dat$pT_combined[cur_dat$pT_combined == "3/4"] <- "1"
+cur_dat$pT_combined[cur_dat$pT_combined == "1/2"] <- "0"
 
-out_2 <- out_1 %>% select(cell_id, PID, ISUP_combined, n_sum) %>% unique() %>% group_by(PID) %>% mutate(n_av = mean(n_sum)) %>% select(PID, ISUP_combined, n_av) %>% unique() %>% filter(!is.na(ISUP_combined))
+# Count heterotypic interactions of immune cells / stromal TO tumor cells
+out_1 <- cur_dat %>% filter(celltype_combined != "tumor") %>% rownames_to_column("cell_id") %>% pivot_longer(2:14, names_to = "celltype_int", values_to = "int_n") %>% filter(celltype_int == "tumor") %>% group_by(cell_id) %>% mutate(n_sum = sum(int_n)) %>% ungroup() 
 
-ggplot(out_2, aes(x = ISUP_combined, y = n_av, fill = ISUP_combined))+
+# Mean number of heterotypic interactions per PID 
+out_2 <- out_1 %>% pivot_longer(4:7, names_to = "cat", values_to = "cat_value") %>% select(cell_id, PID, cat, cat_value, n_sum) %>% unique() %>% group_by(PID) %>% mutate(n_av = mean(n_sum)) %>% select(PID, cat,cat_value, n_av) %>% unique() %>% filter(!is.na(cat_value))
+
+p_values_df <- compare_means(formula = n_av ~ cat_value, data = out_2, group.by = "cat", p.adjust.method = "BH")
+
+ggplot(out_2, aes(x = cat_value, y = n_av, fill = cat))+
+  facet_wrap(~cat)+
   geom_boxplot()+
-  scale_fill_manual(values = metadata(sce)$colors$ISUP_combined)+
+  scale_fill_brewer(palette = "Greys")+
   theme_classic()+
-  stat_compare_means()
+  ylab("Mean number of heterotypic tumor interactions per PID")+
+  geom_text(data = p_values_df, aes(x = 1.5, y = Inf, label = paste0("p = ", p.adj)),
+            vjust = 1.5, hjust = 0.5, size = 4)
+  
 ```
+
+##### M2-like 
+
+```{r}
+## Step 1: Retrieve neighbors table
+cur_dat <- sce$count_neighbors %>% as.data.frame
+rownames(cur_dat) <- sce$cell_id
+cur_dat$PID <- sce$PID
+cur_dat$celltype_combined <- sce$celltype_combined
+
+cur_dat$ISUP_combined <- sce$ISUP_combined
+cur_dat$pT_combined <- sce$pT_combined
+cur_dat$necrose <- sce$necrose
+cur_dat$PDL1_score <- sce$PDL1_score
+
+cur_dat$ISUP_combined[cur_dat$ISUP_combined == "3/4"] <- "1"
+cur_dat$ISUP_combined[cur_dat$ISUP_combined == "1/2"] <- "0"
+cur_dat$pT_combined[cur_dat$pT_combined == "3/4"] <- "1"
+cur_dat$pT_combined[cur_dat$pT_combined == "1/2"] <- "0"
+
+# Count heterotypic interactions of all cells TO M2_like macrophages
+out_1 <- cur_dat %>% filter(celltype_combined != "MY_M2_like") %>% rownames_to_column("cell_id") %>% pivot_longer(2:14, names_to = "celltype_int", values_to = "int_n") %>% filter(celltype_int == "MY_M2_like") %>% group_by(cell_id) %>% mutate(n_sum = sum(int_n)) %>% ungroup() 
+
+# Mean number of heterotypic interactions per PID 
+out_2 <- out_1 %>% pivot_longer(4:7, names_to = "cat", values_to = "cat_value") %>% select(cell_id, PID, cat, cat_value, n_sum) %>% unique() %>% group_by(PID) %>% mutate(n_av = mean(n_sum)) %>% select(PID, cat,cat_value, n_av) %>% unique() %>% filter(!is.na(cat_value))
+
+p_values_df <- compare_means(formula = n_av ~ cat_value, data = out_2, group.by = "cat", p.adjust.method = "BH")
+
+ggplot(out_2, aes(x = cat_value, y = n_av, fill = cat))+
+  facet_wrap(~cat)+
+  geom_boxplot()+
+  scale_fill_brewer(palette = "Greys")+
+  theme_classic()+
+  ylab("Mean number of heterotypic M2 interactions per PID")+
+  geom_text(data = p_values_df, aes(x = 1.5, y = Inf, label = paste0("p = ", p.adj)),
+            vjust = 1.5, hjust = 0.5, size = 4)
+  
+```
+
+
 
 #### Survival testing 
 
@@ -991,6 +1048,7 @@ theme(axis.text.x = element_text(angle = 90))
 
 hr_mean
 ```
+
 ###### Continious 
 
 ```{r}
@@ -1548,6 +1606,90 @@ if (is.null(comparisonGroup)) {
           border = TRUE, 
           row_title = "From", 
           column_title = "To")
+```
+
+#### Oncoprint-like visualization
+
+```{r}
+pVal_ISUP_up <- pVal_fine_ISUP
+pVal_T_up <- pVal_fine_T
+pVal_necrose_up <- pVal_fine_necrose
+pVal_PDL1_up <- pVal_fine_PDL1
+
+pVal_ISUP_up[pVal_ISUP_up < 0 ] <- 0
+pVal_T_up[pVal_T_up < 0] <- 0
+pVal_necrose_up[pVal_necrose_up < 0] <- 0
+pVal_PDL1_up[pVal_PDL1_up < 0] <- 0
+
+# List of differential test results
+mat <- list(ISUP_34 = pVal_ISUP_up,pT_34 = pVal_T_up, necrose_1 = pVal_necrose_up, PDL1_1 = pVal_PDL1_up)
+
+viz_col_up <- setNames(c("#67000D","#08306B", "#3F007D","#00441B"), 
+                      c("ISUP_34", "pT_34", "necrose_1", "PDL1_1"))
+
+# Alter-fun 
+viz_fun_up <- list(
+  background = function(x, y, w, h) grid.rect(x, y, w, h, 
+            gp = gpar(fill = "white", col = "black")),
+  ISUP_34 = function(x, y, w, h) grid.rect(x - 0.25*w, y + 0.25*h, w*0.5, h*0.5, 
+            gp = gpar(fill = viz_col_up["ISUP_34"], col = "black")),
+  pT_34 = function(x, y, w, h) grid.rect(x + 0.25*w, y + 0.25*h, w*0.5, h*0.5, 
+            gp = gpar(fill = viz_col_up["pT_34"], col = "black")),
+  necrose_1 = function(x, y, w, h) grid.rect(x - 0.25*w, y - 0.25*h, w*0.5, h*0.5, 
+            gp = gpar(fill = viz_col_up["necrose_1"], col = "black")),
+  PDL1_1 = function(x, y, w, h) grid.rect(x + 0.25*w, y - 0.25*h, w*0.5, h*0.5, 
+            gp = gpar(fill = viz_col_up["PDL1_1"], col = "black"))
+        )
+
+
+onco_up <- oncoPrint(mat, alter_fun = viz_fun_up, col = viz_col_up, show_column_names = TRUE, row_split = anno$type, column_split = anno$type, row_title = "From",
+          column_title = "To", alter_fun_is_vectorized = FALSE)
+draw(onco_up)
+```
+
+```{r}
+pVal_ISUP_down <- pVal_fine_ISUP
+pVal_T_down <- pVal_fine_T
+pVal_necrose_down <- pVal_fine_necrose
+pVal_PDL1_down <- pVal_fine_PDL1
+
+pVal_ISUP_down[pVal_ISUP_down > 0 ] <- 0
+pVal_T_down[pVal_T_down > 0] <- 0
+pVal_necrose_down[pVal_necrose_down > 0] <- 0
+pVal_PDL1_down[pVal_PDL1_down > 0] <- 0
+
+# List of differential test results
+mat <- list(ISUP_12 = pVal_ISUP_down,pT_12 = pVal_T_down, necrose_0 = pVal_necrose_down, PDL1_0 = pVal_PDL1_down)
+names(mat)
+
+viz_col <- setNames(c("#FC9F81","#ABCFE5", "#d8b2ff","#AADBAB"), 
+                      c("ISUP_12", "pT_12", "necrose_0", "PDL1_0"))
+
+# Alter-fun 
+viz_fun <- list(
+  background = function(x, y, w, h) grid.rect(x, y, w, h, 
+            gp = gpar(fill = "white", col = "black")),
+  ISUP_12 = function(x, y, w, h) grid.rect(x - 0.25*w, y + 0.25*h, w*0.5, h*0.5, 
+            gp = gpar(fill = viz_col["ISUP_12"], col = "black")),
+  pT_12 = function(x, y, w, h) grid.rect(x + 0.25*w, y + 0.25*h, w*0.5, h*0.5, 
+            gp = gpar(fill = viz_col["pT_12"], col = "black")),
+  necrose_0 = function(x, y, w, h) grid.rect(x - 0.25*w, y - 0.25*h, w*0.5, h*0.5, 
+            gp = gpar(fill = viz_col["necrose_0"], col = "black")),
+  PDL1_0 = function(x, y, w, h) grid.rect(x + 0.25*w, y - 0.25*h, w*0.5, h*0.5, 
+            gp = gpar(fill = viz_col["PDL1_0"], col = "black"))
+        )
+
+onco_down <- oncoPrint(mat, alter_fun = viz_fun, col = viz_col, show_column_names = TRUE, row_split = anno$type, column_split = anno$type, row_title = "From", 
+          column_title = "To", alter_fun_is_vectorized = FALSE)
+onco_down
+```
+
+```{r}
+onco_up
+onco_down
+
+onco_up+
+onco_down
 ```
 
 #### Most changing interactors
