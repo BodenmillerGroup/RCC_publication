@@ -721,7 +721,7 @@ pVal_PDL1_down[pVal_PDL1_down > 0] <- 0
 mat <- list(ISUP_12 = pVal_ISUP_down,pT_12 = pVal_T_down, necrose_0 = pVal_necrose_down, PDL1_0 = pVal_PDL1_down)
 names(mat)
 
-viz_col <- setNames(c("#FC9F81","#ABCFE5", "#d8b2ff","#AADBAB"), 
+viz_col <- setNames(c("#FC9F81","#ABCFE5", "#bf8cf0","#AADBAB"), 
                       c("ISUP_12", "pT_12", "necrose_0", "PDL1_0"))
 
 # Alter-fun 
@@ -1164,20 +1164,20 @@ ggplot(lasso_df, aes(x = reorder(term,-exp(estimate)), y = exp(estimate))) +
 ```{r}
 ## MY_M2_like__CD8_T_cell
 # High interaction scores
-cur_sample <- (spicy_out_selected_long %>% filter(pair == "MY_M2_like__CD8_T_cell") %>% group_by(imageID) %>% arrange(desc(coef)) %>% pull(imageID))[1:12]
+cur_sample <- (spicy_out_selected_long %>% filter(pair == "MY_M2_like__CD8_T_cell") %>% group_by(imageID) %>% arrange(desc(coef)) %>% pull(imageID))[1:6]
 
 plotSpatial(sce[,sce$sample_id %in% cur_sample & sce$celltype_combined %in% c("CD8_T_cell","MY_M2_like")], 
             node_color_by = "celltype_combined", 
             img_id = "sample_id", 
-            node_size_fix = 0.5)
+            node_size_fix = 1)
 
 # Low interaction scores
-cur_sample <- (spicy_out_selected_long %>% filter(pair == "MY_M2_like__CD8_T_cell") %>% group_by(imageID) %>% arrange(coef) %>% pull(imageID))[1:12]
+cur_sample <- (spicy_out_selected_long %>% filter(pair == "MY_M2_like__CD8_T_cell") %>% group_by(imageID) %>% arrange(coef) %>% pull(imageID))[1:6]
 
 plotSpatial(sce[,sce$sample_id %in% cur_sample & sce$celltype_combined %in% c("CD8_T_cell","MY_M2_like")], 
             node_color_by = "celltype_combined", 
             img_id = "sample_id", 
-            node_size_fix = 0.5)
+            node_size_fix = 1)
 
 ## AgM_Bcells
 # High interaction scores
@@ -1662,7 +1662,7 @@ pVal_PDL1_down[pVal_PDL1_down > 0] <- 0
 mat <- list(ISUP_12 = pVal_ISUP_down,pT_12 = pVal_T_down, necrose_0 = pVal_necrose_down, PDL1_0 = pVal_PDL1_down)
 names(mat)
 
-viz_col <- setNames(c("#FC9F81","#ABCFE5", "#d8b2ff","#AADBAB"), 
+viz_col <- setNames(c("#FC9F81","#ABCFE5", "#bf8cf0","#AADBAB"), 
                       c("ISUP_12", "pT_12", "necrose_0", "PDL1_0"))
 
 # Alter-fun 

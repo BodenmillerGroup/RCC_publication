@@ -1882,6 +1882,17 @@ cur_masks <- masks[mcols(masks)$sample_id %in% cur_sample]
 cur_sce <- sce[,sce$sample_id %in% cur_sample]
 ```
 
+```{r}
+# Select images
+cur_PID <- colData(sce_tumor) %>% as.data.frame() %>% select(PDL1_score_cells,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+cur_PID <- unfactor(cur_PID %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq)) %>% filter(PDL1_score_cells == "CD274+" & fra > 0.1) %>% arrange(desc(fra)) %>% pull(PID))[1:10]
+  
+cur_sample <- (colData(sce) %>% as.data.frame %>% select(PID, sample_id) %>% filter(PID %in%cur_PID) %>% pull(sample_id) %>% unique())
+
+cur_images <- images[mcols(images)$sample_id %in% cur_sample]
+cur_masks <- masks[mcols(masks)$sample_id %in% cur_sample]
+cur_sce <- sce[,sce$sample_id %in% cur_sample]
+```
 
 ```{r}
 library(cytoviewer)

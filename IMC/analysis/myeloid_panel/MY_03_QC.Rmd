@@ -521,6 +521,15 @@ sce$pN_simple <- ZTMA20$pN_simple[match(sce$PID, ZTMA20$PID)]
 sce$pM_simple <- ZTMA20$pM_simple[match(sce$PID, ZTMA20$PID)]
 ```
 
+```{r}
+## Add PDL1 score 
+### Combined positive score (> 1%) calculated on all cells in next script 
+#### Possible to add here later on
+sce_4 <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_04.rds")
+
+sce$PDL1_score <- sce_4$PDL1_score[match(sce$PID, sce_4$PID)]
+```
+
 ### Number of images per patient 
 
 ```{r}
@@ -552,6 +561,7 @@ subtype_df <- colData(sce) %>% as.data.frame %>% select(PID, subtype_combined) %
 
 ggplot(subtype_df, aes(x = reorder(subtype_combined,-n), y = n, fill = subtype_combined))+
   geom_bar(stat = "identity", color = "black")+
+  geom_text(aes(label = n), position = position_stack(vjust = 0.5), color = "black", size = 4)+
   theme_classic()+
   scale_fill_manual(values = metadata(sce)$colors$subtype_combined)+
   ylab("Number of patients")+
@@ -649,7 +659,10 @@ metadata(sce)$colors$ISUP_combined <- setNames(c("#FC9F81", "#67000D"),c("1/2","
 sce$lymphocytes_combined <- ifelse(sce$lymphocytes %in% c("1","2"),"1/2", sce$lymphocytes)
 
 ### Necrosis 
-metadata(sce)$colors$necrose <- setNames(c("grey", "#3F007D"),c("0","1"))
+metadata(sce)$colors$necrose <- setNames(c("#d8b2ff", "#3F007D"),c("0","1"))
+
+### PDL1 score
+metadata(sce)$colors$PDL1_score <- setNames(c("#AADBAB","#00441B"),c("0", "1"))
 ```
 
 
@@ -659,7 +672,7 @@ library(survival)
 library(survminer)
 
 cur_surv <- colData(sce) %>% as.data.frame() %>% filter(subtype_combined %in% c("ccRCC")) %>% 
-  select(PID, pT_simple, pT_combined, ISUP, ISUP_combined, lymphocytes, lymphocytes_combined, necrose, OS_months, status_OS) %>% unique()
+  select(PID, pT_simple, pT_combined, ISUP, ISUP_combined, lymphocytes, lymphocytes_combined, necrose, PDL1_score, OS_months, status_OS) %>% unique()
 
 
 # Tumor stages
@@ -765,8 +778,23 @@ ggsurvplot(fit_3,
           surv.median.line = "hv", # Specify median survival
           ggtheme = theme_classic(),
           conf.int = TRUE, # Change ggplot2 theme
-          palette = c("grey", "#3F007D")
+          palette = c("#bf8cf0", "#3F007D")
           #log.rank.weights = "n"
+)
+
+#PDL1 score
+fit_4 <- survfit(Surv(OS_months, status_OS) ~ PDL1_score, data = cur_surv)
+print(fit_4)
+
+ggsurvplot(fit_4,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = c("#AADBAB","#00441B"),
+          conf.int = TRUE
 )
 ```
 
@@ -781,14 +809,16 @@ PID_scores[[2]] <- colData(sce) %>% as.data.frame %>% filter(pT_combined == "3/4
 
 PID_scores[[3]] <- colData(sce) %>% as.data.frame %>% filter(necrose == "1" & subtype_combined == "ccRCC") %>% select(PID) %>% unique() %>% pull(PID)
 
-names(PID_scores) <- c("ISUP (3/4)","pT (3/4)","necrose (1)")
+PID_scores[[4]] <- colData(sce) %>% as.data.frame %>% filter(PDL1_score == "1" & subtype_combined == "ccRCC") %>% select(PID) %>% unique() %>% pull(PID)
+
+names(PID_scores) <- c("ISUP (3/4)","pT (3/4)","necrose (1)", "PDL1_score (1)")
 
 library("ggVennDiagram")
 ggVennDiagram(PID_scores,
               label_alpha = 0, 
               set_color = "black")+
-  scale_fill_gradient2(high = "purple4")+
-  scale_color_manual(values = c("black","black","black"))
+  scale_fill_gradient(low = "white", high = "gray30")+
+  scale_color_manual(values = c("black","black","black","black"))
 ```
 
 ```{r}
@@ -800,14 +830,16 @@ PID_scores[[2]] <- colData(sce) %>% as.data.frame %>% filter(pT_combined == "1/2
 
 PID_scores[[3]] <- colData(sce) %>% as.data.frame %>% filter(necrose == "0" & subtype_combined == "ccRCC") %>% select(PID) %>% unique() %>% pull(PID)
 
-names(PID_scores) <- c("ISUP (1/2)","pT (1/2)","necrose (0)")
+PID_scores[[4]] <- colData(sce) %>% as.data.frame %>% filter(PDL1_score == "0" & subtype_combined == "ccRCC") %>% select(PID) %>% unique() %>% pull(PID)
+
+names(PID_scores) <- c("ISUP (1/2)","pT (1/2)","necrose (0)", "PDL1_score (0)")
+
 library("ggVennDiagram")
 ggVennDiagram(PID_scores,
               label_alpha = 0, 
-              set_color = "black",
-              label_color = "black")+
-  scale_fill_gradient2(high = "purple4")+
-  scale_color_manual(values = c("black","black","black"))
+              set_color = "black")+
+  scale_fill_gradient(low = "white", high = "gray30")+
+  scale_color_manual(values = c("black","black","black","black"))
 ```
 
 #### Statistical association of clinical categories 
@@ -853,7 +885,7 @@ corrplot(-log10(direct_comp),
          diag = FALSE, 
          tl.col = "black",
          type="upper", 
-         col = COL1("Purples",100),
+         col = COL1("Blues",100),
          method = "shade",
          bg = "lightgrey", addCoef.col = "black")
 ```
@@ -1106,6 +1138,14 @@ for (x in c("TMA", "pT_simple", "ISUP", "necrose", "lymphocytes", "BAP1_IHC", "P
 paste0("Number of cells after QC: ", dim(sce)[2])
 paste0("Number of images after QC: ", length(unique(sce$sample_id)))
 paste0("Number of patients after QC: ", length(unique(sce$PID)))
+```
+
+```{r}
+sce_ccRCC <- sce[,sce$subtype_combined == "ccRCC"]
+
+paste0("Number of cells after QC: ", dim(sce_ccRCC)[2])
+paste0("Number of images after QC: ", length(unique(sce_ccRCC$sample_id)))
+paste0("Number of patients after QC: ", length(unique(sce_ccRCC$PID)))
 ```
 
 ## Save objects
