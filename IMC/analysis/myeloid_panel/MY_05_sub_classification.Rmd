@@ -297,7 +297,7 @@ data.frame(num_clus = num_clus,
 }
 
 
-df_out <- rbind(df, df_1)
+df_out <- rbind(df)
 
 
 p1 <- ggplot(df_out, aes(x=k, y=num_clus, color = type))+
@@ -1246,7 +1246,7 @@ metadata(sce)$colors$immune_metacluster <- immune_meta_col
 
 ```{r}
 #Read sce after clustering, astir and GMM
-#sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_immune_05.rds")
+sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_immune_05.rds")
 
 ### 1. Heatmap body ###
 
@@ -1371,7 +1371,7 @@ h <- Heatmap(t(assay(mean_sce, "exprs")),
         clustering_method_rows = "ward.D2",
         clustering_method_columns = "ward.D2"
         )+
-  Heatmap(scale(t(assay(mean_sce, "exprs"))))+
+  #Heatmap(scale(t(assay(mean_sce, "exprs"))))+
   ha_astir_GMM+
   ha_spatial+
   ha_meta
@@ -1621,6 +1621,9 @@ sce_sub <- sce[,sub]
 #Run UMAP/TSNE
 reducedDim(sce_sub, "UMAP") <- calculateUMAP(sce_sub[rowData(sce_sub)$sub_cluster,], n_neighbors = 50, pca = 50,exprs_values = "min_max", external_neighbors=TRUE, BPPARAM = MulticoreParam())
 
+plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "immune_metacluster")+
+  scale_color_manual(values = metadata(sce)$colors$immune_metacluster)
+
 plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "immune_metacluster_SOM_test")+
   scale_color_manual(values = metadata(sce)$colors$immune_metacluster)
 plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "immune_metacluster_graph_test")+
@@ -1670,7 +1673,7 @@ dittoHeatmap(sce[,cur_cells],
 
 #### Differential expression analysis 
 
-```{r}
+```{r, fig.width=5, fig.height=7}
 library(EnhancedVolcano)
 
 # Myeloid category
@@ -1736,6 +1739,49 @@ EnhancedVolcano(data,
     colCustom = keyvals)
 ```
 
+Check for double-positive CD8+ T cells 
+
+```{r}
+## Check for CD4/CD8a DP cells 
+sce_T <- sce[,sce$immune_metacluster %in% c("CD8_T_cell","CD4_T_cell")]
+sce_T
+
+## Scatterplot for key markers
+cur_dat <- t(assay(sce_T,"exprs")) %>% as.matrix %>% as.data.frame 
+
+cur_dat$immune_metacluster <- sce_T$immune_metacluster[match(rownames(cur_dat), sce_T$cell_id)]
+cur_dat$astir_immune_combined <- sce_T$astir_immune_combined[match(rownames(cur_dat), sce_T$cell_id)]
+cur_dat$sample_id <- sce_T$sample_id[match(rownames(cur_dat), sce_T$cell_id)]
+
+ggplot(cur_dat, aes_string(x="CD8a", y="CD4", color = "immune_metacluster"))+
+  geom_point(alpha = 0.5)+
+  geom_density2d(color = "black")+
+  coord_cartesian(ylim = c(0,4), xlim = c(0,4))+
+  theme_classic()+
+  scale_color_brewer(palette = "Set1")
+
+ggplot(cur_dat, aes_string(x="CD8a", y="CD4", color = "astir_immune_combined"))+
+  geom_point(alpha = 0.5)+
+  geom_density2d(color = "black")+
+  coord_cartesian(ylim = c(0,4), xlim = c(0,4))+
+  theme_classic()+
+  scale_color_brewer(palette = "Set1")
+
+cur_sample <- cur_dat %>% select(CD8a, CD4, sample_id) %>% filter(CD8a > 2, CD4 > 2) %>% rownames_to_column("cell_id") %>% count(sample_id) %>% arrange(desc(n)) %>% pull(sample_id)
+```
+
+```{r}
+cur_images <- images[mcols(images)$sample_id %in% cur_sample]
+cur_masks <- masks[mcols(masks)$sample_id %in% cur_sample]
+cur_sce <- sce[,sce$sample_id %in% cur_sample]
+
+library(cytoviewer)
+cytoviewer(image = cur_images, mask = cur_masks, object = cur_sce, img_id = "sample_id", cell_id = "ObjectNumber")
+```
+
+
+
+
 # 5. Differential abundance analysis 
 
 ## Loop over categories 
@@ -1798,7 +1844,7 @@ return(DA)
 DA_out <- do.call(rbind, DA)
 ```
 
-```{r}
+```{r, fig.width=7, fig.height=5}
 library(ggnewscale)
 
 DA_out$category <- factor(DA_out$category,levels = c("PDL1_score","necrose","pT_combined","ISUP_combined"))
@@ -1811,7 +1857,8 @@ ggplot(DA_out, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
   scale_size(range = c(2,10))+
   new_scale_colour() +
   geom_point(data = DA_out,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
-  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
 ```
 ### Cluster 
 
@@ -2211,7 +2258,7 @@ anova(basic_model, multi_model)
 ## Note that interpretation of VIF for categorical predictors is unclear 
 
 library(faraway)
-faraway::vif(model.matrix(basic_model))
+faraway::vif(model.matrix(multi_model))
 ```
 
 Conclusion: For multivariate cox models, we should use (age + gender +) pT_combined + necrose as co-variates.
@@ -2309,11 +2356,11 @@ Cox_df_mean <- as.data.frame(Cox_df_mean)
 Cox_df_mean$status_OS <- sce$status_OS[match(rownames(Cox_df_mean),sce$PID)]
 Cox_df_mean$OS_months <- sce$OS_months[match(rownames(Cox_df_mean),sce$PID)]
 
-#Cox_df_mean$gender <- as.factor(sce$gender[match(rownames(Cox_df_mean),sce$PID)])
-#Cox_df_mean$age <- sce$age[match(rownames(Cox_df_mean),sce$PID)]
+Cox_df_mean$gender <- as.factor(sce$gender[match(rownames(Cox_df_mean),sce$PID)])
+Cox_df_mean$age <- sce$age[match(rownames(Cox_df_mean),sce$PID)]
 #Cox_df_mean$ISUP <- as.factor(sce$ISUP_combined[match(rownames(Cox_df_mean),sce$PID)])
-#Cox_df_mean$pT <- as.factor(sce$pT_combined[match(rownames(Cox_df_mean),sce$PID)])
-#Cox_df_mean$necrose <- as.factor(sce$necrose[match(rownames(Cox_df_mean),sce$PID)])
+Cox_df_mean$pT <- as.factor(sce$pT_combined[match(rownames(Cox_df_mean),sce$PID)])
+Cox_df_mean$necrose <- as.factor(sce$necrose[match(rownames(Cox_df_mean),sce$PID)])
 
 #Based on proportions
 #covariates <- Cox_df_mean %>% select(-status_OS,-OS_months, -gender, -age, -ISUP, -pT, -Unknown/Other) %>% colnames

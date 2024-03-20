@@ -508,31 +508,31 @@ sce$cluster_som_quant_20 <- cluster_ids(sce_test, "meta20")
 #sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_04.rds")
 
 
-my_clusters <- colnames(colData(sce))[str_detect(colnames(colData(sce)),"cluster_[:digit:]")]
+# my_clusters <- colnames(colData(sce))[str_detect(colnames(colData(sce)),"cluster_[:digit:]")]
+# 
+# df <- foreach(i = seq_along(my_clusters),.combine = rbind) %do% {
+# num_clus <- length(unique(colData(sce)[,my_clusters[i]]))
+# sil <- approxSilhouette(t(assay(sce, "exprs")), clusters=colData(sce)[,my_clusters[i]])
+# rmsd <- clusterRMSD(t(assay(sce, "exprs")), clusters=colData(sce)[,my_clusters[i]])
+# data.frame(num_clus = num_clus,
+#            k = as.numeric(str_split(my_clusters[i],"_",simplify = TRUE)[,2]), 
+#            sil = mean(sil$width), 
+#            rmsd = sum(rmsd),
+#            type = "cluster")
+# }
 
-df <- foreach(i = seq_along(my_clusters),.combine = rbind) %do% {
-num_clus <- length(unique(colData(sce)[,my_clusters[i]]))
-sil <- approxSilhouette(t(assay(sce, "exprs")), clusters=colData(sce)[,my_clusters[i]])
-rmsd <- clusterRMSD(t(assay(sce, "exprs")), clusters=colData(sce)[,my_clusters[i]])
-data.frame(num_clus = num_clus,
-           k = as.numeric(str_split(my_clusters[i],"_",simplify = TRUE)[,2]), 
-           sil = mean(sil$width), 
-           rmsd = sum(rmsd),
-           type = "cluster")
-}
-
-my_clusters <- colnames(colData(sce))[str_detect(colnames(colData(sce)),"cluster_quant_[:digit:]")]
-
-df_1 <- foreach(i = seq_along(my_clusters),.combine = rbind) %do% {
-num_clus <- length(unique(colData(sce)[,my_clusters[i]]))
-sil <- approxSilhouette(t(assay(sce, "exprs")), clusters=colData(sce)[,my_clusters[i]])
-rmsd <- clusterRMSD(t(assay(sce, "exprs")), clusters=colData(sce)[,my_clusters[i]])
-data.frame(num_clus = num_clus,
-           k = as.numeric(str_split(my_clusters[i],"_",simplify = TRUE)[,3]), 
-           sil = mean(sil$width), 
-           rmsd = sum(rmsd),
-           type = "cluster_quant")
-}
+# my_clusters <- colnames(colData(sce))[str_detect(colnames(colData(sce)),"cluster_quant_[:digit:]")]
+# 
+# df_1 <- foreach(i = seq_along(my_clusters),.combine = rbind) %do% {
+# num_clus <- length(unique(colData(sce)[,my_clusters[i]]))
+# sil <- approxSilhouette(t(assay(sce, "exprs")), clusters=colData(sce)[,my_clusters[i]])
+# rmsd <- clusterRMSD(t(assay(sce, "exprs")), clusters=colData(sce)[,my_clusters[i]])
+# data.frame(num_clus = num_clus,
+#            k = as.numeric(str_split(my_clusters[i],"_",simplify = TRUE)[,3]), 
+#            sil = mean(sil$width), 
+#            rmsd = sum(rmsd),
+#            type = "cluster_quant")
+# }
 
 my_clusters <- colnames(colData(sce))[str_detect(colnames(colData(sce)),"cluster_som_[:digit:]")]
 
@@ -547,21 +547,21 @@ data.frame(num_clus = num_clus,
            type = "cluster_som")
 }
 
-my_clusters <- colnames(colData(sce))[str_detect(colnames(colData(sce)),"cluster_som_quant_[:digit:]")]
+# my_clusters <- colnames(colData(sce))[str_detect(colnames(colData(sce)),"cluster_som_quant_[:digit:]")]
+# 
+# df_3 <- foreach(i = seq_along(my_clusters),.combine = rbind) %do% {
+# num_clus <- length(unique(colData(sce)[,my_clusters[i]]))
+# sil <- approxSilhouette(t(assay(sce, "exprs")), clusters=colData(sce)[,my_clusters[i]])
+# rmsd <- clusterRMSD(t(assay(sce, "exprs")), clusters=colData(sce)[,my_clusters[i]])
+# data.frame(num_clus = num_clus,
+#            k = as.numeric(str_split(my_clusters[i],"_",simplify = TRUE)[,4]), 
+#            sil = mean(sil$width), 
+#            rmsd = sum(rmsd),
+#            type = "cluster_som_quant")
+# }
 
-df_3 <- foreach(i = seq_along(my_clusters),.combine = rbind) %do% {
-num_clus <- length(unique(colData(sce)[,my_clusters[i]]))
-sil <- approxSilhouette(t(assay(sce, "exprs")), clusters=colData(sce)[,my_clusters[i]])
-rmsd <- clusterRMSD(t(assay(sce, "exprs")), clusters=colData(sce)[,my_clusters[i]])
-data.frame(num_clus = num_clus,
-           k = as.numeric(str_split(my_clusters[i],"_",simplify = TRUE)[,4]), 
-           sil = mean(sil$width), 
-           rmsd = sum(rmsd),
-           type = "cluster_som_quant")
-}
 
-
-df_out <- rbind(df, df_1, df_2, df_3)
+df_out <- rbind(df_2)
 
 
 p1 <- ggplot(df_out, aes(x=k, y=num_clus, color = type))+
@@ -588,7 +588,7 @@ p3 <- ggplot(df_out, aes(x=k, y=sil, color = type))+
 p1+p2+p3 
 ```
 
-We selected cluster_30 for downstream analysis. 
+We selected cluster_som_16 for downstream analysis. 
 
 #### Visualization 
 
@@ -1134,14 +1134,14 @@ h <- Heatmap(t(assay(mean_sce, "exprs")),
         show_column_names =  T, row_split = anno_cluscat$cluster_category,
         clustering_method_rows = "ward.D2",
         clustering_method_columns = "ward.D2")+
-  Heatmap(scale(t(assay(mean_sce, "exprs"))),
-        name= "exprs",
-        km = 1,
-        show_row_names = T, 
-        row_names_side = "left",
-        show_column_names =  T, row_split = anno_cluscat$cluster_category,
-        clustering_method_rows = "ward.D2",
-        clustering_method_columns = "ward.D2")+
+  # Heatmap(scale(t(assay(mean_sce, "exprs"))),
+  #       name= "exprs",
+  #       km = 1,
+  #       show_row_names = T, 
+  #       row_names_side = "left",
+  #       show_column_names =  T, row_split = anno_cluscat$cluster_category,
+  #       clustering_method_rows = "ward.D2",
+  #       clustering_method_columns = "ward.D2")+
   ha_spatial+
   ha_meta+
   ha_cluscat

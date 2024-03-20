@@ -764,10 +764,8 @@ dittoScatterPlot(sce,
                  y.var="CD274", 
                  assay.x = "exprs", 
                  assay.y = "exprs", 
-                 color.var = "my_cluster_110") +
+                 color.var = "my_cluster_1_90") +
   theme_classic()
-    scale_color_manual(values = metadata(spe)$color_vectors$celltype) +
-    ggtitle("Scatterplot for CD3/CD20 labelled by celltype")
 ```
 
 #### Violin Expression 
@@ -1000,7 +998,7 @@ Heatmap of clusters
 
 ```{r heatmap, message=FALSE, warning=FALSE}
 #Read sce after clustering, astir and GMM
-#sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_06.rds")
+sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_06.rds")
 
 ### 1. Heatmap body ###
 
@@ -1495,6 +1493,57 @@ plotReducedDim(sce, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "MP
 
 ```
 
+#### CATALYST-based visualization
+
+We will first convert the sce into a CATALYST-compatible format.
+
+```{r CATALYST}
+library(CATALYST)
+# save spe in CATALYST-compatible object with renamed colData entries and 
+# new metadata information
+sce_cat <- sce 
+sce_cat$sample_id <- factor(sce$PID)
+sce_cat$cluster_id <- factor(sce$myeloid_metacluster)
+
+#add celltype information to metadata
+metadata(sce_cat)$cluster_codes <- data.frame(myeloid_metacluster = factor(sce_cat$myeloid_metacluster))
+```
+
+```{r CATALYST pbmds and clrDR, message=FALSE}
+# MDS pseudobulk by myeloid_metacluster
+pbMDS(sce_cat, by = "cluster_id", 
+      features = rownames(sce_cat)[rowData(sce_cat)$myeloid_cluster_1], 
+      label_by = "cluster_id", k = "myeloid_metacluster") +
+  scale_color_manual(values = metadata(sce_cat)$colors$myeloid_metacluster)+
+  theme_classic()
+
+# MDS pseudobulk by myeloid_metacluster
+pbMDS(sce_cat, by = "both", 
+      features = rownames(sce_cat)[rowData(sce_cat)$myeloid_cluster_1], 
+      k = "myeloid_metacluster",
+      size_by = TRUE) +
+  scale_color_manual(values = metadata(sce_cat)$colors$myeloid_metacluster)+
+  theme_classic()
+
+# CLR of patient proportions per myeloid_metacluster
+clrDR(sce_cat, dr = "PCA", 
+      by = "cluster_id", k = "myeloid_metacluster", 
+      label_by = "cluster_id", arrow_col = "PID", 
+      point_pal = metadata(sce_cat)$colors$myeloid_metacluster, 
+      arrows = FALSE) +
+  scale_color_manual(values = metadata(sce_cat)$colors$PID)+
+  guides(color = "none")+
+  theme_classic()
+
+# CLR of myeloid_metacluster proportions per patient
+clrDR(sce_cat, dr = "PCA", 
+      by = "sample_id", point_col = "sample_id",
+      k = "myeloid_metacluster", point_pal = metadata(sce_cat)$colors$PID)+
+  scale_color_manual(values = metadata(sce_cat)$colors$myeloid_metacluster)+
+  guides(fill = "none")+
+  theme_classic()
+```
+
 #### Single-cell heatmaps
 
 ```{r}
@@ -1513,7 +1562,7 @@ dittoHeatmap(sce[,sce$myeloid_metacluster == "Ag_M"],
              genes = rownames(sce)[rowData(sce)$myeloid_cluster_1],
              assay = "min_max", heatmap.colors = viridis(100), 
              scale = "none", 
-             cluster_cols = TRUE, 
+             cluster_cols = FALSE, 
              annot.by = c("my_cluster_selected"))
 
 dittoHeatmap(sce[,sce$myeloid_metacluster == "M2_like"], 
@@ -2121,18 +2170,28 @@ Heatmap(for_district, col = viridis(100), row_names_side = "left", row_labels = 
 
 ```{r}
 ## Specifically spatial metacommunity 3
-cur_sample <- colData(sce) %>% as.data.frame %>% group_by(myeloid_district) %>% filter(myeloid_district == "D_5") %>% count(sample_id) %>% arrange(desc(n)) %>% slice(1:6) %>% pull(sample_id)
+cur_sample <- colData(sce) %>% as.data.frame %>% group_by(myeloid_district_names) %>% filter(myeloid_district_names == "MDSC_M2_mix") %>% count(sample_id) %>% arrange(desc(n)) %>% slice(1:6) %>% pull(sample_id)
 
+cur_sample <- cur_sample[1]
 plotSpatial(sce[,sce$sample_id %in% cur_sample], 
             node_color_by = "myeloid_metacluster", 
             img_id = "sample_id", 
-            node_size_fix = 0.5)+
+            node_size_fix = 2)+
   scale_color_manual(values = metadata(sce)$colors$myeloid_metacluster)
 
 plotSpatial(sce[,sce$sample_id %in% cur_sample], 
-            node_color_by = "myeloid_district", 
+            node_color_by = "myeloid_community_lv", 
             img_id = "sample_id", 
-            node_size_fix = 0.5)
+            node_size_fix = 2, colPairName = "neighborhood", 
+            draw_edges = TRUE, nodes_first = FALSE, 
+            directed = FALSE)+
+  guides(color = "none")
+
+plotSpatial(sce[,sce$sample_id %in% cur_sample], 
+            node_color_by = "myeloid_district_names", 
+            img_id = "sample_id", 
+            node_size_fix = 2)+
+  scale_color_manual(values = c("#fc9d24","pink2","#f96968"))
 ```
 
 ```{r}
@@ -2851,7 +2910,7 @@ Cox_df <- PID_metagroups
 
 ## Based on categories (mean or median division of cluster proportions) 
 Cox_df_mean <- foreach(i = colnames(Cox_df),.combine = "cbind")%do%{
-Cox_df %>% select(all_of(i)) %>% mutate(mean = ifelse(Cox_df[,i] > median(Cox_df[,i]),"B","A")) %>% pull(mean)
+Cox_df %>% select(all_of(i)) %>% mutate(mean = ifelse(Cox_df[,i] > mean(Cox_df[,i]),"B","A")) %>% pull(mean)
 }
 
 colnames(Cox_df_mean) <- colnames(Cox_df)
@@ -3107,7 +3166,7 @@ Cox_df <- PID_metagroups
 
 ## Based on categories (mean or median division of cluster proportions) 
 Cox_df_mean <- foreach(i = colnames(Cox_df),.combine = "cbind")%do%{
-Cox_df %>% select(all_of(i)) %>% mutate(mean = ifelse(Cox_df[,i] > median(Cox_df[,i]),"B","A")) %>% pull(mean)
+Cox_df %>% select(all_of(i)) %>% mutate(mean = ifelse(Cox_df[,i] > mean(Cox_df[,i]),"B","A")) %>% pull(mean)
 }
 
 colnames(Cox_df_mean) <- colnames(Cox_df)
@@ -3464,7 +3523,7 @@ cur_surv_plot <- cur_surv_out %>% mutate(sign = p_adj < 0.05, direction = ifelse
 
 cur_surv_plot <- cur_surv_plot %>% pivot_wider(id_cols = type, names_from = group, values_from = p_out) %>% column_to_rownames("type")
 
-Heatmap(cur_surv_plot, border = FALSE, cluster_columns = FALSE, rect_gp = gpar(col = "black", lwd = 1), name = "log10(FDR)")
+Heatmap(cur_surv_plot, col = col, border = FALSE, cluster_columns = FALSE, rect_gp = gpar(col = "black", lwd = 1), name = "log10(FDR)")
 ```
 
 ```{r}
@@ -3530,7 +3589,7 @@ cur_surv_plot <- cur_surv_out %>% mutate(sign = p_adj < 0.1, direction = ifelse(
 
 cur_surv_plot <- cur_surv_plot %>% pivot_wider(id_cols = type, names_from = group, values_from = p_out) %>% column_to_rownames("type")
 
-Heatmap(cur_surv_plot, border = FALSE, cluster_columns = FALSE, rect_gp = gpar(col = "black", lwd = 1), name = "log10(FDR)")
+Heatmap(cur_surv_plot, col = col, border = FALSE, cluster_columns = FALSE, rect_gp = gpar(col = "black", lwd = 1), name = "log10(FDR)")
 ```
 
 ```{r}
@@ -4461,7 +4520,7 @@ ggsurvplot(fit,
 library(survival)
 library(survminer)
 
-cur_surv <- colData(sce) %>% as.data.frame() %>% select(OS_months, status_OS, gender, age, pT_combined, ISUP_combined, PID_metagroups) %>% unique()
+cur_surv <- colData(sce) %>% as.data.frame() %>% select(OS_months, status_OS, gender, age, pT_combined, necrose, PID_metagroups) %>% unique()
 
 cur_surv <- na.omit(cur_surv) 
 
@@ -4475,7 +4534,7 @@ multi_model_full <- coxph(multi_formula_full, data = cur_surv)
 
 #cur_surv is.na(cur_surv$PID_metagroups)
 
-# Log-likeli hood ratio test
+# Log-likelihood ratio test
 anova(multi_model_null, multi_model_full)
 ```
 
