@@ -1838,7 +1838,7 @@ cur_surv <- colData(sce) %>% as.data.frame() %>% select(PID, OS_months, status_O
 
 cur_surv$MY_CD163__CD8_T_cell <- out_df$MY_CD163__CD8_T_cell[match(cur_surv$PID, out_df$PID)]
 
-cur_surv$MY_HLADR_hi_CD11c__B_cell <- out_df$MY_HLADR_hi_CD11c__B_cell[match(cur_surv$PID, out_df$PID)]
+cur_surv$MY_HLADR_hi_CD15__Endothelial <- out_df$MY_HLADR_hi_CD15__Endothelial[match(cur_surv$PID, out_df$PID)]
 
 #Plot specific survival curves
 fit <- survfit(Surv(OS_months, status_OS) ~ MY_CD163__CD8_T_cell, data = cur_surv)
@@ -1856,7 +1856,7 @@ ggsurvplot(fit,
 )
 
 #Plot specific survival curves
-fit <- survfit(Surv(OS_months, status_OS) ~ MY_HLADR_hi_CD11c__B_cell, data = cur_surv)
+fit <- survfit(Surv(OS_months, status_OS) ~ MY_HLADR_hi_CD15__Endothelial, data = cur_surv)
 print(fit)
 
 ggsurvplot(fit,
@@ -2029,7 +2029,265 @@ plotSpatial(sce[,sce$sample_id %in% cur_sample & sce$celltype_combined_fine %in%
             img_id = "sample_id", 
             node_size_fix = 0.5)
 ```
-## 2B. B cell patch analysis 
+## 2B. Interaction testing / Fraction plots
+
+### Fraction-correlation heatmap 
+
+```{r}
+## Fraction correlation based heatmap
+PID_celltype_combined <- colData(sce) %>% as.data.frame() %>% select(celltype_combined,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_celltype_combined <- PID_celltype_combined %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq))
+
+PID_long <- PID_celltype_combined %>% pivot_wider(id_cols = "PID",names_from = "celltype_combined",values_from = "fra") %>% column_to_rownames("PID")
+
+# Pearson correlation
+PID_cor <- cor(as.matrix(PID_long)) 
+
+#PID_cor[PID_cor == 1] <- NA 
+
+anno <- data.frame(celltypes = rownames(PID_cor))
+anno$type <- ifelse(str_detect(anno$celltypes, "MY"),"MY","Not_MY")
+  
+Heatmap(PID_cor, na_col = "black", column_split = anno$type, row_split = anno$type, cluster_columns = FALSE, cluster_rows = FALSE)
+```
+
+### Interaction testing 
+
+```{r}
+## Number of images with significant interaction
+out <- testInteractions(sce,
+                        method = "classic",
+                        group_by = "PID",
+                        label = "celltype_combined",
+                        colPairName = "neighborhood",
+                        BPPARAM = MulticoreParam(workers = 15))
+head(out)
+
+cur_out <- out %>% as.data.frame()
+```
+
+```{r}
+# Extract number of PID with significant interaction 
+library(scales)
+out_viz <- out %>% as_tibble() %>%
+    group_by(from_label, to_label) %>%
+    dplyr::summarize(sum_sigval = sum(sigval, na.rm = TRUE)) %>% 
+  pivot_wider(id_cols = "from_label", names_from = "to_label", values_from = "sum_sigval") %>%
+  column_to_rownames("from_label")
+
+Heatmap(out_viz)
+
+## Fraction of PID with significant interaction
+out_viz_fra <- out_viz/length(unique(sce$PID))
+Heatmap(out_viz_fra)
+```
+
+### Combined visualization 
+
+```{r}
+# Combined heatmaps 
+out_viz_fra <- out_viz_fra[match(rownames(out_viz_fra), rownames(PID_cor)),]
+out_viz_fra <- out_viz_fra[,match(colnames(out_viz_fra), colnames(PID_cor))]
+out_viz <- out_viz[match(rownames(out_viz), rownames(PID_cor)),]
+out_viz <- out_viz[,match(colnames(out_viz), colnames(PID_cor))]
+
+Heatmap(PID_cor, na_col = "black", column_split = anno$type, row_split = anno$type, cluster_columns = FALSE, cluster_rows = FALSE)+
+  Heatmap(out_viz)
+```
+
+
+```{r}
+max_value = max(abs(out_viz))
+
+cell_fun = function(j, i, x, y, width, height, fill) {
+  width = convertWidth(width, "mm")
+  height = convertHeight(height, "mm")
+  r = abs(out_viz[i, j])/max_value * min(unit.c(width, height))*0.5
+  grid.circle(x = x, y = y, r = r,
+              gp = gpar(fill = NA, col = ifelse(out_viz[i, j] > 0, "darkred","darkblue")))
+}
+
+
+Heatmap(PID_cor, cell_fun = cell_fun, column_split = anno$type, row_split = anno$type)
+```
+
+#### Focus myeloid 
+
+```{r}
+out_viz_1 <- out_viz[str_detect(rownames(out_viz), "MY"),]
+out_viz_fra_1 <- out_viz_fra[str_detect(rownames(out_viz_fra), "MY"),]
+PID_cor_1 <- PID_cor[str_detect(rownames(PID_cor), "MY"),]
+
+max_value = max(abs(out_viz_1))
+
+cell_fun = function(j, i, x, y, width, height, fill) {
+  width = convertWidth(width, "mm")
+  height = convertHeight(height, "mm")
+  r = abs(out_viz_1[i, j])/max_value * min(unit.c(width, height))*0.5
+  grid.circle(x = x, y = y, r = r,
+              gp = gpar(fill = NA, col = ifelse(out_viz_fra_1[i, j] > 0, "darkred","darkblue")))
+}
+
+
+Heatmap(PID_cor_1, cell_fun = cell_fun, cluster_rows = TRUE, cluster_columns = TRUE, column_split = anno$type)
+```
+
+
+### Across disease progression 
+
+#### Interaction testing 
+
+```{r}
+# Example: ISUP combined 
+test <- out %>% as.data.frame()
+test$ISUP_combined <- sce$ISUP_combined[match(test$group_by, sce$PID)]
+
+test_viz_1 <- test %>% filter(ISUP_combined == "3/4") %>%
+    group_by(from_label, to_label) %>%
+    dplyr::summarize(sum_sigval = sum(sigval, na.rm = TRUE)) %>% 
+  pivot_wider(id_cols = "from_label", names_from = "to_label", values_from = "sum_sigval") %>%
+  column_to_rownames("from_label")
+
+test_viz_0 <- test %>% filter(ISUP_combined == "1/2") %>%
+    group_by(from_label, to_label) %>%
+    dplyr::summarize(sum_sigval = sum(sigval, na.rm = TRUE)) %>% 
+  pivot_wider(id_cols = "from_label", names_from = "to_label", values_from = "sum_sigval") %>%
+  column_to_rownames("from_label")
+
+## Fraction 
+test_viz_1_fra <- test_viz_1/length(unique(sce$PID))
+test_viz_0_fra <- test_viz_0/length(unique(sce$PID))
+
+## Difference of fractions
+test_viz <- test_viz_1_fra-test_viz_0_fra
+
+Heatmap(test_viz, column_split = anno$type, row_split = anno$type)
+```
+
+#### Fraction correlation 
+
+```{r}
+### Correlation plot / Interaction testing 
+
+## Fraction correlation based heatmap
+PID_celltype_combined <- colData(sce) %>% as.data.frame() %>% filter(ISUP_combined == "3/4") %>% select(celltype_combined,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_celltype_combined <- PID_celltype_combined %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq))
+
+PID_long <- PID_celltype_combined %>% pivot_wider(id_cols = "PID",names_from = "celltype_combined",values_from = "fra") %>% column_to_rownames("PID")
+
+PID_cor_high <- cor(as.matrix(PID_long)) 
+
+PID_celltype_combined <- colData(sce) %>% as.data.frame() %>% filter(ISUP_combined == "1/2") %>% select(celltype_combined,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_celltype_combined <- PID_celltype_combined %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq))
+
+PID_long <- PID_celltype_combined %>% pivot_wider(id_cols = "PID",names_from = "celltype_combined",values_from = "fra") %>% column_to_rownames("PID")
+
+PID_cor_low <- cor(as.matrix(PID_long)) 
+
+Heatmap(PID_cor_high, cluster_rows = FALSE, cluster_columns = FALSE) + Heatmap(PID_cor_low, cluster_rows = FALSE, cluster_columns = FALSE)
+
+PID_cor_diff <- PID_cor_high-PID_cor_low
+
+# Color for heatmaps 
+colours <- c("#4575B4", "white", "#D73027")
+breaks <- c(-5, 5, 0.5)
+breaks <- seq(from = breaks[1], to = breaks[2], by = breaks[3])
+pal <- grDevices::colorRampPalette(colours)(length(breaks))
+col <- colorRamp2(breaks, pal)
+
+# Plot heatmap 
+Heatmap(PID_cor_diff)
+```
+
+#### Combined visualization
+
+```{r}
+test_viz_1 <- test_viz_1[match(rownames(test_viz_1), rownames(PID_cor_high)),]
+test_viz_1 <- test_viz_1[,match(colnames(test_viz_1), colnames(PID_cor_high))]
+
+max_value = max(abs(test_viz_1))
+
+cell_fun = function(j, i, x, y, width, height, fill) {
+  width = convertWidth(width, "mm")
+  height = convertHeight(height, "mm")
+  r = abs(test_viz_1[i, j])/max_value * min(unit.c(width, height))*0.5
+  grid.circle(x = x, y = y, r = r,
+              gp = gpar(fill = NA, col = ifelse(test_viz_1[i, j] > 0, "darkred","darkblue")))
+}
+
+
+Heatmap(PID_cor_high, cell_fun = cell_fun, cluster_rows = TRUE, cluster_columns = TRUE, column_split = anno$type, row_split = anno$type)
+
+test_viz_0 <- test_viz_0[match(rownames(test_viz_0), rownames(PID_cor_low)),]
+test_viz_0 <- test_viz_0[,match(colnames(test_viz_0), colnames(PID_cor_low))]
+
+max_value = max(abs(test_viz_0))
+
+cell_fun = function(j, i, x, y, width, height, fill) {
+  width = convertWidth(width, "mm")
+  height = convertHeight(height, "mm")
+  r = abs(test_viz_0[i, j])/max_value * min(unit.c(width, height))*0.5
+  grid.circle(x = x, y = y, r = r,
+              gp = gpar(fill = NA, col = ifelse(test_viz_0[i, j] > 0, "darkred","darkblue")))
+}
+
+
+Heatmap(PID_cor_low, cell_fun = cell_fun, cluster_rows = TRUE, cluster_columns = TRUE, column_split = anno$type, row_split = anno$type)
+
+test_viz <- test_viz[match(rownames(test_viz), rownames(PID_cor_diff)),]
+test_viz <- test_viz[,match(colnames(test_viz), colnames(PID_cor_diff))]
+
+max_value = max(abs(test_viz))
+
+cell_fun = function(j, i, x, y, width, height, fill) {
+  width = convertWidth(width, "mm")
+  height = convertHeight(height, "mm")
+  r = abs(test_viz[i, j])/max_value * min(unit.c(width, height))*0.5
+  grid.circle(x = x, y = y, r = r,
+              gp = gpar(fill = NA, col = ifelse(test_viz[i, j] > 0, "darkred","darkblue")))
+}
+
+
+Heatmap(PID_cor_diff, cell_fun = cell_fun, cluster_rows = TRUE, cluster_columns = TRUE, column_split = anno$type, row_split = anno$type)
+```
+
+##### Myeloid focus 
+
+TO BE ADDED 
+
+#### Test for interacting differences
+
+e.g. Chi-Square test 
+
+```{r}
+test_viz_1
+test_viz_0
+
+length(unique(sce[,sce$ISUP_combined == "3/4"]$PID))
+
+cur_PID_high <- length(colData(sce) %>% as.data.frame %>% select(PID, ISUP_combined, necrose, PDL1_score, pT_combined) %>% filter(ISUP_combined == "3/4") %>% pull(PID) %>% unique())
+
+cur_PID_low <- length(colData(sce) %>% as.data.frame %>% select(PID, ISUP_combined, necrose, PDL1_score, pT_combined) %>% filter(ISUP_combined == "1/2") %>% pull(PID) %>% unique())
+
+test_viz_out <- rbind(
+test_viz_1 %>% rownames_to_column("partner") %>% pivot_longer(2:14, names_to = "interaction", values_to = "n_images") %>% mutate(category = "high", total_number = cur_PID_high),
+test_viz_0 %>% rownames_to_column("partner") %>% pivot_longer(2:14, names_to = "interaction", values_to = "n_images") %>% mutate(category = "low", total_number = cur_PID_low)
+)
+
+test_viz_out$interaction
+
+out_mat_test <- test_viz_out %>% filter(partner == "MY_M2_like", interaction == "CD8_T_cell") %>% mutate(not_interacting = total_number-n_images) %>% select(n_images, not_interacting) %>% t()
+
+out_mat_test <- test_viz_out %>% filter(partner == "MY_M2_like", interaction == "CD8_T_cell") %>% mutate(not_interacting = total_number-n_images) %>% select(n_images, not_interacting) %>% t()
+
+
+chisq.test(out_mat_test)
+```
+
+
+
+
+## 2C. B cell patch analysis 
 
 ```{r}
 ## Patch detection
@@ -2137,7 +2395,7 @@ ggsurvplot(fit,
 )
 ```
 
-## 2C. Tumor patch analysis 
+## 2D. Tumor patch analysis 
 
 ```{r}
 ## Patch detection
@@ -2170,7 +2428,10 @@ ggplot(patch_inf, aes(log10(patch_size), MY_cell_freq, color = sample_id))+
 
 
 
-## 2D. M2-CD8 interaction category
+
+
+
+## 2E. M2-CD8 interaction category
 
 ```{r}
 sce$M2_CD8_int_cat
@@ -2276,7 +2537,7 @@ cowplot::plot_grid(plotlist = all_plots)
 
 
 
-## 2E. Distances of M2-like macrophages 
+## 2F. Distances of M2-like macrophages 
 
 ### M2-like vs CD8 
 
