@@ -750,7 +750,97 @@ onco_down
 onco_up+
 onco_down
 ```
+##### Myeloid focus 
 
+```{r}
+pVal_ISUP_up <- pVal_ISUP
+pVal_T_up <- pVal_T
+pVal_necrose_up <- pVal_necrose
+pVal_PDL1_up <- pVal_PDL1
+
+pVal_ISUP_up[pVal_ISUP_up < 0 ] <- 0
+pVal_T_up[pVal_T_up < 0] <- 0
+pVal_necrose_up[pVal_necrose_up < 0] <- 0
+pVal_PDL1_up[pVal_PDL1_up < 0] <- 0
+
+pVal_ISUP_up <- pVal_ISUP_up[str_detect(rownames(pVal_ISUP_up), "MY"),]
+pVal_T_up <- pVal_T_up[str_detect(rownames(pVal_T_up), "MY"),]
+pVal_necrose_up <- pVal_necrose_up[str_detect(rownames(pVal_necrose_up), "MY"),]
+pVal_PDL1_up <- pVal_PDL1_up[str_detect(rownames(pVal_PDL1_up), "MY"),]
+
+all.equal(rownames(pVal_ISUP_up), rownames(pVal_necrose_up), rownames(pVal_necrose_up), rownames(pVal_PDL1_up))
+all.equal(colnames(pVal_ISUP_up), colnames(pVal_necrose_up), colnames(pVal_necrose_up), colnames(pVal_PDL1_up))
+
+# List of differential test results
+mat <- list(ISUP_34 = pVal_ISUP_up,pT_34 = pVal_T_up, necrose_1 = pVal_necrose_up, PDL1_1 = pVal_PDL1_up)
+
+#viz_col_up <- setNames(c("#67000D","#08306B", "#3F007D","#00441B"), 
+#                      c("ISUP_34", "pT_34", "necrose_1", "PDL1_1"))
+viz_col_up <- setNames(c("#E41A1C","#377EB8", "#984EA3","#4DAF4A"), 
+                      c("ISUP_34", "pT_34", "necrose_1", "PDL1_1"))
+# Alter-fun 
+viz_fun_up <- list(
+  background = function(x, y, w, h) grid.rect(x, y, w, h, 
+            gp = gpar(fill = "white", col = "black")),
+  ISUP_34 = function(x, y, w, h) grid.rect(x - 0.25*w, y + 0.25*h, w*0.5, h*0.5, 
+            gp = gpar(fill = viz_col_up["ISUP_34"], col = "black")),
+  pT_34 = function(x, y, w, h) grid.rect(x + 0.25*w, y + 0.25*h, w*0.5, h*0.5, 
+            gp = gpar(fill = viz_col_up["pT_34"], col = "black")),
+  necrose_1 = function(x, y, w, h) grid.rect(x - 0.25*w, y - 0.25*h, w*0.5, h*0.5, 
+            gp = gpar(fill = viz_col_up["necrose_1"], col = "black")),
+  PDL1_1 = function(x, y, w, h) grid.rect(x + 0.25*w, y - 0.25*h, w*0.5, h*0.5, 
+            gp = gpar(fill = viz_col_up["PDL1_1"], col = "black"))
+        )
+  
+onco_up <- oncoPrint(mat, alter_fun = viz_fun_up, col = viz_col_up, show_column_names = TRUE, column_split = anno$type, row_title = "From",
+          column_title = "To", alter_fun_is_vectorized = FALSE)
+draw(onco_up)
+```
+```{r}
+pVal_ISUP_down <- pVal_ISUP
+pVal_T_down <- pVal_T
+pVal_necrose_down <- pVal_necrose
+pVal_PDL1_down <- pVal_PDL1
+
+pVal_ISUP_down[pVal_ISUP_down > 0 ] <- 0
+pVal_T_down[pVal_T_down > 0] <- 0
+pVal_necrose_down[pVal_necrose_down > 0] <- 0
+pVal_PDL1_down[pVal_PDL1_down > 0] <- 0
+
+pVal_ISUP_down <- pVal_ISUP_down[str_detect(rownames(pVal_ISUP_down), "MY"),]
+pVal_T_down <- pVal_T_down[str_detect(rownames(pVal_T_down), "MY"),]
+pVal_necrose_down <- pVal_necrose_down[str_detect(rownames(pVal_necrose_down), "MY"),]
+pVal_PDL1_down <- pVal_PDL1_down[str_detect(rownames(pVal_PDL1_down), "MY"),]
+
+# List of differential test results
+mat <- list(ISUP_12 = pVal_ISUP_down,pT_12 = pVal_T_down, necrose_0 = pVal_necrose_down, PDL1_0 = pVal_PDL1_down)
+names(mat)
+
+viz_col <- setNames(c("#FC9F81","#ABCFE5", "#bf8cf0","#AADBAB"), 
+                      c("ISUP_12", "pT_12", "necrose_0", "PDL1_0"))
+
+# Alter-fun 
+viz_fun <- list(
+  background = function(x, y, w, h) grid.rect(x, y, w, h, 
+            gp = gpar(fill = "white", col = "black")),
+  ISUP_12 = function(x, y, w, h) grid.rect(x - 0.25*w, y + 0.25*h, w*0.5, h*0.5, 
+            gp = gpar(fill = viz_col["ISUP_12"], col = "black")),
+  pT_12 = function(x, y, w, h) grid.rect(x + 0.25*w, y + 0.25*h, w*0.5, h*0.5, 
+            gp = gpar(fill = viz_col["pT_12"], col = "black")),
+  necrose_0 = function(x, y, w, h) grid.rect(x - 0.25*w, y - 0.25*h, w*0.5, h*0.5, 
+            gp = gpar(fill = viz_col["necrose_0"], col = "black")),
+  PDL1_0 = function(x, y, w, h) grid.rect(x + 0.25*w, y - 0.25*h, w*0.5, h*0.5, 
+            gp = gpar(fill = viz_col["PDL1_0"], col = "black"))
+        )
+
+onco_down <- oncoPrint(mat, alter_fun = viz_fun, col = viz_col, show_column_names = TRUE, column_split = anno$type, row_title = "From", 
+          column_title = "To", alter_fun_is_vectorized = FALSE)
+onco_down
+```
+
+```{r}
+onco_up + onco_down
+```
 
 #### Most changing interactors
 
@@ -1694,6 +1784,97 @@ onco_up+
 onco_down
 ```
 
+##### Myeloid focus 
+
+```{r}
+pVal_ISUP_up <- pVal_fine_ISUP
+pVal_T_up <- pVal_fine_T
+pVal_necrose_up <- pVal_fine_necrose
+pVal_PDL1_up <- pVal_fine_PDL1
+
+pVal_ISUP_up[pVal_ISUP_up < 0 ] <- 0
+pVal_T_up[pVal_T_up < 0] <- 0
+pVal_necrose_up[pVal_necrose_up < 0] <- 0
+pVal_PDL1_up[pVal_PDL1_up < 0] <- 0
+
+pVal_ISUP_up <- pVal_ISUP_up[str_detect(rownames(pVal_ISUP_up), "MY"),]
+pVal_T_up <- pVal_T_up[str_detect(rownames(pVal_T_up), "MY"),]
+pVal_necrose_up <- pVal_necrose_up[str_detect(rownames(pVal_necrose_up), "MY"),]
+pVal_PDL1_up <- pVal_PDL1_up[str_detect(rownames(pVal_PDL1_up), "MY"),]
+
+all.equal(rownames(pVal_ISUP_up), rownames(pVal_necrose_up), rownames(pVal_necrose_up), rownames(pVal_PDL1_up))
+all.equal(colnames(pVal_ISUP_up), colnames(pVal_necrose_up), colnames(pVal_necrose_up), colnames(pVal_PDL1_up))
+
+# List of differential test results
+mat <- list(ISUP_34 = pVal_ISUP_up,pT_34 = pVal_T_up, necrose_1 = pVal_necrose_up, PDL1_1 = pVal_PDL1_up)
+
+#viz_col_up <- setNames(c("#67000D","#08306B", "#3F007D","#00441B"), 
+#                      c("ISUP_34", "pT_34", "necrose_1", "PDL1_1"))
+viz_col_up <- setNames(c("#E41A1C","#377EB8", "#984EA3","#4DAF4A"), 
+                      c("ISUP_34", "pT_34", "necrose_1", "PDL1_1"))
+# Alter-fun 
+viz_fun_up <- list(
+  background = function(x, y, w, h) grid.rect(x, y, w, h, 
+            gp = gpar(fill = "white", col = "black")),
+  ISUP_34 = function(x, y, w, h) grid.rect(x - 0.25*w, y + 0.25*h, w*0.5, h*0.5, 
+            gp = gpar(fill = viz_col_up["ISUP_34"], col = "black")),
+  pT_34 = function(x, y, w, h) grid.rect(x + 0.25*w, y + 0.25*h, w*0.5, h*0.5, 
+            gp = gpar(fill = viz_col_up["pT_34"], col = "black")),
+  necrose_1 = function(x, y, w, h) grid.rect(x - 0.25*w, y - 0.25*h, w*0.5, h*0.5, 
+            gp = gpar(fill = viz_col_up["necrose_1"], col = "black")),
+  PDL1_1 = function(x, y, w, h) grid.rect(x + 0.25*w, y - 0.25*h, w*0.5, h*0.5, 
+            gp = gpar(fill = viz_col_up["PDL1_1"], col = "black"))
+        )
+  
+onco_up <- oncoPrint(mat, alter_fun = viz_fun_up, col = viz_col_up, show_column_names = TRUE, column_split = anno$type, row_title = "From",
+          column_title = "To", alter_fun_is_vectorized = FALSE)
+draw(onco_up)
+```
+```{r}
+pVal_ISUP_down <- pVal_fine_ISUP
+pVal_T_down <- pVal_fine_T
+pVal_necrose_down <- pVal_fine_necrose
+pVal_PDL1_down <- pVal_fine_PDL1
+
+pVal_ISUP_down[pVal_ISUP_down > 0 ] <- 0
+pVal_T_down[pVal_T_down > 0] <- 0
+pVal_necrose_down[pVal_necrose_down > 0] <- 0
+pVal_PDL1_down[pVal_PDL1_down > 0] <- 0
+
+pVal_ISUP_down <- pVal_ISUP_down[str_detect(rownames(pVal_ISUP_down), "MY"),]
+pVal_T_down <- pVal_T_down[str_detect(rownames(pVal_T_down), "MY"),]
+pVal_necrose_down <- pVal_necrose_down[str_detect(rownames(pVal_necrose_down), "MY"),]
+pVal_PDL1_down <- pVal_PDL1_down[str_detect(rownames(pVal_PDL1_down), "MY"),]
+
+# List of differential test results
+mat <- list(ISUP_12 = pVal_ISUP_down,pT_12 = pVal_T_down, necrose_0 = pVal_necrose_down, PDL1_0 = pVal_PDL1_down)
+names(mat)
+
+viz_col <- setNames(c("#FC9F81","#ABCFE5", "#bf8cf0","#AADBAB"), 
+                      c("ISUP_12", "pT_12", "necrose_0", "PDL1_0"))
+
+# Alter-fun 
+viz_fun <- list(
+  background = function(x, y, w, h) grid.rect(x, y, w, h, 
+            gp = gpar(fill = "white", col = "black")),
+  ISUP_12 = function(x, y, w, h) grid.rect(x - 0.25*w, y + 0.25*h, w*0.5, h*0.5, 
+            gp = gpar(fill = viz_col["ISUP_12"], col = "black")),
+  pT_12 = function(x, y, w, h) grid.rect(x + 0.25*w, y + 0.25*h, w*0.5, h*0.5, 
+            gp = gpar(fill = viz_col["pT_12"], col = "black")),
+  necrose_0 = function(x, y, w, h) grid.rect(x - 0.25*w, y - 0.25*h, w*0.5, h*0.5, 
+            gp = gpar(fill = viz_col["necrose_0"], col = "black")),
+  PDL1_0 = function(x, y, w, h) grid.rect(x + 0.25*w, y - 0.25*h, w*0.5, h*0.5, 
+            gp = gpar(fill = viz_col["PDL1_0"], col = "black"))
+        )
+
+onco_down <- oncoPrint(mat, alter_fun = viz_fun, col = viz_col, show_column_names = TRUE, column_split = anno$type, row_title = "From", 
+          column_title = "To", alter_fun_is_vectorized = FALSE)
+onco_down
+```
+```{r}
+onco_up + onco_down
+```
+
 #### Most changing interactors
 
 ```{r}
@@ -2253,7 +2434,42 @@ Heatmap(PID_cor_diff, cell_fun = cell_fun, cluster_rows = TRUE, cluster_columns 
 
 ##### Myeloid focus 
 
-TO BE ADDED 
+```{r}
+## High Grade
+test_viz_1_my <- test_viz_1[str_detect(rownames(test_viz_1), "MY"),]
+PID_cor_high_my <- PID_cor_high[str_detect(rownames(PID_cor_high), "MY"),]
+
+max_value = max(abs(test_viz_1_my))
+
+cell_fun = function(j, i, x, y, width, height, fill) {
+  width = convertWidth(width, "mm")
+  height = convertHeight(height, "mm")
+  r = abs(test_viz_1_my[i, j])/max_value * min(unit.c(width, height))*0.5
+  grid.circle(x = x, y = y, r = r,
+              gp = gpar(fill = NA, col = ifelse(test_viz_1_my[i, j] > 0, "darkred","darkblue")))
+}
+
+
+Heatmap(PID_cor_high_my, cell_fun = cell_fun, cluster_rows = FALSE, cluster_columns = FALSE, column_split = anno$type)
+
+## Low Grade
+test_viz_0_my <- test_viz_0[str_detect(rownames(test_viz_0), "MY"),]
+PID_cor_low_my <- PID_cor_low[str_detect(rownames(PID_cor_low), "MY"),]
+
+max_value = max(abs(test_viz_0_my))
+
+cell_fun = function(j, i, x, y, width, height, fill) {
+  width = convertWidth(width, "mm")
+  height = convertHeight(height, "mm")
+  r = abs(test_viz_0_my[i, j])/max_value * min(unit.c(width, height))*0.5
+  grid.circle(x = x, y = y, r = r,
+              gp = gpar(fill = NA, col = ifelse(test_viz_0_my[i, j] > 0, "darkred","darkblue")))
+}
+
+
+Heatmap(PID_cor_low_my, cell_fun = cell_fun, cluster_rows = FALSE, cluster_columns = FALSE, column_split = anno$type)
+```
+
 
 #### Test for interacting differences
 
