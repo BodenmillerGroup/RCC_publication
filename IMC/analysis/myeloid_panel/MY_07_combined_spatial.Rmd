@@ -2210,6 +2210,7 @@ plotSpatial(sce[,sce$sample_id %in% cur_sample & sce$celltype_combined_fine %in%
             img_id = "sample_id", 
             node_size_fix = 0.5)
 ```
+
 ## 2B. Interaction testing / Fraction plots
 
 ### Fraction-correlation heatmap 
@@ -2245,6 +2246,8 @@ out <- testInteractions(sce,
 head(out)
 
 cur_out <- out %>% as.data.frame()
+#saveRDS(out, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/07_comb/Interaction_CelltypeCombined.rds")
+#out <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/07_comb/Interaction_CelltypeCombined.rds")
 ```
 
 ```{r}
@@ -2342,6 +2345,8 @@ test_viz_0_fra <- test_viz_0/length(unique(sce$PID))
 ## Difference of fractions
 test_viz <- test_viz_1_fra-test_viz_0_fra
 
+Heatmap(test_viz_0, column_split = anno$type, row_split = anno$type)
+Heatmap(test_viz_1, column_split = anno$type, row_split = anno$type)
 Heatmap(test_viz, column_split = anno$type, row_split = anno$type)
 ```
 
@@ -2473,31 +2478,97 @@ Heatmap(PID_cor_low_my, cell_fun = cell_fun, cluster_rows = FALSE, cluster_colum
 
 #### Test for interacting differences
 
-e.g. Chi-Square test 
+e.g. Fisher/Chi-Square test 
 
 ```{r}
+## Currently based on ISUP grading (TO DO across categories)
 test_viz_1
 test_viz_0
-
-length(unique(sce[,sce$ISUP_combined == "3/4"]$PID))
 
 cur_PID_high <- length(colData(sce) %>% as.data.frame %>% select(PID, ISUP_combined, necrose, PDL1_score, pT_combined) %>% filter(ISUP_combined == "3/4") %>% pull(PID) %>% unique())
 
 cur_PID_low <- length(colData(sce) %>% as.data.frame %>% select(PID, ISUP_combined, necrose, PDL1_score, pT_combined) %>% filter(ISUP_combined == "1/2") %>% pull(PID) %>% unique())
 
+## 1. Attraction changes
 test_viz_out <- rbind(
-test_viz_1 %>% rownames_to_column("partner") %>% pivot_longer(2:14, names_to = "interaction", values_to = "n_images") %>% mutate(category = "high", total_number = cur_PID_high),
-test_viz_0 %>% rownames_to_column("partner") %>% pivot_longer(2:14, names_to = "interaction", values_to = "n_images") %>% mutate(category = "low", total_number = cur_PID_low)
+test_viz_1 %>% rownames_to_column("partner") %>% pivot_longer(2:14, names_to = "interaction", values_to = "PID_interacting") %>% mutate(interaction_category = ifelse(PID_interacting >= 0, "attraction", "avoidance")) %>% mutate(PID_interacting_abs = abs(PID_interacting)) %>% mutate(category = "high", PID_total = cur_PID_high) %>% mutate(PID_not_interacting = PID_total - PID_interacting),
+test_viz_0 %>% rownames_to_column("partner") %>% pivot_longer(2:14, names_to = "interaction", values_to = "PID_interacting") %>% mutate(interaction_category = ifelse(PID_interacting >= 0, "attraction", "avoidance")) %>% mutate(PID_interacting_abs = abs(PID_interacting)) %>% mutate(category = "low", PID_total = cur_PID_low) %>% mutate(PID_not_interacting = PID_total - PID_interacting)
 )
 
-test_viz_out$interaction
 
-out_mat_test <- test_viz_out %>% filter(partner == "MY_M2_like", interaction == "CD8_T_cell") %>% mutate(not_interacting = total_number-n_images) %>% select(n_images, not_interacting) %>% t()
+## 2. Test specific associations 
 
-out_mat_test <- test_viz_out %>% filter(partner == "MY_M2_like", interaction == "CD8_T_cell") %>% mutate(not_interacting = total_number-n_images) %>% select(n_images, not_interacting) %>% t()
-
-
+# A: T cells and M2-like/AgM
+out_mat_test <- test_viz_out %>% filter(partner == "MY_M2_like", interaction == "CD8_T_cell") %>% select(PID_interacting, PID_not_interacting) %>% t()
+fisher.test(out_mat_test)
 chisq.test(out_mat_test)
+
+## Visualize 
+viz_test <- as.data.frame(prop.table(out_mat_test, margin = 2))
+colnames(viz_test) <- c("High","Low")
+viz_test <- viz_test %>% rownames_to_column("type") %>% pivot_longer(2:3, values_to = "fra", names_to = "group")
+viz_test$type <- factor(viz_test$type, levels = c("PID_not_interacting","PID_interacting"))
+
+ggplot(viz_test, aes(x = group, y = fra, fill = type))+
+  geom_bar(stat = "identity", color = "black")+
+  theme_classic()+
+  scale_fill_brewer(palette = "Reds")+
+  ggtitle(paste0("Fisher = ", fisher.test(out_mat_test)$p.value))+
+  coord_cartesian(ylim = c(0,0.15))
+
+out_mat_test <- test_viz_out %>% filter(partner == "MY_M2_like", interaction == "CD4_T_cell") %>% select(PID_interacting, PID_not_interacting) %>% t()
+fisher.test(out_mat_test)
+chisq.test(out_mat_test)
+
+## Visualize 
+viz_test <- as.data.frame(prop.table(out_mat_test, margin = 2))
+colnames(viz_test) <- c("High","Low")
+viz_test <- viz_test %>% rownames_to_column("type") %>% pivot_longer(2:3, values_to = "fra", names_to = "group")
+viz_test$type <- factor(viz_test$type, levels = c("PID_not_interacting","PID_interacting"))
+
+ggplot(viz_test, aes(x = group, y = fra, fill = type))+
+  geom_bar(stat = "identity", color = "black")+
+  theme_classic()+
+  scale_fill_brewer(palette = "Reds")+
+  ggtitle(paste0("Fisher = ", fisher.test(out_mat_test)$p.value))+
+  coord_cartesian(ylim = c(0,0.15))
+  
+out_mat_test <- test_viz_out %>% filter(partner == "MY_Ag_M", interaction == "CD8_T_cell") %>% select(PID_interacting, PID_not_interacting) %>% t()
+fisher.test(out_mat_test)
+chisq.test(out_mat_test)
+
+## Visualize 
+viz_test <- as.data.frame(prop.table(out_mat_test, margin = 2))
+colnames(viz_test) <- c("High","Low")
+viz_test <- viz_test %>% rownames_to_column("type") %>% pivot_longer(2:3, values_to = "fra", names_to = "group")
+viz_test$type <- factor(viz_test$type, levels = c("PID_not_interacting","PID_interacting"))
+
+ggplot(viz_test, aes(x = group, y = fra, fill = type))+
+  geom_bar(stat = "identity", color = "black")+
+  theme_classic()+
+  scale_fill_brewer(palette = "Reds")+
+  ggtitle(paste0("Fisher = ", fisher.test(out_mat_test)$p.value))+
+  coord_cartesian(ylim = c(0,0.15))
+
+out_mat_test <- test_viz_out %>% filter(partner == "MY_Ag_M", interaction == "CD4_T_cell") %>% select(PID_interacting, PID_not_interacting) %>% t()
+fisher.test(out_mat_test)
+chisq.test(out_mat_test)
+
+## Visualize 
+viz_test <- as.data.frame(prop.table(out_mat_test, margin = 2))
+colnames(viz_test) <- c("High","Low")
+viz_test <- viz_test %>% rownames_to_column("type") %>% pivot_longer(2:3, values_to = "fra", names_to = "group")
+viz_test$type <- factor(viz_test$type, levels = c("PID_not_interacting","PID_interacting"))
+
+ggplot(viz_test, aes(x = group, y = fra, fill = type))+
+  geom_bar(stat = "identity", color = "black")+
+  theme_classic()+
+  scale_fill_brewer(palette = "Reds")+
+  ggtitle(paste0("Fisher = ", fisher.test(out_mat_test)$p.value))+
+  coord_cartesian(ylim = c(0,0.15))
+
+# B: Tumor and myeloid
+## TO DO 
 ```
 
 
