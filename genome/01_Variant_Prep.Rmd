@@ -1,0 +1,524 @@
+---
+title: "01_TS_variant_prep"
+author: "Lasse Meyer"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Variant calls preparation
+
+## Software requirments 
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(RColorBrewer)
+library(foreach)
+library(circlize)
+library(ComplexHeatmap)
+```
+
+## Cohort 2 - OpenBIS 
+
+```{r}
+path <- c("/mnt/central_nas/rcc_volume/RCC/genome/results/cohort_2_openbis/02_variant_calling/variant_tables/")
+
+# List all files
+files <- list.files(path)
+
+# Extract ID
+PID <- str_split(files, "_B", simplify = TRUE)[,1]
+```
+
+```{r}
+# Create combined variant table 
+variant_combined <- foreach(i = seq_along(files), .combine = "rbind")%do%{
+   variant_table <- read_tsv(paste0(path, files[i]))
+  # Add ID 
+  variant_table$PID <- PID[i]
+  # Add type (SNV, Indel) and consequence from Annotation 
+  variant_table$variant_type <- str_split(variant_table$Annotation,"[|;]", simplify = TRUE)[,12]
+  variant_table$variant_consequence <- str_split(variant_table$Annotation,"\\|", simplify = TRUE)[,4]
+  return(variant_table)
+}
+```
+
+```{r}
+write_csv(variant_combined, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_cohort2.csv")
+```
+
+```{r}
+# ccRCC mutational driver genes 
+GOI_IntOGen <- read_tsv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/data/IntOGen_DriverGenes_CCRCC.tsv")
+GOI <- GOI_IntOGen$Symbol #n = 44
+```
+
+```{r}
+# Split genes column into two rows in case it contains two gene names
+variant_combined <- variant_combined %>%
+  separate_rows(Genes, sep = ";") %>%
+  unnest(cols = everything())
+
+# Check variants called with VAF == 100 
+## Possible to filter out - Potential SNPs 
+vaf_100 <- variant_combined %>% filter(Frequency == 100)
+vaf_100_GOI <- vaf_100 %>% filter(Genes %in% GOI)
+
+# Pick first mutation consequence 
+variant_combined$variant_consequence_clean <- str_split(variant_combined$variant_consequence,"&", simplify = TRUE)[,1]
+```
+
+ENSEMBL-based 
+Filter: Variants with MODERATE or HIGH impact only 
+See: https://grch37.ensembl.org/info/genome/variation/prediction/predicted_data.html
+
+```{r}
+unique(variant_combined$variant_consequence_clean)
+
+# Variants with MODERATE or HIGH impact
+mutation_consequence <- c("splice_acceptor_variant","splice_donor_variant","stop_gained","frameshift_variant","stop_lost","start_lost","inframe_insertion","inframe_deletion","missense_variant","protein_altering_variant")
+
+variant_combined_filtered <- variant_combined %>% filter(variant_consequence_clean %in% mutation_consequence)
+```
+
+```{r}
+vaf_100 <- variant_combined_filtered %>% filter(Frequency == 100)
+vaf_100_GOI <- vaf_100 %>% filter(Genes %in% GOI)
+```
+
+```{r}
+variant_combined_filtered$variant_consequence_combined <- variant_combined_filtered$variant_consequence_clean
+
+variant_combined_filtered$variant_consequence_combined[variant_combined_filtered$variant_consequence_combined %in% c("stop_gained", "stop_lost","start_lost")] <- "stop_gained_lost_start_lost" 
+variant_combined_filtered$variant_consequence_combined[variant_combined_filtered$variant_consequence_combined %in% c("splice_donor_variant", "splice_acceptor_variant")] <- "splice_site"
+variant_combined_filtered$variant_consequence_combined[variant_combined_filtered$variant_consequence_combined %in% c("inframe_deletion", "inframe_insertion")] <- "inframe_del_ins"
+```
+
+```{r}
+write_csv(variant_combined_filtered, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_filtered_cohort2.csv")
+```
+
+
+
+```{r}
+#Load processed data file and select columns of interest
+snv <- variant_combined_filtered
+snv$mut_level <- snv$variant_consequence_combined
+
+snv <- snv %>% select(PID, Genes, mut_level)
+
+mut_levels_for_matrix <- snv %>% pull(mut_level) %>% unique()
+
+# Select genes 
+## A: All genes 
+Genes_list <- snv %>% pull(Genes) %>% unique()
+## B: Genes of Interest e.g. IntOGen driver genes 
+Genes_list <- snv %>% filter(Genes %in% GOI) %>% pull(Genes) %>% unique()
+
+#Placeholders 
+mut_list <- list()
+placeholder_Genes <- Genes_list[1]
+pids <- unique(snv$PID)
+placeholder_pid <- pids[1]
+
+for(mut in mut_levels_for_matrix){
+  
+  #select all SNVs/Indels of the mut_level and give a value of 1
+  x <- snv %>%
+    dplyr::filter(mut_level==mut,
+                  Genes %in% Genes_list | 
+                    grepl(paste0(paste0("^", Genes_list, "[,;]"), collapse="|"), Genes) |       #allow for multi-Genes mutations
+                    grepl(paste0(paste0("[,;]", Genes_list, "$"), collapse="|"), Genes) ) %>%  
+    dplyr::select(PID, Genes) %>%
+    dplyr::mutate(value=1) %>%
+    dplyr::distinct()
+  
+  if(dim(x)[1]!=0){
+    x <- x %>%
+      tidyr::spread(Genes, value)
+    
+    #transpose and replace NA by 0
+    y <- x %>% column_to_rownames("PID")
+    y <- t(y)
+    y[is.na(y)] <- 0
+    
+  }else{
+    y <- tibble(0)
+    colnames(y) <- placeholder_pid
+    rownames(y) <- placeholder_Genes
+  }
+  
+  mut_list[[mut]] <- as.matrix(y)
+}
+
+#Unify matrices
+mut_list_full <- unify_mat_list(mut_list)
+```
+
+
+```{r print onc, message=FALSE,warning=FALSE,fig.width=12,fig.height=6}
+# keep the order of annotation and mutation list
+#ord= anno$PID_short
+  
+# show every gene and patient
+# blank for patients  and.or genes missing 
+for (i in seq_along(mut_list_full)){
+  dif_gen= setdiff(Genes_list,rownames(mut_list_full[[i]]))
+  dif_pat= setdiff(pids,colnames(mut_list_full[[i]]))
+  
+  blank= matrix(ncol=length(dif_pat),nrow=length(rownames(mut_list_full[[i]])),0)
+  colnames(blank)=dif_pat
+  rownames(blank)=rownames(mut_list_full[[i]])
+  mut_list_full[[i]]=cbind(mut_list_full[[i]],blank)
+  
+  blank= matrix(ncol=ncol(mut_list_full[[i]]),nrow=length(dif_gen),0)
+  colnames(blank)=colnames(mut_list_full[[i]])
+  rownames(blank)=dif_gen
+  mut_list_full[[i]]=rbind(mut_list_full[[i]],blank)
+  #mut_list_full[[i]]=mut_list_full[[i]][,ord]
+}
+
+##Annotation
+#Colors
+col <- colorRampPalette(brewer.pal(12,"Paired"))(length(unique(snv$mut_level)))
+
+# alter_fun function 
+fun_alter = list(
+  background = function(x, y, w, h) grid.rect(x, y, w, h, gp = gpar(fill = "#e7e7e7", col = "white")),
+  missense_variant = function(x, y, w, h) grid.rect(x, y, w*0.8, h*0.4, gp = gpar(fill = col[1], col = NA)),
+  stop_gained_lost_start_lost = function(x, y, w, h) grid.rect(x, y, w*0.8, h*0.8, gp = gpar(fill = col[2], col = NA)),
+  frameshift_variant = function(x, y, w, h) grid.rect(x, y, w*0.8, h*0.4, gp = gpar(fill = col[3], col = NA)),
+  inframe_del_ins = function(x, y, w, h) grid.rect(x, y, w*0.8, h*0.8, gp = gpar(fill = col[4], col = NA)),
+  splice_site = function(x, y, w, h) grid.rect(x, y, w*0.4, h*0.8, gp = gpar(fill = col[5], col = NA)),
+  protein_altering_variant = function(x, y, w, h) grid.rect(x, y, w*0.4, h*0.8, gp = gpar(fill = col[6], col = NA))
+)
+
+names(col) <- c("missense_variant", "stop_gained_lost_start_lost", "frameshift_variant", 
+"inframe_del_ins", "splice_site", "protein_altering_variant")
+test_alter_fun(fun_alter)
+
+#Plot oncoprint
+ht_all <- oncoPrint(mut_list_full,
+                  alter_fun = fun_alter,
+                  col = col)
+
+draw(ht_all)
+```
+
+
+## Cohort 1 - ENA 
+
+```{r}
+path <- c("/mnt/central_nas/rcc_volume/RCC/genome/results/cohort_1_ena/02_variant_calling/variant_tables/")
+
+# List all files
+files <- list.files(path)
+
+# Extract ID
+PID <- str_split(files, "\\.", simplify = TRUE)[,1]
+```
+
+```{r}
+# Create combined variant table 
+variant_combined <- foreach(i = seq_along(files), .combine = "rbind")%do%{
+   variant_table <- read_tsv(paste0(path, files[i]))
+  # Add ID 
+  variant_table$PID <- PID[i]
+  # Add type (SNV, Indel) and consequence from Annotation 
+  variant_table$variant_type <- str_split(variant_table$Annotation,"[|;]", simplify = TRUE)[,12]
+  variant_table$variant_consequence <- str_split(variant_table$Annotation,"\\|", simplify = TRUE)[,4]
+  return(variant_table)
+}
+```
+
+```{r}
+write_csv(variant_combined, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_cohort1.csv")
+```
+
+```{r}
+# ccRCC mutational driver genes 
+GOI_IntOGen <- read_tsv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/data/IntOGen_DriverGenes_CCRCC.tsv")
+GOI <- GOI_IntOGen$Symbol #n = 44
+```
+
+```{r}
+# Split genes column into two rows in case it contains two gene names
+variant_combined <- variant_combined %>%
+  separate_rows(Genes, sep = ";") %>%
+  unnest(cols = everything())
+
+# Check variants called with VAF == 100 
+## Possible to filter out - Potential SNPs 
+vaf_100 <- variant_combined %>% filter(Frequency == 100)
+vaf_100_GOI <- vaf_100 %>% filter(Genes %in% GOI)
+
+# Pick first mutation consequence 
+variant_combined$variant_consequence_clean <- str_split(variant_combined$variant_consequence,"&", simplify = TRUE)[,1]
+```
+
+ENSEMBL-based 
+Filter: Variants with MODERATE or HIGH impact only 
+See: https://grch37.ensembl.org/info/genome/variation/prediction/predicted_data.html
+
+```{r}
+unique(variant_combined$variant_consequence_clean)
+
+# Variants with MODERATE or HIGH impact
+mutation_consequence <- c("splice_acceptor_variant","splice_donor_variant","stop_gained","frameshift_variant","stop_lost","start_lost","inframe_insertion","inframe_deletion","missense_variant","protein_altering_variant")
+
+variant_combined_filtered <- variant_combined %>% filter(variant_consequence_clean %in% mutation_consequence)
+```
+
+```{r}
+vaf_100 <- variant_combined_filtered %>% filter(Frequency == 100)
+vaf_100_GOI <- vaf_100 %>% filter(Genes %in% GOI)
+```
+
+```{r}
+variant_combined_filtered$variant_consequence_combined <- variant_combined_filtered$variant_consequence_clean
+
+variant_combined_filtered$variant_consequence_combined[variant_combined_filtered$variant_consequence_combined %in% c("stop_gained", "stop_lost","start_lost")] <- "stop_gained_lost_start_lost" 
+variant_combined_filtered$variant_consequence_combined[variant_combined_filtered$variant_consequence_combined %in% c("splice_donor_variant", "splice_acceptor_variant")] <- "splice_site"
+variant_combined_filtered$variant_consequence_combined[variant_combined_filtered$variant_consequence_combined %in% c("inframe_deletion", "inframe_insertion")] <- "inframe_del_ins"
+```
+
+```{r}
+write_csv(variant_combined_filtered, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_filtered_cohort1.csv")
+```
+
+
+```{r}
+#Load processed data file and select columns of interest
+snv <- variant_combined_filtered
+snv$mut_level <- snv$variant_consequence_combined
+
+snv <- snv %>% select(PID, Genes, mut_level)
+
+mut_levels_for_matrix <- snv %>% pull(mut_level) %>% unique()
+
+# Select genes 
+## A: All genes 
+Genes_list <- snv %>% pull(Genes) %>% unique()
+## B: Genes of Interest e.g. IntOGen driver genes 
+Genes_list <- snv %>% filter(Genes %in% GOI) %>% pull(Genes) %>% unique()
+
+#Placeholders 
+mut_list <- list()
+placeholder_Genes <- Genes_list[1]
+pids <- unique(snv$PID)
+placeholder_pid <- pids[1]
+
+for(mut in mut_levels_for_matrix){
+  
+  #select all SNVs/Indels of the mut_level and give a value of 1
+  x <- snv %>%
+    dplyr::filter(mut_level==mut,
+                  Genes %in% Genes_list | 
+                    grepl(paste0(paste0("^", Genes_list, "[,;]"), collapse="|"), Genes) |       #allow for multi-Genes mutations
+                    grepl(paste0(paste0("[,;]", Genes_list, "$"), collapse="|"), Genes) ) %>%  
+    dplyr::select(PID, Genes) %>%
+    dplyr::mutate(value=1) %>%
+    dplyr::distinct()
+  
+  if(dim(x)[1]!=0){
+    x <- x %>%
+      tidyr::spread(Genes, value)
+    
+    #transpose and replace NA by 0
+    y <- x %>% column_to_rownames("PID")
+    y <- t(y)
+    y[is.na(y)] <- 0
+    
+  }else{
+    y <- tibble(0)
+    colnames(y) <- placeholder_pid
+    rownames(y) <- placeholder_Genes
+  }
+  
+  mut_list[[mut]] <- as.matrix(y)
+}
+
+#Unify matrices
+mut_list_full <- unify_mat_list(mut_list)
+```
+
+
+```{r print onc, message=FALSE,warning=FALSE,fig.width=12,fig.height=6}
+# keep the order of annotation and mutation list
+#ord= anno$PID_short
+  
+# show every gene and patient
+# blank for patients  and.or genes missing 
+for (i in seq_along(mut_list_full)){
+  dif_gen= setdiff(Genes_list,rownames(mut_list_full[[i]]))
+  dif_pat= setdiff(pids,colnames(mut_list_full[[i]]))
+  
+  blank= matrix(ncol=length(dif_pat),nrow=length(rownames(mut_list_full[[i]])),0)
+  colnames(blank)=dif_pat
+  rownames(blank)=rownames(mut_list_full[[i]])
+  mut_list_full[[i]]=cbind(mut_list_full[[i]],blank)
+  
+  blank= matrix(ncol=ncol(mut_list_full[[i]]),nrow=length(dif_gen),0)
+  colnames(blank)=colnames(mut_list_full[[i]])
+  rownames(blank)=dif_gen
+  mut_list_full[[i]]=rbind(mut_list_full[[i]],blank)
+  #mut_list_full[[i]]=mut_list_full[[i]][,ord]
+}
+
+##Annotation
+#Colors
+col <- colorRampPalette(brewer.pal(12,"Paired"))(length(unique(snv$mut_level)))
+
+# alter_fun function 
+fun_alter = list(
+  background = function(x, y, w, h) grid.rect(x, y, w, h, gp = gpar(fill = "#e7e7e7", col = "white")),
+  missense_variant = function(x, y, w, h) grid.rect(x, y, w*0.8, h*0.4, gp = gpar(fill = col[1], col = NA)),
+  stop_gained_lost_start_lost = function(x, y, w, h) grid.rect(x, y, w*0.8, h*0.8, gp = gpar(fill = col[2], col = NA)),
+  frameshift_variant = function(x, y, w, h) grid.rect(x, y, w*0.8, h*0.4, gp = gpar(fill = col[3], col = NA)),
+  inframe_del_ins = function(x, y, w, h) grid.rect(x, y, w*0.8, h*0.8, gp = gpar(fill = col[4], col = NA)),
+  splice_site = function(x, y, w, h) grid.rect(x, y, w*0.4, h*0.8, gp = gpar(fill = col[5], col = NA)),
+  protein_altering_variant = function(x, y, w, h) grid.rect(x, y, w*0.4, h*0.8, gp = gpar(fill = col[6], col = NA))
+)
+
+names(col) <- c("missense_variant", "stop_gained_lost_start_lost", "frameshift_variant", 
+"inframe_del_ins", "splice_site", "protein_altering_variant")
+test_alter_fun(fun_alter)
+
+#Plot oncoprint
+ht_all <- oncoPrint(mut_list_full,
+                  alter_fun = fun_alter,
+                  col = col, 
+                  show_row_names = TRUE, show_column_names = TRUE)
+
+draw(ht_all)
+```
+
+
+## Combined 
+
+```{r}
+variant_combined_filtered <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_filtered_cohort1.csv")
+variant_combined_filtered$cohort <- "cohort_old"
+
+variant_combined_filtered_2 <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_filtered_cohort2.csv")
+variant_combined_filtered_2$cohort <- "cohort_new"
+
+variant_combined_filtered <- rbind(variant_combined_filtered, variant_combined_filtered_2)
+```
+
+```{r}
+#Load processed data file and select columns of interest
+snv <- variant_combined_filtered
+snv$mut_level <- snv$variant_consequence_combined
+
+snv <- snv %>% select(PID, Genes, mut_level)
+
+mut_levels_for_matrix <- snv %>% pull(mut_level) %>% unique()
+
+# Select genes 
+## A: All genes 
+Genes_list <- snv %>% pull(Genes) %>% unique()
+## B: Genes of Interest e.g. IntOGen driver genes 
+Genes_list <- snv %>% filter(Genes %in% GOI) %>% pull(Genes) %>% unique()
+
+#Placeholders 
+mut_list <- list()
+placeholder_Genes <- Genes_list[1]
+pids <- unique(snv$PID)
+placeholder_pid <- pids[1]
+
+for(mut in mut_levels_for_matrix){
+  
+  #select all SNVs/Indels of the mut_level and give a value of 1
+  x <- snv %>%
+    dplyr::filter(mut_level==mut,
+                  Genes %in% Genes_list | 
+                    grepl(paste0(paste0("^", Genes_list, "[,;]"), collapse="|"), Genes) |       #allow for multi-Genes mutations
+                    grepl(paste0(paste0("[,;]", Genes_list, "$"), collapse="|"), Genes) ) %>%  
+    dplyr::select(PID, Genes) %>%
+    dplyr::mutate(value=1) %>%
+    dplyr::distinct()
+  
+  if(dim(x)[1]!=0){
+    x <- x %>%
+      tidyr::spread(Genes, value)
+    
+    #transpose and replace NA by 0
+    y <- x %>% column_to_rownames("PID")
+    y <- t(y)
+    y[is.na(y)] <- 0
+    
+  }else{
+    y <- tibble(0)
+    colnames(y) <- placeholder_pid
+    rownames(y) <- placeholder_Genes
+  }
+  
+  mut_list[[mut]] <- as.matrix(y)
+}
+
+#Unify matrices
+mut_list_full <- unify_mat_list(mut_list)
+```
+
+
+```{r print onc, message=FALSE,warning=FALSE,fig.width=12,fig.height=9}
+# keep the order of annotation and mutation list
+#ord= anno$PID_short
+  
+# show every gene and patient
+# blank for patients  and.or genes missing 
+for (i in seq_along(mut_list_full)){
+  dif_gen= setdiff(Genes_list,rownames(mut_list_full[[i]]))
+  dif_pat= setdiff(pids,colnames(mut_list_full[[i]]))
+  
+  blank= matrix(ncol=length(dif_pat),nrow=length(rownames(mut_list_full[[i]])),0)
+  colnames(blank)=dif_pat
+  rownames(blank)=rownames(mut_list_full[[i]])
+  mut_list_full[[i]]=cbind(mut_list_full[[i]],blank)
+  
+  blank= matrix(ncol=ncol(mut_list_full[[i]]),nrow=length(dif_gen),0)
+  colnames(blank)=colnames(mut_list_full[[i]])
+  rownames(blank)=dif_gen
+  mut_list_full[[i]]=rbind(mut_list_full[[i]],blank)
+  #mut_list_full[[i]]=mut_list_full[[i]][,ord]
+}
+
+##Annotation
+#Colors
+col <- colorRampPalette(brewer.pal(12,"Paired"))(length(unique(snv$mut_level)))
+
+# alter_fun function 
+fun_alter = list(
+  background = function(x, y, w, h) grid.rect(x, y, w, h, gp = gpar(fill = "#e7e7e7", col = "white")),
+  missense_variant = function(x, y, w, h) grid.rect(x, y, w*0.8, h*0.4, gp = gpar(fill = col[1], col = NA)),
+  stop_gained_lost_start_lost = function(x, y, w, h) grid.rect(x, y, w*0.8, h*0.8, gp = gpar(fill = col[2], col = NA)),
+  frameshift_variant = function(x, y, w, h) grid.rect(x, y, w*0.8, h*0.4, gp = gpar(fill = col[3], col = NA)),
+  inframe_del_ins = function(x, y, w, h) grid.rect(x, y, w*0.8, h*0.8, gp = gpar(fill = col[4], col = NA)),
+  splice_site = function(x, y, w, h) grid.rect(x, y, w*0.4, h*0.8, gp = gpar(fill = col[5], col = NA)),
+  protein_altering_variant = function(x, y, w, h) grid.rect(x, y, w*0.4, h*0.8, gp = gpar(fill = col[6], col = NA))
+)
+
+names(col) <- c("missense_variant", "stop_gained_lost_start_lost", "frameshift_variant", 
+"inframe_del_ins", "splice_site", "protein_altering_variant")
+test_alter_fun(fun_alter)
+
+anno <- data.frame(PID = colnames(mut_list_full[1]$missense_variant))
+anno$cohort <- variant_combined_filtered$cohort[match(anno$PID, variant_combined_filtered$PID)]
+
+
+#Plot oncoprint
+ht_all <- oncoPrint(mut_list_full,
+                  alter_fun = fun_alter,
+                  #column_split = anno$cohort,
+                  col = col, 
+                  show_row_names = TRUE, show_column_names = TRUE)%v%
+  columnAnnotation(cohort = anno_simple(anno$cohort))
+
+draw(ht_all)
+```
+
