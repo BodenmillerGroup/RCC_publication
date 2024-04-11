@@ -60,7 +60,7 @@ ggplot(coverage_rcc_targets, aes(x = median))+
 ggplot(coverage_rcc_targets, aes(x = mean))+
   geom_density(aes(fill = cohort), alpha = 0.7)+
   geom_rug(aes(color = cohort))+
-  #geom_vline(xintercept = 5, color = "black", linewidth = 0.8)+
+  geom_vline(xintercept = 5, color = "black", linewidth = 0.8)+
   theme_classic()+
   scale_fill_brewer(palette = "Set1")+
   scale_color_brewer(palette = "Set1")
@@ -76,6 +76,13 @@ ggplot(coverage_rcc_targets, aes(x = `30X`))+
 
 ```{r}
 PID_kick_out <- coverage_rcc_targets %>% filter(sample_status == "kick_out") %>% pull(sample)
+```
+
+```{r}
+## Average coverage per PID
+coverage_rcc_targets$PID <- str_split(coverage_rcc_targets$sample, "_TU", simplify = TRUE)[,1]
+
+coverage_rcc_targets_PID <- coverage_rcc_targets %>% group_by(PID) %>% summarise(mean = mean(mean))
 ```
 
 ## Cohort 2 - OpenBIS 
@@ -112,14 +119,10 @@ write_csv(variant_combined, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysi
 ### Filter 
 
 ```{r}
+# Kick out PID with low coverage across RCC targets
 summary(PID_kick_out %in% variant_combined$PID)
-
-# Kick out PID with low coverage
-variant_combined <- variant_combined[variant_combined$PID %in% PID_kick_out,]
-
-unique(variant_combined$PID)
+#variant_combined <- variant_combined[variant_combined$PID %in% PID_kick_out,]
 ```
-
 
 ```{r}
 # ccRCC mutational driver genes 
@@ -137,6 +140,8 @@ variant_combined <- variant_combined %>%
 ## Possible to filter out - Potential SNPs 
 vaf_100 <- variant_combined %>% filter(Frequency == 100)
 vaf_100_GOI <- vaf_100 %>% filter(Genes %in% GOI)
+## Optional: 
+#variant_combined <- variant_combined %>% filter(Frequency != 100)
 
 # Pick first mutation consequence 
 variant_combined$variant_consequence_clean <- str_split(variant_combined$variant_consequence,"&", simplify = TRUE)[,1]
@@ -228,6 +233,12 @@ for(mut in mut_levels_for_matrix){
 
 #Unify matrices
 mut_list_full <- unify_mat_list(mut_list)
+
+# Create a new list entry called "Multiple" for multiple gene mutations within a PID
+sum_matrix <- Reduce(`+`, mut_list_full)
+mut_list_full$multiple <- as.matrix(ifelse(sum_matrix > 1, 1,0))
+
+mut_list_full$protein_altering_variant
 ```
 
 
@@ -265,7 +276,8 @@ fun_alter = list(
   frameshift_variant = function(x, y, w, h) grid.rect(x, y, w*0.8, h*0.4, gp = gpar(fill = col[3], col = NA)),
   inframe_del_ins = function(x, y, w, h) grid.rect(x, y, w*0.8, h*0.8, gp = gpar(fill = col[4], col = NA)),
   splice_site = function(x, y, w, h) grid.rect(x, y, w*0.4, h*0.8, gp = gpar(fill = col[5], col = NA)),
-  protein_altering_variant = function(x, y, w, h) grid.rect(x, y, w*0.4, h*0.8, gp = gpar(fill = col[6], col = NA))
+  protein_altering_variant = function(x, y, w, h) grid.rect(x, y, w*0.4, h*0.8, gp = gpar(fill = col[6], col = NA)),
+  multiple = function(x, y, w, h) grid.points(x, y, size = unit(0.4, "char"), pch = 16)
 )
 
 names(col) <- c("missense_variant", "stop_gained_lost_start_lost", "frameshift_variant", 
@@ -422,6 +434,10 @@ for(mut in mut_levels_for_matrix){
 
 #Unify matrices
 mut_list_full <- unify_mat_list(mut_list)
+
+# Create a new list entry called "Multiple" for multiple gene mutations within a PID
+sum_matrix <- Reduce(`+`, mut_list_full)
+mut_list_full$multiple <- as.matrix(ifelse(sum_matrix > 1, 1,0))
 ```
 
 
@@ -459,7 +475,8 @@ fun_alter = list(
   frameshift_variant = function(x, y, w, h) grid.rect(x, y, w*0.8, h*0.4, gp = gpar(fill = col[3], col = NA)),
   inframe_del_ins = function(x, y, w, h) grid.rect(x, y, w*0.8, h*0.8, gp = gpar(fill = col[4], col = NA)),
   splice_site = function(x, y, w, h) grid.rect(x, y, w*0.4, h*0.8, gp = gpar(fill = col[5], col = NA)),
-  protein_altering_variant = function(x, y, w, h) grid.rect(x, y, w*0.4, h*0.8, gp = gpar(fill = col[6], col = NA))
+  protein_altering_variant = function(x, y, w, h) grid.rect(x, y, w*0.4, h*0.8, gp = gpar(fill = col[6], col = NA)),
+  multiple = function(x, y, w, h) grid.points(x, y, size = unit(0.4, "char"), pch = 16)
 )
 
 names(col) <- c("missense_variant", "stop_gained_lost_start_lost", "frameshift_variant", 
@@ -581,6 +598,10 @@ for(mut in mut_levels_for_matrix){
 
 #Unify matrices
 mut_list_full <- unify_mat_list(mut_list)
+
+# Create a new list entry called "Multiple" for multiple gene mutations within a PID
+sum_matrix <- Reduce(`+`, mut_list_full)
+mut_list_full$multiple <- as.matrix(ifelse(sum_matrix > 1, 1,0))
 ```
 
 
@@ -618,7 +639,8 @@ fun_alter = list(
   frameshift_variant = function(x, y, w, h) grid.rect(x, y, w*0.8, h*0.4, gp = gpar(fill = col[3], col = NA)),
   inframe_del_ins = function(x, y, w, h) grid.rect(x, y, w*0.8, h*0.8, gp = gpar(fill = col[4], col = NA)),
   splice_site = function(x, y, w, h) grid.rect(x, y, w*0.4, h*0.8, gp = gpar(fill = col[5], col = NA)),
-  protein_altering_variant = function(x, y, w, h) grid.rect(x, y, w*0.4, h*0.8, gp = gpar(fill = col[6], col = NA))
+  protein_altering_variant = function(x, y, w, h) grid.rect(x, y, w*0.4, h*0.8, gp = gpar(fill = col[6], col = NA)),
+  multiple = function(x, y, w, h) grid.points(x, y, size = unit(0.4, "char"), pch = 16)
 )
 
 names(col) <- c("missense_variant", "stop_gained_lost_start_lost", "frameshift_variant", 
@@ -637,7 +659,9 @@ draw(ht_all)
 
 
 
-## Combined 
+## Full cohort 
+
+### Oncoprint 
 
 ```{r}
 variant_combined_filtered <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_consensus_filtered_cohort1.csv")
@@ -647,12 +671,12 @@ variant_combined_filtered <- variant_combined_filtered %>% select(-sample_id)
 variant_combined_filtered_2 <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_filtered_cohort2.csv")
 variant_combined_filtered_2$cohort <- "cohort_new"
 
-variant_combined_filtered <- rbind(variant_combined_filtered, variant_combined_filtered_2)
+variant_combined_full <- rbind(variant_combined_filtered, variant_combined_filtered_2)
 ```
 
 ```{r}
 #Load processed data file and select columns of interest
-snv <- variant_combined_filtered
+snv <- variant_combined_full
 snv$mut_level <- snv$variant_consequence_combined
 
 snv <- snv %>% select(PID, Genes, mut_level)
@@ -703,10 +727,11 @@ for(mut in mut_levels_for_matrix){
 
 #Unify matrices
 mut_list_full <- unify_mat_list(mut_list)
-```
 
+# Create a new list entry called "Multiple" for multiple gene mutations within a PID
+sum_matrix <- Reduce(`+`, mut_list_full)
+mut_list_full$multiple <- as.matrix(ifelse(sum_matrix > 1, 1,0))
 
-```{r print onc, message=FALSE,warning=FALSE,fig.width=12,fig.height=9}
 # keep the order of annotation and mutation list
 #ord= anno$PID_short
   
@@ -727,7 +752,10 @@ for (i in seq_along(mut_list_full)){
   mut_list_full[[i]]=rbind(mut_list_full[[i]],blank)
   #mut_list_full[[i]]=mut_list_full[[i]][,ord]
 }
+```
 
+
+```{r print onc, message=FALSE,warning=FALSE}
 ##Annotation
 #Colors
 col <- colorRampPalette(brewer.pal(12,"Paired"))(length(unique(snv$mut_level)))
@@ -740,30 +768,45 @@ fun_alter = list(
   frameshift_variant = function(x, y, w, h) grid.rect(x, y, w*0.8, h*0.4, gp = gpar(fill = col[3], col = NA)),
   inframe_del_ins = function(x, y, w, h) grid.rect(x, y, w*0.8, h*0.8, gp = gpar(fill = col[4], col = NA)),
   splice_site = function(x, y, w, h) grid.rect(x, y, w*0.4, h*0.8, gp = gpar(fill = col[5], col = NA)),
-  protein_altering_variant = function(x, y, w, h) grid.rect(x, y, w*0.4, h*0.8, gp = gpar(fill = col[6], col = NA))
+  protein_altering_variant = function(x, y, w, h) grid.rect(x, y, w*0.4, h*0.8, gp = gpar(fill = col[6], col = NA)),
+  multiple = function(x, y, w, h) grid.points(x, y, size = unit(0.4, "char"), pch = 16)
 )
 
 names(col) <- c("missense_variant", "stop_gained_lost_start_lost", "frameshift_variant", 
 "inframe_del_ins", "splice_site", "protein_altering_variant")
 test_alter_fun(fun_alter)
 
-anno <- data.frame(PID = colnames(mut_list_full[1]$missense_variant))
-anno$cohort <- variant_combined_filtered$cohort[match(anno$PID, variant_combined_filtered$PID)]
+# Column annotation
+c_anno <- data.frame(PID = colnames(mut_list_full[1]$missense_variant))
+c_anno$cohort <- variant_combined_full$cohort[match(c_anno$PID, variant_combined_full$PID)]
+c_anno$critical <- c_anno$PID %in% PID_kick_out
+c_anno$mean_cov <- coverage_rcc_targets_PID$mean[match(c_anno$PID, coverage_rcc_targets_PID$PID)]
 
+ca <- columnAnnotation(cohort = anno_simple(c_anno$cohort), 
+                   mean_cov = anno_simple(c_anno$mean_cov),
+                   cov_status = anno_simple(as.character(c_anno$critical))
+                   )
 
+# Row annotation
+r_anno <- data.frame(genes = rownames(mut_list_full[1]$missense_variant))
+r_anno$key_genes <- ifelse(r_anno$genes %in% c("VHL","PBRM1","BAP1","SETD2"), "key_driver", "other_driver")
+
+  
 #Plot oncoprint
 ht_all <- oncoPrint(mut_list_full,
                   alter_fun = fun_alter,
-                  #column_split = anno$cohort,
+                  row_split = r_anno$key_genes,
+                  #column_split = c_anno$cohort,
                   col = col, 
                   show_row_names = TRUE, show_column_names = TRUE, 
-                  pct_side = "right", row_names_side = "left")%v%
-  columnAnnotation(cohort = anno_simple(anno$cohort))
+                  pct_side = "right", row_names_side = "left")%v%ca
+  
 
 draw(ht_all)
 ```
 
 ```{r}
-length(unique(variant_combined_filtered$PID))
+## TO DO: 
+# Adjust colors, Add PID level information (grade / stage / age etc.), general coverage information across genome, Chi-Square test across disease progression categories, Co-occurence analysis (see Nature Genetics paper), Compute VAF / CCF and compare between categories
 ```
 
