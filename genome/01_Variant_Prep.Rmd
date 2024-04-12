@@ -24,21 +24,78 @@ library(ComplexHeatmap)
 
 ## General QC 
 
+### Coverage General 
+
+```{r}
+## Cohort 2
+coverage_2 <- read_tsv("/mnt/central_nas/rcc_volume/RCC/genome/results/cohort_2_openbis/cohort_2_openbis_overview.tsv")
+coverage_2$cohort <- "cohort_new"
+coverage_2$tissue_treatment <- "FFPE"
+
+## Cohort 1
+coverage_1 <- read_tsv("/mnt/central_nas/rcc_volume/RCC/genome/results/cohort_1_ena/cohort_1_ena_overview.tsv")
+coverage_1$cohort <- "cohort_old"
+
+# Select tumor samples 
+coverage_1 <- coverage_1 %>% filter(sample_type == "TU")
+coverage_1$sample <- coverage_1$sample_title
+
+## Combine
+colnames_shared <- colnames(coverage_1)[colnames(coverage_1) %in% colnames(coverage_2)]
+
+coverage_all <- rbind(coverage_1 %>% select(all_of(colnames_shared)),
+coverage_2 %>% select(all_of(colnames_shared)))
+```
+
+```{r}
+## MOSDEPTH coverage for RCC targets (VHL, PBRM1, BAP1, SETD2, PI3KCA)
+
+coverage_all$multiqc_general.mean_coverage
+
+# Median coverages
+ggplot(coverage_all, aes(x = multiqc_general.median_coverage))+
+  geom_density(aes(fill = cohort), alpha = 0.7)+
+  geom_rug(aes(color = cohort))+
+  theme_classic()+
+  scale_fill_brewer(palette = "Set1")+
+  scale_color_brewer(palette = "Set1")
+
+# Mean coverages
+ggplot(coverage_all, aes(x = multiqc_general.mean_coverage))+
+  geom_density(aes(fill = cohort), alpha = 0.7)+
+  geom_rug(aes(color = cohort))+
+  theme_classic()+
+  scale_fill_brewer(palette = "Set1")+
+  scale_color_brewer(palette = "Set1")
+
+# Proportion of reads with 30X
+ggplot(coverage_all, aes(x = multiqc_general.median_coverage))+
+  geom_density(aes(fill = cohort), alpha = 0.7)+
+  geom_rug(aes(color = cohort))+
+  theme_classic()+
+  scale_fill_brewer(palette = "Set1")+
+  scale_color_brewer(palette = "Set1")
+
+## Mark samples with less than 5X mean coverage across target genes 
+coverage_rcc_targets$sample_status <- ifelse(coverage_rcc_targets$mean < 5, "kick_out", coverage_rcc_targets$cohort)
+```
+
+
 ### Coverage Target Genes 
 
 ```{r}
 ## Cohort 2
-coverage_rcc_targets_2 <- read_tsv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/data/cohort2_rcctargets_general_stats_table.tsv")
-coverage_rcc_targets_2$cohort <- "cohort_new"
+coverage_2 <- read_tsv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/data/cohort2_rcctargets_general_stats_table.tsv")
+coverage_2$cohort <- "cohort_new"
 
 ## Cohort 1
-coverage_rcc_targets_1 <- read_tsv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/data/cohort1_rcctargets_general_stats_table.tsv")
-coverage_rcc_targets_1$cohort <- "cohort_old"
+coverage_1 <- read_tsv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/data/cohort1_rcctargets_general_stats_table.tsv")
+coverage_1$cohort <- "cohort_old"
 # Select tumor samples 
-coverage_rcc_targets_1 <- coverage_rcc_targets_1[str_detect(coverage_rcc_targets_1$Sample, "TU"),]
+coverage_1 <- coverage_1[str_detect(coverage_1$Sample, "TU"),]
 
 ## Combine
-coverage_rcc_targets <- rbind(coverage_rcc_targets_2, coverage_rcc_targets_1)
+coverage_rcc_targets <- rbind(coverage_2, coverage_1)
 ```
 
 ```{r}
@@ -82,7 +139,7 @@ PID_kick_out <- coverage_rcc_targets %>% filter(sample_status == "kick_out") %>%
 ## Average coverage per PID
 coverage_rcc_targets$PID <- str_split(coverage_rcc_targets$sample, "_TU", simplify = TRUE)[,1]
 
-coverage_rcc_targets_PID <- coverage_rcc_targets %>% group_by(PID) %>% summarise(mean = mean(mean))
+coverage_PID <- coverage_rcc_targets %>% group_by(PID) %>% summarise(mean = mean(mean))
 ```
 
 ## Cohort 2 - OpenBIS 
@@ -780,7 +837,7 @@ test_alter_fun(fun_alter)
 c_anno <- data.frame(PID = colnames(mut_list_full[1]$missense_variant))
 c_anno$cohort <- variant_combined_full$cohort[match(c_anno$PID, variant_combined_full$PID)]
 c_anno$critical <- c_anno$PID %in% PID_kick_out
-c_anno$mean_cov <- coverage_rcc_targets_PID$mean[match(c_anno$PID, coverage_rcc_targets_PID$PID)]
+c_anno$mean_cov <- coverage_PID$mean[match(c_anno$PID, coverage_PID$PID)]
 
 ca <- columnAnnotation(cohort = anno_simple(c_anno$cohort), 
                    mean_cov = anno_simple(c_anno$mean_cov),
