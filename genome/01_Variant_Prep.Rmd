@@ -43,12 +43,11 @@ coverage_1$sample <- coverage_1$sample_title
 ## Combine
 colnames_shared <- colnames(coverage_1)[colnames(coverage_1) %in% colnames(coverage_2)]
 
-coverage_all <- rbind(coverage_1 %>% select(all_of(colnames_shared)),
-coverage_2 %>% select(all_of(colnames_shared)))
+coverage_all <- rbind(coverage_1 %>% select(all_of(colnames_shared)), coverage_2 %>% select(all_of(colnames_shared)))
 ```
 
 ```{r}
-## MOSDEPTH coverage for RCC targets (VHL, PBRM1, BAP1, SETD2, PI3KCA)
+## MOSDEPTH coverage across gene panel
 
 # Median coverages
 ggplot(coverage_all, aes(x = multiqc_general.median_coverage))+
@@ -129,15 +128,37 @@ ggplot(coverage_rcc_targets, aes(x = `30X`))+
   scale_color_brewer(palette = "Set1")
 ```
 
+
+#### Correlation Mean / Target Coverage 
+
 ```{r}
-PID_kick_out <- coverage_rcc_targets %>% filter(sample_status == "kick_out") %>% pull(sample)
+coverage_comp <- data.frame(sample = coverage_all$sample, mean_cov = coverage_all$multiqc_general.mean_coverage)
+coverage_comp$mean_cov_rcc <- coverage_rcc_targets$mean[match(coverage_comp$sample, coverage_rcc_targets$sample)]
+
+spearman_test <- cor.test(coverage_comp$mean_cov, coverage_comp$mean_cov_rcc)
+
+ggplot(coverage_comp, aes(mean_cov, mean_cov_rcc))+
+  geom_smooth(method='lm', formula= y~x, se = TRUE, color = "darkgrey")+
+  geom_point(size = 2)+
+  theme_classic()+
+  ggtitle(paste("Pearson = ",round(spearman_test$estimate, digits = 2)))
+```
+
+
+#### Filter criteria 
+
+```{r}
+PID_kick_out <- coverage_comp %>% filter(mean_cov < 5) %>% pull(sample) #n=8
 ```
 
 ```{r}
 ## Average coverage per PID
 coverage_rcc_targets$PID <- str_split(coverage_rcc_targets$sample, "_TU", simplify = TRUE)[,1]
+coverage_all$PID <- str_split(coverage_all$sample, "_TU", simplify = TRUE)[,1]
 
-coverage_PID <- coverage_rcc_targets %>% group_by(PID) %>% summarise(mean = mean(mean))
+
+# Here for overall mean coverage
+coverage_PID <- coverage_all %>% group_by(PID) %>% summarise(mean = mean(multiqc_general.mean_coverage))
 ```
 
 ## Cohort 2 - OpenBIS 
@@ -168,8 +189,10 @@ variant_combined <- foreach(i = seq_along(files), .combine = "rbind")%do%{
 ```
 
 ```{r}
-write_csv(variant_combined, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_cohort2.csv")
+#write_csv(variant_combined, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_cohort2.csv")
+variant_combined <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_cohort2.csv")
 ```
+
 
 ### Filter 
 
@@ -292,12 +315,10 @@ mut_list_full <- unify_mat_list(mut_list)
 # Create a new list entry called "Multiple" for multiple gene mutations within a PID
 sum_matrix <- Reduce(`+`, mut_list_full)
 mut_list_full$multiple <- as.matrix(ifelse(sum_matrix > 1, 1,0))
-
-mut_list_full$protein_altering_variant
 ```
 
 
-```{r print onc, message=FALSE,warning=FALSE,fig.width=12,fig.height=6}
+```{r print onc, message=FALSE,warning=FALSE,fig.width=10,fig.height=6}
 # keep the order of annotation and mutation list
 #ord= anno$PID_short
   
@@ -339,10 +360,15 @@ names(col) <- c("missense_variant", "stop_gained_lost_start_lost", "frameshift_v
 "inframe_del_ins", "splice_site", "protein_altering_variant")
 test_alter_fun(fun_alter)
 
+## Step 3: Row Annotation 
+r_anno <- data.frame(genes = rownames(mut_list_full[1]$missense_variant))
+r_anno$key_genes <- ifelse(r_anno$genes %in% c("VHL","PBRM1","BAP1","SETD2"), "key_driver", "other_driver")
+
 #Plot oncoprint
 ht_all <- oncoPrint(mut_list_full,
-                  alter_fun = fun_alter,
-                  col = col)
+                    row_split = r_anno$key_genes,
+                    alter_fun = fun_alter,
+                    col = col)
 
 draw(ht_all)
 ```
@@ -379,6 +405,7 @@ variant_combined <- foreach(i = seq_along(files), .combine = "rbind")%do%{
 
 ```{r}
 write_csv(variant_combined, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_cohort1.csv")
+#variant_combined <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_cohort1.csv")
 ```
 
 ```{r}
@@ -660,7 +687,7 @@ mut_list_full$multiple <- as.matrix(ifelse(sum_matrix > 1, 1,0))
 ```
 
 
-```{r print onc, message=FALSE,warning=FALSE,fig.width=12,fig.height=6}
+```{r print onc, message=FALSE,warning=FALSE,fig.width=10,fig.height=6}
 # keep the order of annotation and mutation list
 #ord= anno$PID_short
   
@@ -702,9 +729,14 @@ names(col) <- c("missense_variant", "stop_gained_lost_start_lost", "frameshift_v
 "inframe_del_ins", "splice_site", "protein_altering_variant")
 test_alter_fun(fun_alter)
 
+## Step 3: Row Annotation 
+r_anno <- data.frame(genes = rownames(mut_list_full[1]$missense_variant))
+r_anno$key_genes <- ifelse(r_anno$genes %in% c("VHL","PBRM1","BAP1","SETD2"), "key_driver", "other_driver")
+
 #Plot oncoprint
 ht_all <- oncoPrint(mut_list_full,
                   alter_fun = fun_alter,
+                  row_split = r_anno$key_genes,
                   col = col, 
                   show_row_names = TRUE, show_column_names = TRUE)
 
@@ -716,9 +748,139 @@ draw(ht_all)
 
 ## Full cohort 
 
+### Cohort comparisons
+
+#### Mutational load 
+
+```{r}
+variant_combined_2 <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_cohort2.csv")
+variant_combined_2$cohort <- "cohort_new"
+
+variant_combined_1 <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_cohort1.csv")
+variant_combined_1$cohort <- "cohort_old"
+variant_combined_1 <- variant_combined_1 %>% select(-sample_id)
+
+variant_full <- rbind(variant_combined_1, variant_combined_2)
+```
+
+```{r}
+# Option 1: Considering all mutation types 
+mut_out <- variant_full %>% group_by(PID, cohort) %>% count(PID) 
+
+mut_out$mean_cov <- coverage_PID$mean[match(mut_out$PID, coverage_PID$PID)]
+
+ggplot(mut_out, aes(x=cohort, y = n, size = mean_cov))+
+  geom_jitter(position=position_jitter(w=0.1,h=0.1), aes(color = cohort))+
+  geom_boxplot(outlier.color = NA)+
+  scale_color_brewer(palette = "Set1")+
+  theme_classic()+
+  ylab("Mutational burden (total)")+
+  stat_compare_means()
+  
+
+ggplot(mut_out, aes(mean_cov, n))+
+  geom_smooth(method='lm', formula= y~x, se = TRUE, color = "darkgrey")+
+  geom_point(size = 2)+
+  theme_classic()
+```
+```{r}
+# Option 2: Only mutations with consequence 
+TODO 
+```
+
+#### VAF
+
+```{r}
+# Option 1: Considering all mutation types 
+
+## Overall VAF
+ggplot(variant_full, aes(x=cohort, y = Frequency))+
+  geom_jitter(position=position_jitter(w=0.1,h=0.1), aes(color = cohort))+
+  geom_boxplot(outlier.color = NA)+
+  scale_color_brewer(palette = "Set1")+
+  theme_classic()+
+  ylab("VAF")+
+  stat_compare_means()
+
+## Mean VAF per PID 
+vaf_out <- variant_full %>% group_by(PID, cohort) %>% summarise(mean_vaf = mean(Frequency))
+
+ggplot(vaf_out, aes(x=cohort, y = mean_vaf))+
+  geom_jitter(position=position_jitter(w=0.1,h=0.1), aes(color = cohort))+
+  geom_boxplot(outlier.color = NA)+
+  scale_color_brewer(palette = "Set1")+
+  theme_classic()+
+  ylab("VAF")+
+  stat_compare_means()
+```
+#### Mutation frequencies
+
+```{r}
+sum_matrix <- Reduce(`+`, mut_list_full)
+sum_matrix <- as.matrix(ifelse(sum_matrix >= 1, 1,0))
+
+# Cohort identifiers
+PID_new <- variant_combined_full %>% filter(cohort == "cohort_new") %>% pull(PID) %>% unique()
+PID_old <- variant_combined_full %>% filter(cohort == "cohort_old") %>% pull(PID) %>% unique()
+```
+
+
+```{r}
+# Function to perform Fisher exact test for each gene
+perform_fisher_test <- function(gene_row, group1_cols, group2_cols) {
+  contingency_table <- matrix(0, nrow = 2, ncol = 2)
+  contingency_table[1, 1] <- sum(gene_row[group1_cols] == 1)
+  contingency_table[1, 2] <- sum(gene_row[group2_cols] == 1)
+  contingency_table[2, 1] <- sum(gene_row[group1_cols] == 0)
+  contingency_table[2, 2] <- sum(gene_row[group2_cols] == 0)
+  test_result <- fisher.test(contingency_table)
+  return(c(odds_ratio = test_result$estimate, p_value = test_result$p.value))
+}
+
+# Perform Fisher exact tests for each gene
+fisher_results <- apply(sum_matrix, 1, perform_fisher_test, group1_cols = PID_new, group2_cols = PID_old)
+
+
+fisher_results <- as.data.frame(fisher_results)
+
+fisher_results <- as.data.frame(t(fisher_results)) %>% rownames_to_column("gene")
+fisher_results$p_adj <- p.adjust(fisher_results$p_value, method = "BH")
+colnames(fisher_results) <- c("gene", "odds_ratio", "p_value", "p_adj")
+
+isGreater <- fisher_results$odds_ratio > 1
+pVal <- log10(fisher_results$p_adj)
+pVal[isGreater] <- abs(pVal[isGreater])
+fisher_results$p_out <- pVal
+
+
+# Visualize findings with ggplot2
+ggplot(fisher_results, aes(x = reorder(gene, -p_out), y = p_out, fill = odds_ratio > 1)) +
+  geom_segment(aes(xend = gene, y = 0, yend = p_out), color = "black") +
+  geom_point(size = 5, shape = 21, color = "black", fill = ifelse(fisher_results$p_out > -log10(0.05) & fisher_results$odds_ratio > 1, "#E41A1C",
+                                                                  ifelse(fisher_results$p_out < log10(0.05) & fisher_results$odds_ratio < 1, "#377EB8", "grey")))+
+  theme_classic()+
+  geom_hline(yintercept = 0)+
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed", color = "black")+
+  geom_hline(yintercept = log10(0.05), linetype = "dashed", color = "black")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  labs(x = "Genes", y = "(-)log10(P-Value)")
+
+
+
+
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed", color = "red") + # Add significance threshold line
+  geom_text(aes(label = sprintf("%.2f", ifelse(odds_ratio > 1, odds_ratio, -log10(p_out)))), vjust = -0.5, size = 3, color = "black") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1),
+        legend.position = "none") +
+  labs(x = "Genes", y = "-log10(P-Value)", title = "Fisher Exact Test Results")
+```
+
+
 ### Oncoprint 
 
 ```{r}
+## Use filtered variants
 variant_combined_filtered <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_consensus_filtered_cohort1.csv")
 variant_combined_filtered$cohort <- "cohort_old"
 variant_combined_filtered <- variant_combined_filtered %>% select(-sample_id)
@@ -810,8 +972,10 @@ for (i in seq_along(mut_list_full)){
 ```
 
 
-```{r print onc, message=FALSE,warning=FALSE}
-##Annotation
+```{r print onc, message=FALSE,warning=FALSE, fig.width=10,fig.height=7}
+
+## Step 1: Define alteration function
+
 #Colors
 col <- colorRampPalette(brewer.pal(12,"Paired"))(length(unique(snv$mut_level)))
 
@@ -831,23 +995,30 @@ names(col) <- c("missense_variant", "stop_gained_lost_start_lost", "frameshift_v
 "inframe_del_ins", "splice_site", "protein_altering_variant")
 test_alter_fun(fun_alter)
 
-# Column annotation
+## Step 2: Column Annotation 
 c_anno <- data.frame(PID = colnames(mut_list_full[1]$missense_variant))
 c_anno$cohort <- variant_combined_full$cohort[match(c_anno$PID, variant_combined_full$PID)]
 c_anno$critical <- c_anno$PID %in% PID_kick_out
 c_anno$mean_cov <- coverage_PID$mean[match(c_anno$PID, coverage_PID$PID)]
 
-ca <- columnAnnotation(cohort = anno_simple(c_anno$cohort), 
-                   mean_cov = anno_simple(c_anno$mean_cov),
-                   cov_status = anno_simple(as.character(c_anno$critical))
+## Define colors 
+cov_col <- colorRamp2(c(min(c_anno$mean_cov),median(c_anno$mean_cov),max(c_anno$mean_cov)), c("#E41A1C","white","#377EB8"))
+cohort_col <- setNames(brewer.pal(3, "Set1")[1:2],unique(c_anno$cohort))
+critical_col <- setNames(c("white","purple"),unique(c_anno$critical))
+
+ca <- columnAnnotation(cohort = c_anno$cohort, 
+                   mean_cov = c_anno$mean_cov,
+                   cov_status = as.character(c_anno$critical), 
+                   col = list(cohort = cohort_col, mean_cov = cov_col, cov_status = critical_col), 
+                   border = TRUE
                    )
 
-# Row annotation
+## Step 3: Row Annotation 
 r_anno <- data.frame(genes = rownames(mut_list_full[1]$missense_variant))
 r_anno$key_genes <- ifelse(r_anno$genes %in% c("VHL","PBRM1","BAP1","SETD2"), "key_driver", "other_driver")
 
   
-#Plot oncoprint
+## Step 4: Print Oncoprint
 ht_all <- oncoPrint(mut_list_full,
                   alter_fun = fun_alter,
                   row_split = r_anno$key_genes,
@@ -861,7 +1032,14 @@ draw(ht_all)
 ```
 
 ```{r}
+
+```
+
+
+
+
+```{r}
 ## TO DO: 
-# Adjust colors, Add PID level information (grade / stage / age etc.), general coverage information across genome, Chi-Square test across disease progression categories, Co-occurence analysis (see Nature Genetics paper), Compute VAF / CCF and compare between categories
+# Add PID level information (grade / stage / age etc.), Chi-Square test across cohorts for mutations, disease progression categories, Co-occurence analysis (see Nature Genetics paper) possible already right now, Compute VAF / CCF and compare between categories
 ```
 
