@@ -891,6 +891,13 @@ variant_combined_filtered_2$cohort <- "cohort_new"
 variant_combined_full <- rbind(variant_combined_filtered, variant_combined_filtered_2)
 ```
 
+
+```{r}
+# ccRCC mutational driver genes 
+GOI_IntOGen <- read_tsv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/data/IntOGen_DriverGenes_CCRCC.tsv")
+GOI <- GOI_IntOGen$Symbol #n = 44
+```
+
 ```{r}
 #Load processed data file and select columns of interest
 snv <- variant_combined_full
@@ -1032,14 +1039,20 @@ draw(ht_all)
 ```
 
 ```{r}
-
-```
-
-
-
-
-```{r}
 ## TO DO: 
-# Add PID level information (grade / stage / age etc.), Chi-Square test across cohorts for mutations, disease progression categories, Co-occurence analysis (see Nature Genetics paper) possible already right now, Compute VAF / CCF and compare between categories
+# Add PID level information (grade / stage / age etc.), Chi-Square test across cohorts for mutations, disease progression categories, Co-occurence analysis (see Nature Genetics paper) possible already right now, Compute VAF / CCF and compare between categories, Indels vs. SNVs
 ```
 
+# Save plots as pdf
+
+```{r save_plots, include=FALSE}
+##IMPORTANT: change to chunk output in console for this last part - DO NOT RUN LIKE THIS DUE TO DUPLICATED VARIABLE NAMES
+
+##save plots as pdf (vector graphics)
+
+pdf("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/plots/oncoprint_fullcohort_variants_drivers.pdf",width = 10,height = 7)
+draw(ht_all)
+dev.off()
+
+##IMPORTANT: change back to chunk output inline
+```

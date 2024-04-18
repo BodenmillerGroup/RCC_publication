@@ -343,6 +343,7 @@ out_PDL1_score
 #### Heatmap visualization 
 
 ```{r}
+sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_07.rds")
 spicyTest <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/07_comb/spicyTest_ISUP.rds")
 spicyTest_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/07_comb/spicyTest_pT.rds")
 spicyTest_2 <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/07_comb/spicyTest_necrose.rds")
@@ -683,7 +684,9 @@ pVal_PDL1_up[pVal_PDL1_up < 0] <- 0
 # List of differential test results
 mat <- list(ISUP_34 = pVal_ISUP_up,pT_34 = pVal_T_up, necrose_1 = pVal_necrose_up, PDL1_1 = pVal_PDL1_up)
 
-viz_col_up <- setNames(c("#67000D","#08306B", "#3F007D","#00441B"), 
+# viz_col_up <- setNames(c("#67000D","#08306B", "#3F007D","#00441B"), 
+#                       c("ISUP_34", "pT_34", "necrose_1", "PDL1_1"))
+viz_col_up <- setNames(c("#E41A1C","#377EB8", "#984EA3","#4DAF4A"), 
                       c("ISUP_34", "pT_34", "necrose_1", "PDL1_1"))
 
 # Alter-fun 
@@ -1716,7 +1719,7 @@ pVal_PDL1_up[pVal_PDL1_up < 0] <- 0
 # List of differential test results
 mat <- list(ISUP_34 = pVal_ISUP_up,pT_34 = pVal_T_up, necrose_1 = pVal_necrose_up, PDL1_1 = pVal_PDL1_up)
 
-viz_col_up <- setNames(c("#67000D","#08306B", "#3F007D","#00441B"), 
+viz_col_up <- setNames(c("#E41A1C","#377EB8", "#984EA3","#4DAF4A"), 
                       c("ISUP_34", "pT_34", "necrose_1", "PDL1_1"))
 
 # Alter-fun 
@@ -4076,6 +4079,20 @@ saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sc
 
 
 
+# Save plots as pdf
+
+```{r save_plots}
+##IMPORTANT: change to chunk output in console for this last part 
+
+##save plots as pdf (vector graphics)
+pdf("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/07_comb/interaction_celltype_onco_up_down.pdf",width = 11,height = 4)
+onco_up + onco_down
+dev.off()
+
+pdf("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/07_comb/interaction_celltype_fine_onco_up_down.pdf",width = 15,height = 6)
+onco_up + onco_down
+dev.off()
+```
 
 
 
