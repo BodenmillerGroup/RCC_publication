@@ -1029,8 +1029,6 @@ ggplot(fisher_results, aes(x = reorder(gene, -p_out), y = p_out, fill = odds_rat
 
 #### Co-occurence analysis 
 
-
-
 ```{r}
 # Co-occurence analysis 
 sum_matrix <- Reduce(`+`, mut_list_full)
