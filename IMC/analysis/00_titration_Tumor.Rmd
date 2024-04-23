@@ -132,7 +132,7 @@ colnames(sce) <- paste0(sce$sample_id, "_", sce$ObjectNumber)
 ```{r}
 #define markers for titration testing (markers that are apparent on most dilutions)
 #rowData(sce)$use_channel <- 
-rowData(sce)$use_markers <- rowData(sce)$clean_target %in% c("GPX4", "NFKB", "CycD1", "HIF1a", "p53", "cMYC", "ICAM1", "CD140b", "CD11c", "PDK4", "CD73", "BRG1", "PKM2", "CD10", "IDH2", "HIF2a", "AuroraKinaseA", "EGFR", "S6", "VEGFR", "VHL", "Rb", "mTOR", "Fumarase", "GLUD12")
+rowData(sce)$use_markers <- rowData(sce)$clean_target %in% c("GPX4", "NFKB", "CycD1", "HIF1a", "p53", "cMYC", "ICAM1", "CD140b", "CD4", "PDK4", "CD73", "BRG1", "PKM2", "CD10", "IDH2", "HIF2a", "AuroraKinaseA", "EGFR", "S6", "VEGFR", "VHL", "Rb", "mTOR", "Fumarase", "GLUD12")
 use_markers <- rowData(sce)$clean_target[rowData(sce)$use_markers]
 ```
 
@@ -299,7 +299,7 @@ sn_dat <- SN_ratios(sce_normal,use_markers,group.by = "dilution_id")
 Here we check if the kmeans clustering actually does a meaningful separation of cells into two clusters, which we can do visually on the UMAP.
 
 ```{r, fig.width=8, fig.height=4}
-marker <- "Rb"
+marker <- "CD4"
 cur_dat <- as.matrix(t(assay(sce_normal,"exprs"))[,marker])
 cur_df <- as_tibble(colData(sce_normal))
 cur_df$expr<- cur_dat[,1]
