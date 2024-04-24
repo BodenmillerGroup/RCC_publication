@@ -47,11 +47,18 @@ colnames_shared <- colnames(coverage_1)[colnames(coverage_1) %in% colnames(cover
 coverage_all <- rbind(coverage_1 %>% select(all_of(colnames_shared)), coverage_2 %>% select(all_of(colnames_shared)))
 ```
 
+
+```{r}
+# Select columns of interest
+coverage_filtered <- coverage_all %>% select(sample, cohort, multiqc_general.median_coverage, multiqc_general.mean_coverage,multiqc_general.5_x_pc, rcc_targets_mosdepth_mqc.generalstats.mosdepth.median_coverage, rcc_targets_mosdepth_mqc.generalstats.mosdepth.mean_coverage, rcc_targets_mosdepth_mqc.generalstats.mosdepth.5_x_pc)
+```
+
+
 ```{r}
 ## MOSDEPTH coverage across gene panel
 
 # Median coverages
-ggplot(coverage_all, aes(x = multiqc_general.median_coverage))+
+ggplot(coverage_filtered, aes(x = multiqc_general.median_coverage))+
   geom_density(aes(fill = cohort), alpha = 0.7)+
   geom_rug(aes(color = cohort))+
   theme_classic()+
@@ -59,52 +66,27 @@ ggplot(coverage_all, aes(x = multiqc_general.median_coverage))+
   scale_color_brewer(palette = "Set1")
 
 # Mean coverages
-ggplot(coverage_all, aes(x = multiqc_general.mean_coverage))+
+ggplot(coverage_filtered, aes(x = multiqc_general.mean_coverage))+
   geom_density(aes(fill = cohort), alpha = 0.7)+
   geom_rug(aes(color = cohort))+
   theme_classic()+
   scale_fill_brewer(palette = "Set1")+
   scale_color_brewer(palette = "Set1")
 
-# Proportion of reads with 30X
-ggplot(coverage_all, aes(x = multiqc_general.30_x_pc))+
+# 5x coverage percentage
+ggplot(coverage_filtered, aes(x = multiqc_general.5_x_pc))+
   geom_density(aes(fill = cohort), alpha = 0.7)+
   geom_rug(aes(color = cohort))+
   theme_classic()+
   scale_fill_brewer(palette = "Set1")+
   scale_color_brewer(palette = "Set1")
-
-## Mark samples with less than 5X mean coverage across target genes 
-#coverage_rcc_targets$sample_status <- ifelse(coverage_rcc_targets$mean < 5, "kick_out", coverage_rcc_targets$cohort)
-```
-
-
-### Coverage Target Genes 
-
-```{r}
-## Cohort 2
-coverage_2 <- read_tsv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/data/cohort2_rcctargets_general_stats_table.tsv")
-coverage_2$cohort <- "cohort_new"
-
-## Cohort 1
-coverage_1 <- read_tsv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/data/cohort1_rcctargets_general_stats_table.tsv")
-coverage_1$cohort <- "cohort_old"
-# Select tumor samples 
-coverage_1 <- coverage_1[str_detect(coverage_1$Sample, "TU"),]
-
-## Combine
-coverage_rcc_targets <- rbind(coverage_2, coverage_1)
 ```
 
 ```{r}
-## MOSDEPTH coverage for RCC targets (VHL, PBRM1, BAP1, SETD2, PI3KCA)
-colnames(coverage_rcc_targets) <- c("sample","30X","median","mean", "cohort")
-
-## Mark samples with less than 5X mean coverage across target genes 
-coverage_rcc_targets$sample_status <- ifelse(coverage_rcc_targets$mean < 5, "kick_out", coverage_rcc_targets$cohort)
+## MOSDEPTH coverage across specific RCC targets 
 
 # Median coverages
-ggplot(coverage_rcc_targets, aes(x = median))+
+ggplot(coverage_filtered, aes(x = rcc_targets_mosdepth_mqc.generalstats.mosdepth.median_coverage))+
   geom_density(aes(fill = cohort), alpha = 0.7)+
   geom_rug(aes(color = cohort))+
   theme_classic()+
@@ -112,29 +94,37 @@ ggplot(coverage_rcc_targets, aes(x = median))+
   scale_color_brewer(palette = "Set1")
 
 # Mean coverages
-ggplot(coverage_rcc_targets, aes(x = mean))+
+ggplot(coverage_filtered, aes(x = rcc_targets_mosdepth_mqc.generalstats.mosdepth.mean_coverage))+
   geom_density(aes(fill = cohort), alpha = 0.7)+
   geom_rug(aes(color = cohort))+
-  geom_vline(xintercept = 5, color = "black", linewidth = 0.8)+
   theme_classic()+
   scale_fill_brewer(palette = "Set1")+
   scale_color_brewer(palette = "Set1")
 
-# Proportion of reads with 30X
-ggplot(coverage_rcc_targets, aes(x = `30X`))+
+# 5x coverage percentage
+ggplot(coverage_filtered, aes(x = rcc_targets_mosdepth_mqc.generalstats.mosdepth.5_x_pc))+
   geom_density(aes(fill = cohort), alpha = 0.7)+
   geom_rug(aes(color = cohort))+
   theme_classic()+
+  geom_vline(xintercept = 15)+
   scale_fill_brewer(palette = "Set1")+
   scale_color_brewer(palette = "Set1")
 ```
-
 
 #### Correlation Mean / Target Coverage 
 
 ```{r}
-coverage_comp <- data.frame(sample = coverage_all$sample, mean_cov = coverage_all$multiqc_general.mean_coverage)
-coverage_comp$mean_cov_rcc <- coverage_rcc_targets$mean[match(coverage_comp$sample, coverage_rcc_targets$sample)]
+coverage_comp <- data.frame(sample = coverage_filtered$sample, mean_cov = coverage_filtered$multiqc_general.mean_coverage, mean_cov_rcc = coverage_filtered$rcc_targets_mosdepth_mqc.generalstats.mosdepth.mean_coverage)
+
+spearman_test <- cor.test(coverage_comp$mean_cov, coverage_comp$mean_cov_rcc)
+
+ggplot(coverage_comp, aes(mean_cov, mean_cov_rcc))+
+  geom_smooth(method='lm', formula= y~x, se = TRUE, color = "darkgrey")+
+  geom_point(size = 2)+
+  theme_classic()+
+  ggtitle(paste("Pearson = ",round(spearman_test$estimate, digits = 2)))
+
+coverage_comp <- data.frame(sample = coverage_filtered$sample, mean_cov = coverage_filtered$multiqc_general.5_x_pc, mean_cov_rcc = coverage_filtered$rcc_targets_mosdepth_mqc.generalstats.mosdepth.5_x_pc)
 
 spearman_test <- cor.test(coverage_comp$mean_cov, coverage_comp$mean_cov_rcc)
 
@@ -148,18 +138,19 @@ ggplot(coverage_comp, aes(mean_cov, mean_cov_rcc))+
 
 #### Filter criteria 
 
-```{r}
-PID_kick_out <- coverage_comp %>% filter(mean_cov < 5) %>% pull(sample) #n=8
-```
+
 
 ```{r}
 ## Average coverage per PID
-coverage_rcc_targets$PID <- str_split(coverage_rcc_targets$sample, "_TU", simplify = TRUE)[,1]
-coverage_all$PID <- str_split(coverage_all$sample, "_TU", simplify = TRUE)[,1]
-
+coverage_filtered$PID <- str_split(coverage_filtered$sample, "_TU", simplify = TRUE)[,1]
 
 # Here for overall mean coverage
-coverage_PID <- coverage_all %>% group_by(PID) %>% summarise(mean = mean(multiqc_general.mean_coverage))
+coverage_PID <- coverage_filtered %>% group_by(PID) %>% summarise(mean_cov = mean(multiqc_general.mean_coverage), 
+                                                                  cov_rcc_5 = mean(rcc_targets_mosdepth_mqc.generalstats.mosdepth.5_x_pc))
+```
+
+```{r}
+PID_kick_out <- coverage_PID %>% filter(cov_rcc_5 < 15) %>% pull(PID) #n=5
 ```
 
 ## Cohort 2 - OpenBIS 
@@ -191,8 +182,64 @@ variant_combined <- foreach(i = seq_along(files), .combine = "rbind")%do%{
 
 ```{r}
 #write_csv(variant_combined, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_cohort2.csv")
-variant_combined <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_cohort2.csv")
+#variant_combined <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_cohort2.csv")
 ```
+
+#### Match identifiers
+
+```{r}
+# Load patient metadata from IMC 
+patient_meta <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/data/Metadata_combined_RCC.csv",col_names = TRUE)
+
+patient_meta <- patient_meta %>% filter(type == "primary")
+
+# Re-group subtypes 
+patient_meta$subtype_combined <- ifelse(patient_meta$subtype %in% c("clear_cell_RCC", "papillary_RCC", "chromophobe_RCC"), patient_meta$subtype, "other")
+patient_meta$subtype_combined[patient_meta$subtype_combined == "clear_cell_RCC"] <- "ccRCC"
+patient_meta$subtype_combined[patient_meta$subtype_combined == "papillary_RCC"] <- "pRCC"
+patient_meta$subtype_combined[patient_meta$subtype_combined == "chromophobe_RCC"] <- "chrRCC"
+
+## Update survival censoring
+patient_meta$status_OS <- ifelse(patient_meta$censor_dead_0_alive_1 == 1, 0, 
+       ifelse(patient_meta$censor_dead_0_alive_1 == 0, 1, patient_meta$censor_dead_0_alive_1))
+
+patient_meta$OS_months <- patient_meta$survival_months
+
+## Combine relevant disease progression categories and set colors
+### Tumor stage
+patient_meta$pT_combined <- ifelse(patient_meta$pT_simple %in% c("1","2"),"1/2", ifelse(patient_meta$pT_simple %in% c("3","4"), "3/4", patient_meta$pT_simple))
+
+### ISUP grade 
+patient_meta$ISUP_combined <- ifelse(patient_meta$ISUP %in% c("1","2"),"1/2", ifelse(patient_meta$ISUP %in% c("3","4"), "3/4", patient_meta$ISUP))
+patient_meta$lymphocytes_combined <- ifelse(patient_meta$lymphocytes %in% c("1","2"),"1/2", patient_meta$lymphocytes)
+```
+
+```{r}
+ID_match_new <- data.frame(PID_old =unique(variant_combined$PID))
+
+ID_match_new$PID <- str_replace(ID_match_new$PID_old, "B0", "B200")
+ID_match_new$PID <- str_replace(ID_match_new$PID, "B1", "B201")
+ID_match_new$PID <- str_replace(ID_match_new$PID, "B9", "B199")
+
+ID_match_new$PID <- str_replace(ID_match_new$PID, "_",".")        
+ID_match_new$PID <- str_split(ID_match_new$PID, "_", simplify = TRUE)[,1]
+
+ID_match_new$PID_in_IMC <- ID_match_new$PID %in% patient_meta$PID
+
+write_csv(ID_match_new, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/cohort2_PID_matching.csv")
+```
+
+```{r}
+# Re-enter after manual editing
+ID_match_new <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/cohort2_PID_matching_LM.csv")
+ID_match_new$PID_in_IMC <- ID_match_new$PID %in% patient_meta$PID
+
+write_csv(ID_match_new, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/cohort2_PID_matching.csv")
+
+## TO DO: Add new PID to variant_combined!
+```
+
+
 
 
 ### Filter 
@@ -405,8 +452,70 @@ variant_combined <- foreach(i = seq_along(files), .combine = "rbind")%do%{
 ```
 
 ```{r}
-write_csv(variant_combined, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_cohort1.csv")
-#variant_combined <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_cohort1.csv")
+#write_csv(variant_combined, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_cohort1.csv")
+variant_combined <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_cohort1.csv")
+```
+
+#### Match identifiers
+
+```{r}
+ID_match <- read_excel("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/data/ccRCC_ids.xlsx", sheet = 1)
+ID_match_2 <- read_excel("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/data/ccRCC_ids.xlsx", sheet = 2)
+
+ID_match$Bnum_2 <- ID_match_2$Bnum[match(ID_match$expID, ID_match_2$expID)]
+
+ID_match$PID <- c(str_split(ID_match$BnumGnum[1:16], "/", simplify = TRUE)[,2], ID_match$Bnum_2[17:nrow(ID_match)])
+```
+
+
+```{r}
+# Load patient metadata from IMC 
+patient_meta <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/data/Metadata_combined_RCC.csv",col_names = TRUE)
+
+patient_meta <- patient_meta %>% filter(type == "primary")
+
+# Re-group subtypes 
+patient_meta$subtype_combined <- ifelse(patient_meta$subtype %in% c("clear_cell_RCC", "papillary_RCC", "chromophobe_RCC"), patient_meta$subtype, "other")
+patient_meta$subtype_combined[patient_meta$subtype_combined == "clear_cell_RCC"] <- "ccRCC"
+patient_meta$subtype_combined[patient_meta$subtype_combined == "papillary_RCC"] <- "pRCC"
+patient_meta$subtype_combined[patient_meta$subtype_combined == "chromophobe_RCC"] <- "chrRCC"
+
+## Update survival censoring
+patient_meta$status_OS <- ifelse(patient_meta$censor_dead_0_alive_1 == 1, 0, 
+       ifelse(patient_meta$censor_dead_0_alive_1 == 0, 1, patient_meta$censor_dead_0_alive_1))
+
+patient_meta$OS_months <- patient_meta$survival_months
+
+## Combine relevant disease progression categories and set colors
+### Tumor stage
+patient_meta$pT_combined <- ifelse(patient_meta$pT_simple %in% c("1","2"),"1/2", ifelse(patient_meta$pT_simple %in% c("3","4"), "3/4", patient_meta$pT_simple))
+
+### ISUP grade 
+patient_meta$ISUP_combined <- ifelse(patient_meta$ISUP %in% c("1","2"),"1/2", ifelse(patient_meta$ISUP %in% c("3","4"), "3/4", patient_meta$ISUP))
+patient_meta$lymphocytes_combined <- ifelse(patient_meta$lymphocytes %in% c("1","2"),"1/2", patient_meta$lymphocytes)
+```
+
+```{r}
+# Match identifiers 
+ID_match$PID_in_IMC <- ID_match$PID %in% patient_meta$PID
+ID_match$PID <- ifelse(ID_match$PID == "", NA, ID_match$PID)
+
+variant_combined$PID_old <- variant_combined$PID
+variant_combined$PID <- ID_match$PID[match(variant_combined$PID,ID_match$Label)]
+```
+
+```{r}
+# Detect patients without a match and extract Gnumbers
+ID_match_no_match <- ID_match %>% filter(PID_in_IMC == FALSE) %>% select(Label, BnumGnum, expID, PID_in_IMC)
+
+write_csv(ID_match_no_match, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/cohort1_PID_noBnumber.csv")
+```
+
+#### Filter
+
+```{r}
+# Filter for patients for which we have IMC data
+variant_combined <- variant_combined %>% filter(!is.na(PID))
 ```
 
 ```{r}
@@ -429,8 +538,6 @@ vaf_100_GOI <- vaf_100 %>% filter(Genes %in% GOI)
 # Pick first mutation consequence 
 variant_combined$variant_consequence_clean <- str_split(variant_combined$variant_consequence,"&", simplify = TRUE)[,1]
 ```
-
-#### Filter
 
 ENSEMBL-based 
 Filter: Variants with MODERATE or HIGH impact only 
@@ -470,6 +577,7 @@ snv <- variant_combined_filtered
 snv$mut_level <- snv$variant_consequence_combined
 
 snv <- snv %>% select(PID, Genes, mut_level)
+snv$PID <- variant_combined_filtered$sample_id
 
 mut_levels_for_matrix <- snv %>% pull(mut_level) %>% unique()
 
@@ -581,7 +689,7 @@ draw(ht_all)
 ```{r}
 ## Consensus per PID 
 ### Only select mutations that were detected in both samples (n=2) - independent of mutation type
-consensus <- variant_combined %>% group_by(PID, sample_id) %>% select(Genes) %>% unique() %>% ungroup() %>% group_by(PID, Genes) %>% count() %>% filter(n == 2)
+consensus <- variant_combined %>% group_by(PID, sample_id) %>% select(Genes) %>% unique() %>% ungroup() %>% group_by(PID, Genes) %>% dplyr::count() %>% filter(n == 2)
 
 variant_consensus <- foreach(i = unique(variant_combined$PID), .combine = "rbind")%do%{
   genes_consensus <- consensus %>% filter(PID == i) %>% pull(Genes)
@@ -755,7 +863,7 @@ draw(ht_all)
 ## Use filtered variants
 variant_combined_filtered <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_consensus_filtered_cohort1.csv")
 variant_combined_filtered$cohort <- "cohort_old"
-variant_combined_filtered <- variant_combined_filtered %>% select(-sample_id)
+variant_combined_filtered <- variant_combined_filtered %>% select(-sample_id, -PID_old)
 
 variant_combined_filtered_2 <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_filtered_cohort2.csv")
 variant_combined_filtered_2$cohort <- "cohort_new"
@@ -763,6 +871,10 @@ variant_combined_filtered_2$cohort <- "cohort_new"
 variant_combined_full <- rbind(variant_combined_filtered, variant_combined_filtered_2)
 ```
 
+```{r}
+## Check potential PID for filtering
+variant_check <- variant_combined_full %>% filter(PID %in% PID_kick_out, Genes %in% GOI)
+```
 
 ```{r}
 # ccRCC mutational driver genes 
@@ -776,6 +888,9 @@ snv <- variant_combined_full
 snv$mut_level <- snv$variant_consequence_combined
 
 snv <- snv %>% select(PID, Genes, mut_level)
+
+# Optional: Filter low-cov patients
+# snv <- snv %>% filter(!PID %in% PID_kick_out)
 
 mut_levels_for_matrix <- snv %>% pull(mut_level) %>% unique()
 
@@ -874,23 +989,23 @@ names(col) <- c("missense_variant", "stop_gained_lost_start_lost", "frameshift_v
 "inframe_del_ins", "splice_site", "protein_altering_variant")
 test_alter_fun(fun_alter)
 
-## Step 2: Column Annotation 
-c_anno <- data.frame(PID = colnames(mut_list_full[1]$missense_variant))
-c_anno$cohort <- variant_combined_full$cohort[match(c_anno$PID, variant_combined_full$PID)]
-c_anno$critical <- c_anno$PID %in% PID_kick_out
-c_anno$mean_cov <- coverage_PID$mean[match(c_anno$PID, coverage_PID$PID)]
-
-## Define colors 
-cov_col <- colorRamp2(c(min(c_anno$mean_cov),median(c_anno$mean_cov),max(c_anno$mean_cov)), c("#E41A1C","white","#377EB8"))
-cohort_col <- setNames(brewer.pal(3, "Set1")[1:2],unique(c_anno$cohort))
-critical_col <- setNames(c("white","purple"),unique(c_anno$critical))
-
-ca <- columnAnnotation(cohort = c_anno$cohort, 
-                   mean_cov = c_anno$mean_cov,
-                   cov_status = as.character(c_anno$critical), 
-                   col = list(cohort = cohort_col, mean_cov = cov_col, cov_status = critical_col), 
-                   border = TRUE
-                   )
+# ## Step 2: Column Annotation 
+# c_anno <- data.frame(PID = colnames(mut_list_full[1]$missense_variant))
+# c_anno$cohort <- variant_combined_full$cohort[match(c_anno$PID, variant_combined_full$PID)]
+# c_anno$critical <- c_anno$PID %in% PID_kick_out
+# c_anno$mean_cov <- coverage_PID$mean_cov[match(c_anno$PID, coverage_PID$PID)]
+# 
+# ## Define colors 
+# cov_col <- colorRamp2(c(min(c_anno$mean_cov),median(c_anno$mean_cov),max(c_anno$mean_cov)), c("#E41A1C","white","#377EB8"))
+# cohort_col <- setNames(brewer.pal(3, "Set1")[1:2],unique(c_anno$cohort))
+# #critical_col <- setNames(c("white","purple"),unique(c_anno$critical))
+# 
+# ca <- columnAnnotation(cohort = c_anno$cohort, 
+#                    mean_cov = c_anno$mean_cov,
+#                    #cov_status = as.character(c_anno$critical), 
+#                    col = list(cohort = cohort_col, mean_cov = cov_col, cov_status = critical_col), 
+#                    border = TRUE
+#                    )
 
 ## Step 3: Row Annotation 
 r_anno <- data.frame(genes = rownames(mut_list_full[1]$missense_variant))
@@ -904,7 +1019,7 @@ ht_all <- oncoPrint(mut_list_full,
                   #column_split = c_anno$cohort,
                   col = col, 
                   show_row_names = TRUE, show_column_names = TRUE, 
-                  pct_side = "right", row_names_side = "left")%v%ca
+                  pct_side = "right", row_names_side = "left")#%v%ca
   
 
 draw(ht_all)
@@ -1097,7 +1212,7 @@ ggplot(co_occurrence_df_sig, aes(x = reorder(pair, -p_out), y = p_out, fill = od
 
 ```{r}
 ## TO DO: 
-# Add PID level information (grade / stage / age etc.), Chi-Square test across cohorts for mutations, disease progression categories, Co-occurence analysis (see Nature Genetics paper) possible already right now, Compute VAF / CCF and compare between categories, Indels vs. SNVs
+# Add PID level information (grade / stage / age etc. sample type - FFPE/fresh frozen), Chi-Square test across cohorts for mutations, disease progression categories, Co-occurence analysis (see Nature Genetics paper) possible already right now, Compute VAF / CCF and compare between categories, Indels vs. SNVs
 ```
 
 
