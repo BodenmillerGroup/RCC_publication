@@ -1081,6 +1081,49 @@ ht_all <- oncoPrint(mut_list_full,
 draw(ht_all)
 ```
 
+## 5. Genomic subtype defintion 
+
+```{r}
+# create oncoprint with heatmap of IHC scores 
+
+driver_mat <- as.data.frame(t(sum_matrix)) %>% select(VHL, BAP1, PBRM1, SETD2, PIK3CA) %>% rownames_to_column("PID") 
+
+driver_mat$BAP1_IHC <- variant_combined_full$BAP1_IHC[match(driver_mat$PID, variant_combined_full$PID)]
+driver_mat$PBRM1_IHC <- variant_combined_full$PBRM1_IHC[match(driver_mat$PID, variant_combined_full$PID)]
+driver_mat$H3K36me_IHC <- variant_combined_full$H3K36me_IHC[match(driver_mat$PID, variant_combined_full$PID)]
+
+mut_mat <- driver_mat %>% column_to_rownames("PID") %>% select(VHL, BAP1, PBRM1, SETD2, PIK3CA) 
+IHC_mat <- driver_mat %>% column_to_rownames("PID") %>% select(BAP1_IHC, PBRM1_IHC, H3K36me_IHC)
+
+
+Heatmap(t(mut_mat))%v%
+  Heatmap(t(IHC_mat), col = viridis(100), na_col = "grey", cluster_columns = FALSE, cluster_rows = FALSE)
+
+
+driver_mat %>% column_to_rownames("PID") %>% mutate(sum = rowSums(.))
+  
+  
+  mutate(CD11c_CD68_GMM = ifelse(CD11c_GMM | CD68_GMM, 1, 0)) %>% # Macro = CD11c or CD68
+  mutate(CD11c_CD68_GMM = ifelse(MPO_GMM, 0, CD11c_CD68_GMM)) %>% # Neutro = MPO (independent of CD11c or CD68)
+  mutate(CD3_CD4_GMM = ifelse(CD3_GMM & CD4_GMM, 1, 0)) %>% # CD4 = CD3 AND CD4
+  select(-CD11c_GMM,-CD68_GMM, -CD3_GMM, -CD4_GMM) %>% 
+  mutate(sum = rowSums(.)) %>% filter(sum == 1) %>% 
+  rownames_to_column("cell_id") %>% 
+  pivot_longer(2:9, names_to = "GMM", values_to = "count") %>% 
+  filter(count == 1) %>% select(cell_id, GMM)
+
+
+# TO DO: Extract driver_mat and manually annotate genomic subtypes 
+# Consider subclonal mutations of cohort 1 
+# Association of mutation status with IHC scores 
+```
+
+
+
+
+
+
+
 ## 5. Cohort comparisons
 
 ### Cohort vs Progression 
@@ -1620,9 +1663,70 @@ ggsurvplot(fit,
 ### Per mutation 
 
 ```{r}
-# TO-DO
+mut_matrix <- as.data.frame(t(ifelse(sum_matrix == 1, TRUE, FALSE))) %>% rownames_to_column("PID") 
+
+mut_matrix$status_OS <- variant_combined_full$status_OS[match(mut_matrix$PID, variant_combined_full$PID)]
+mut_matrix$OS_months <- variant_combined_full$OS_months[match(mut_matrix$PID, variant_combined_full$PID)]
 ```
 
+```{r}
+#Assess survival impact across categories
+library(survival)
+library(survminer)
+
+# Extract p-values from log-rank / direction of trend
+cur_surv_out <- foreach(x = colnames(mut_matrix %>% select(-PID, -status_OS, -OS_months)), .combine = "rbind")%do%{
+  formula <- as.formula(paste("Surv(OS_months, status_OS) ~ ", x))
+  fit <- survdiff(formula, data = mut_matrix)
+  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[1], exp_2 = fit$exp[1])
+}
+
+# Adjust p-values using BH 
+cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
+
+# Create and plot heatmap 
+cur_surv_plot <- cur_surv_out %>% mutate(sign = p_adj < 0.1, direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% mutate(p_out = ifelse(sign == TRUE & direction == "high",  -log10(p_adj), ifelse(sign == TRUE & direction == "low", log10(p_adj), 0))) %>% arrange(desc(p_out)) #%>% filter(p < 0.05)
+
+cur_surv_plot <- cur_surv_plot %>% pivot_wider(id_cols = type, names_from = group, values_from = p_out) %>% column_to_rownames("type")
+
+Heatmap(cur_surv_plot, border = FALSE, cluster_columns = FALSE, rect_gp = gpar(col = "black", lwd = 1), name = "log10(p)")
+```
+
+```{r}
+library(survival)
+library(survminer)
+
+cur_surv <- mut_matrix %>% select(PID, OS_months, status_OS, TP53, SETD2) %>% unique()
+
+#Plot survival curves
+fit <- survfit(Surv(OS_months, status_OS) ~ TP53, data = cur_surv)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = "Set1",
+          conf.int = TRUE
+)
+
+fit <- survfit(Surv(OS_months, status_OS) ~ SETD2, data = cur_surv)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = "Set1",
+          conf.int = TRUE
+)
+```
 
 # Save plots as pdf
 
