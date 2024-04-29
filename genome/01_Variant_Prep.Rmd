@@ -429,7 +429,7 @@ variant_combined <- foreach(i = seq_along(files), .combine = "rbind")%do%{
 ```
 
 ```{r}
-#write_csv(variant_combined, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_cohort1.csv")
+write_csv(variant_combined, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_cohort1.csv")
 #variant_combined <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_cohort1.csv")
 ```
 
@@ -469,7 +469,7 @@ write_csv(ID_match_no_match, "/mnt/central_nas/rcc_volume/RCC/genome/data_analys
 ```
 
 ```{r}
-write_csv(variant_combined, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_cohort1.csv")
+#write_csv(variant_combined, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_cohort1.csv")
 #variant_combined <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_cohort1.csv")
 ```
 
@@ -649,7 +649,7 @@ draw(ht_all)
 ### Consensus per patient
 
 ```{r}
-## Consensus per PID 
+# Option 1: Consensus per PID 
 ### Only select mutations that were detected in both samples (n=2) - independent of mutation type
 consensus <- variant_combined %>% group_by(PID, sample_id) %>% select(Genes) %>% unique() %>% ungroup() %>% group_by(PID, Genes) %>% dplyr::count() %>% filter(n == 2)
 
@@ -660,11 +660,43 @@ variant_consensus <- foreach(i = unique(variant_combined$PID), .combine = "rbind
 }
 ```
 
+
+```{r}
+# Option 2: Clonality annotation per PID
+### If mutation is found in both samples - "Clonal" - Otherwise "Subclonal"
+clonality <- variant_combined %>% group_by(PID, sample_id) %>% filter(!is.na(PID)) %>% select(Genes) %>% unique() %>% ungroup() %>% group_by(PID, Genes) %>% dplyr::count() %>% mutate(clonality = ifelse(n == 1, "subclonal", "clonal"))
+
+clonality_consensus <- foreach(i = unique(variant_combined$PID), .combine = "rbind")%do%{
+  variant_consensus <- variant_combined %>% filter(PID == i)
+  clonality_consensus <- clonality %>% filter(PID == i)
+  variant_consensus$clonality <- clonality_consensus$clonality[match(variant_consensus$Genes, clonality_consensus$Genes)]
+  return(variant_consensus)
+}
+```
+
+```{r}
+clonality_plot <- clonality_consensus %>% group_by(PID, clonality) %>% dplyr::count() %>% ungroup() %>% group_by(PID) %>% mutate(fra = n/sum(n)) %>% filter(clonality == "clonal")
+
+ggplot(clonality_plot, aes(x = clonality, y = fra))+
+  geom_jitter(size = 2, position=position_jitter(w=0.1,h=0.1), aes(color = PID))+
+  geom_boxplot(outlier.color = NA)+
+  guides(color = "none")+
+  theme_classic()+
+  ylab("Clonal mutation percentage (all)")
+```
+
+
 ```{r}
 write_csv(variant_consensus, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_consensus_cohort1.csv")
+write_csv(clonality_consensus, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_clonality_consensus_cohort1.csv")
 ```
 
 #### Filter
+
+```{r}
+# Optional: Work with all genes but with clonality annotations
+variant_consensus <- clonality_consensus
+```
 
 ENSEMBL-based 
 Filter: Variants with MODERATE or HIGH impact only 
@@ -682,6 +714,18 @@ variant_consensus_filtered <- variant_consensus %>% filter(variant_consequence_c
 ```{r}
 vaf_100 <- variant_consensus_filtered %>% filter(Frequency == 100)
 vaf_100_GOI <- vaf_100 %>% filter(Genes %in% GOI)
+```
+
+```{r}
+# Clonality for Driver Mutations
+clonality_plot <- variant_consensus %>% filter(Genes %in% GOI) %>% group_by(PID, clonality) %>% dplyr::count() %>% ungroup() %>% group_by(PID) %>% mutate(fra = n/sum(n)) %>% filter(clonality == "clonal")
+
+ggplot(clonality_plot, aes(x = clonality, y = fra))+
+  geom_jitter(size = 2, position=position_jitter(w=0.1,h=0.1), aes(color = PID))+
+  geom_boxplot(outlier.color = NA)+
+  guides(color = "none")+
+  theme_classic()+
+  ylab("Clonal mutation percentage (GOI)")
 ```
 
 ```{r}
@@ -709,7 +753,8 @@ mut_levels_for_matrix <- snv %>% pull(mut_level) %>% unique()
 
 # Select genes 
 ## A: All genes 
-Genes_list <- snv %>% pull(Genes) %>% unique()
+#Genes_list <- snv %>% pull(Genes) %>% unique()
+
 ## B: Genes of Interest e.g. IntOGen driver genes 
 Genes_list <- snv %>% filter(Genes %in% GOI) %>% pull(Genes) %>% unique()
 
@@ -755,10 +800,22 @@ mut_list_full <- unify_mat_list(mut_list)
 # Create a new list entry called "Multiple" for multiple gene mutations within a PID
 sum_matrix <- Reduce(`+`, mut_list_full)
 mut_list_full$multiple <- as.matrix(ifelse(sum_matrix > 1, 1,0))
+
+
+# Optional: Create a new list entry called "Clonality" for gene mutation clonality annotation per PID
+subclonal_anno <- variant_consensus_filtered %>% select(PID, Genes, clonality) %>% filter(Genes %in% GOI) %>% unique() %>% pivot_wider(id_cols = PID, names_from = Genes, values_from = clonality) %>% column_to_rownames("PID")
+
+subclonal_anno[is.na(subclonal_anno)] <- "none"
+subclonal_anno <- t(ifelse(subclonal_anno == "subclonal", 1, 0))
+
+subclonal_anno <- subclonal_anno[match(rownames(mut_list_full$missense_variant), rownames(subclonal_anno)),]
+subclonal_anno <- subclonal_anno[,match(colnames(mut_list_full$missense_variant), colnames(subclonal_anno))]
+
+mut_list_full$subclonal <- subclonal_anno
 ```
 
 
-```{r print onc, message=FALSE,warning=FALSE,fig.width=10,fig.height=6}
+```{r print onc, message=FALSE,warning=FALSE,fig.width=15,fig.height=10}
 # keep the order of annotation and mutation list
 #ord= anno$PID_short
   
@@ -793,7 +850,8 @@ fun_alter = list(
   inframe_del_ins = function(x, y, w, h) grid.rect(x, y, w*0.8, h*0.8, gp = gpar(fill = col[4], col = NA)),
   splice_site = function(x, y, w, h) grid.rect(x, y, w*0.4, h*0.8, gp = gpar(fill = col[5], col = NA)),
   protein_altering_variant = function(x, y, w, h) grid.rect(x, y, w*0.4, h*0.8, gp = gpar(fill = col[6], col = NA)),
-  multiple = function(x, y, w, h) grid.points(x, y, size = unit(0.4, "char"), pch = 16)
+  multiple = function(x, y, w, h) grid.points(x, y, size = unit(0.4, "char"), pch = 16),
+  subclonal = function(x, y, w, h) grid.points(x, y, size = unit(0.4, "char"), pch = 10)
 )
 
 names(col) <- c("missense_variant", "stop_gained_lost_start_lost", "frameshift_variant", 
