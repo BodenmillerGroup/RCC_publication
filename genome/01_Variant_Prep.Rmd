@@ -850,8 +850,8 @@ fun_alter = list(
   inframe_del_ins = function(x, y, w, h) grid.rect(x, y, w*0.8, h*0.8, gp = gpar(fill = col[4], col = NA)),
   splice_site = function(x, y, w, h) grid.rect(x, y, w*0.4, h*0.8, gp = gpar(fill = col[5], col = NA)),
   protein_altering_variant = function(x, y, w, h) grid.rect(x, y, w*0.4, h*0.8, gp = gpar(fill = col[6], col = NA)),
-  multiple = function(x, y, w, h) grid.points(x, y, size = unit(0.4, "char"), pch = 16),
-  subclonal = function(x, y, w, h) grid.points(x, y, size = unit(0.4, "char"), pch = 10)
+  multiple = function(x, y, w, h) grid.points(x, y, size = unit(1.3, "char"), pch = 0),
+  subclonal = function(x, y, w, h) grid.points(x, y, size = unit(0.4, "char"), pch = 16)
 )
 
 names(col) <- c("missense_variant", "stop_gained_lost_start_lost", "frameshift_variant", 
@@ -883,6 +883,7 @@ variant_combined_filtered <- variant_combined_filtered %>% select(-sample_id)
 
 variant_combined_filtered_2 <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_filtered_cohort2.csv")
 variant_combined_filtered_2$cohort <- "cohort_new"
+variant_combined_filtered_2$clonality <- "clonal" #add clonal attribute 
 
 variant_combined_full <- rbind(variant_combined_filtered, variant_combined_filtered_2)
 ```
@@ -983,7 +984,7 @@ mut_levels_for_matrix <- snv %>% pull(mut_level) %>% unique()
 Genes_list <- snv %>% pull(Genes) %>% unique()
 ## B: Genes of Interest e.g. IntOGen driver genes 
 Genes_list <- snv %>% filter(Genes %in% GOI) %>% pull(Genes) %>% unique()
-Genes_list <- Genes_list[!Genes_list %in% c("SF3B1", "STAG2", "PTEN", "ARHGAP35", "ERBB4", "SETBP1", "CUX1")]
+#Genes_list <- Genes_list[!Genes_list %in% c("SF3B1", "STAG2", "PTEN", "ARHGAP35", "ERBB4", "SETBP1", "CUX1")]
 
 #Placeholders 
 mut_list <- list()
@@ -1048,6 +1049,17 @@ for (i in seq_along(mut_list_full)){
   mut_list_full[[i]]=rbind(mut_list_full[[i]],blank)
   #mut_list_full[[i]]=mut_list_full[[i]][,ord]
 }
+
+# Optional: Create a new list entry called "Clonality" for gene mutation clonality annotation per PID
+subclonal_anno <- variant_combined_full %>% select(PID, Genes, clonality) %>% unique() %>% pivot_wider(id_cols = PID, names_from = Genes, values_from = clonality) %>% column_to_rownames("PID")
+
+subclonal_anno[is.na(subclonal_anno)] <- "none"
+subclonal_anno <- t(ifelse(subclonal_anno == "subclonal", 1, 0))
+
+subclonal_anno <- subclonal_anno[match(rownames(mut_list_full$missense_variant), rownames(subclonal_anno)),]
+subclonal_anno <- subclonal_anno[,match(colnames(mut_list_full$missense_variant), colnames(subclonal_anno))]
+
+mut_list_full$subclonal <- subclonal_anno
 ```
 
 
@@ -1055,30 +1067,31 @@ for (i in seq_along(mut_list_full)){
 ## Step 1: Define alteration function
 
 #Colors
-col <- colorRampPalette(brewer.pal(12,"Paired"))(length(unique(snv$mut_level)))
+col <- colorRampPalette(brewer.pal(7,"Paired"))(length(unique(snv$mut_level))+1)
 
 # alter_fun function 
 fun_alter = list(
   background = function(x, y, w, h) grid.rect(x, y, w, h, gp = gpar(fill = "#e7e7e7", col = "white")),
   missense_variant = function(x, y, w, h) grid.rect(x, y, w*0.8, h*0.4, gp = gpar(fill = col[1], col = NA)),
-  stop_gained_lost_start_lost = function(x, y, w, h) grid.rect(x, y, w*0.8, h*0.8, gp = gpar(fill = col[2], col = NA)),
+  stop_gained_lost_start_lost = function(x, y, w, h) grid.rect(x, y, w*0.8, h*0.4, gp = gpar(fill = col[2], col = NA)),
   frameshift_variant = function(x, y, w, h) grid.rect(x, y, w*0.8, h*0.4, gp = gpar(fill = col[3], col = NA)),
-  inframe_del_ins = function(x, y, w, h) grid.rect(x, y, w*0.8, h*0.8, gp = gpar(fill = col[4], col = NA)),
+  inframe_del_ins = function(x, y, w, h) grid.rect(x, y, w*0.4, h*0.8, gp = gpar(fill = col[4], col = NA)),
   splice_site = function(x, y, w, h) grid.rect(x, y, w*0.4, h*0.8, gp = gpar(fill = col[5], col = NA)),
-  protein_altering_variant = function(x, y, w, h) grid.rect(x, y, w*0.4, h*0.8, gp = gpar(fill = col[6], col = NA)),
-  multiple = function(x, y, w, h) grid.points(x, y, size = unit(0.4, "char"), pch = 16)
+  protein_altering_variant = function(x, y, w, h) grid.rect(x, y, w*0.4, h*0.8, gp = gpar(fill = col[7], col = NA)),
+  multiple = function(x, y, w, h) grid.rect(x, y, w*0.8, h*0.8, gp = gpar(fill = col[6], col = NA)),
+  subclonal = function(x, y, w, h) grid.points(x, y, size = unit(0.4, "char"), pch = 16)
 )
 
 names(col) <- c("missense_variant", "stop_gained_lost_start_lost", "frameshift_variant", 
-"inframe_del_ins", "splice_site", "protein_altering_variant")
+"inframe_del_ins", "splice_site", "protein_altering_variant", "multiple")
 test_alter_fun(fun_alter)
 
 ## Step 2: Column Annotation
 c_anno <- data.frame(PID = colnames(mut_list_full[1]$missense_variant))
 c_anno$cohort <- variant_combined_full$cohort[match(c_anno$PID, variant_combined_full$PID)]
 c_anno$PID_old <- variant_combined_full$PID_old[match(c_anno$PID, variant_combined_full$PID)]
-c_anno$critical <- c_anno$PID_old %in% PID_kick_out
-c_anno$mean_cov <- coverage_PID$mean_cov[match(c_anno$PID_old, coverage_PID$PID)]
+#c_anno$critical <- c_anno$PID_old %in% PID_kick_out
+#c_anno$mean_cov <- coverage_PID$mean_cov[match(c_anno$PID_old, coverage_PID$PID)]
 
 c_anno$gender <- variant_combined_full$gender[match(c_anno$PID, variant_combined_full$PID)]
 c_anno$age_bin <- variant_combined_full$age_bin[match(c_anno$PID, variant_combined_full$PID)]
@@ -1089,14 +1102,14 @@ c_anno$PDL1_score <- variant_combined_full$PDL1_score[match(c_anno$PID, variant_
 
 ## 2A: Sequencing related data
 ### Define colors
-cov_col <- colorRamp2(c(min(c_anno$mean_cov),median(c_anno$mean_cov),max(c_anno$mean_cov)), c("#E41A1C","white","#377EB8"))
+#cov_col <- colorRamp2(c(min(c_anno$mean_cov),median(c_anno$mean_cov),max(c_anno$mean_cov)), c("#E41A1C","white","#377EB8"))
 cohort_col <- setNames(brewer.pal(3, "Set1")[1:2],unique(c_anno$cohort))
 #critical_col <- setNames(c("white","purple"),unique(c_anno$critical))
 
 ca <- columnAnnotation(cohort = c_anno$cohort,
-                   mean_cov = c_anno$mean_cov,
+                   #mean_cov = c_anno$mean_cov,
                    #cov_status = as.character(c_anno$critical),
-                   col = list(cohort = cohort_col, mean_cov = cov_col, cov_status = critical_col),
+                   col = list(cohort = cohort_col),
                    border = TRUE
                    )
 
@@ -1142,33 +1155,35 @@ draw(ht_all)
 ## 5. Genomic subtype defintion 
 
 ```{r}
-# create oncoprint with heatmap of IHC scores 
+# Create heatmap combining information from mutations and IHC scores
+sum_matrix <- Reduce(`+`, mut_list_full)
+sum_matrix <- as.matrix(ifelse(sum_matrix >= 1, 1,0))
+sum_matrix[mut_list_full$subclonal == 1] <- 0.5
 
-driver_mat <- as.data.frame(t(sum_matrix)) %>% select(VHL, BAP1, PBRM1, SETD2, PIK3CA) %>% rownames_to_column("PID") 
+driver_mat <- as.data.frame(t(sum_matrix)) %>% select(VHL, BAP1, PBRM1, SETD2) %>% rownames_to_column("PID") 
 
 driver_mat$BAP1_IHC <- variant_combined_full$BAP1_IHC[match(driver_mat$PID, variant_combined_full$PID)]
 driver_mat$PBRM1_IHC <- variant_combined_full$PBRM1_IHC[match(driver_mat$PID, variant_combined_full$PID)]
 driver_mat$H3K36me_IHC <- variant_combined_full$H3K36me_IHC[match(driver_mat$PID, variant_combined_full$PID)]
 
-mut_mat <- driver_mat %>% column_to_rownames("PID") %>% select(VHL, BAP1, PBRM1, SETD2, PIK3CA) 
+# Create two heatmaps for mutations and IHC scores
+mut_mat <- driver_mat %>% column_to_rownames("PID") %>% select(VHL, BAP1, PBRM1, SETD2) 
 IHC_mat <- driver_mat %>% column_to_rownames("PID") %>% select(BAP1_IHC, PBRM1_IHC, H3K36me_IHC)
 
+## Define colors
+mut_col <- colorRamp2(c(0, 0.5, 1), c("lightgrey","#A6CEE3","#1F78B4"))
 
-Heatmap(t(mut_mat))%v%
+## Create heatmap
+ht_mut <- Heatmap(t(mut_mat), col = mut_col)%v%
   Heatmap(t(IHC_mat), col = viridis(100), na_col = "grey", cluster_columns = FALSE, cluster_rows = FALSE)
 
+ht_mut <- draw(ht_mut)
 
-driver_mat %>% column_to_rownames("PID") %>% mutate(sum = rowSums(.))
-  
-  
-  mutate(CD11c_CD68_GMM = ifelse(CD11c_GMM | CD68_GMM, 1, 0)) %>% # Macro = CD11c or CD68
-  mutate(CD11c_CD68_GMM = ifelse(MPO_GMM, 0, CD11c_CD68_GMM)) %>% # Neutro = MPO (independent of CD11c or CD68)
-  mutate(CD3_CD4_GMM = ifelse(CD3_GMM & CD4_GMM, 1, 0)) %>% # CD4 = CD3 AND CD4
-  select(-CD11c_GMM,-CD68_GMM, -CD3_GMM, -CD4_GMM) %>% 
-  mutate(sum = rowSums(.)) %>% filter(sum == 1) %>% 
-  rownames_to_column("cell_id") %>% 
-  pivot_longer(2:9, names_to = "GMM", values_to = "count") %>% 
-  filter(count == 1) %>% select(cell_id, GMM)
+# Extract column order for manual annotation of genomic subtypes
+col_order_ht <- column_order(ht_mut)
+driver_mat_ordered <- driver_mat[col_order_ht,]
+
+write_csv(driver_mat_ordered, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/genomic_subtype_anno.csv")
 
 
 # TO DO: Extract driver_mat and manually annotate genomic subtypes 
@@ -1182,7 +1197,7 @@ driver_mat %>% column_to_rownames("PID") %>% mutate(sum = rowSums(.))
 
 
 
-## 5. Cohort comparisons
+## 6. Cohort comparisons
 
 ### Cohort vs Progression 
 
@@ -1650,7 +1665,7 @@ ggplot(co_occurrence_df_sig, aes(x = reorder(pair, -p_out), y = p_out, fill = od
 ```
 
 
-## 6. Survival comparisons
+## 7. Survival comparisons
 
 ### Progression categories 
 
@@ -1721,7 +1736,10 @@ ggsurvplot(fit,
 ### Per mutation 
 
 ```{r}
-mut_matrix <- as.data.frame(t(ifelse(sum_matrix == 1, TRUE, FALSE))) %>% rownames_to_column("PID") 
+# Only clonal
+#mut_matrix <- as.data.frame(t(ifelse(sum_matrix == 1, TRUE, FALSE))) %>% rownames_to_column("PID") 
+# Clonal + subclonal
+mut_matrix <- as.data.frame(t(ifelse(sum_matrix > 0, TRUE, FALSE))) %>% rownames_to_column("PID") 
 
 mut_matrix$status_OS <- variant_combined_full$status_OS[match(mut_matrix$PID, variant_combined_full$PID)]
 mut_matrix$OS_months <- variant_combined_full$OS_months[match(mut_matrix$PID, variant_combined_full$PID)]
@@ -1754,7 +1772,7 @@ Heatmap(cur_surv_plot, border = FALSE, cluster_columns = FALSE, rect_gp = gpar(c
 library(survival)
 library(survminer)
 
-cur_surv <- mut_matrix %>% select(PID, OS_months, status_OS, TP53, SETD2) %>% unique()
+cur_surv <- mut_matrix %>% select(PID, OS_months, status_OS, TP53, MET) %>% unique()
 
 #Plot survival curves
 fit <- survfit(Surv(OS_months, status_OS) ~ TP53, data = cur_surv)
@@ -1771,7 +1789,7 @@ ggsurvplot(fit,
           conf.int = TRUE
 )
 
-fit <- survfit(Surv(OS_months, status_OS) ~ SETD2, data = cur_surv)
+fit <- survfit(Surv(OS_months, status_OS) ~ MET, data = cur_surv)
 print(fit)
 
 ggsurvplot(fit,
