@@ -987,7 +987,7 @@ mut_levels_for_matrix <- snv %>% pull(mut_level) %>% unique()
 Genes_list <- snv %>% pull(Genes) %>% unique()
 ## B: Genes of Interest e.g. IntOGen driver genes 
 Genes_list <- snv %>% filter(Genes %in% GOI) %>% pull(Genes) %>% unique()
-Genes_list <- Genes_list[!Genes_list %in% c("SF3B1", "STAG2", "PTEN", "ARHGAP35")]
+#Genes_list <- Genes_list[!Genes_list %in% c("SF3B1", "STAG2", "PTEN", "ARHGAP35")]
 
 #Placeholders 
 mut_list <- list()
@@ -1166,7 +1166,7 @@ sum_matrix <- as.matrix(ifelse(sum_matrix >= 1, 1,0))
 sum_matrix[mut_list_full$subclonal == 1] <- 0.5
 
 # Select mutations of interest
-driver_mat <- as.data.frame(t(sum_matrix)) %>% select(VHL, BAP1, PBRM1, SETD2) %>% rownames_to_column("PID") 
+driver_mat <- as.data.frame(t(sum_matrix)) %>% select(VHL, BAP1, PBRM1, SETD2, PTEN, PIK3CA) %>% rownames_to_column("PID") 
 
 # Add IHC scores
 driver_mat$BAP1_IHC <- variant_combined_full$BAP1_IHC[match(driver_mat$PID, variant_combined_full$PID)]
@@ -1174,7 +1174,7 @@ driver_mat$PBRM1_IHC <- variant_combined_full$PBRM1_IHC[match(driver_mat$PID, va
 driver_mat$H3K36me_IHC <- variant_combined_full$H3K36me_IHC[match(driver_mat$PID, variant_combined_full$PID)]
 
 # Create two heatmaps for mutations and IHC scores
-mut_mat <- driver_mat %>% column_to_rownames("PID") %>% select(VHL, BAP1, PBRM1, SETD2) 
+mut_mat <- driver_mat %>% column_to_rownames("PID") %>% select(VHL, BAP1, PBRM1, SETD2, PTEN, PIK3CA) 
 IHC_mat <- driver_mat %>% column_to_rownames("PID") %>% select(BAP1_IHC, PBRM1_IHC, H3K36me_IHC)
 
 ## Define colors
@@ -1190,7 +1190,7 @@ ht_mut <- draw(ht_mut)
 col_order_ht <- column_order(ht_mut)
 driver_mat_ordered <- driver_mat[col_order_ht,]
 
-write_csv(driver_mat_ordered, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/genomic_subtype_anno.csv")
+#write_csv(driver_mat_ordered, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/genomic_subtype_anno.csv")
 ```
 
 ### Visualization
@@ -1198,12 +1198,18 @@ write_csv(driver_mat_ordered, "/mnt/central_nas/rcc_volume/RCC/genome/data_analy
 ```{r}
 # Depends on previous code chunk 
 # Read in after manual annotation 
-driver_mat_anno <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/genomic_subtype_anno.csv")
+driver_mat_anno_out <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/genomic_subtype_anno_new.csv")
+
+# Annotate original dataframe
+driver_mat_anno <- driver_mat
+driver_mat_anno$genomic_subtype <- driver_mat_anno_out$genomic_subtype[match(driver_mat_anno$PID, driver_mat_anno_out$PID)]
 
 # define evolutionary subtypes ("like")
 driver_mat_anno <- driver_mat_anno %>% mutate(evolution_type = ifelse(genomic_subtype %in% c("multiple_drivers", "BAP1_driven", "VHL_wildtype"), "punctuated_like", ifelse(genomic_subtype == "PBRM1_driven", "branched_like", "linear_like")))
 
 driver_mat_anno$evolution_type_comb <- ifelse(driver_mat_anno$evolution_type == "punctuated_like", "punctuated_like", "branched_linear_like")
+
+driver_mat_anno$evolution_type_comb_1 <- ifelse(driver_mat_anno$genomic_subtype %in% c("multiple_drivers", "BAP1_driven"), "punctuated_like", ifelse(driver_mat_anno$genomic_subtype == "PBRM1_driven", "branched_like", "VHL_like"))
 
 # match
 driver_mat_anno <- driver_mat_anno[match(rownames(mut_mat), driver_mat_anno$PID),]
@@ -1218,6 +1224,8 @@ ca <- columnAnnotation(genomic_subtype = driver_mat_anno$genomic_subtype,
                        evolution_type = driver_mat_anno$evolution_type, 
                        col = list(genomic_subtype = subtype_col, evolution_type = evo_col))
 
+# Select Genes for display
+mut_mat <- mut_mat %>% select(-PIK3CA)
 
 # Create heatmap 
 ht_mut_anno <- Heatmap(t(mut_mat), name = "Mutation status", 
@@ -1278,6 +1286,20 @@ ggsurvplot(fit,
 )
 
 fit <- survfit(Surv(OS_months, status_OS) ~ evolution_type_comb, data = driver_mat_anno)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = "Set1",
+          conf.int = TRUE
+)
+
+fit <- survfit(Surv(OS_months, status_OS) ~ evolution_type_comb_1, data = driver_mat_anno)
 print(fit)
 
 ggsurvplot(fit,
