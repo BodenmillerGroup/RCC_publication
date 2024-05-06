@@ -990,6 +990,7 @@ variant_check <- variant_combined_full %>% filter(PID_old %in% PID_kick_out, Gen
 # ccRCC mutational driver genes 
 GOI_IntOGen <- read_tsv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/data/IntOGen_DriverGenes_CCRCC.tsv")
 GOI <- GOI_IntOGen$Symbol #n = 44
+GOI <- c(GOI, "ELOC") # Add ELOC (TCEB1)
 ```
 
 ### Oncoprint 
@@ -1421,7 +1422,7 @@ ggplot(fisher_full, aes(x=reorder(gene, -p_out), y = category,col = odds_ratio, 
   scale_size(range = c(2,10))+
   new_scale_colour() +
   geom_point(data = fisher_full,shape = 1,aes(size = -log10(p_value), col = result), stroke =1.5)+
-  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   xlab("Genomic subtype")
 
@@ -1439,7 +1440,7 @@ ggplot(fisher_full, aes(x=reorder(gene, -p_out), y = category,col = odds_ratio, 
   scale_size(range = c(2,10))+
   new_scale_colour() +
   geom_point(data = fisher_full,shape = 1,aes(size = -log10(p_adj), col = result), stroke =1.5)+
-  scale_color_manual(values = c("UP" = "#E41A1C","UP_trend" = "#f5a3a3", "NOTSIG" = "snow2", "DOWN_trend" = "#a4c7e4","DOWN" = "#377EB8"), name = "Direction")+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   xlab("Genomic subtype")
 ```
@@ -1522,7 +1523,7 @@ ggplot(fisher_full, aes(x=reorder(gene, -p_out), y = category,col = odds_ratio, 
   scale_size(range = c(2,10))+
   new_scale_colour() +
   geom_point(data = fisher_full,shape = 1,aes(size = -log10(p_value), col = result), stroke =1.5)+
-  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   xlab("Genomic subtype")
 
@@ -1540,18 +1541,19 @@ ggplot(fisher_full, aes(x=reorder(gene, -p_out), y = category,col = odds_ratio, 
   scale_size(range = c(2,10))+
   new_scale_colour() +
   geom_point(data = fisher_full,shape = 1,aes(size = -log10(p_adj), col = result), stroke =1.5)+
-  scale_color_manual(values = c("UP" = "#E41A1C","UP_trend" = "#f5a3a3", "NOTSIG" = "snow2", "DOWN_trend" = "#a4c7e4","DOWN" = "#377EB8"), name = "Direction")+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   xlab("Genomic subtype")
+
 ```
 
 ### IHC scores and mutations 
 
 ```{r}
-IHC_mut <- driver_mat_anno[,1:8]
+IHC_mut <- driver_mat_anno[,1:9]
 
 # Give subclonal mutations a score of 1
-IHC_mut[,2:5][IHC_mut[,2:5] == 0.5] <- 1
+IHC_mut[,2:6][IHC_mut[,2:6] == 0.5] <- 1
 
 # Give expression a score of 1 if > 0
 #IHC_mut[,6:8][IHC_mut[,6:8] > 0] <- 1
@@ -1961,7 +1963,7 @@ ggplot(fisher_full, aes(x=reorder(gene, -p_out), y = category,col = odds_ratio, 
   scale_size(range = c(2,10))+
   new_scale_colour() +
   geom_point(data = fisher_full,shape = 1,aes(size = -log10(p_value), col = result), stroke =1.5)+
-  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))
 
 # FDR at 0.1 with trends
@@ -1978,7 +1980,7 @@ ggplot(fisher_full, aes(x=reorder(gene, -p_out), y = category,col = odds_ratio, 
   scale_size(range = c(2,10))+
   new_scale_colour() +
   geom_point(data = fisher_full,shape = 1,aes(size = -log10(p_adj), col = result), stroke =1.5)+
-  scale_color_manual(values = c("UP" = "#E41A1C","UP_trend" = "#f5a3a3", "NOTSIG" = "snow2", "DOWN_trend" = "#a4c7e4","DOWN" = "#377EB8"), name = "Direction")+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   xlab("Gene mutation")
 ```
@@ -1990,7 +1992,7 @@ ggplot(fisher_full, aes(x=reorder(gene, -p_out), y = category,col = odds_ratio, 
 sum_matrix <- Reduce(`+`, mut_list_full)
 sum_matrix <- as.matrix(ifelse(sum_matrix >= 1, 1,0))
 
-#sum_matrix <- sum_matrix[rownames(sum_matrix) %in% c("VHL","SETD2","BAP1","PBRM1","PIK3CA","MTOR"),]
+#sum_matrix <- sum_matrix[rownames(sum_matrix) %in% c("VHL","SETD2","BAP1","PBRM1","PTEN"),]
 
 # P-value and odds ratio estimate 
 co_occurrence_results <- list()
@@ -2153,14 +2155,21 @@ cur_surv_plot <- cur_surv_out %>% mutate(sign = p_adj < 0.1, direction = ifelse(
 
 cur_surv_plot <- cur_surv_plot %>% pivot_wider(id_cols = type, names_from = group, values_from = p_out) %>% column_to_rownames("type")
 
-Heatmap(cur_surv_plot, border = FALSE, cluster_columns = FALSE, rect_gp = gpar(col = "black", lwd = 1), name = "log10(p)")
+# Define color 
+colours <- c("#4575B4", "white", "#D73027")
+breaks <- c(-2, 2, 0.5)
+breaks <- seq(from = breaks[1], to = breaks[2], by = breaks[3])
+pal <- grDevices::colorRampPalette(colours)(length(breaks))
+col <- colorRamp2(breaks, pal)
+
+Heatmap(cur_surv_plot, col = col, border = FALSE, cluster_columns = FALSE, rect_gp = gpar(col = "black", lwd = 1), name = "log10(p)")
 ```
 
 ```{r}
 library(survival)
 library(survminer)
 
-cur_surv <- mut_matrix %>% select(PID, OS_months, status_OS, SETD2, TP53, MET) %>% unique()
+cur_surv <- mut_matrix %>% select(PID, OS_months, status_OS, TP53, MET, SETD2) %>% unique()
 
 #Plot survival curves
 fit <- survfit(Surv(OS_months, status_OS) ~ TP53, data = cur_surv)

@@ -1,0 +1,440 @@
+---
+title: "02_Variant_Myeloid_compare"
+author: "Lasse Meyer"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Association of Genomic and IMC (here myeloid) data 
+
+## Software requirments 
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(RColorBrewer)
+library(foreach)
+library(circlize)
+library(ComplexHeatmap)
+library(ggpubr)
+```
+
+# Read and match data 
+
+```{r}
+# Read in genomics data 
+## 1A: Mutations 
+mut_anno <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_full_withmeta.csv")
+
+## 1B: Genomic subtypes 
+genomic_sub <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/genomic_subtype_anno_final.csv")
+```
+
+```{r}
+# Read and subset sce object 
+sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_07.rds")
+
+# Subset for PID for which we have genomics data
+sce <- sce[,sce$PID %in% genomic_sub$PID]
+```
+
+```{r}
+# Add relevant metadata to sce 
+genom_add <- colnames(genomic_sub)[colnames(genomic_sub) %in% c("genomic_subtype", "evolution_type", "evolution_type_comb")]
+
+genomic_sub <- as.data.frame(genomic_sub)
+
+for (entry in genom_add) {
+  colData(sce)[,entry] <- genomic_sub[,entry][match(colData(sce)[,"PID"],genomic_sub[,"PID"])]
+}
+```
+
+```{r}
+# Create binary categories 
+## Genomic subtypes
+sce$VHL_wildtype <- ifelse(sce$genomic_subtype == "VHL_wildtype", "1", "0")
+sce$PBRM1_driven <- ifelse(sce$genomic_subtype == "PBRM1_driven", "1", "0")
+sce$BAP1_driven <- ifelse(sce$genomic_subtype == "BAP1_driven", "1", "0")
+sce$VHL_monodriver <- ifelse(sce$genomic_subtype == "VHL_monodriver", "1", "0")
+sce$multiple_drivers <- ifelse(sce$genomic_subtype == "multiple_drivers", "1", "0")
+
+## Evolutonary subtypes
+sce$punctuated_like <- ifelse(sce$evolution_type == "punctuated_like", "1", "0")
+sce$branched_like <- ifelse(sce$evolution_type == "branched_like", "1", "0")
+sce$linear_like <- ifelse(sce$evolution_type == "linear_like", "1", "0")
+```
+
+## Immune subtypes
+
+TO DO 
+
+## Myeloid subtypes 
+
+```{r}
+sce_MY <- sce[,str_detect(sce$celltype_combined, "MY")]
+```
+
+### Celltype broad 
+
+```{r}
+### Differential abundance analysis based on edgeR
+library(edgeR)
+
+DA <- lapply(c("VHL_wildtype", "PBRM1_driven", "VHL_monodriver", "BAP1_driven", 
+"multiple_drivers"), function(x){
+
+abundances <- table(sce_MY$celltype_combined, sce_MY$PID)
+abundances <- unclass(abundances) 
+
+#relevant patient metadata (Re-level for baseline)
+meta <- colData(sce_MY)[match(colnames(abundances), sce_MY$PID),]
+
+meta[,x] <- relevel(x=factor(meta[,x]), ref = "0")
+
+#filter
+meta <- meta[!is.na(meta[,x]),]
+abundances <- abundances[,colnames(abundances) %in% meta$PID]
+
+#create DGEList - based on edgeR package
+y.ab <- DGEList(abundances, samples=meta, group = meta[,x])
+
+#Design matrix
+design <- model.matrix(~group, data = y.ab$samples)
+
+#Visualize
+# logCPM of abundances per cluster
+cur_mat <- edgeR::cpm(abundances,prior.count = 1,log = TRUE)
+
+# Estimate NB and QL dispersion 
+y.ab <- estimateDisp(y.ab, design, trend="none")
+
+fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
+
+# Test for differential abundance of clusters between tumor stages
+res <- glmQLFTest(fit.ab, coef=ncol(design))
+
+DA <- res$table
+
+DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
+
+DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.1, result = ifelse(DA$logFC > 0 & DA$FDR < 0.1, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.1, "DOWN", "NOTSIG"))) %>% 
+  arrange(desc(logFC))
+
+DA$cluster <- factor(DA$cluster, levels = DA$cluster)
+DA$category <- x
+
+return(DA)
+})
+
+DA_out <- do.call(rbind, DA)
+```
+
+```{r}
+# FDR at 0.1 with trends
+DA_out$category <- factor(DA_out$category,levels = c("VHL_wildtype", "PBRM1_driven", "VHL_monodriver", "BAP1_driven", 
+"multiple_drivers")) 
+
+DA_out$result <- ifelse(DA_out$logFC > 0 & DA_out$FDR < 0.1, "UP",
+                             ifelse(DA_out$logFC > 0 & DA_out$PValue < 0.1, "UP_trend", 
+                                    ifelse(DA_out$logFC < 0 & DA_out$FDR < 0.1, "DOWN", 
+                                           ifelse(DA_out$logFC < 0 & DA_out$PValue < 0.1, "DOWN_trend","NOTSIG"))))
+
+
+ggplot(DA_out, aes(x=reorder(cluster, -logFC), y = category,col = logFC, size= -log10(FDR)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8")+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = DA_out,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+
+
+```{r}
+### Differential abundance analysis based on edgeR - Compare to VHL wildtype
+library(edgeR)
+
+DA <- lapply(c("PBRM1_driven", "VHL_monodriver", "BAP1_driven", 
+"multiple_drivers"), function(x){
+
+sce_MY <- sce_MY[, sce_MY$VHL_wildtype == 1 | colData(sce_MY)[,x] == 1]
+
+abundances <- table(sce_MY$celltype_combined, sce_MY$PID)
+abundances <- unclass(abundances) 
+
+#relevant patient metadata (Re-level for baseline)
+meta <- colData(sce_MY)[match(colnames(abundances), sce_MY$PID),]
+
+meta[,x] <- relevel(x=factor(meta[,x]), ref = "0")
+
+#filter
+meta <- meta[!is.na(meta[,x]),]
+abundances <- abundances[,colnames(abundances) %in% meta$PID]
+
+#create DGEList - based on edgeR package
+y.ab <- DGEList(abundances, samples=meta, group = meta[,x])
+
+#Design matrix
+design <- model.matrix(~group, data = y.ab$samples)
+
+#Visualize
+# logCPM of abundances per cluster
+cur_mat <- edgeR::cpm(abundances,prior.count = 1,log = TRUE)
+
+# Estimate NB and QL dispersion 
+y.ab <- estimateDisp(y.ab, design, trend="none")
+
+fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
+
+# Test for differential abundance of clusters between tumor stages
+res <- glmQLFTest(fit.ab, coef=ncol(design))
+
+DA <- res$table
+
+DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
+
+DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.1, result = ifelse(DA$logFC > 0 & DA$FDR < 0.1, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.1, "DOWN", "NOTSIG"))) %>% 
+  arrange(desc(logFC))
+
+DA$cluster <- factor(DA$cluster, levels = DA$cluster)
+DA$category <- x
+
+return(DA)
+})
+
+DA_out <- do.call(rbind, DA)
+```
+
+```{r}
+# FDR at 0.1 with trends
+DA_out$category <- factor(DA_out$category,levels = c("VHL_wildtype", "PBRM1_driven", "VHL_monodriver", "BAP1_driven", 
+"multiple_drivers")) 
+
+DA_out$result <- ifelse(DA_out$logFC > 0 & DA_out$FDR < 0.1, "UP",
+                             ifelse(DA_out$logFC > 0 & DA_out$PValue < 0.1, "UP_trend", 
+                                    ifelse(DA_out$logFC < 0 & DA_out$FDR < 0.1, "DOWN", 
+                                           ifelse(DA_out$logFC < 0 & DA_out$PValue < 0.1, "DOWN_trend","NOTSIG"))))
+
+
+ggplot(DA_out, aes(x=reorder(cluster, -logFC), y = category,col = logFC, size= -log10(FDR)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8")+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = DA_out,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "black","UP_trend" = "#9f1214", "NOTSIG" = "snow2", "DOWN_trend" = "#25567d","DOWN" = "black"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+```{r}
+### Differential abundance analysis based on edgeR
+library(edgeR)
+
+DA <- lapply(c("VHL_wildtype", "PBRM1_driven", "VHL_monodriver", "BAP1_driven", 
+"multiple_drivers"), function(x){
+
+abundances <- table(sce$celltype_combined, sce$PID)
+abundances <- unclass(abundances) 
+
+#relevant patient metadata (Re-level for baseline)
+meta <- colData(sce)[match(colnames(abundances), sce$PID),]
+
+meta[,x] <- relevel(x=factor(meta[,x]), ref = "0")
+
+#filter
+meta <- meta[!is.na(meta[,x]),]
+abundances <- abundances[,colnames(abundances) %in% meta$PID]
+
+#create DGEList - based on edgeR package
+y.ab <- DGEList(abundances, samples=meta, group = meta[,x])
+
+#Design matrix
+design <- model.matrix(~group, data = y.ab$samples)
+
+#Visualize
+# logCPM of abundances per cluster
+cur_mat <- edgeR::cpm(abundances,prior.count = 1,log = TRUE)
+
+# Estimate NB and QL dispersion 
+y.ab <- estimateDisp(y.ab, design, trend="none")
+
+fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
+
+# Test for differential abundance of clusters between tumor stages
+res <- glmQLFTest(fit.ab, coef=ncol(design))
+
+DA <- res$table
+
+DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
+
+DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.1, result = ifelse(DA$logFC > 0 & DA$FDR < 0.1, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.1, "DOWN", "NOTSIG"))) %>% 
+  arrange(desc(logFC))
+
+DA$cluster <- factor(DA$cluster, levels = DA$cluster)
+DA$category <- x
+
+return(DA)
+})
+
+DA_out <- do.call(rbind, DA)
+```
+
+```{r}
+# FDR at 0.1 with trends
+DA_out$category <- factor(DA_out$category,levels = c("VHL_wildtype", "PBRM1_driven", "VHL_monodriver", "BAP1_driven", 
+"multiple_drivers")) 
+
+DA_out$result <- ifelse(DA_out$logFC > 0 & DA_out$FDR < 0.1, "UP",
+                             ifelse(DA_out$logFC > 0 & DA_out$PValue < 0.1, "UP_trend", 
+                                    ifelse(DA_out$logFC < 0 & DA_out$FDR < 0.1, "DOWN", 
+                                           ifelse(DA_out$logFC < 0 & DA_out$PValue < 0.1, "DOWN_trend","NOTSIG"))))
+
+
+ggplot(DA_out, aes(x=reorder(cluster, -logFC), y = category,col = logFC, size= -log10(FDR)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8")+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = DA_out,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "black","UP_trend" = "#9f1214", "NOTSIG" = "snow2", "DOWN_trend" = "#25567d","DOWN" = "black"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+### Celltype fine
+
+```{r}
+# Optional: Remove low abundant cell types
+sce_MY <- sce_MY[,!sce_MY$celltype_combined_fine %in% c("MY_CD11b_CD11c_CD206", "MY_CD11b_MMP9", "MY_CD11b", "MY_CD68_Arginase_CCR2")]
+```
+
+```{r}
+### Differential abundance analysis based on edgeR
+library(edgeR)
+
+DA <- lapply(c("VHL_wildtype", "PBRM1_driven", "VHL_monodriver", "BAP1_driven", 
+"multiple_drivers"), function(x){
+
+abundances <- table(sce_MY$celltype_combined_fine, sce_MY$PID)
+abundances <- unclass(abundances) 
+
+#relevant patient metadata (Re-level for baseline)
+meta <- colData(sce_MY)[match(colnames(abundances), sce_MY$PID),]
+
+meta[,x] <- relevel(x=factor(meta[,x]), ref = "0")
+
+#filter
+meta <- meta[!is.na(meta[,x]),]
+abundances <- abundances[,colnames(abundances) %in% meta$PID]
+
+#create DGEList - based on edgeR package
+y.ab <- DGEList(abundances, samples=meta, group = meta[,x])
+
+#Design matrix
+design <- model.matrix(~group, data = y.ab$samples)
+
+#Visualize
+# logCPM of abundances per cluster
+cur_mat <- edgeR::cpm(abundances,prior.count = 1,log = TRUE)
+
+# Estimate NB and QL dispersion 
+y.ab <- estimateDisp(y.ab, design, trend="none")
+
+fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
+
+# Test for differential abundance of clusters between tumor stages
+res <- glmQLFTest(fit.ab, coef=ncol(design))
+
+DA <- res$table
+
+DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
+
+DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.1, result = ifelse(DA$logFC > 0 & DA$FDR < 0.1, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.1, "DOWN", "NOTSIG"))) %>% 
+  arrange(desc(logFC))
+
+DA$cluster <- factor(DA$cluster, levels = DA$cluster)
+DA$category <- x
+
+return(DA)
+})
+
+DA_out <- do.call(rbind, DA)
+```
+
+
+```{r}
+# FDR at 0.1 with trends
+DA_out$category <- factor(DA_out$category,levels = c("VHL_wildtype", "PBRM1_driven", "VHL_monodriver", "BAP1_driven", 
+"multiple_drivers")) 
+
+DA_out$result <- ifelse(DA_out$logFC > 0 & DA_out$FDR < 0.1, "UP",
+                             ifelse(DA_out$logFC > 0 & DA_out$PValue < 0.05, "UP_trend", 
+                                    ifelse(DA_out$logFC < 0 & DA_out$FDR < 0.1, "DOWN", 
+                                           ifelse(DA_out$logFC < 0 & DA_out$PValue < 0.05, "DOWN_trend","NOTSIG"))))
+
+
+ggplot(DA_out, aes(x=reorder(cluster, -logFC), y = category,col = logFC, size= -log10(FDR)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8")+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = DA_out,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+
+## Logistic regression 
+
+```{r}
+PID_celltype_combined <- colData(sce_MY) %>% as.data.frame() %>% select(celltype_combined,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_celltype_combined <- PID_celltype_combined %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq))
+PID_metagroups <- PID_celltype_combined %>% pivot_wider(id_cols = "PID",names_from = "celltype_combined",values_from = "fra") %>% column_to_rownames("PID")
+
+
+
+## Add subtypes 
+PID_metagroups$BAP1_driven <- sce_MY$BAP1_driven[match(rownames(PID_metagroups), sce_MY$PID)]
+PID_metagroups$BAP1_driven <- as.factor(PID_metagroups$BAP1_driven)
+PID_metagroups$BAP1_driven <- relevel(x=PID_metagroups$BAP1_driven, ref = "0")
+
+PID_metagroups$PBRM1_driven <- sce_MY$PBRM1_driven[match(rownames(PID_metagroups), sce_MY$PID)]
+PID_metagroups$PBRM1_driven <- as.factor(PID_metagroups$PBRM1_driven)
+PID_metagroups$PBRM1_driven <- relevel(x=PID_metagroups$PBRM1_driven, ref = "0")
+
+PID_metagroups$multiple_drivers <- sce_MY$multiple_drivers[match(rownames(PID_metagroups), sce_MY$PID)]
+PID_metagroups$multiple_drivers <- as.factor(PID_metagroups$multiple_drivers)
+PID_metagroups$multiple_drivers <- relevel(x=PID_metagroups$multiple_drivers, ref = "0")
+```
+
+```{r}
+#logit transform 
+PID_metagroups <- as.data.frame.matrix(apply(PID_metagroups, 2, function(x){log(x / (1 - x))}))
+
+PID_metagroups$MY_Ag_M[PID_metagroups$MY_Ag_M == -Inf] <- min(PID_metagroups$MY_Ag_M[PID_metagroups$MY_Ag_M != -Inf])
+
+PID_metagroups <- as.data.frame.matrix(apply(PID_metagroups, 2, function(x){
+  x[x == -Inf] <- min(x[x != -Inf])
+  return(x)
+  }))
+  
+```
+
+```{r}
+# Logistic regression
+glm_out <- glm(multiple_drivers ~ MY_C_M + MY_M2_like + MY_Neutro_MDSC + MY_Ag_M + MY_M1_like, data = PID_metagroups, family = binomial)
+summary(glm_out)
+
+# Linear regression 
+lm_out <- lm(multiple_drivers ~ MY_C_M + MY_M2_like + MY_Neutro_MDSC + MY_Ag_M + MY_M1_like, data = PID_metagroups)
+summary(lm_out)
+```
