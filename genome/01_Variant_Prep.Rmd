@@ -436,12 +436,17 @@ write_csv(variant_combined, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysi
 #### Match identifiers
 
 ```{r}
-ID_match <- read_excel("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/data/ccRCC_ids.xlsx", sheet = 1)
-ID_match_2 <- read_excel("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/data/ccRCC_ids.xlsx", sheet = 2)
+ID_match <- read_excel("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/data/ccRCC_ids_LM.xlsx", sheet = 1)
+ID_match_2 <- read_excel("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/data/ccRCC_ids_LM.xlsx", sheet = 2)
 
 ID_match$Bnum_2 <- ID_match_2$Bnum[match(ID_match$expID, ID_match_2$expID)]
+ID_match$Bnum_2[15:16] <- ID_match$BnumGnum[15:16]
 
 ID_match$PID <- c(str_split(ID_match$BnumGnum[1:16], "/", simplify = TRUE)[,2], ID_match$Bnum_2[17:nrow(ID_match)])
+ID_match$PID <- ifelse(ID_match$PID == "", NA, ID_match$PID)
+
+ID_match_3 <- read_excel("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/data/cohort1_PID_noBnumber_withBnr_LM.xlsx", sheet = 1)
+ID_match$PID <- ifelse(is.na(ID_match_3$PID_LM[match(ID_match$Bnum_2, ID_match_3$GNrCode)]), ID_match$PID,ID_match_3$PID_LM[match(ID_match$Bnum_2, ID_match_3$GNrCode)])
 ```
 
 
@@ -455,7 +460,6 @@ patient_meta <- patient_meta %>% filter(type == "primary")
 ```{r}
 # Match identifiers 
 ID_match$PID_in_IMC <- ID_match$PID %in% patient_meta$PID
-ID_match$PID <- ifelse(ID_match$PID == "", NA, ID_match$PID)
 
 variant_combined$PID_old <- variant_combined$PID
 variant_combined$PID <- ID_match$PID[match(variant_combined$PID,ID_match$Label)]
@@ -465,7 +469,7 @@ variant_combined$PID <- ID_match$PID[match(variant_combined$PID,ID_match$Label)]
 # Detect patients without a match and extract Gnumbers
 ID_match_no_match <- ID_match %>% filter(PID_in_IMC == FALSE) %>% select(Label, BnumGnum, expID, PID_in_IMC)
 
-write_csv(ID_match_no_match, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/cohort1_PID_noBnumber.csv")
+write_csv(ID_match_no_match, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/cohort1_PID_noBnumber_new.csv")
 ```
 
 ```{r}
@@ -528,8 +532,8 @@ variant_combined_filtered$variant_consequence_combined[variant_combined_filtered
 ```
 
 ```{r}
-#write_csv(variant_combined_filtered, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_filtered_cohort1.csv")
-variant_combined_filtered <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_filtered_cohort1.csv")
+write_csv(variant_combined_filtered, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_filtered_cohort1.csv")
+#variant_combined_filtered <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_filtered_cohort1.csv")
 ```
 
 #### Oncoprint
@@ -729,6 +733,22 @@ ggplot(clonality_plot, aes(x = clonality, y = fra))+
   guides(color = "none")+
   theme_classic()+
   ylab("Clonal mutation percentage (GOI)")
+```
+
+```{r}
+# Intra-tumor genomic heterogeneity index (ITH) for Driver Mutations
+ITH_index <- variant_consensus %>% filter(Genes %in% GOI) %>% group_by(PID, clonality) %>% dplyr::count() %>% ungroup() %>% pivot_wider(names_from = "clonality", values_from = "n") %>% replace_na(list(clonal = 0, subclonal = 0)) %>% mutate(ITH_index = subclonal/clonal)
+
+# Replace Inf with max(ITH_index)
+ITH_index$ITH_index[ITH_index$ITH_index == Inf] <- max(ITH_index %>% filter(ITH_index != Inf) %>% pull(ITH_index))
+ITH_index$group <- "ITH"
+
+ggplot(ITH_index, aes(x = group, y = ITH_index))+
+  geom_jitter(size = 2, position=position_jitter(w=0.1,h=0.1), aes(color = PID))+
+  geom_boxplot(outlier.color = NA)+
+  guides(color = "none")+
+  theme_classic()+
+  ylab("ITH index (GOI)")
 ```
 
 ```{r}
@@ -942,18 +962,23 @@ variant_combined_full$PDL1_score <- sce$PDL1_score[match(variant_combined_full$P
 ```
 
 ```{r}
-write_csv(variant_combined_full, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_full_withmeta")
+# Add ITH index from cohort 1 
+variant_combined_full$ITH_index <- ITH_index$ITH_index[match(variant_combined_full$PID, ITH_index$PID)]
 ```
 
 ```{r}
 # Double-check ccRCC cases
 check_subtype <- variant_combined_full %>% select(PID, cohort, subtype_combined) %>% unique() %>% group_by(subtype_combined) %>% dplyr::count()
 
-# One chrRCC case?? 
+# Two chrRCC cases?? 
 check_subtype_out <- variant_combined_full %>% select(PID, subtype_combined) %>% unique() %>% filter(subtype_combined != "ccRCC") 
 
 ## Filter for ccRCC cases only 
 variant_combined_full <- variant_combined_full %>% filter(subtype_combined == "ccRCC")
+```
+
+```{r}
+write_csv(variant_combined_full, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_full_withmeta.csv")
 ```
 
 ```{r}
@@ -1166,7 +1191,7 @@ sum_matrix <- as.matrix(ifelse(sum_matrix >= 1, 1,0))
 sum_matrix[mut_list_full$subclonal == 1] <- 0.5
 
 # Select mutations of interest
-driver_mat <- as.data.frame(t(sum_matrix)) %>% select(VHL, BAP1, PBRM1, SETD2, PTEN, PIK3CA) %>% rownames_to_column("PID") 
+driver_mat <- as.data.frame(t(sum_matrix)) %>% select(VHL, BAP1, PBRM1, SETD2, PTEN) %>% rownames_to_column("PID") 
 
 # Add IHC scores
 driver_mat$BAP1_IHC <- variant_combined_full$BAP1_IHC[match(driver_mat$PID, variant_combined_full$PID)]
@@ -1174,7 +1199,7 @@ driver_mat$PBRM1_IHC <- variant_combined_full$PBRM1_IHC[match(driver_mat$PID, va
 driver_mat$H3K36me_IHC <- variant_combined_full$H3K36me_IHC[match(driver_mat$PID, variant_combined_full$PID)]
 
 # Create two heatmaps for mutations and IHC scores
-mut_mat <- driver_mat %>% column_to_rownames("PID") %>% select(VHL, BAP1, PBRM1, SETD2, PTEN, PIK3CA) 
+mut_mat <- driver_mat %>% column_to_rownames("PID") %>% select(VHL, BAP1, PBRM1, SETD2, PTEN) 
 IHC_mat <- driver_mat %>% column_to_rownames("PID") %>% select(BAP1_IHC, PBRM1_IHC, H3K36me_IHC)
 
 ## Define colors
@@ -1182,7 +1207,8 @@ mut_col <- colorRamp2(c(0, 0.5, 1), c("lightgrey","#A6CEE3","#1F78B4"))
 
 ## Create heatmap
 ht_mut <- Heatmap(t(mut_mat), col = mut_col)%v%
-  Heatmap(t(IHC_mat), col = viridis(100), na_col = "grey", cluster_columns = FALSE, cluster_rows = FALSE)
+  Heatmap(t(IHC_mat), col = viridis(100), na_col = "grey", cluster_columns = FALSE, cluster_rows = FALSE)%v%
+  columnAnnotation(ITH = driver_mat$ITH_index)
 
 ht_mut <- draw(ht_mut)
 
@@ -1190,7 +1216,7 @@ ht_mut <- draw(ht_mut)
 col_order_ht <- column_order(ht_mut)
 driver_mat_ordered <- driver_mat[col_order_ht,]
 
-#write_csv(driver_mat_ordered, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/genomic_subtype_anno.csv")
+#write_csv(driver_mat_anno, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/genomic_subtype_anno_new.csv")
 ```
 
 ### Visualization
@@ -1198,7 +1224,7 @@ driver_mat_ordered <- driver_mat[col_order_ht,]
 ```{r}
 # Depends on previous code chunk 
 # Read in after manual annotation 
-driver_mat_anno_out <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/genomic_subtype_anno_new.csv")
+driver_mat_anno_out <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/genomic_subtype_anno.csv")
 
 # Annotate original dataframe
 driver_mat_anno <- driver_mat
@@ -1225,7 +1251,7 @@ ca <- columnAnnotation(genomic_subtype = driver_mat_anno$genomic_subtype,
                        col = list(genomic_subtype = subtype_col, evolution_type = evo_col))
 
 # Select Genes for display
-mut_mat <- mut_mat %>% select(-PIK3CA)
+#mut_mat <- mut_mat %>% select(-PIK3CA)
 
 # Create heatmap 
 ht_mut_anno <- Heatmap(t(mut_mat), name = "Mutation status", 
