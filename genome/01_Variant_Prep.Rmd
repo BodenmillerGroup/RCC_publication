@@ -979,6 +979,7 @@ variant_combined_full <- variant_combined_full %>% filter(subtype_combined == "c
 
 ```{r}
 write_csv(variant_combined_full, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_full_withmeta.csv")
+#variant_combined_full <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_full_withmeta.csv")
 ```
 
 ```{r}
@@ -1182,6 +1183,18 @@ draw(ht_all)
 ```
 
 ## 5. Genomic subtype defintion 
+
+```{r}
+# Create heatmap combining information from mutations and IHC scores
+sum_matrix <- Reduce(`+`, mut_list_full)
+sum_matrix <- as.matrix(ifelse(sum_matrix >= 1, 1,0))
+sum_matrix[mut_list_full$subclonal == 1] <- 0.5
+
+save_sum <- as.data.frame(t(sum_matrix)) %>% rownames_to_column("PID")
+
+# Save sum_matrix 
+write_csv(save_sum, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/mutation_per_PID_binary.csv")
+```
 
 ### Manual annotation 
 
@@ -1840,6 +1853,8 @@ ggplot(vaf_out_long, aes(x=level, y = mean_vaf))+
 ```{r}
 sum_matrix <- Reduce(`+`, mut_list_full)
 sum_matrix <- as.matrix(ifelse(sum_matrix >= 1, 1,0))
+#sum_matrix[mut_list_full$subclonal == 1] <- 0.5
+#sum_matrix <- as.matrix(ifelse(sum_matrix >= 1, 1,0))
 
 # Cohort identifiers
 PID_new <- variant_combined_full %>% filter(cohort == "cohort_new") %>% pull(PID) %>% unique()
