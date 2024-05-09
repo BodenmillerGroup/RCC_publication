@@ -2490,7 +2490,9 @@ ggplot(DA_out, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))
 ```
 
-## 3. Myeloid patient groups 
+# Fisher testing based 
+
+## 1. Myeloid patient groups 
 
 ```{r}
 # Read and subset sce object 
@@ -2635,7 +2637,7 @@ column_sorted <- hc$order
 fisher_full$gene <- factor(fisher_full$gene, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
 
 
-ggplot(fisher_full, aes(x=gene, y = category,col = odds_ratio, size = -log10(p_adj)))+
+ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_adj)))+
   geom_point()+
   theme_classic()+
   scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
@@ -2715,7 +2717,441 @@ column_sorted <- hc$order
 fisher_full$gene <- factor(fisher_full$gene, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
 
 
-ggplot(fisher_full, aes(x=gene, y = category,col = odds_ratio, size = -log10(p_adj)))+
+ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_adj)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = fisher_full,shape = 1,aes(size = -log10(p_adj), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+### Genomic subtypes 
+
+```{r}
+# Patient group info 
+cur_groups <- colData(sce) %>% as.data.frame %>% select(PID, M2_dom, M1_dom, AgM_dom, MDSC_dom) %>% unique()
+
+# Binary subtypes
+cur_genome <- colData(sce) %>% as.data.frame %>% select(PID, VHL_wildtype, PBRM1_driven, VHL_monodriver, BAP1_driven, multiple_drivers) %>% unique() %>% remove_rownames %>% column_to_rownames("PID") %>% t() %>% as.data.frame %>% mutate_all(as.numeric)
+
+# Function to perform Fisher exact test for each gene
+perform_fisher_test <- function(gene_row, group1_cols, group2_cols) {
+    contingency_table <- matrix(0, nrow = 2, ncol = 2)
+    contingency_table[1, 1] <- sum(gene_row[group1_cols] == 1)
+    contingency_table[1, 2] <- sum(gene_row[group2_cols] == 1)
+    contingency_table[2, 1] <- sum(gene_row[group1_cols] == 0)
+    contingency_table[2, 2] <- sum(gene_row[group2_cols] == 0)
+    test_result <- fisher.test(contingency_table)
+    return(c(odds_ratio = test_result$estimate, p_value = test_result$p.value))
+  }
+  
+fisher_full <- foreach(i = c("M2_dom", "M1_dom","AgM_dom","MDSC_dom"), .combine = "rbind")%do%{
+
+  PID_high <- unique(cur_groups[cur_groups[, i] == "1",]$PID)
+  PID_low <- unique(cur_groups[cur_groups[, i] == "0",]$PID)
+  
+  PID_high <- PID_high[!is.na(PID_high)]
+  PID_low <- PID_low[!is.na(PID_low)]
+  
+  fisher_results <- apply(cur_genome, 1, perform_fisher_test, group1_cols = PID_high, group2_cols = PID_low)
+  
+  fisher_results <- as.data.frame(fisher_results)
+  fisher_results <- as.data.frame(t(fisher_results)) %>% rownames_to_column("gene")
+  fisher_results$p_adj <- p.adjust(fisher_results$p_value, method = "BH")
+  fisher_results$category <- i
+  
+  return(fisher_results)
+  }
+
+isGreater <- fisher_full$odds_ratio > 1
+pVal <- log10(fisher_full$p_value)
+pVal[isGreater] <- abs(pVal[isGreater])
+fisher_full$p_out <- pVal
+colnames(fisher_full) <- c("gene", "odds_ratio", "p_value", "p_adj", "category", "p_out")
+```
+
+```{r}
+# FDR at 0.1 with trends
+fisher_full$result <- ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_adj < 0.1, "UP",
+                             ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_value < 0.05, "UP_trend", 
+                                    ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_adj < 0.1, "DOWN", 
+                                           ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_value < 0.05, "DOWN_trend","NOTSIG"))))
+
+## hierarchical clustering on odds_ratio
+cur_df <- fisher_full %>% select(gene, category, odds_ratio) %>% pivot_wider(values_from = odds_ratio, names_from = gene)
+
+# rows 
+dd <- dist(cur_df[2:ncol(cur_df)], method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+row_sorted <- hc$order
+fisher_full$category <- factor(fisher_full$category, levels = cur_df[row_sorted,]$category)
+
+# columns 
+dd <- dist(t(cur_df[2:ncol(cur_df)]), method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+column_sorted <- hc$order
+fisher_full$gene <- factor(fisher_full$gene, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
+
+
+ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_adj)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = fisher_full,shape = 1,aes(size = -log10(p_adj), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+### Evolution types 
+
+```{r}
+# Patient group info 
+cur_groups <- colData(sce) %>% as.data.frame %>% select(PID, M2_dom, M1_dom, AgM_dom, MDSC_dom) %>% unique()
+
+# Binary subtypes
+cur_evo <- colData(sce) %>% as.data.frame %>% select(PID, punctuated_like, branched_like, linear_like) %>% unique() %>% remove_rownames %>% column_to_rownames("PID") %>% t() %>% as.data.frame %>% mutate_all(as.numeric)
+
+# Function to perform Fisher exact test for each gene
+perform_fisher_test <- function(gene_row, group1_cols, group2_cols) {
+    contingency_table <- matrix(0, nrow = 2, ncol = 2)
+    contingency_table[1, 1] <- sum(gene_row[group1_cols] == 1)
+    contingency_table[1, 2] <- sum(gene_row[group2_cols] == 1)
+    contingency_table[2, 1] <- sum(gene_row[group1_cols] == 0)
+    contingency_table[2, 2] <- sum(gene_row[group2_cols] == 0)
+    test_result <- fisher.test(contingency_table)
+    return(c(odds_ratio = test_result$estimate, p_value = test_result$p.value))
+  }
+  
+fisher_full <- foreach(i = c("M2_dom", "M1_dom","AgM_dom","MDSC_dom"), .combine = "rbind")%do%{
+
+  PID_high <- unique(cur_groups[cur_groups[, i] == "1",]$PID)
+  PID_low <- unique(cur_groups[cur_groups[, i] == "0",]$PID)
+  
+  PID_high <- PID_high[!is.na(PID_high)]
+  PID_low <- PID_low[!is.na(PID_low)]
+  
+  fisher_results <- apply(cur_evo, 1, perform_fisher_test, group1_cols = PID_high, group2_cols = PID_low)
+  
+  fisher_results <- as.data.frame(fisher_results)
+  fisher_results <- as.data.frame(t(fisher_results)) %>% rownames_to_column("gene")
+  fisher_results$p_adj <- p.adjust(fisher_results$p_value, method = "BH")
+  fisher_results$category <- i
+  
+  return(fisher_results)
+  }
+
+isGreater <- fisher_full$odds_ratio > 1
+pVal <- log10(fisher_full$p_value)
+pVal[isGreater] <- abs(pVal[isGreater])
+fisher_full$p_out <- pVal
+colnames(fisher_full) <- c("gene", "odds_ratio", "p_value", "p_adj", "category", "p_out")
+```
+
+```{r}
+# FDR at 0.1 with trends
+fisher_full$result <- ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_adj < 0.1, "UP",
+                             ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_value < 0.05, "UP_trend", 
+                                    ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_adj < 0.1, "DOWN", 
+                                           ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_value < 0.05, "DOWN_trend","NOTSIG"))))
+
+## hierarchical clustering on odds_ratio
+cur_df <- fisher_full %>% select(gene, category, odds_ratio) %>% pivot_wider(values_from = odds_ratio, names_from = gene)
+
+# rows 
+dd <- dist(cur_df[2:ncol(cur_df)], method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+row_sorted <- hc$order
+fisher_full$category <- factor(fisher_full$category, levels = cur_df[row_sorted,]$category)
+
+# columns 
+dd <- dist(t(cur_df[2:ncol(cur_df)]), method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+column_sorted <- hc$order
+fisher_full$gene <- factor(fisher_full$gene, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
+
+
+ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_adj)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = fisher_full,shape = 1,aes(size = -log10(p_adj), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+## 2. Proportion split based 
+
+```{r}
+PID_myeloid_metacluster <- colData(sce) %>% as.data.frame() %>% select(myeloid_metacluster,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_myeloid_metacluster <- PID_myeloid_metacluster %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq))
+
+### Multivariate cox proportional hazard model on multiple covariates (here proportion of phenotypes)
+PID_metagroups <- PID_myeloid_metacluster %>% pivot_wider(id_cols = "PID",names_from = "myeloid_metacluster",values_from = "fra") %>% column_to_rownames("PID")
+
+Cox_df <- PID_metagroups
+
+## Based on categories (mean or median division of cluster proportions) 
+# Mean split
+Cox_df_mean <- foreach(i = colnames(Cox_df),.combine = "cbind")%do%{
+Cox_df %>% select(all_of(i)) %>% mutate(mean = ifelse(Cox_df[,i] > mean(Cox_df[,i]),"1","0")) %>% pull(mean)}
+
+# tertile split
+Cox_df_tert <- foreach(i = colnames(Cox_df),.combine = "cbind")%do%{
+Cox_df %>% select(all_of(i)) %>% 
+    mutate(tert = ifelse(Cox_df[,i] < quantile(Cox_df[,i], probs = seq(0,1,0.33))[2],"0",
+                         ifelse(Cox_df[,i] > quantile(Cox_df[,i], probs = seq(0,1,0.33))[3], "1", NA))) %>% pull(tert)
+  }
+
+Cox_df_mean <- Cox_df_tert
+
+colnames(Cox_df_mean) <- colnames(Cox_df)
+rownames(Cox_df_mean) <- rownames(Cox_df)
+Cox_df_mean <- Cox_df_mean %>% as.data.frame() %>% rownames_to_column("PID")
+```
+
+
+### Mutation types 
+
+```{r}
+# Patient group info 
+cur_groups <- Cox_df_mean
+
+# Binary mutation matrix
+## Here GOI all 
+cur_mut_all <- colData(sce) %>% as.data.frame %>% select(PID, GOI_all) %>% unique() %>% remove_rownames %>% column_to_rownames("PID") %>% t()
+
+# Function to perform Fisher exact test for each gene
+perform_fisher_test <- function(gene_row, group1_cols, group2_cols) {
+    contingency_table <- matrix(0, nrow = 2, ncol = 2)
+    contingency_table[1, 1] <- sum(gene_row[group1_cols] == 1)
+    contingency_table[1, 2] <- sum(gene_row[group2_cols] == 1)
+    contingency_table[2, 1] <- sum(gene_row[group1_cols] == 0)
+    contingency_table[2, 2] <- sum(gene_row[group2_cols] == 0)
+    test_result <- fisher.test(contingency_table)
+    return(c(odds_ratio = test_result$estimate, p_value = test_result$p.value))
+  }
+  
+fisher_full <- foreach(i = c("Ag_M", "C_M", "M1_like", "M2_like", "Neutro_MDSC"), .combine = "rbind")%do%{
+
+  PID_high <- unique(cur_groups[cur_groups[, i] == "1",]$PID)
+  PID_low <- unique(cur_groups[cur_groups[, i] == "0",]$PID)
+  
+  PID_high <- PID_high[!is.na(PID_high)]
+  PID_low <- PID_low[!is.na(PID_low)]
+  
+  fisher_results <- apply(cur_mut_all, 1, perform_fisher_test, group1_cols = PID_high, group2_cols = PID_low)
+  
+  fisher_results <- as.data.frame(fisher_results)
+  fisher_results <- as.data.frame(t(fisher_results)) %>% rownames_to_column("gene")
+  fisher_results$p_adj <- p.adjust(fisher_results$p_value, method = "BH")
+  fisher_results$category <- i
+  
+  return(fisher_results)
+  }
+
+isGreater <- fisher_full$odds_ratio > 1
+pVal <- log10(fisher_full$p_value)
+pVal[isGreater] <- abs(pVal[isGreater])
+fisher_full$p_out <- pVal
+colnames(fisher_full) <- c("gene", "odds_ratio", "p_value", "p_adj", "category", "p_out")
+```
+
+```{r}
+# FDR at 0.1 with trends
+fisher_full$result <- ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_adj < 0.1, "UP",
+                             ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_value < 0.1, "UP_trend", 
+                                    ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_adj < 0.1, "DOWN", 
+                                           ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_value < 0.1, "DOWN_trend","NOTSIG"))))
+
+## hierarchical clustering on odds_ratio
+cur_df <- fisher_full %>% select(gene, category, odds_ratio) %>% pivot_wider(values_from = odds_ratio, names_from = gene)
+
+# rows 
+dd <- dist(cur_df[2:ncol(cur_df)], method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+row_sorted <- hc$order
+fisher_full$category <- factor(fisher_full$category, levels = cur_df[row_sorted,]$category)
+
+# columns 
+dd <- dist(t(cur_df[2:ncol(cur_df)]), method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+column_sorted <- hc$order
+fisher_full$gene <- factor(fisher_full$gene, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
+
+
+ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_adj)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = fisher_full,shape = 1,aes(size = -log10(p_adj), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+```{r}
+# Patient group info 
+cur_groups <- Cox_df_mean
+
+# Binary mutation matrix
+## Here GOI clonal
+cur_mut_clonal <- colData(sce) %>% as.data.frame %>% select(PID, GOI_clonal) %>% unique() %>% remove_rownames %>% column_to_rownames("PID") %>% t()
+
+# Function to perform Fisher exact test for each gene
+perform_fisher_test <- function(gene_row, group1_cols, group2_cols) {
+    contingency_table <- matrix(0, nrow = 2, ncol = 2)
+    contingency_table[1, 1] <- sum(gene_row[group1_cols] == 1)
+    contingency_table[1, 2] <- sum(gene_row[group2_cols] == 1)
+    contingency_table[2, 1] <- sum(gene_row[group1_cols] == 0)
+    contingency_table[2, 2] <- sum(gene_row[group2_cols] == 0)
+    test_result <- fisher.test(contingency_table)
+    return(c(odds_ratio = test_result$estimate, p_value = test_result$p.value))
+  }
+  
+fisher_full <- foreach(i = c("Ag_M", "C_M", "M1_like", "M2_like", "Neutro_MDSC"), .combine = "rbind")%do%{
+
+  PID_high <- unique(cur_groups[cur_groups[, i] == "1",]$PID)
+  PID_low <- unique(cur_groups[cur_groups[, i] == "0",]$PID)
+  
+  PID_high <- PID_high[!is.na(PID_high)]
+  PID_low <- PID_low[!is.na(PID_low)]
+  
+  fisher_results <- apply(cur_mut_clonal, 1, perform_fisher_test, group1_cols = PID_high, group2_cols = PID_low)
+  
+  fisher_results <- as.data.frame(fisher_results)
+  fisher_results <- as.data.frame(t(fisher_results)) %>% rownames_to_column("gene")
+  fisher_results$p_adj <- p.adjust(fisher_results$p_value, method = "BH")
+  fisher_results$category <- i
+  
+  return(fisher_results)
+  }
+
+isGreater <- fisher_full$odds_ratio > 1
+pVal <- log10(fisher_full$p_value)
+pVal[isGreater] <- abs(pVal[isGreater])
+fisher_full$p_out <- pVal
+colnames(fisher_full) <- c("gene", "odds_ratio", "p_value", "p_adj", "category", "p_out")
+```
+
+```{r}
+# FDR at 0.1 with trends
+fisher_full$result <- ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_adj < 0.1, "UP",
+                             ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_value < 0.1, "UP_trend", 
+                                    ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_adj < 0.1, "DOWN", 
+                                           ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_value < 0.1, "DOWN_trend","NOTSIG"))))
+
+## hierarchical clustering on odds_ratio
+cur_df <- fisher_full %>% select(gene, category, odds_ratio) %>% pivot_wider(values_from = odds_ratio, names_from = gene)
+
+# rows 
+dd <- dist(cur_df[2:ncol(cur_df)], method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+row_sorted <- hc$order
+fisher_full$category <- factor(fisher_full$category, levels = cur_df[row_sorted,]$category)
+
+# columns 
+dd <- dist(t(cur_df[2:ncol(cur_df)]), method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+column_sorted <- hc$order
+fisher_full$gene <- factor(fisher_full$gene, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
+
+
+ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_adj)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = fisher_full,shape = 1,aes(size = -log10(p_adj), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+### Genomic subtypes 
+
+```{r}
+# Patient group info 
+cur_groups <- Cox_df_mean
+
+# Binary subtypes
+cur_genome <- colData(sce) %>% as.data.frame %>% select(PID, VHL_wildtype, PBRM1_driven, VHL_monodriver, BAP1_driven, multiple_drivers) %>% unique() %>% remove_rownames %>% column_to_rownames("PID") %>% t() %>% as.data.frame %>% mutate_all(as.numeric)
+
+# Function to perform Fisher exact test for each gene
+perform_fisher_test <- function(gene_row, group1_cols, group2_cols) {
+    contingency_table <- matrix(0, nrow = 2, ncol = 2)
+    contingency_table[1, 1] <- sum(gene_row[group1_cols] == 1)
+    contingency_table[1, 2] <- sum(gene_row[group2_cols] == 1)
+    contingency_table[2, 1] <- sum(gene_row[group1_cols] == 0)
+    contingency_table[2, 2] <- sum(gene_row[group2_cols] == 0)
+    test_result <- fisher.test(contingency_table)
+    return(c(odds_ratio = test_result$estimate, p_value = test_result$p.value))
+  }
+  
+fisher_full <- foreach(i = c("Ag_M", "C_M", "M1_like", "M2_like", "Neutro_MDSC"), .combine = "rbind")%do%{
+
+  PID_high <- unique(cur_groups[cur_groups[, i] == "1",]$PID)
+  PID_low <- unique(cur_groups[cur_groups[, i] == "0",]$PID)
+  
+  PID_high <- PID_high[!is.na(PID_high)]
+  PID_low <- PID_low[!is.na(PID_low)]
+  
+  fisher_results <- apply(cur_genome, 1, perform_fisher_test, group1_cols = PID_high, group2_cols = PID_low)
+  
+  fisher_results <- as.data.frame(fisher_results)
+  fisher_results <- as.data.frame(t(fisher_results)) %>% rownames_to_column("gene")
+  fisher_results$p_adj <- p.adjust(fisher_results$p_value, method = "BH")
+  fisher_results$category <- i
+  
+  return(fisher_results)
+  }
+
+isGreater <- fisher_full$odds_ratio > 1
+pVal <- log10(fisher_full$p_value)
+pVal[isGreater] <- abs(pVal[isGreater])
+fisher_full$p_out <- pVal
+colnames(fisher_full) <- c("gene", "odds_ratio", "p_value", "p_adj", "category", "p_out")
+```
+
+```{r}
+# FDR at 0.1 with trends
+fisher_full$result <- ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_adj < 0.1, "UP",
+                             ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_value < 0.1, "UP_trend", 
+                                    ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_adj < 0.1, "DOWN", 
+                                           ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_value < 0.1, "DOWN_trend","NOTSIG"))))
+
+## hierarchical clustering on odds_ratio
+cur_df <- fisher_full %>% select(gene, category, odds_ratio) %>% pivot_wider(values_from = odds_ratio, names_from = gene)
+
+# rows 
+dd <- dist(cur_df[2:ncol(cur_df)], method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+row_sorted <- hc$order
+fisher_full$category <- factor(fisher_full$category, levels = cur_df[row_sorted,]$category)
+
+# columns 
+dd <- dist(t(cur_df[2:ncol(cur_df)]), method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+column_sorted <- hc$order
+fisher_full$gene <- factor(fisher_full$gene, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
+
+
+ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_adj)))+
   geom_point()+
   theme_classic()+
   scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
@@ -2727,7 +3163,6 @@ ggplot(fisher_full, aes(x=gene, y = category,col = odds_ratio, size = -log10(p_a
 ```
 
 
-TO DO: Finish genomic subtypes and evolution subtypes - start writing down papers etc. - try the other way around with fisher? (no diff?)
 
 
 # Regression based
