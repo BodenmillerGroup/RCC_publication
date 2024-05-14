@@ -4428,14 +4428,16 @@ ggsurvplot(fit,
 sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_06.rds")
 ```
 
-## Myeloid metacluster 
+## Based on myeloid only proportions 
+
+### Myeloid metacluster 
 
 ```{r pgroups, eval = F}
 PID_myeloid_metacluster <- colData(sce) %>% as.data.frame() %>% select(myeloid_metacluster,PID) %>% group_by(PID) %>% table() %>% as.data.frame
 PID_myeloid_metacluster <- PID_myeloid_metacluster %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq))
 
-# Filter for patients that have at least 5 myeloid cells
-PID_select <- PID_myeloid_metacluster %>% ungroup() %>% group_by(PID) %>% mutate(total = sum(Freq)) %>% filter(total >= 5) %>% 
+# Filter for patients that have at least 10 myeloid cells
+PID_select <- PID_myeloid_metacluster %>% ungroup() %>% group_by(PID) %>% mutate(total = sum(Freq)) %>% filter(total >= 10) %>% 
   pull(PID) %>% unique()
 
 PID_metagroups <- PID_myeloid_metacluster %>% filter(PID %in% PID_select) %>% pivot_wider(id_cols = "PID",names_from = "myeloid_metacluster",values_from = "fra") %>% column_to_rownames("PID")
@@ -4526,10 +4528,10 @@ ha_meta <- HeatmapAnnotation(n_cells = anno_barplot(n_cell_id$n, width = unit(10
 anno <- myeloid_metacluster %>% rownames_to_column("metagroups")
 anno$metagroups_match <- anno$metagroups
 
-anno$metagroups[anno$metagroups == "1"] <- "M2_dom"
-anno$metagroups[anno$metagroups == "2"] <- "MDSC_dom"
-anno$metagroups[anno$metagroups == "3"] <- "M1_dom"
-anno$metagroups[anno$metagroups == "4"] <- "AgM_dom"
+anno$metagroups[anno$metagroups == "1"] <- "AgM_dom"
+anno$metagroups[anno$metagroups == "2"] <- "M1_dom"
+anno$metagroups[anno$metagroups == "3"] <- "MDSC_dom"
+anno$metagroups[anno$metagroups == "4"] <- "M2_dom"
 
 
 ## Add names to sce
@@ -4549,7 +4551,7 @@ library(survival)
 library(survminer)
 
 cur_surv <- colData(sce) %>% as.data.frame() %>%
-  select(PID, PID_metagroups_names, pT_combined, OS_months, status_OS) %>% 
+  select(PID, PID_metagroups_names, PID_metagroups, pT_combined, OS_months, status_OS) %>% 
   #mutate(PID_metagroups_2 = ifelse(PID_metagroups %in% c("2","3"),"2/3",PID_metagroups)) %>%
   #filter(PID_metagroups %in% c("1","4")) %>% 
   #filter(pT_combined == "3/4") %>% 
@@ -4570,7 +4572,7 @@ ggsurvplot(fit,
           conf.int = FALSE)
 ```
 
-### Nested model testing 
+#### Nested model testing 
 
 ```{r}
 library(survival)
@@ -4592,6 +4594,105 @@ multi_model_full <- coxph(multi_formula_full, data = cur_surv)
 
 # Log-likelihood ratio test
 anova(multi_model_null, multi_model_full)
+```
+
+
+## Based on myeloid of immune proportions 
+
+```{r}
+sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_07.rds")
+
+# Remove tumor cells 
+sce <- sce[,sce$celltype_combined != "tumor"]
+```
+
+### Myeloid metacluster 
+
+```{r pgroups, eval = F}
+PID_celltype_combined <- colData(sce) %>% as.data.frame() %>% select(celltype_combined,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_celltype_combined <- PID_celltype_combined %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq))
+
+# Filter for myeloid cells 
+PID_celltype_combined <- PID_celltype_combined[str_detect(PID_celltype_combined$celltype_combined, "MY"),]
+
+# Filter for patients that have at least 5 myeloid cells
+PID_select <- PID_celltype_combined %>% ungroup() %>% group_by(PID) %>% mutate(total = sum(Freq)) %>% filter(total >= 5) %>% 
+  pull(PID) %>% unique()
+
+PID_metagroups <- PID_celltype_combined %>% filter(PID %in% PID_select) %>% pivot_wider(id_cols = "PID",names_from = "celltype_combined",values_from = "fra") %>% column_to_rownames("PID")
+
+#double-check that rowsums are 1 
+rowSums(PID_metagroups)
+
+#Option: Column-scaled
+PID_metagroups_scaled <- scale(as.matrix(PID_metagroups))
+#col_scaled <- colorRamp2(c(-1, 0, 2, 3), c("#A278FAFF", "#F1E9E7FF", "#FF8061FF", "#FF0000FF"))
+
+### 1. Cluster-testing
+library(clValid)
+#Internal measures
+testCL<- clValid(PID_metagroups,nClust = 2:20,clMethods = c("hierarchical","agnes","kmeans"),validation="internal",metric="euclidean", method = "ward")
+summary(testCL)
+plot(testCL)
+
+#Stability measures 
+testCL_1<- clValid(PID_metagroups,nClust = 2:20,clMethods = c("hierarchical","agnes","kmeans"),validation="stability",metric="euclidean", method = "ward")
+summary(testCL_1)
+plot(testCL_1, legend = FALSE)
+
+#Selected method: agnes, 4
+
+set.seed(22)
+library(dendextend)
+avg_dend_obj_MCP <- as.dendrogram(agnes(PID_metagroups,metric = "euclidean",method = "ward"))
+avg_col_dend_MCP <- color_branches(avg_dend_obj_MCP, k = 5)
+plot(avg_col_dend_MCP)
+
+# Print heatmap
+h_g <- Heatmap(PID_metagroups, name = "Cluster fraction", 
+        col = viridis(100),
+        row_km = 5, 
+        row_km_repeats = 2000,
+        #cluster_rows = avg_col_dend_MCP,
+        #row_split = 5,
+        clustering_method_columns = "ward.D2",
+        clustering_method_rows = "ward.D2")
+
+h_g <- draw(h_g)
+draw(h_g)
+
+#Retrieve PID groups
+library(foreach)
+row_groups <- foreach(i = 1:5, .combine = rbind) %do%{
+data.frame(PID = rownames(PID_metagroups[row_order(h_g)[[i]],]), PID_group = i)
+}
+
+#Add to sce
+sce$PID_metagroups_immune <- row_groups$PID_group[match(sce$PID,row_groups$PID)]
+```
+
+```{r}
+library(survival)
+library(survminer)
+
+cur_surv <- colData(sce) %>% as.data.frame() %>% 
+  select(PID, PID_metagroups_immune, OS_months, status_OS) %>% 
+  #mutate(PID_metagroups_2 = ifelse(PID_metagroups == "6","6","Not_6")) %>% unique()
+  #filter(!PID_metagroups_immune %in% c("4")) %>% 
+  unique()
+
+#Plot survival curves
+fit <- survfit(Surv(OS_months, status_OS) ~ PID_metagroups_immune, data = cur_surv)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = "Set1")
 ```
 
 

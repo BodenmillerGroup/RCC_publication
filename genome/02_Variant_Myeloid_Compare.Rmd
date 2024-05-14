@@ -3061,6 +3061,8 @@ ht_all <- oncoPrint(mut_list_full,
 draw(ht_all)
 ```
 
+#### Split heatmaps by group 
+
 ```{r}
 ## M2 dominated 
 vec <- colnames(mut_list_full$missense_variant) %in% unique(sce$PID[sce$M2_dom == "1"])
@@ -3151,57 +3153,58 @@ draw(ht_MDSC)
 ht_M2 + ht_MDSC + ht_M1 + ht_AgM
 ```
 
-
-#### Statistical comparison
-
+Statistical comparison
 
 ```{r}
-## Add loop etc. and add also to oncoprint as anno?! 
+fisher_out_all <- foreach(x = GOI_all, .combine = "rbind") %do% {
+cur_groups <- colData(sce) %>% as.data.frame %>% select(PID, PID_metagroups_names, all_of(x)) %>% unique() %>% select(-PID) %>% group_by(!!sym(x), PID_metagroups_names) %>% dplyr::count()
 
-# Patient group info 
-cur_groups <- colData(sce) %>% as.data.frame %>% select(PID, PID_metagroups_names, SETD2_clonal) %>% unique() %>% select(-PID) %>% group_by(SETD2_clonal, PID_metagroups_names) %>% dplyr::count()
+test_result <- fisher.test(xtabs(as.formula(paste0("n ~", x, "+ PID_metagroups_names")), data = cur_groups))
 
-chisq.test(xtabs(n ~ SETD2_clonal + PID_metagroups_names, data = cur_groups))
+data_out <- data.frame(gene = str_split(x,"_", simplify = TRUE)[,1], p_value = test_result$p.value)
 
-fisher.test(xtabs(n ~ SETD2_clonal + PID_metagroups_names, data = cur_groups))
+data_out <- data_out %>% mutate(sign = ifelse(p_value < 0.05, TRUE, FALSE))
 
-
-
-sce$TP53_all
-
-# Function to perform chi-square test for each gene
-perform_chi_square_test <- function(gene_row, group_cols) {
-  contingency_table <- table(gene_row[group_cols])
-  test_result <- chisq.test(contingency_table)
-  return(c(chi_square_stat = test_result$statistic, p_value = test_result$p.value))
+return(data_out)
 }
+ 
 
-# Modified code to perform chi-square test and BH correction
-chi_square_full <- foreach(i = c("M2_dom", "M1_dom","AgM_dom","MDSC_dom"), .combine = "rbind") %do% {
-  
-  PID_high <- unique(cur_groups[cur_groups[, i] == "1",]$PID)
-  PID_low <- unique(cur_groups[cur_groups[, i] == "0",]$PID)
-  
-  PID_high <- PID_high[!is.na(PID_high)]
-  PID_low <- PID_low[!is.na(PID_low)]
-  
-  chi_square_results <- apply(cur_mut_all, 1, perform_chi_square_test, group_cols = c(PID_high, PID_low))
-  
-  chi_square_results <- as.data.frame(chi_square_results)
-  chi_square_results <- as.data.frame(t(chi_square_results)) %>% rownames_to_column("gene")
-  chi_square_results$p_adj <- p.adjust(chi_square_results$p_value, method = "BH")
-  chi_square_results$category <- i
-  
-  return(chi_square_results)
-}
+fisher_out_clonal <- foreach(x = GOI_clonal, .combine = "rbind") %do% {
+cur_groups <- colData(sce) %>% as.data.frame %>% select(PID, PID_metagroups_names, all_of(x)) %>% unique() %>% select(-PID) %>% group_by(!!sym(x), PID_metagroups_names) %>% dplyr::count()
 
-# Adjusting the output for visualization
-chi_square_full$p_out <- -log10(chi_square_full$p_value)
-colnames(chi_square_full) <- c("gene", "chi_square_stat", "p_value", "p_adj", "category", "p_out")
+test_result <- fisher.test(xtabs(as.formula(paste0("n ~", x, "+ PID_metagroups_names")), data = cur_groups))
+
+data_out <- data.frame(gene = str_split(x,"_", simplify = TRUE)[,1], p_value = test_result$p.value)
+
+data_out <- data_out %>% mutate(sign = ifelse(p_value < 0.05, TRUE, FALSE))
+
+return(data_out)
+}      
+
+# Create Heatmap annotation 
+## Match names 
+fisher_out_all <- fisher_out_all[match(rownames(subset_list$missense_variant), fisher_out_all$gene),]
+fisher_out_clonal <- fisher_out_clonal[match(rownames(subset_list$missense_variant), fisher_out_clonal$gene),]
+
+fisher_out_all$p_out <- paste0(" p = ",round(fisher_out_all$p_value,digits = 3)) 
+fisher_out_clonal$p_out <- paste0(" p = ",round(fisher_out_clonal$p_value,digits = 3)) 
+
+sign_col <- setNames(c("firebrick","grey"),c(TRUE, FALSE))
+                       
+## Create Annotation 
+r_anno_clonal <- rowAnnotation(fisher_clonal = fisher_out_clonal$sign, 
+                          p = anno_text(fisher_out_clonal$p_out), 
+                          col = list(fisher_clonal = sign_col))
+
+r_anno_all <- rowAnnotation(fisher_all = fisher_out_all$sign, 
+                          p = anno_text(fisher_out_all$p_out), 
+                          col = list(fisher_all = sign_col))
 
 ```
 
-
+```{r}
+ht_M2 + ht_MDSC + ht_M1 + ht_AgM + r_anno_all + r_anno_clonal
+```
 
 
 ## 2. Proportion split based 
