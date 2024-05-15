@@ -4445,8 +4445,9 @@ PID_metagroups <- PID_myeloid_metacluster %>% filter(PID %in% PID_select) %>% pi
 #double-check that rowsums are 1 
 rowSums(PID_metagroups)
 
-#Option: Column-scaled
-PID_metagroups_scaled <- scale(as.matrix(PID_metagroups))
+#Option: A: Row-scaled (per PID)
+PID_metagroups_scaled <- t(scale(as.matrix(t(PID_metagroups))))
+
 #col_scaled <- colorRamp2(c(-1, 0, 2, 3), c("#A278FAFF", "#F1E9E7FF", "#FF8061FF", "#FF0000FF"))
 
 ### 1. Cluster-testing
@@ -4495,7 +4496,7 @@ sce$PID_metagroups <- row_groups$PID_group[match(sce$PID,row_groups$PID)]
 
 ```{r}
 for_metagroups <- prop.table(table(sce$PID_metagroups, sce$myeloid_metacluster), margin = 1)
-for_metagroups_fine <- prop.table(table(sce$PID_metagroups, sce$my_cluster_names), margin = 1)
+for_metagroups_fine <- prop.table(table(sce$PID_metagroups, sce$myeloid_district_names), margin = 1)
 
 # Proportion of myeloid_metacluster per metagroups
 myeloid_metacluster <- colData(sce) %>% as.data.frame() %>% select(PID_metagroups,myeloid_metacluster) %>% group_by(PID_metagroups) %>% table() %>% as.data.frame
@@ -4532,6 +4533,7 @@ anno$metagroups[anno$metagroups == "1"] <- "AgM_dom"
 anno$metagroups[anno$metagroups == "2"] <- "M1_dom"
 anno$metagroups[anno$metagroups == "3"] <- "MDSC_dom"
 anno$metagroups[anno$metagroups == "4"] <- "M2_dom"
+#anno$metagroups[anno$metagroups == "5"] <- "M1_dom"
 
 
 ## Add names to sce
@@ -4590,10 +4592,228 @@ covariates_full <- cur_surv %>% select(-OS_months, -status_OS) %>% colnames
 multi_formula_full <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates_full, collapse = " + ")))
 multi_model_full <- coxph(multi_formula_full, data = cur_surv)
 
+# Log-likelihood ratio test
+anova(multi_model_null, multi_model_full)
+```
+
+
+## Based on myeloid densities 
+
+NOTE: Here, I am row-scaling the densities per PID to retrieve patient groups, which is in fact the exact SAME as row-scaling the proportions per PID. 
+
+### Myeloid metacluster 
+
+```{r}
+library(survival)
+library(survminer)
+
+PID_myeloid_metacluster <- colData(sce) %>% as.data.frame() %>% select(myeloid_metacluster,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+
+# Mean tissue area per PID
+PID_area <- colData(sce) %>% as.data.frame() %>% select(tissue_area,PID) %>% unique() %>% group_by(PID) %>% mutate(mean_tissue_area = mean(tissue_area))
+
+PID_myeloid_metacluster$mean_tissue_area <- PID_area$mean_tissue_area[match(PID_myeloid_metacluster$PID, PID_area$PID)]
+  
+PID_myeloid_metacluster <- PID_myeloid_metacluster %>% group_by(PID) %>% mutate(density = Freq/(mean_tissue_area/1000000))  
+
+# Select PID with more than 10 myeloid cells
+PID_select <- PID_myeloid_metacluster %>% ungroup() %>% group_by(PID) %>% mutate(total = sum(Freq)) %>% filter(total >= 10) %>% 
+  pull(PID) %>% unique() %>% unfactor() 
+
+PID_myeloid_metacluster <- PID_myeloid_metacluster %>% filter(PID %in% PID_select)
+
+PID_metagroups <- PID_myeloid_metacluster %>% pivot_wider(id_cols = "PID",names_from = "myeloid_metacluster",values_from = "density") %>% column_to_rownames("PID")
+
+#Option: A: Row-scaled (per PID)
+PID_metagroups_scaled <- t(scale(as.matrix(t(PID_metagroups))))
+#col_scaled <- colorRamp2(c(-1, 0, 2, 3), c("#A278FAFF", "#F1E9E7FF", "#FF8061FF", "#FF0000FF"))
+
+### 1. Cluster-testing
+library(clValid)
+#Internal measures
+testCL<- clValid(PID_metagroups_scaled,nClust = 2:20,clMethods = c("hierarchical","agnes","kmeans"),validation="internal",metric="euclidean", method = "ward")
+summary(testCL)
+plot(testCL)
+
+#Stability measures 
+testCL_1<- clValid(PID_metagroups_scaled,nClust = 2:20,clMethods = c("hierarchical","agnes","kmeans"),validation="stability",metric="euclidean", method = "ward")
+summary(testCL_1)
+plot(testCL_1, legend = FALSE)
+
+#Selected method: agnes, 4
+set.seed(22)
+library(dendextend)
+avg_dend_obj_MCP <- as.dendrogram(agnes(PID_metagroups_scaled,metric = "euclidean",method = "ward"))
+avg_col_dend_MCP <- color_branches(avg_dend_obj_MCP, k = 4)
+plot(avg_col_dend_MCP)
+
+# Print heatmap
+h_g <- Heatmap(PID_metagroups_scaled, name = "Cluster fraction", 
+        col = viridis(100),
+        row_km = 4, 
+        row_km_repeats = 2000,
+        #cluster_rows = avg_col_dend_MCP,
+        #row_split = 4,
+        clustering_method_columns = "ward.D2",
+        clustering_method_rows = "ward.D2")
+
+h_g <- draw(h_g)
+draw(h_g)
+
+#Retrieve PID groups
+library(foreach)
+row_groups <- foreach(i = 1:4, .combine = rbind) %do%{
+data.frame(PID = rownames(PID_metagroups[row_order(h_g)[[i]],]), PID_group = i)
+}
+
+#Add to sce
+sce$PID_metagroups_scaled <- row_groups$PID_group[match(sce$PID,row_groups$PID)]
+```
+
+
+```{r}
+#Assess survival impact 
+library(survival)
+library(survminer)
+
+cur_surv <- colData(sce) %>% as.data.frame() %>%
+  select(PID, PID_metagroups_scaled, pT_combined, OS_months, status_OS) %>% 
+  #mutate(PID_metagroups_2 = ifelse(PID_metagroups %in% c("2","3"),"2/3",PID_metagroups)) %>%
+  #filter(PID_metagroups %in% c("1","4")) %>% 
+  #filter(pT_combined == "3/4") %>% 
+  unique()
+
+#Plot survival curves
+fit <- survfit(Surv(OS_months, status_OS) ~ PID_metagroups_scaled, data = cur_surv)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = "Set2",
+          conf.int = FALSE)
+```
+```{r}
+for_metagroups <- prop.table(table(sce$PID_metagroups_scaled, sce$myeloid_metacluster), margin = 1)
+for_metagroups_fine <- prop.table(table(sce$PID_metagroups_scaled, sce$myeloid_district_names), margin = 1)
+
+# Proportion of myeloid_metacluster per metagroups
+myeloid_metacluster <- colData(sce) %>% as.data.frame() %>% select(PID_metagroups_scaled,myeloid_metacluster) %>% group_by(PID_metagroups_scaled) %>% table() %>% as.data.frame
+myeloid_metacluster <- myeloid_metacluster %>% group_by(PID_metagroups_scaled) %>% mutate(fra = Freq/sum(Freq)) 
+myeloid_metacluster <- myeloid_metacluster %>% select(-Freq) %>% pivot_wider(id_cols = PID_metagroups_scaled,names_from = myeloid_metacluster,values_from = fra) %>% column_to_rownames("PID_metagroups_scaled")
+
+col <- metadata(sce)$colors$myeloid_metacluster[match(colnames(myeloid_metacluster), names(metadata(sce)$colors$myeloid_metacluster))]
+
+ha_my <- HeatmapAnnotation(
+  myeloid_metacluster = anno_barplot(myeloid_metacluster, width = unit(20, "mm"), gp = gpar(fill = col)),
+                            border = TRUE, 
+                            annotation_name_rot = 90,
+                            gap = unit(3,"mm"),
+                            which = "row")
+
+# Number of cells and PID 
+n_PID <- colData(sce) %>% as.data.frame() %>% select(PID_metagroups_scaled,PID) %>% group_by(PID_metagroups_scaled) %>% table() %>% as.data.frame %>% filter(Freq != 0) %>% group_by(PID_metagroups_scaled) %>% dplyr::count()
+
+n_cell_id <- colData(sce) %>% as.data.frame() %>% select(PID_metagroups_scaled,cell_id) %>% group_by(PID_metagroups_scaled) %>% table() %>% as.data.frame %>% filter(Freq != 0) %>% group_by(PID_metagroups_scaled) %>% dplyr::count()
+
+ha_meta <- HeatmapAnnotation(n_cells = anno_barplot(n_cell_id$n, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),                        
+                             n_PID = anno_barplot(n_PID$n, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),
+                             border = TRUE, 
+                             annotation_name_rot = 90,
+                             gap = unit(1,"mm"),
+                             which = "row")
+
+
+# Define names for districts
+anno <- myeloid_metacluster %>% rownames_to_column("metagroups")
+anno$metagroups_match <- anno$metagroups
+
+anno$metagroups[anno$metagroups == "1"] <- "AgM_dom"
+anno$metagroups[anno$metagroups == "2"] <- "M1_dom"
+anno$metagroups[anno$metagroups == "3"] <- "M2_dom"
+anno$metagroups[anno$metagroups == "4"] <- "MDSC_dom"
+
+
+## Add names to sce
+sce$PID_metagroups_scaled_names <- factor(anno$metagroups[match(sce$PID_metagroups_scaled, anno$metagroups_match)])
+
+# Plot heatmap 
+Heatmap(for_metagroups, col = viridis(100), row_names_side = "left", row_labels = anno$metagroups)+
+  ha_my+
+  Heatmap(for_metagroups_fine, col = viridis(100))+
+  ha_meta
+```
+
+
+#### Nested model testing 
+
+```{r}
+library(survival)
+library(survminer)
+
+cur_surv <- colData(sce) %>% as.data.frame() %>% select(OS_months, status_OS, gender, age, pT_combined, ISUP_combined, PID_metagroups_density) %>% unique()
+
+cur_surv <- na.omit(cur_surv) 
+
+covariates_null <- cur_surv %>% select(-OS_months, -status_OS, -PID_metagroups_density) %>% colnames
+multi_formula_null <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates_null, collapse = " + ")))
+multi_model_null <- coxph(multi_formula_null, data = cur_surv)
+
+covariates_full <- cur_surv %>% select(-OS_months, -status_OS) %>% colnames
+multi_formula_full <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates_full, collapse = " + ")))
+multi_model_full <- coxph(multi_formula_full, data = cur_surv)
+
 #cur_surv is.na(cur_surv$PID_metagroups)
 
 # Log-likelihood ratio test
 anova(multi_model_null, multi_model_full)
+```
+
+
+```{r}
+#Assess survival impact 
+library(survival)
+library(survminer)
+
+cur_surv <- colData(sce) %>% as.data.frame() %>%
+  select(PID, PID_metagroups_scaled_names, PID_metagroups_names, pT_combined, OS_months, status_OS) %>% 
+  #mutate(PID_metagroups_2 = ifelse(PID_metagroups %in% c("2","3"),"2/3",PID_metagroups)) %>%
+  #filter(PID_metagroups %in% c("1","4")) %>% 
+  #filter(pT_combined == "3/4") %>% 
+  unique()
+
+#Plot survival curves
+fit <- survfit(Surv(OS_months, status_OS) ~ PID_metagroups_scaled_names, data = cur_surv)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = c("seagreen","orange3","firebrick","pink2"),
+          conf.int = FALSE)
+
+#Plot survival curves
+fit <- survfit(Surv(OS_months, status_OS) ~ PID_metagroups_names, data = cur_surv)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = c("seagreen","orange3","firebrick","pink2"),
+          conf.int = FALSE)
+
 ```
 
 

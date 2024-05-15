@@ -2500,8 +2500,11 @@ ggplot(DA_out, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
 # Read and subset sce object 
 sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_06.rds")
 
-# Subset for PID for which we have genomics data
+# Subset for PID for which we have genomics data and for which patient groups are defined
 sce <- sce[,sce$PID %in% genomic_sub$PID]
+
+PID_defined <- colData(sce) %>% as.data.frame %>% filter(!is.na(PID_metagroups_names)) %>% pull(PID) %>% unique()
+sce <- sce[,sce$PID %in% PID_defined]
 ```
 
 
@@ -2560,15 +2563,22 @@ sce$linear_like <- ifelse(sce$evolution_type == "linear_like", "1", "0")
 
 ## Patient groups 
 unique(sce$PID_metagroups_names)
+unique(sce$PID_metagroups_scaled_names)
 
 sce$M2_dom <- ifelse(sce$PID_metagroups_names == "M2_dom", "1", "0")
 sce$M1_dom <- ifelse(sce$PID_metagroups_names == "M1_dom", "1", "0")
 sce$AgM_dom <- ifelse(sce$PID_metagroups_names == "AgM_dom", "1", "0")
 sce$MDSC_dom <- ifelse(sce$PID_metagroups_names == "MDSC_dom", "1", "0")
+sce$Mix <- ifelse(sce$PID_metagroups_names == "Mix", "1", "0")
 ```
 
 
 ### Mutation types 
+
+```{r}
+GOI_all <- GOI_all[!GOI_all %in% c("SF3B1_all","ELOC_all","STAG2_all","ARHGAP35_all")]
+GOI_clonal <- GOI_clonal[!GOI_clonal %in% c("SF3B1_clonal","ELOC_clonal","STAG2_clonal","ARHGAP35_clonal")]
+```
 
 ```{r}
 # Patient group info 
@@ -2859,9 +2869,9 @@ colnames(fisher_full) <- c("gene", "odds_ratio", "p_value", "p_adj", "category",
 ```{r}
 # FDR at 0.1 with trends
 fisher_full$result <- ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_adj < 0.1, "UP",
-                             ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_value < 0.05, "UP_trend", 
+                             ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_value < 0.1, "UP_trend", 
                                     ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_adj < 0.1, "DOWN", 
-                                           ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_value < 0.05, "DOWN_trend","NOTSIG"))))
+                                           ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_value < 0.1, "DOWN_trend","NOTSIG"))))
 
 ## hierarchical clustering on odds_ratio
 cur_df <- fisher_full %>% select(gene, category, odds_ratio) %>% pivot_wider(values_from = odds_ratio, names_from = gene)
@@ -2910,8 +2920,9 @@ GOI <- c(GOI, "ELOC") # Add ELOC (TCEB1)
 #Load processed data file and select columns of interest
 snv <- variant_combined_full
 
-# Optional: Filter low-cov patients
-#snv <- snv %>% filter(!PID_old %in% PID_kick_out)
+# Select PID 
+PID_select <- colData(sce) %>% as.data.frame %>% filter(!is.na(PID_metagroups_names)) %>% pull(PID) %>% unique()
+snv <- snv %>% filter(PID %in% PID_select)
 
 snv$mut_level <- snv$variant_consequence_combined
 
@@ -3032,15 +3043,19 @@ c_anno <- data.frame(PID = colnames(mut_list_full[1]$missense_variant))
 
 # Add myeloid patient groups
 c_anno$PID_metagroups_names <- sce$PID_metagroups_names[match(c_anno$PID, sce$PID)]
+c_anno$PID_metagroups_scaled_names <- sce$PID_metagroups_scaled_names[match(c_anno$PID, sce$PID)]
 c_anno$genomic_subtype <- sce$genomic_subtype[match(c_anno$PID, sce$PID)]
 
 ## 2A: Patient metadata
-groups_col <- setNames(c("orange","seagreen","pink","firebrick"),unique(c_anno$PID_metagroups_names))
+groups_col <- setNames(c("orange3","seagreen","pink2","firebrick"),unique(c_anno$PID_metagroups_names))
 subtype_col <- setNames(c("#046C9A", "#000000", "#D69C4E", "#ECCBAE", "#ABDDDE"),c("BAP1_driven", "multiple_drivers", "PBRM1_driven","VHL_monodriver", "VHL_wildtype"))
 
 ca_PID <- columnAnnotation(myeloid_subtype = c_anno$PID_metagroups_names,
+                           myeloid_subtype_2 = c_anno$PID_metagroups_scaled_names,
                            genomic_subtype = c_anno$genomic_subtype, 
-                           col = list(myeloid_subtype = groups_col, genomic_subtype = subtype_col)
+                           col = list(myeloid_subtype = groups_col, 
+                                      myeloid_subtype_2 = groups_col, 
+                                      genomic_subtype = subtype_col)
                            )
 
 ## Step 3: Row Annotation 
@@ -3148,6 +3163,27 @@ ht_MDSC <- oncoPrint(subset_list,
                   row_split = r_anno$key_genes, col = col, show_row_names = FALSE, pct_side = "right", row_names_side = "left", show_heatmap_legend = FALSE, bottom_annotation = ca)
 
 draw(ht_MDSC)
+
+# ## Mixed
+# vec <- colnames(mut_list_full$missense_variant) %in% unique(sce$PID[sce$Mix == "1"])
+# 
+# subset_list <- lapply(mut_list_full, function(matrix) matrix[, vec, drop = FALSE])
+# 
+# # Output the subset list
+# subset_list
+# 
+# c_anno <- data.frame(PID = colnames(subset_list[1]$missense_variant))
+# c_anno$myeloid_group <- "Mix"
+# col_group <- groups_col[names(groups_col) == unique(c_anno$myeloid_group)]
+# ca <- columnAnnotation(myeloid_group = c_anno$myeloid_group, 
+#                        col = list(myeloid_group = col_group),
+#                        show_annotation_name = FALSE)
+# 
+# ht_Mix <- oncoPrint(subset_list,
+#                   alter_fun = fun_alter,
+#                   row_split = r_anno$key_genes, col = col, show_row_names = FALSE, pct_side = "right", row_names_side = "left", show_heatmap_legend = FALSE, bottom_annotation = ca)
+# 
+# draw(ht_Mix)
 
 
 ht_M2 + ht_MDSC + ht_M1 + ht_AgM
