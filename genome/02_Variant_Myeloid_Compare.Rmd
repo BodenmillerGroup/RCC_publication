@@ -2507,6 +2507,45 @@ PID_defined <- colData(sce) %>% as.data.frame %>% filter(!is.na(PID_metagroups_n
 sce <- sce[,sce$PID %in% PID_defined]
 ```
 
+```{r}
+#Check survival impact for sequencing patients
+library(survival)
+library(survminer)
+
+cur_surv <- colData(sce) %>% as.data.frame() %>%
+  select(PID, PID_metagroups_scaled_names, PID_metagroups_names, pT_combined, OS_months, status_OS) %>% 
+  unique()
+
+#Plot survival curves
+fit <- survfit(Surv(OS_months, status_OS) ~ PID_metagroups_scaled_names, data = cur_surv)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = c("seagreen4","orange2","firebrick2","pink2"),
+          conf.int = FALSE)
+
+#Plot survival curves
+fit <- survfit(Surv(OS_months, status_OS) ~ PID_metagroups_names, data = cur_surv)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = c("seagreen4","orange2","firebrick2","pink2"),
+          conf.int = FALSE)
+
+```
+
 
 ```{r}
 # Add relevant metadata to sce 
@@ -2563,7 +2602,9 @@ sce$linear_like <- ifelse(sce$evolution_type == "linear_like", "1", "0")
 
 ## Patient groups 
 unique(sce$PID_metagroups_names)
-unique(sce$PID_metagroups_scaled_names)
+unique(sce$PID_metagroups_scaled_names) #These are potentially more informative! 
+
+#sce$PID_metagroups_names <- sce$PID_metagroups_scaled_names
 
 sce$M2_dom <- ifelse(sce$PID_metagroups_names == "M2_dom", "1", "0")
 sce$M1_dom <- ifelse(sce$PID_metagroups_names == "M1_dom", "1", "0")
@@ -2627,9 +2668,9 @@ colnames(fisher_full) <- c("gene", "odds_ratio", "p_value", "p_adj", "category",
 ```{r}
 # FDR at 0.1 with trends
 fisher_full$result <- ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_adj < 0.1, "UP",
-                             ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_value < 0.05, "UP_trend", 
+                             ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_value < 0.1, "UP_trend", 
                                     ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_adj < 0.1, "DOWN", 
-                                           ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_value < 0.05, "DOWN_trend","NOTSIG"))))
+                                           ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_value < 0.1, "DOWN_trend","NOTSIG"))))
 
 ## hierarchical clustering on odds_ratio
 cur_df <- fisher_full %>% select(gene, category, odds_ratio) %>% pivot_wider(values_from = odds_ratio, names_from = gene)
@@ -2707,9 +2748,9 @@ colnames(fisher_full) <- c("gene", "odds_ratio", "p_value", "p_adj", "category",
 ```{r}
 # FDR at 0.1 with trends
 fisher_full$result <- ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_adj < 0.1, "UP",
-                             ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_value < 0.05, "UP_trend", 
+                             ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_value < 0.1, "UP_trend", 
                                     ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_adj < 0.1, "DOWN", 
-                                           ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_value < 0.05, "DOWN_trend","NOTSIG"))))
+                                           ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_value < 0.1, "DOWN_trend","NOTSIG"))))
 
 ## hierarchical clustering on odds_ratio
 cur_df <- fisher_full %>% select(gene, category, odds_ratio) %>% pivot_wider(values_from = odds_ratio, names_from = gene)
@@ -2788,9 +2829,9 @@ colnames(fisher_full) <- c("gene", "odds_ratio", "p_value", "p_adj", "category",
 ```{r}
 # FDR at 0.1 with trends
 fisher_full$result <- ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_adj < 0.1, "UP",
-                             ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_value < 0.05, "UP_trend", 
+                             ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_value < 0.1, "UP_trend", 
                                     ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_adj < 0.1, "DOWN", 
-                                           ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_value < 0.05, "DOWN_trend","NOTSIG"))))
+                                           ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_value < 0.1, "DOWN_trend","NOTSIG"))))
 
 ## hierarchical clustering on odds_ratio
 cur_df <- fisher_full %>% select(gene, category, odds_ratio) %>% pivot_wider(values_from = odds_ratio, names_from = gene)
@@ -3199,7 +3240,7 @@ test_result <- fisher.test(xtabs(as.formula(paste0("n ~", x, "+ PID_metagroups_n
 
 data_out <- data.frame(gene = str_split(x,"_", simplify = TRUE)[,1], p_value = test_result$p.value)
 
-data_out <- data_out %>% mutate(sign = ifelse(p_value < 0.05, TRUE, FALSE))
+data_out <- data_out %>% mutate(sign = ifelse(p_value < 0.1, TRUE, FALSE))
 
 return(data_out)
 }
@@ -3212,7 +3253,7 @@ test_result <- fisher.test(xtabs(as.formula(paste0("n ~", x, "+ PID_metagroups_n
 
 data_out <- data.frame(gene = str_split(x,"_", simplify = TRUE)[,1], p_value = test_result$p.value)
 
-data_out <- data_out %>% mutate(sign = ifelse(p_value < 0.05, TRUE, FALSE))
+data_out <- data_out %>% mutate(sign = ifelse(p_value < 0.1, TRUE, FALSE))
 
 return(data_out)
 }      

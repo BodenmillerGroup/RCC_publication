@@ -4797,7 +4797,7 @@ ggsurvplot(fit,
           linetype = "strata", # Change line type by groups
           surv.median.line = "hv", # Specify median survival
           ggtheme = theme_classic(), # Change ggplot2 theme
-          palette = c("seagreen","orange3","firebrick","pink2"),
+          palette = c("seagreen4","orange2","firebrick2","pink2"),
           conf.int = FALSE)
 
 #Plot survival curves
@@ -4811,7 +4811,7 @@ ggsurvplot(fit,
           linetype = "strata", # Change line type by groups
           surv.median.line = "hv", # Specify median survival
           ggtheme = theme_classic(), # Change ggplot2 theme
-          palette = c("seagreen","orange3","firebrick","pink2"),
+          palette = c("seagreen4","orange2","firebrick2","pink2"),
           conf.int = FALSE)
 
 ```
