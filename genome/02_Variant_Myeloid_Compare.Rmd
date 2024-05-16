@@ -2605,12 +2605,11 @@ unique(sce$PID_metagroups_names)
 unique(sce$PID_metagroups_scaled_names) #These are potentially more informative! 
 
 #sce$PID_metagroups_names <- sce$PID_metagroups_scaled_names
-
 sce$M2_dom <- ifelse(sce$PID_metagroups_names == "M2_dom", "1", "0")
 sce$M1_dom <- ifelse(sce$PID_metagroups_names == "M1_dom", "1", "0")
 sce$AgM_dom <- ifelse(sce$PID_metagroups_names == "AgM_dom", "1", "0")
 sce$MDSC_dom <- ifelse(sce$PID_metagroups_names == "MDSC_dom", "1", "0")
-sce$Mix <- ifelse(sce$PID_metagroups_names == "Mix", "1", "0")
+#sce$Mix <- ifelse(sce$PID_metagroups_names == "Mix", "1", "0")
 ```
 
 

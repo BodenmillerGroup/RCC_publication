@@ -260,13 +260,304 @@ Heatmap(PID_cor, col = col, cluster_columns = TRUE, cluster_rows = TRUE)
 
 ### Myeloid based patient groups 
 
+#### Celltype broad 
+
+```{r}
+# Crate binary patient groups
+## Patient groups 
+unique(sce$PID_metagroups_names)
+unique(sce$PID_metagroups_scaled_names) #These are potentially more informative! 
+sce$PID_metagroups_names <- sce$PID_metagroups_scaled_names
+
+sce$M2_dom <- ifelse(sce$PID_metagroups_names == "M2_dom", "1", "0")
+sce$M1_dom <- ifelse(sce$PID_metagroups_names == "M1_dom", "1", "0")
+sce$AgM_dom <- ifelse(sce$PID_metagroups_names == "AgM_dom", "1", "0")
+sce$MDSC_dom <- ifelse(sce$PID_metagroups_names == "MDSC_dom", "1", "0")
+#sce$Mix <- ifelse(sce$PID_metagroups_names == "Mix", "1", "0")
+```
+
+```{r}
+PID_T_metacluster <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/data/Tcell_metacluster_PID.csv")
+```
+
+##### Combined CD4/CD8 
+
+```{r}
+### Differential abundance analysis based on edgeR
+library(edgeR)
+
+DA <- lapply(c("M2_dom", "M1_dom", "AgM_dom", "MDSC_dom"), function(x){
+
+abundances <- PID_T_metacluster %>% pivot_wider(id_cols = "PID",names_from = "Tcell_metacluster",values_from = "Freq") %>% column_to_rownames("PID") %>% t()
+
+abundances <- unclass(abundances) 
+
+#relevant patient metadata (Re-level for baseline)
+meta <- colData(sce)[match(colnames(abundances), sce$PID),]
+
+meta[,x] <- relevel(x=factor(meta[,x]), ref = "0")
+
+#filter
+meta <- meta[!is.na(meta[,x]),]
+abundances <- abundances[,colnames(abundances) %in% meta$PID]
+
+#create DGEList - based on edgeR package
+y.ab <- DGEList(abundances, samples=meta, group = meta[,x])
+
+#Design matrix
+design <- model.matrix(~group, data = y.ab$samples)
+
+#Visualize
+# logCPM of abundances per cluster
+cur_mat <- edgeR::cpm(abundances,prior.count = 1,log = TRUE)
+
+# Estimate NB and QL dispersion 
+y.ab <- estimateDisp(y.ab, design, trend="none")
+
+fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
+
+# Test for differential abundance of clusters between tumor stages
+res <- glmQLFTest(fit.ab, coef=ncol(design))
+
+DA <- res$table
+
+DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
+
+DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.05, result = ifelse(DA$logFC > 0 & DA$FDR < 0.05, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.05, "DOWN", "NOTSIG"))) %>% 
+  arrange(desc(logFC))
+
+DA$cluster <- factor(DA$cluster, levels = DA$cluster)
+DA$category <- x
+
+return(DA)
+})
+
+DA_out <- do.call(rbind, DA)
+```
 
 
+```{r}
+# FDR at 0.1 with trends
+DA_out$result <- ifelse(DA_out$logFC > 0 & DA_out$FDR < 0.1, "UP",
+                             ifelse(DA_out$logFC > 0 & DA_out$PValue < 0.05, "UP_trend", 
+                                    ifelse(DA_out$logFC < 0 & DA_out$FDR < 0.1, "DOWN", 
+                                           ifelse(DA_out$logFC < 0 & DA_out$PValue < 0.05, "DOWN_trend","NOTSIG"))))
+
+## hierarchical clustering on logFC
+cur_df <- DA_out %>% select(cluster, category, logFC) %>% pivot_wider(values_from = logFC, names_from = cluster)
+
+# rows 
+dd <- dist(cur_df[2:ncol(cur_df)], method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+row_sorted <- hc$order
+DA_out$category <- factor(DA_out$category, levels = cur_df[row_sorted,]$category)
+
+# columns 
+dd <- dist(t(cur_df[2:ncol(cur_df)]), method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+column_sorted <- hc$order
+
+DA_out$cluster <- factor(DA_out$cluster, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
+
+ggplot(DA_out, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8")+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = DA_out,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+##### CD8 
+
+```{r}
+### Differential abundance analysis based on edgeR
+library(edgeR)
+
+DA <- lapply(c("M2_dom", "M1_dom", "AgM_dom", "MDSC_dom"), function(x){
+
+abundances <- PID_T_metacluster %>% filter(str_detect(Tcell_metacluster, "CD8")) %>% pivot_wider(id_cols = "PID",names_from = "Tcell_metacluster",values_from = "Freq") %>% column_to_rownames("PID") %>% t()
+
+abundances <- unclass(abundances) 
+
+#relevant patient metadata (Re-level for baseline)
+meta <- colData(sce)[match(colnames(abundances), sce$PID),]
+
+meta[,x] <- relevel(x=factor(meta[,x]), ref = "0")
+
+#filter
+meta <- meta[!is.na(meta[,x]),]
+abundances <- abundances[,colnames(abundances) %in% meta$PID]
+
+#create DGEList - based on edgeR package
+y.ab <- DGEList(abundances, samples=meta, group = meta[,x])
+
+#Design matrix
+design <- model.matrix(~group, data = y.ab$samples)
+
+#Visualize
+# logCPM of abundances per cluster
+cur_mat <- edgeR::cpm(abundances,prior.count = 1,log = TRUE)
+
+# Estimate NB and QL dispersion 
+y.ab <- estimateDisp(y.ab, design, trend="none")
+
+fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
+
+# Test for differential abundance of clusters between tumor stages
+res <- glmQLFTest(fit.ab, coef=ncol(design))
+
+DA <- res$table
+
+DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
+
+DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.05, result = ifelse(DA$logFC > 0 & DA$FDR < 0.05, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.05, "DOWN", "NOTSIG"))) %>% 
+  arrange(desc(logFC))
+
+DA$cluster <- factor(DA$cluster, levels = DA$cluster)
+DA$category <- x
+
+return(DA)
+})
+
+DA_out <- do.call(rbind, DA)
+```
 
 
+```{r}
+# FDR at 0.1 with trends
+DA_out$result <- ifelse(DA_out$logFC > 0 & DA_out$FDR < 0.1, "UP",
+                             ifelse(DA_out$logFC > 0 & DA_out$PValue < 0.05, "UP_trend", 
+                                    ifelse(DA_out$logFC < 0 & DA_out$FDR < 0.1, "DOWN", 
+                                           ifelse(DA_out$logFC < 0 & DA_out$PValue < 0.05, "DOWN_trend","NOTSIG"))))
+
+## hierarchical clustering on logFC
+cur_df <- DA_out %>% select(cluster, category, logFC) %>% pivot_wider(values_from = logFC, names_from = cluster)
+
+# rows 
+dd <- dist(cur_df[2:ncol(cur_df)], method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+row_sorted <- hc$order
+DA_out$category <- factor(DA_out$category, levels = cur_df[row_sorted,]$category)
+
+# columns 
+dd <- dist(t(cur_df[2:ncol(cur_df)]), method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+column_sorted <- hc$order
+
+DA_out$cluster <- factor(DA_out$cluster, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
+
+ggplot(DA_out, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8")+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = DA_out,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
 
 
+##### CD4
+
+```{r}
+### Differential abundance analysis based on edgeR
+library(edgeR)
+
+DA <- lapply(c("M2_dom", "M1_dom", "AgM_dom", "MDSC_dom"), function(x){
+
+abundances <- PID_T_metacluster %>% filter(str_detect(Tcell_metacluster, "CD4")) %>% pivot_wider(id_cols = "PID",names_from = "Tcell_metacluster",values_from = "Freq") %>% column_to_rownames("PID") %>% t()
+abundances <- unclass(abundances) 
+abundances <- abundances[,colnames(abundances) %in% names(colSums(abundances))[colSums(abundances) != 0]]
+
+#relevant patient metadata (Re-level for baseline)
+meta <- colData(sce)[match(colnames(abundances), sce$PID),]
+
+meta[,x] <- relevel(x=factor(meta[,x]), ref = "0")
+
+#filter
+meta <- meta[!is.na(meta[,x]),]
+abundances <- abundances[,colnames(abundances) %in% meta$PID]
+
+#create DGEList - based on edgeR package
+y.ab <- DGEList(abundances, samples=meta, group = meta[,x])
+
+#Design matrix
+design <- model.matrix(~group, data = y.ab$samples)
+
+#Visualize
+# logCPM of abundances per cluster
+cur_mat <- edgeR::cpm(abundances,prior.count = 1,log = TRUE)
+
+# Estimate NB and QL dispersion 
+y.ab <- estimateDisp(y.ab, design, trend="none")
+
+fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
+
+# Test for differential abundance of clusters between tumor stages
+res <- glmQLFTest(fit.ab, coef=ncol(design))
+
+DA <- res$table
+
+DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
+
+DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.05, result = ifelse(DA$logFC > 0 & DA$FDR < 0.05, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.05, "DOWN", "NOTSIG"))) %>% 
+  arrange(desc(logFC))
+
+DA$cluster <- factor(DA$cluster, levels = DA$cluster)
+DA$category <- x
+
+return(DA)
+})
+
+DA_out <- do.call(rbind, DA)
+```
 
 
+```{r}
+# FDR at 0.1 with trends
+DA_out$result <- ifelse(DA_out$logFC > 0 & DA_out$FDR < 0.1, "UP",
+                             ifelse(DA_out$logFC > 0 & DA_out$PValue < 0.05, "UP_trend", 
+                                    ifelse(DA_out$logFC < 0 & DA_out$FDR < 0.1, "DOWN", 
+                                           ifelse(DA_out$logFC < 0 & DA_out$PValue < 0.05, "DOWN_trend","NOTSIG"))))
+
+## hierarchical clustering on logFC
+cur_df <- DA_out %>% select(cluster, category, logFC) %>% pivot_wider(values_from = logFC, names_from = cluster)
+
+# rows 
+dd <- dist(cur_df[2:ncol(cur_df)], method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+row_sorted <- hc$order
+DA_out$category <- factor(DA_out$category, levels = cur_df[row_sorted,]$category)
+
+# columns 
+dd <- dist(t(cur_df[2:ncol(cur_df)]), method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+column_sorted <- hc$order
+
+DA_out$cluster <- factor(DA_out$cluster, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
+
+ggplot(DA_out, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8")+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = DA_out,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
 
 
+#### Celltype fine
+
+TO DO
