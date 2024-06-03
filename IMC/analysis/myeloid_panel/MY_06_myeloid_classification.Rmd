@@ -1601,6 +1601,22 @@ plotExpression(sce[,cur_cells],
   scale_color_manual(values = metadata(sce)$colors$myeloid_metacluster)
 ```
 
+#### Extract data 
+
+```{r}
+# Fine myeloid clusters
+PID_my_cluster_names <- colData(sce) %>% as.data.frame() %>% select(my_cluster_names,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_my_cluster_names <- PID_my_cluster_names %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq))
+
+write.csv(PID_my_cluster_names, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/06_my/myeloid_fine_cluster_PID.csv")
+
+# Myeloid metacluster
+PID_myeloid_metacluster <- colData(sce) %>% as.data.frame() %>% select(myeloid_metacluster,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_myeloid_metacluster <- PID_myeloid_metacluster %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq))
+
+write.csv(PID_myeloid_metacluster, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/06_my/myeloid_metacluster_PID.csv")
+```
+
 # 5. Myeloid neighborhood
 
 NOTE: Neighborhood detection did not work as intended. One neighborhood contains most cells, which is hard to interpret. 
