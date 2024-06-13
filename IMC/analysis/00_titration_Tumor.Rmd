@@ -9,9 +9,9 @@ editor_options:
 
 # Adopted from Daniel Schulz 
 
-This script can be used to calculate signal to noise ratios for single cells from an images.
+This script can be used to calculate signal to noise ratios for single cells from a images.
 
-As an input an expression matrix will work (e.g. steinbock output)
+As an input an expression matrix will work (e.g. steinbock output).
 
 Additionally, we will load images and masks and investigate the positive and negative clusters further. 
 
@@ -161,6 +161,7 @@ plotReducedDim(sce_RCC,dimred = "UMAP", colour_by = "dilution_cat")
 ### Calculate signal to noise and check splits
 
 ```{r, fig.width=8, fig.height=4}
+# Main analysis
 sn_dat <- SN_ratios(sce_RCC,use_markers,group.by = "dilution_id")
 ``` 
 
