@@ -201,7 +201,8 @@ ggplot(n_pathway, aes(x = reorder(KEGG.pathway,-n), y = n))+
 
 
 
-## TO DO: Turn into summarizedExperiment object? 
+## TO DO: Turn into summarizedExperiment object? Differential expression analysis? Pathway enrichment analysis? etc. 
+
 
 # Save plots as pdf
 

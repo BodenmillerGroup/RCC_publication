@@ -990,9 +990,9 @@ DA_out <- do.call(rbind, DA)
 ```{r}
 # FDR at 0.1 with trends
 DA_out$result <- ifelse(DA_out$logFC > 0 & DA_out$FDR < 0.1, "UP",
-                             ifelse(DA_out$logFC > 0 & DA_out$PValue < 0.05, "UP_trend", 
+                             ifelse(DA_out$logFC > 0 & DA_out$PValue < 0.1, "UP_trend", 
                                     ifelse(DA_out$logFC < 0 & DA_out$FDR < 0.1, "DOWN", 
-                                           ifelse(DA_out$logFC < 0 & DA_out$PValue < 0.05, "DOWN_trend","NOTSIG"))))
+                                           ifelse(DA_out$logFC < 0 & DA_out$PValue < 0.1, "DOWN_trend","NOTSIG"))))
 
 # Select myeloid cells only 
 DA_out <- DA_out[str_detect(DA_out$cluster, "MY"),]
@@ -1093,9 +1093,9 @@ DA_out <- do.call(rbind, DA)
 ```{r}
 # FDR at 0.1 with trends
 DA_out$result <- ifelse(DA_out$logFC > 0 & DA_out$FDR < 0.1, "UP",
-                             ifelse(DA_out$logFC > 0 & DA_out$PValue < 0.05, "UP_trend", 
+                             ifelse(DA_out$logFC > 0 & DA_out$PValue < 0.1, "UP_trend", 
                                     ifelse(DA_out$logFC < 0 & DA_out$FDR < 0.1, "DOWN", 
-                                           ifelse(DA_out$logFC < 0 & DA_out$PValue < 0.05, "DOWN_trend","NOTSIG"))))
+                                           ifelse(DA_out$logFC < 0 & DA_out$PValue < 0.1, "DOWN_trend","NOTSIG"))))
 
 ## hierarchical clustering on logFC
 cur_df <- DA_out %>% select(cluster, category, logFC) %>% pivot_wider(values_from = logFC, names_from = cluster)
