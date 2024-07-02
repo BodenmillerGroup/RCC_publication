@@ -1208,6 +1208,150 @@ sce$my_cluster_names <- as.factor(anno$my_cluster_names[match(sce$my_cluster_sel
 colData(sce) %>% as.data.frame %>% group_by(myeloid_metacluster) %>% count()
 ```
 
+#### Aggregated 
+
+```{r}
+#Read sce after clustering, astir and GMM
+sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_06.rds")
+
+### 1. Heatmap body ###
+
+# Aggregrate across cells with the mean
+mean_sce <- aggregateAcrossCells(sce, ids = sce$myeloid_metacluster,
+                                 statistics = "mean",
+                                 use.assay.type = "exprs",
+                                 subset.row = rowData(sce)$myeloid_cluster_1)
+
+
+# Heatmap body color 
+col_main = viridis(100)
+
+### 2. Heatmap annotation ###
+
+### 2.1 Spatial features
+
+#Select spatial features and average over myeloid_metaclusters 
+spatial <- colData(sce) %>% as.data.frame %>% select(area,eccentricity,n_neighbors, myeloid_metacluster)
+spatial <- spatial %>% select(-myeloid_metacluster) %>% aggregate(by = list(myeloid_metacluster = spatial$myeloid_metacluster), FUN = mean) %>% column_to_rownames("myeloid_metacluster")
+
+#Define color schemes for spatial features and add to metadata
+area_col <- colorRamp2(c(min(spatial$area),median(spatial$area),max(spatial$area)), c(brewer.pal(3,"Blues")[1],brewer.pal(3,"Blues")[2],brewer.pal(3,"Blues")[3]))
+metadata(sce)$colors$area <- area_col
+
+eccentricity_col <- colorRamp2(c(min(spatial$eccentricity),median(spatial$eccentricity),max(spatial$eccentricity)), c(brewer.pal(3,"Purples")[1],brewer.pal(3,"Purples")[2],brewer.pal(3,"Purples")[3]))
+metadata(sce)$colors$eccentricity <- eccentricity_col
+
+n_neighbors_col <- colorRamp2(c(min(spatial$n_neighbors),median(spatial$n_neighbors),max(spatial$n_neighbors)), c(brewer.pal(3,"RdPu")[1],brewer.pal(3,"RdPu")[2],brewer.pal(3,"RdPu")[3]))
+metadata(sce)$colors$n_neighbors <- n_neighbors_col
+
+#Create Spatial Heatmap Annotation
+ha_spatial <- HeatmapAnnotation(
+    area = spatial$area,
+    eccentricity = spatial$eccentricity,
+    n_neighbors = spatial$n_neighbors, 
+    col = list(area = metadata(sce)$colors$area,
+               eccentricity = metadata(sce)$colors$eccentricity,
+               n_neighbors = metadata(sce)$colors$n_neighbors),
+    border = TRUE,
+    which = "row")
+
+### 2.2 Astir / GMM prediction 
+
+## Astir cell types per cluster
+astir_anno <- colData(sce) %>% as.data.frame() %>% select(myeloid_metacluster,astir_myeloid_combined) %>% group_by(myeloid_metacluster) %>% table() %>% as.data.frame
+astir_anno <- astir_anno %>% group_by(myeloid_metacluster) %>% mutate(fra = Freq/sum(Freq)) 
+astir_anno <- astir_anno %>% select(-Freq) %>% pivot_wider(id_cols = myeloid_metacluster,names_from = astir_myeloid_combined,values_from = fra) %>% column_to_rownames("myeloid_metacluster")
+
+#Create colors for astir cell types 
+astir_col <- setNames(c("#E31A1C","#A6CEE3","#FB9A99","#FDBF6F","#33A02C","#CAB2D6"), 
+                      c("M2_like", "C_M", "Neutro_MDSC", "M1_like", "Ag_M","Unknown/Other"))
+
+#astir_col <- setNames(c("#E31A1C", "#EB4445", "#F36F6F", "#FB9A99", "#CA7194", "#994A8F", "#68228B"), 
+#                     c("M2_like", "M1_like", "Neutro_MDSC","Granu", "C_M", "Ag_M", "Other"))
+
+metadata(sce)$colors$my_astir_col <- astir_col
+metadata(sce)$colors$my_astir_col <- metadata(sce)$colors$my_astir_col[match(colnames(astir_anno),names(metadata(sce)$colors$my_astir_col))]
+
+## GMM cell types per cluster
+GMM_anno <- colData(sce) %>% as.data.frame() %>% select(myeloid_metacluster,GMM_myeloid_combined) %>% group_by(myeloid_metacluster) %>% table() %>% as.data.frame
+GMM_anno <- GMM_anno %>% group_by(myeloid_metacluster) %>% mutate(fra = Freq/sum(Freq)) 
+GMM_anno <- GMM_anno %>% select(-Freq) %>% pivot_wider(id_cols = myeloid_metacluster,names_from = GMM_myeloid_combined,values_from = fra) %>% column_to_rownames("myeloid_metacluster")
+
+#Create colors for GMM cell types 
+GMM_col <- setNames(c("#E31A1C","#A6CEE3","#FB9A99","#FDBF6F","#33A02C","#CAB2D6"), 
+                      c("M2_like", "C_M", "Neutro_MDSC", "M1_like", "Ag_M","Unknown/Other"))
+
+#GMM_col <- setNames(c("#E31A1C", "#EB4445", "#F36F6F", "#FB9A99", "#CA7194", "#994A8F", "#68228B"), 
+#                     c("M2_like", "M1_like", "Neutro_MDSC","Granu", "C_M", "Ag_M", "Other"))
+
+metadata(sce)$colors$my_GMM_col <- GMM_col
+metadata(sce)$colors$my_GMM_col <- metadata(sce)$colors$my_GMM_col[match(colnames(GMM_anno),names(metadata(sce)$colors$my_GMM_col))]
+
+ha_GMM_astir <- HeatmapAnnotation(
+  astir_myeloid = anno_barplot(astir_anno, width = unit(20, "mm"), gp = gpar(fill = metadata(sce)$colors$my_astir_col)),
+  GMM_myeloid = anno_barplot(GMM_anno, width = unit(20, "mm"), gp = gpar(fill = metadata(sce)$colors$my_GMM_col)),
+                            border = TRUE, 
+                            annotation_name_rot = 90,
+                            gap = unit(3,"mm"),
+                            which = "row")
+
+### 2.2 Metadata features
+
+#Number of cells per myeloid_metacluster 
+n_cells <- colData(mean_sce) %>% as.data.frame %>% select(myeloid_metacluster, ncells)
+
+# # Number of contributing patients (at least 1 cell)
+cluster_PID <- colData(sce) %>% as.data.frame() %>% select(myeloid_metacluster,PID) %>% group_by(myeloid_metacluster) %>% table() %>% as.data.frame
+n_PID <- cluster_PID %>% filter(Freq>=5) %>% group_by(myeloid_metacluster) %>% count(name = "n_PID") %>% column_to_rownames("myeloid_metacluster")
+
+
+ha_meta <- HeatmapAnnotation(
+  n_cells = anno_barplot(n_cells$ncells, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),                        
+  n_PID = anno_barplot(n_PID$n_PID, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),
+  border = TRUE, 
+  annotation_name_rot = 90,
+  gap = unit(1,"mm"),
+  which = "row")
+
+### 3. Define broader categories
+anno <- colData(mean_sce) %>% as.data.frame %>% select(myeloid_metacluster, ncells)
+
+#Create colors for myeloid metacluster
+meta_col <- setNames(c("#E31A1C","#A6CEE3","#FB9A99","#FDBF6F","#33A02C"), 
+                      c("M2_like", "C_M", "Neutro_MDSC", "M1_like", "Ag_M"))
+
+metadata(sce)$colors$myeloid_metacluster <- meta_col
+
+### 4. Plot combined Heatmap
+h <- Heatmap(t(assay(mean_sce, "exprs")),
+        col = col_main,
+        name = "exprs",
+        row_title = NULL,
+        show_row_names = TRUE, 
+        show_row_dend = TRUE,
+        row_names_side = "left",
+        show_column_names =  TRUE,
+        row_split = anno$myeloid_metacluster,
+        clustering_method_rows = "ward.D2",
+        clustering_method_columns = "ward.D2",
+        cluster_row_slices = TRUE)+
+  Heatmap(scale(t(assay(mean_sce, "exprs"))))+
+  rowAnnotation(metacluster = anno_simple(unfactor(anno$myeloid_metacluster), col = metadata(sce)$colors$myeloid_metacluster, border = TRUE))+
+  ha_GMM_astir+
+  ha_spatial+
+  ha_meta
+
+# Create legends for annotation 
+lgd <- Legend(title = "metacluster", at = names(metadata(sce)$colors$myeloid_metacluster), 
+               legend_gp = gpar(fill = metadata(sce)$colors$myeloid_metacluster))
+ 
+lgd_1 <- Legend(title = "astir/GMM", at = names(metadata(sce)$colors$my_astir_col), 
+               legend_gp = gpar(fill = metadata(sce)$colors$my_astir_col))
+
+# Draw heatmap
+draw(h, annotation_legend_list = list(lgd, lgd_1))
+```
+
 ### Visualization 
 
 #### Complex fraction stacked barplot
@@ -2176,7 +2320,7 @@ sce$myeloid_district_names <- factor(anno$district_names[match(sce$myeloid_distr
 # Plot heatmap 
 Heatmap(for_district, col = viridis(100), row_names_side = "left", row_labels = anno$district_names)+
   ha_my+
-  Heatmap(for_district_fine, col = viridis(100))+
+  #Heatmap(for_district_fine, col = viridis(100))+
   ha_meta
   
 #Heatmap(t(scale(t(for_district))))
@@ -3182,7 +3326,7 @@ Cox_df <- PID_metagroups
 
 ## Based on categories (mean or median division of cluster proportions) 
 Cox_df_mean <- foreach(i = colnames(Cox_df),.combine = "cbind")%do%{
-Cox_df %>% select(all_of(i)) %>% mutate(mean = ifelse(Cox_df[,i] > mean(Cox_df[,i]),"B","A")) %>% pull(mean)
+Cox_df %>% select(all_of(i)) %>% mutate(mean = ifelse(Cox_df[,i] > median(Cox_df[,i]),"B","A")) %>% pull(mean)
 }
 
 colnames(Cox_df_mean) <- colnames(Cox_df)
@@ -5051,12 +5195,75 @@ pdf("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/06_my/myelo
 draw(h, annotation_legend_list = list(lgd, lgd_1))
 dev.off()
 
-pdf("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/06_my/myeloid_districts_heatmap.pdf",width = 10,height = 5)
+pdf("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/06_my/myeloid_districts_heatmap.pdf",width = 7,height = 5)
 Heatmap(for_district, col = viridis(100), row_names_side = "left", row_labels = anno$district_names)+
   ha_my+
-  Heatmap(for_district_fine, col = viridis(100))+
+  #Heatmap(for_district_fine, col = viridis(100))+
   ha_meta
 dev.off()
+
+pdf("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/06_my/myeloid_metacluster_heatmap_aggregated.pdf",width = 15,height = 6)
+draw(h, annotation_legend_list = list(lgd, lgd_1))
+dev.off()
+
+pdf("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/06_my/myeloid_metacluster_diff_abun_progression.pdf",width = 7,height = 5)
+ggplot(DA_out, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8")+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = DA_out,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+dev.off()
+
+pdf("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/06_my/cox_multi_myeloid_metacluster_mean.pdf",width = 5,height = 5)
+hr_mean
+dev.off()
+
+pdf("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/06_my/Kaplan_AgM_mean.pdf",width = 5,height = 5, onefile = FALSE)
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = "Set1",
+          conf.int = TRUE
+)
+dev.off()
+
+pdf("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/06_my/cox_multi_myeloid_district_mean.pdf",width = 5,height = 5)
+hr_mean
+dev.off()
+
+pdf("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/06_my/Kaplan_myeloid_district_M2dom_mean.pdf",width = 5,height = 5, onefile = FALSE)
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = "Set1",
+          conf.int = TRUE
+)
+dev.off()
+
+pdf("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/06_my/myeloid_districts_diff_abun_progression.pdf",width = 7,height = 5)
+ggplot(DA_out, aes(x = cluster, y = category, col = logFC, size = -log10(FDR))) +
+  geom_point() +
+  theme_classic() +
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8") +
+  scale_size(range = c(2, 10)) +
+  new_scale_colour() +
+  geom_point(data = DA_out, shape = 1, aes(size = -log10(FDR), col = result), stroke = 1.5) +
+  scale_color_manual(values = c("UP" = "#E41A1C", "NOTSIG" = "snow2", "DOWN" = "#377EB8"), name = "Direction") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+dev.off()
+
 ##IMPORTANT: change back to chunk output inline
 ```
 

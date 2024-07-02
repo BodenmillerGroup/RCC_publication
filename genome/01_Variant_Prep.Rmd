@@ -1458,6 +1458,7 @@ ggplot(fisher_full, aes(x=reorder(gene, -p_out), y = category,col = odds_ratio, 
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   xlab("Genomic subtype")
 ```
+
 #### Evolutionary subtypes 
 
 ```{r}
