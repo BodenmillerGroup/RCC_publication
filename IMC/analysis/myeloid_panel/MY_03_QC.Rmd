@@ -4,7 +4,7 @@ author: "Lasse Meyer"
 date: "1/24/2022"
 output: html_document
 editor_options: 
-  chunk_output_type: inline
+  chunk_output_type: console
 ---
 
 ```{r setup, include=FALSE}
@@ -668,6 +668,8 @@ metadata(sce)$colors$PDL1_score <- setNames(c("#AADBAB","#00441B"),c("0", "1"))
 
 ```{r}
 ## Assess survival impact of clinical categories
+#sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_04.rds") this also contains PDL1 score
+
 library(survival)
 library(survminer)
 
@@ -1148,13 +1150,71 @@ paste0("Number of images after QC: ", length(unique(sce_ccRCC$sample_id)))
 paste0("Number of patients after QC: ", length(unique(sce_ccRCC$PID)))
 ```
 
-## Save objects
+# Save objects
 
 The modified `SingleCellExperiment` object is saved for further downstream analysis.
 
 ```{r save-objects-quality-control}
 saveRDS(sce,"/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_MY_03.rds")
+#sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_MY_03.rds")
 saveRDS(sce_sub,"/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_sub_MY_03.rds")
+```
+
+# Save plots 
+
+```{r}
+pdf("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/03_QC/survival_pT_combined.pdf",width = 5,height = 5, onefile = FALSE)
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = c("#ABCFE5", "#08306B"),
+          conf.int = TRUE)
+dev.off()
+
+pdf("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/03_QC/survival_ISUP_grade.pdf",width = 5,height = 5, onefile = FALSE)
+ggsurvplot(fit_1,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), 
+          conf.int = TRUE,
+          palette = c("#FC9F81", "#67000D")
+          #log.rank.weights = "n"
+)
+dev.off()
+
+pdf("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/03_QC/survival_necrose.pdf",width = 5,height = 5, onefile = FALSE)
+ggsurvplot(fit_3,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(),
+          conf.int = TRUE, # Change ggplot2 theme
+          palette = c("#bf8cf0", "#3F007D")
+          #log.rank.weights = "n"
+)
+dev.off()
+
+pdf("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/03_QC/survival_PDL1.pdf",width = 5,height = 5, onefile = FALSE)
+ggsurvplot(fit_4,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = c("#AADBAB","#00441B"),
+          conf.int = TRUE
+)
+dev.off()
 ```
 
 
