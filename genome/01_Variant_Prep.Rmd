@@ -965,7 +965,7 @@ variant_combined_full$PDL1_score <- sce$PDL1_score[match(variant_combined_full$P
 
 ```{r}
 # Add ITH index from cohort 1 
-variant_combined_full$ITH_index <- ITH_index$ITH_index[match(variant_combined_full$PID, ITH_index$PID)]
+#variant_combined_full$ITH_index <- ITH_index$ITH_index[match(variant_combined_full$PID, ITH_index$PID)]
 ```
 
 ```{r}

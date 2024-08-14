@@ -1,0 +1,161 @@
+---
+title: "00_image_artefact_QC"
+author: "Lasse Meyer"
+date: "1/24/2022"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Image artefact correction 
+
+Here, we correct observed image artefacts (in T cell and myeloid panel) - check in Tumor here - before proceeding with downstream analysis such as single-cell segmentation (see `RCC_steinbock_prepro.md`). 
+
+## Software requirements
+
+```{r lib, message=FALSE,warning=FALSE}
+#Data containers
+library(SpatialExperiment)
+library(SingleCellExperiment)
+
+#Data processing
+library(CATALYST)
+library(scuttle)
+library(scater)
+library(imcRtools)
+
+#Data visualization
+library(cytomapper)
+library(dittoSeq)
+library(viridis)
+
+#Utilities
+library(tidyverse)
+library(openxlsx)
+library(stringr)
+library(BiocParallel)
+```
+
+## Read in uncorrected images
+
+```{r read-images}
+#Load images
+images <- loadImages("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/img/",on_disk = TRUE,h5FilesPath = "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/img/",BPPARAM = MulticoreParam(workers = 14,progressbar = TRUE,stop.on.error = FALSE))
+```
+
+```{r}
+# Set channel-names for multi-channel images
+panel <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/panel.csv")
+channelNames(images) <- panel$clean_target
+images
+```
+
+## Save uncorrected images
+
+```{r save-objects-read-data}
+saveRDS(images, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/images_before_correction.rds")
+#images <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/images_before_correction.rds")
+```
+
+## Function to remove artificial pixels
+
+Please note that this function returns multi-channel images as **16-bit** encoded images (not 32bit as usual).
+
+```{r}
+library(BiocNeighbors)
+library(BiocParallel)
+library(tidyverse)
+library(EBImage)
+
+removePixelArtifacts <- function(images,
+                         cutoff = 0,
+                         size = 2,
+                         BPPARAM = MulticoreParam()){
+  bplapply(seq_along(images), function(x){ 
+    
+    # Step 1: Detect artifacts by log-variance-mean-ratio
+    cur_var <- apply(as.array(images[[x]]), MARGIN = c(1,2), var)
+    cur_mean <- apply(as.array(images[[x]]), MARGIN = c(1,2), mean)
+    
+    pixels_wrong <- log(cur_var/(cur_mean^2)) < cutoff
+    pixels_wrong[is.na(pixels_wrong)] <- FALSE
+
+    if (sum(pixels_wrong) > 0) {
+      print(paste0(names(images[x]),": This image contained ", sum(pixels_wrong), " artificial pixels."))
+    
+    # Step 2: Set all artificial pixels to 0
+    img_cor <- CytoImageList(images[x], on_disk = FALSE)[[1]] #Load images into memory
+    img_cor[pixels_wrong] <- 0
+
+    #Step 3: Replace artificial pixels with median filter 
+    img_median <- medianFilter(img_cor, size = size)
+    img_cor[pixels_wrong] <- img_median[pixels_wrong]
+
+    writeImage(as.array(img_cor)/(2^16 - 1), 
+               paste0("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/img_cor/",names(images[x]), ".tiff"), #directory currently hard-coded - has to be created
+               bits.per.sample = 16)
+    
+    }else{
+      
+      writeImage(as.array(images[[x]])/(2^16 - 1), 
+                 paste0("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/img_cor/",names(images[x]), ".tiff"),#directory currently hard-coded - has to be created
+                 bits.per.sample = 16)
+      
+    }
+    }, BPPARAM = BPPARAM)
+  
+  return(print("Artificial Pixel removal completed."))
+  }
+```
+
+## Apply function to images 
+
+```{r}
+# Read in images 
+images <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/images_before_correction.rds")
+```
+
+
+```{r}
+# Run function across all images
+removePixelArtifacts(images, BPPARAM = MulticoreParam(workers = 20)) #please copy the function print out into an excel file
+```
+
+```{r}
+# Summary for pixel removal part
+library(readxl)
+out <- read_excel("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/summary_pixelremoval.csv") # created by coyping the function print out into excel 
+
+out$Image <- str_replace(out$Image, ":", "")
+out$Image <- str_replace(out$Image, "\"", "")
+
+dim(out %>% filter(n_pixels_changed >= 100)) 
+
+hist(out$n_pixels_changed, breaks = 20)
+```
+
+
+## Load and save corrected images 
+
+```{r read-images}
+#Load images
+images_new <- loadImages("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/img_cor/",
+                         on_disk = TRUE,h5FilesPath = "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/img_cor_h5/", #create separate h5_folder
+                         as.is = TRUE, # Important to not rescale 16-bit images
+                         BPPARAM = MulticoreParam(workers = 25,progressbar = TRUE,stop.on.error = FALSE))
+```
+
+```{r}
+# Set channel-names for multi-channel images
+panel <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/panel.csv")
+channelNames(images_new) <- panel$clean_target
+images_new
+```
+
+```{r save-objects-read-data}
+saveRDS(images_new, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/images.rds")
+```

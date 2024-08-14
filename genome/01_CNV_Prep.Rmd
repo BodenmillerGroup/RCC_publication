@@ -1,0 +1,99 @@
+---
+title: "01_CNV_Prep"
+author: "Lasse Meyer"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# CNV calls preparation
+
+## Software requirments 
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(RColorBrewer)
+library(foreach)
+library(circlize)
+library(ComplexHeatmap)
+library(ggpubr)
+```
+
+## 1. 
+
+
+```{r}
+CNV_genes <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/results/cohort_1_ena/03_CNV/pureCN_all_samples_CNA_genes.csv")
+
+CNV_genes_sig <- CNV_genes %>% filter(type %in% c("AMPLIFICATION","DELETION" ))
+
+CNV_genes_count <- CNV_genes_sig %>% group_by(gene.symbol) %>% count() %>% arrange(desc(n))
+
+CNV_genes_count %>% filter(gene.symbol %in% GOI)
+
+check <- CNV_genes_sig %>% filter(gene.symbol %in% GOI)
+```
+
+```{r}
+# ccRCC mutational driver genes 
+GOI_IntOGen <- read_tsv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/data/IntOGen_DriverGenes_CCRCC.tsv")
+GOI <- GOI_IntOGen$Symbol #n = 44
+```
+
+
+```{r}
+files <- list.files("/mnt/central_nas/rcc_volume/RCC/genome/results/cohort_1_ena/03_CNV/pureCN_raw/")
+filenames <- str_replace(files[str_detect(files, "pureCN")], "pureCN_","")
+
+CNV_arm_full <- foreach(file = filenames, .combine = "rbind")%do%{
+  dir <- paste0("/mnt/central_nas/rcc_volume/RCC/genome/results/cohort_1_ena/03_CNV/pureCN_raw/pureCN_", file, "/", file, "_loh.csv") 
+  cur_out <- read_csv(dir)
+  return(cur_out)
+}
+```
+
+```{r}
+CNV_arm_sum <- CNV_arm_full %>% mutate(chr_arm = paste0(chr, "_", arm), diff_bp = as.integer(end) - as.integer(start)) %>% group_by(Sampleid, chr_arm) %>% mutate(total_bp = sum(diff_bp)) %>% mutate(C_norm = C*(diff_bp/total_bp)) %>% summarise(C_norm = sum(C_norm)) %>% mutate(chr_arm_type = ifelse(C_norm >= 3, "gain", ifelse(C_norm < 2, "loss", "neutral")))
+  
+CNV_arm_sum %>% ungroup() %>% filter(chr_arm_type == "gain") %>% count(chr_arm) %>% arrange(desc(n))
+CNV_arm_sum %>% ungroup() %>% filter(chr_arm_type == "loss") %>% count(chr_arm) %>% arrange(desc(n))
+  
+
+out_heat <- CNV_arm_sum %>% pivot_wider(id_cols = Sampleid, values_from = C_norm, names_from = chr_arm) %>% column_to_rownames("Sampleid")
+out_heat <- out_heat %>% mutate_all(as.numeric)
+
+out_heat_bin <- ifelse(out_heat >= 3, 4, ifelse(out_heat < 1.5, 1, 2))
+
+colours = c("#4575B4", "white", "#D73027")
+col <- colorRamp2(breaks = c(1,2,4), colours)
+
+Heatmap(out_heat, col = col)
+Heatmap(out_heat_bin, col = col)
+```
+
+
+
+
+
+```{r}
+hg38 <- readRDS("/mnt/central_nas/rcc_volume/RCC/genome/results/cohort_1_ena/03_CNV/pureCN_raw/normalDB_hg38.rds")
+
+check <- as.data.frame(hg38$sd$weights)
+check <- check %>% filter(seqnames == "chr1")
+
+range(check$start)
+
+```
+
+```{r}
+# Get cytoband information via https://genome.ucsc.edu/cgi-bin/hgTables
+library(GenomeInfoDb)
+library(rtracklayer)
+
+cytoband <- getTable(ucscTableQuery(session, table = "cytoBand"))
+```
+
