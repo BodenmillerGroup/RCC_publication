@@ -980,7 +980,7 @@ variant_combined_full <- variant_combined_full %>% filter(subtype_combined == "c
 ```
 
 ```{r}
-write_csv(variant_combined_full, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_full_withmeta.csv")
+#write_csv(variant_combined_full, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_full_withmeta.csv")
 #variant_combined_full <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_full_withmeta.csv")
 ```
 
@@ -995,6 +995,13 @@ GOI_IntOGen <- read_tsv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/da
 GOI <- GOI_IntOGen$Symbol #n = 44
 GOI <- c(GOI, "ELOC") # Add ELOC (TCEB1)
 ```
+
+
+### Add CNV gene data 
+
+TO DO
+
+For these patients, we may also need to change the genomic subtype! 
 
 ### Oncoprint 
 
@@ -1184,6 +1191,13 @@ ht_all <- oncoPrint(mut_list_full,
 draw(ht_all)
 ```
 
+
+
+
+
+# TO DO: SPLIT THE SCRIPT UP HERE! 
+
+
 ## 5. Genomic subtype defintion 
 
 ```{r}
@@ -1199,6 +1213,8 @@ save_sum <- as.data.frame(t(sum_matrix)) %>% rownames_to_column("PID")
 ```
 
 ### Manual annotation 
+
+TO DO: Change for patients (5 or so) with focal CNV events 
 
 ```{r}
 # Create heatmap combining information from mutations and IHC scores

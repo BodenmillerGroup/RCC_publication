@@ -23,27 +23,90 @@ library(ComplexHeatmap)
 library(ggpubr)
 ```
 
-## 1. 
-
+## 1. Focal CNVs (Genes)
 
 ```{r}
 CNV_genes <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/results/cohort_1_ena/03_CNV/pureCN_all_samples_CNA_genes.csv")
-
-CNV_genes_sig <- CNV_genes %>% filter(type %in% c("AMPLIFICATION","DELETION" ))
-
-CNV_genes_count <- CNV_genes_sig %>% group_by(gene.symbol) %>% count() %>% arrange(desc(n))
-
-CNV_genes_count %>% filter(gene.symbol %in% GOI)
-
-check <- CNV_genes_sig %>% filter(gene.symbol %in% GOI)
 ```
+
+### Match identifiers
+
+```{r}
+ID_match <- read_excel("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/data/ccRCC_ids_LM.xlsx", sheet = 1)
+ID_match_2 <- read_excel("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/data/ccRCC_ids_LM.xlsx", sheet = 2)
+
+ID_match$Bnum_2 <- ID_match_2$Bnum[match(ID_match$expID, ID_match_2$expID)]
+ID_match$Bnum_2[15:16] <- ID_match$BnumGnum[15:16]
+
+ID_match$PID <- c(str_split(ID_match$BnumGnum[1:16], "/", simplify = TRUE)[,2], ID_match$Bnum_2[17:nrow(ID_match)])
+ID_match$PID <- ifelse(ID_match$PID == "", NA, ID_match$PID)
+
+ID_match_3 <- read_excel("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/data/cohort1_PID_noBnumber_withBnr_LM.xlsx", sheet = 1)
+ID_match$PID <- ifelse(is.na(ID_match_3$PID_LM[match(ID_match$Bnum_2, ID_match_3$GNrCode)]), ID_match$PID,ID_match_3$PID_LM[match(ID_match$Bnum_2, ID_match_3$GNrCode)])
+```
+
+```{r}
+# Load patient metadata from IMC 
+patient_meta <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/data/Metadata_combined_RCC.csv",col_names = TRUE)
+patient_meta <- patient_meta %>% filter(type == "primary")
+```
+
+```{r}
+# Add PID
+CNV_genes$PID_old <- str_split(CNV_genes$Sampleid, "_", simplify = TRUE)[,1]
+
+# Match identifiers 
+CNV_genes$PID <- ID_match$PID[match(CNV_genes$PID_old,ID_match$Label)]
+
+# Filter samples without match
+CNV_genes <- CNV_genes %>% filter(!is.na(PID))
+```
+
+
+### Filter CNVs
 
 ```{r}
 # ccRCC mutational driver genes 
 GOI_IntOGen <- read_tsv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/data/IntOGen_DriverGenes_CCRCC.tsv")
 GOI <- GOI_IntOGen$Symbol #n = 44
+GOI <- c(GOI, "ELOC")
 ```
 
+```{r}
+CNV_genes_sig <- CNV_genes %>% filter(type %in% c("AMPLIFICATION","DELETION"))
+
+CNV_genes_count <- CNV_genes_sig %>% group_by(gene.symbol) %>% count() %>% arrange(desc(n))
+
+# Filter for GOI
+CNV_GOI <- CNV_genes_sig %>% filter(gene.symbol %in% GOI)
+
+CNV_GOI_count <- CNV_GOI %>% group_by(gene.symbol) %>% count() %>% arrange(desc(n))
+```
+
+
+```{r}
+# Clonality annotation per PID
+### If mutation is found in both samples - "Clonal" - Otherwise "Subclonal"
+clonality <- CNV_GOI %>% group_by(PID, Sampleid) %>% filter(!is.na(PID)) %>% select(gene.symbol) %>% unique() %>% ungroup() %>% group_by(PID, gene.symbol) %>% dplyr::count() %>% mutate(clonality = ifelse(n == 1, "subclonal", "clonal"))
+
+CNV_consensus <- foreach(i = unique(CNV_GOI$PID), .combine = "rbind")%do%{
+  variant_consensus <- CNV_GOI %>% filter(PID == i)
+  clonality_consensus <- clonality %>% filter(PID == i)
+  variant_consensus$clonality <- clonality_consensus$clonality[match(variant_consensus$gene.symbol, clonality_consensus$gene.symbol)]
+  return(variant_consensus)
+}
+```
+
+
+Check whether I should filter samples anymore by C.flagged for example? 
+
+```{r}
+write_csv(CNV_consensus, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/CNV_genes_combined_consensus.csv")
+```
+
+
+
+## 2. Arm-level CNVs 
 
 ```{r}
 files <- list.files("/mnt/central_nas/rcc_volume/RCC/genome/results/cohort_1_ena/03_CNV/pureCN_raw/")
@@ -56,28 +119,168 @@ CNV_arm_full <- foreach(file = filenames, .combine = "rbind")%do%{
 }
 ```
 
+### Match identifiers
+
 ```{r}
-CNV_arm_sum <- CNV_arm_full %>% mutate(chr_arm = paste0(chr, "_", arm), diff_bp = as.integer(end) - as.integer(start)) %>% group_by(Sampleid, chr_arm) %>% mutate(total_bp = sum(diff_bp)) %>% mutate(C_norm = C*(diff_bp/total_bp)) %>% summarise(C_norm = sum(C_norm)) %>% mutate(chr_arm_type = ifelse(C_norm >= 3, "gain", ifelse(C_norm < 2, "loss", "neutral")))
-  
-CNV_arm_sum %>% ungroup() %>% filter(chr_arm_type == "gain") %>% count(chr_arm) %>% arrange(desc(n))
-CNV_arm_sum %>% ungroup() %>% filter(chr_arm_type == "loss") %>% count(chr_arm) %>% arrange(desc(n))
-  
+ID_match <- read_excel("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/data/ccRCC_ids_LM.xlsx", sheet = 1)
+ID_match_2 <- read_excel("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/data/ccRCC_ids_LM.xlsx", sheet = 2)
 
-out_heat <- CNV_arm_sum %>% pivot_wider(id_cols = Sampleid, values_from = C_norm, names_from = chr_arm) %>% column_to_rownames("Sampleid")
-out_heat <- out_heat %>% mutate_all(as.numeric)
+ID_match$Bnum_2 <- ID_match_2$Bnum[match(ID_match$expID, ID_match_2$expID)]
+ID_match$Bnum_2[15:16] <- ID_match$BnumGnum[15:16]
 
-out_heat_bin <- ifelse(out_heat >= 3, 4, ifelse(out_heat < 1.5, 1, 2))
+ID_match$PID <- c(str_split(ID_match$BnumGnum[1:16], "/", simplify = TRUE)[,2], ID_match$Bnum_2[17:nrow(ID_match)])
+ID_match$PID <- ifelse(ID_match$PID == "", NA, ID_match$PID)
 
-colours = c("#4575B4", "white", "#D73027")
-col <- colorRamp2(breaks = c(1,2,4), colours)
+ID_match_3 <- read_excel("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/data/cohort1_PID_noBnumber_withBnr_LM.xlsx", sheet = 1)
+ID_match$PID <- ifelse(is.na(ID_match_3$PID_LM[match(ID_match$Bnum_2, ID_match_3$GNrCode)]), ID_match$PID,ID_match_3$PID_LM[match(ID_match$Bnum_2, ID_match_3$GNrCode)])
+```
 
-Heatmap(out_heat, col = col)
-Heatmap(out_heat_bin, col = col)
+```{r}
+# Load patient metadata from IMC 
+patient_meta <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/data/Metadata_combined_RCC.csv",col_names = TRUE)
+patient_meta <- patient_meta %>% filter(type == "primary")
+```
+
+```{r}
+# Add PID
+CNV_arm_full$PID_old <- str_split(CNV_arm_full$Sampleid, "_", simplify = TRUE)[,1]
+
+# Match identifiers 
+CNV_arm_full$PID <- ID_match$PID[match(CNV_arm_full$PID_old,ID_match$Label)]
+
+# Filter samples without match
+CNV_arm_full <- CNV_arm_full %>% filter(!is.na(PID))
 ```
 
 
+### Filter and annotate arm-level events 
+
+```{r}
+# Normalizes the Copy-Number for each arm by the number of basepairs profiled 
+# Then categorizes arm-level events
+CNV_arm_sum <- CNV_arm_full %>% mutate(chr_arm = paste0(chr, "_", arm), diff_bp = as.integer(end) - as.integer(start)) %>% group_by(Sampleid, chr_arm) %>% mutate(total_bp = sum(diff_bp)) %>% mutate(C_norm = C*(diff_bp/total_bp)) %>% summarise(C_norm = sum(C_norm)) %>% mutate(chr_arm_type = ifelse(C_norm >= 3, "gain", ifelse(C_norm < 1.5, "loss", "neutral")))
+
+CNV_arm_sum$PID <- CNV_arm_full$PID[match(CNV_arm_sum$Sampleid, CNV_arm_full$Sampleid)]
+```
+
+```{r}
+# Clonality annotation per PID
+### If event is found in both samples - "Clonal" - Otherwise "Subclonal"
+CNV_arm_sum_out <- CNV_arm_sum %>%
+  group_by(PID, chr_arm) %>%
+  summarise(
+    type_summarized = if(n_distinct(chr_arm_type) == 1) first(chr_arm_type) else paste(unique(chr_arm_type)[order(unique(chr_arm_type))], collapse = "_"),
+    clonality = if(n_distinct(chr_arm_type) == 1) "clonal" else "subclonal"
+  ) %>%
+  ungroup()
+
+# count types
+CNV_arm_sum_out %>% group_by(type_summarized) %>% count()
+```
+
+Check whether I should filter samples anymore by C.flagged for example? 
+
+```{r}
+write_csv(CNV_arm_sum_out, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/CNV_armlevel_combined_consensus.csv")
+```
 
 
+### Visualization 
+
+#### General 
+
+Clonal events 
+
+```{r}
+n_PID <- length(unique(CNV_arm_sum_out$PID))
+
+# Loss
+loss_total <- CNV_arm_sum_out %>% filter(type_summarized == "loss") %>% group_by(chr_arm) %>% count() %>% arrange(desc(n)) %>% mutate(fra = n/n_PID, cat = "loss")
+
+# Gain
+gain_total <- CNV_arm_sum_out %>% filter(type_summarized == "gain") %>% group_by(chr_arm) %>% count() %>% arrange(desc(n)) %>% mutate(fra = n/n_PID, cat = "gain")
+
+
+ggplot(loss_total, aes(x=reorder(chr_arm,-fra), y=fra, fill = cat))+
+  geom_bar(stat = "identity", color = "black")+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90))+
+  scale_fill_manual(values = "blue4")+
+
+ggplot(gain_total, aes(x=reorder(chr_arm,-fra), y=fra, fill = cat))+
+  geom_bar(stat = "identity", color = "black")+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90))+
+  scale_fill_manual(values = "firebrick")
+
+combined_total <- rbind(loss_total, gain_total)
+
+ggplot(combined_total, aes(x=reorder(chr_arm,-fra), y=fra, fill = cat))+
+  geom_bar(stat = "identity", color = "black")+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90))+
+  scale_fill_brewer(palette = "Set1")
+
+ggplot(combined_total %>% filter(fra > 0.1), aes(x=reorder(chr_arm,-fra), y=fra, fill = cat))+
+  geom_bar(stat = "identity", color = "black")+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90))+
+  scale_fill_brewer(palette = "Set1")
+```
+All events 
+
+```{r}
+n_PID <- length(unique(CNV_arm_sum_out$PID))
+
+# Loss
+loss_total <- CNV_arm_sum_out %>% filter(type_summarized %in% c("loss", "loss_neutral")) %>% group_by(type_summarized, chr_arm) %>% count() %>% arrange(desc(n)) %>% mutate(fra = n/n_PID, cat = "loss")
+c("loss", "loss_neutral")
+loss_total$type_summarized <- factor(loss_total$type_summarized, levels = c("loss_neutral", "loss"))
+
+# Gain
+gain_total <- CNV_arm_sum_out %>% filter(type_summarized %in% c("gain", "gain_neutral")) %>% group_by(type_summarized, chr_arm) %>% count() %>% arrange(desc(n)) %>% mutate(fra = n/n_PID, cat = "gain")
+gain_total$type_summarized <- factor(gain_total$type_summarized, levels = c("gain_neutral", "gain"))
+
+
+ggplot(loss_total, aes(x=reorder(chr_arm,-fra), y=fra, fill = type_summarized))+
+  geom_bar(stat = "identity", color = "black")+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90))+
+  coord_cartesian(ylim = c(0,1))+
+  scale_fill_manual(values = c("lightblue", "blue4"))+
+
+
+ggplot(gain_total, aes(x=reorder(chr_arm,-fra), y=fra, fill = type_summarized))+
+  geom_bar(stat = "identity", color = "black")+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90))+
+  coord_cartesian(ylim = c(0,1))+
+  scale_fill_manual(values = c("orangered", "firebrick"))
+```
+
+#### Heatmap 
+
+```{r}
+out_heat <- CNV_arm_sum_out %>% pivot_wider(id_cols = PID, values_from = type_summarized, names_from = chr_arm) %>% column_to_rownames("PID")
+
+out_heat_bin <- ifelse(out_heat == "gain", 1, ifelse(out_heat == "loss", -1, 0))
+out_heat_bin_minor <- ifelse(out_heat == "gain", 1, ifelse(out_heat == "loss", -1, ifelse(out_heat == "gain_neutral", 0.5, ifelse(out_heat == "loss_neutral", -0.5,0))))
+
+Heatmap(out_heat_bin)
+Heatmap(out_heat_bin_minor)
+
+#colours = c("#4575B4", "white", "#D73027")
+#col <- colorRamp2(breaks = c(1,2,4), colours)
+```
+
+#### Oncoprint 
+
+TO DO
+
+
+
+
+## 3. Utility code
 
 ```{r}
 hg38 <- readRDS("/mnt/central_nas/rcc_volume/RCC/genome/results/cohort_1_ena/03_CNV/pureCN_raw/normalDB_hg38.rds")
@@ -86,7 +289,6 @@ check <- as.data.frame(hg38$sd$weights)
 check <- check %>% filter(seqnames == "chr1")
 
 range(check$start)
-
 ```
 
 ```{r}
