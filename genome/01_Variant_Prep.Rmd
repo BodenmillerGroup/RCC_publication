@@ -963,10 +963,6 @@ sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/
 variant_combined_full$PDL1_score <- sce$PDL1_score[match(variant_combined_full$PID, sce$PID)]
 ```
 
-```{r}
-# Add ITH index from cohort 1 
-#variant_combined_full$ITH_index <- ITH_index$ITH_index[match(variant_combined_full$PID, ITH_index$PID)]
-```
 
 ```{r}
 # Double-check ccRCC cases
@@ -980,13 +976,8 @@ variant_combined_full <- variant_combined_full %>% filter(subtype_combined == "c
 ```
 
 ```{r}
-#write_csv(variant_combined_full, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_full_withmeta.csv")
+write_csv(variant_combined_full, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_full_withmeta.csv")
 #variant_combined_full <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_full_withmeta.csv")
-```
-
-```{r}
-## Check potential PID for filtering
-variant_check <- variant_combined_full %>% filter(PID_old %in% PID_kick_out, Genes %in% GOI)
 ```
 
 ```{r}
@@ -996,14 +987,66 @@ GOI <- GOI_IntOGen$Symbol #n = 44
 GOI <- c(GOI, "ELOC") # Add ELOC (TCEB1)
 ```
 
+```{r}
+## Check potential PID for filtering
+variant_check <- variant_combined_full %>% filter(PID_old %in% PID_kick_out, Genes %in% GOI)
+```
 
-### Add CNV gene data 
 
-TO DO
 
-For these patients, we may also need to change the genomic subtype! 
+### Add CNV focal gene data 
+
+```{r}
+## Filter for GOI
+variant_combined_GOI <- variant_combined_full %>% filter(Genes %in% GOI)
+
+colnames(variant_combined_GOI)
+
+variant_combined_GOI <- variant_combined_GOI %>% select(PID, PID_old, Genes, clonality, variant_consequence_combined, cohort)
+
+```
+
+```{r}
+CNV_consensus <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/CNV_genes_combined_consensus.csv")
+
+CNV_consensus$Genes <- CNV_consensus$gene.symbol
+CNV_consensus$variant_consequence_combined <- CNV_consensus$type
+CNV_consensus$variant_consequence_combined <- CNV_consensus$type
+CNV_consensus$cohort <- "cohort_old"
+
+CNV_consensus_GOI <- CNV_consensus %>% select(PID, PID_old, Genes, clonality, variant_consequence_combined, cohort) %>% unique()
+```
+
+
+```{r}
+full_consensus_GOI <- rbind(variant_combined_GOI, CNV_consensus_GOI)
+```
+
+```{r}
+# Add relevant metadata to full_consensus_GOI 
+meta_add <- colnames(patient_meta)[colnames(patient_meta) %in% c("TMA","subtype_combined", "gender", "age", "age_bin", "necrose", "lymphocytes", "BAP1_IHC", "PBRM1_IHC", "H3K36me_IHC", "status_OS", "OS_months", "tar_sequencing_data", "pT_combined", "ISUP_combined")]
+
+patient_meta <- as.data.frame(patient_meta)
+full_consensus_GOI <- as.data.frame(full_consensus_GOI)
+              
+for (entry in meta_add) {
+  full_consensus_GOI[,entry] <- patient_meta[,entry][match(full_consensus_GOI[,"PID"],patient_meta[,"PID"])]
+}
+
+full_consensus_GOI$necrose <- as.character(full_consensus_GOI$necrose)
+```
+
+```{r}
+write_csv(full_consensus_GOI, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/SNV_CNV_combined_full_withmeta.csv")
+#full_consensus_GOI <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/SNV_CNV_combined_full_withmeta.csv")
+```
+
+
+## 5. Visualization
 
 ### Oncoprint 
+
+#### Only SNV 
 
 ```{r}
 #Load processed data file and select columns of interest
@@ -1192,1061 +1235,176 @@ draw(ht_all)
 ```
 
 
-
-
-
-# TO DO: SPLIT THE SCRIPT UP HERE! 
-
-
-## 5. Genomic subtype defintion 
+#### SNV / CNV 
 
 ```{r}
-# Create heatmap combining information from mutations and IHC scores
-sum_matrix <- Reduce(`+`, mut_list_full)
-sum_matrix <- as.matrix(ifelse(sum_matrix >= 1, 1,0))
-sum_matrix[mut_list_full$subclonal == 1] <- 0.5
+#Load processed data file and select columns of interest
+snv <- full_consensus_GOI
 
-save_sum <- as.data.frame(t(sum_matrix)) %>% rownames_to_column("PID")
+# Optional: Filter low-cov patients
+#snv <- snv %>% filter(!PID_old %in% PID_kick_out)
 
-# Save sum_matrix 
-#write_csv(save_sum, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/mutation_per_PID_binary.csv")
-```
+snv$mut_level <- snv$variant_consequence_combined
 
-### Manual annotation 
+snv <- snv %>% select(PID, Genes, mut_level)
 
-TO DO: Change for patients (5 or so) with focal CNV events 
+mut_levels_for_matrix <- snv %>% pull(mut_level) %>% unique()
 
-```{r}
-# Create heatmap combining information from mutations and IHC scores
-sum_matrix <- Reduce(`+`, mut_list_full)
-sum_matrix <- as.matrix(ifelse(sum_matrix >= 1, 1,0))
-sum_matrix[mut_list_full$subclonal == 1] <- 0.5
+# Select genes 
+## A: All genes 
+Genes_list <- snv %>% pull(Genes) %>% unique()
+## B: Genes of Interest e.g. IntOGen driver genes 
+Genes_list <- snv %>% filter(Genes %in% GOI) %>% pull(Genes) %>% unique()
+Genes_list <- Genes_list[!Genes_list %in% c("SF3B1", "STAG2", "ELOC", "ARHGAP35")]
 
-# Select mutations of interest
-driver_mat <- as.data.frame(t(sum_matrix)) %>% select(VHL, BAP1, PBRM1, SETD2, PTEN) %>% rownames_to_column("PID") 
+#Placeholders 
+mut_list <- list()
+placeholder_Genes <- Genes_list[1]
+pids <- unique(snv$PID)
+placeholder_pid <- pids[1]
 
-# Add IHC scores
-driver_mat$BAP1_IHC <- variant_combined_full$BAP1_IHC[match(driver_mat$PID, variant_combined_full$PID)]
-driver_mat$PBRM1_IHC <- variant_combined_full$PBRM1_IHC[match(driver_mat$PID, variant_combined_full$PID)]
-driver_mat$H3K36me_IHC <- variant_combined_full$H3K36me_IHC[match(driver_mat$PID, variant_combined_full$PID)]
-
-# Create two heatmaps for mutations and IHC scores
-mut_mat <- driver_mat %>% column_to_rownames("PID") %>% select(VHL, BAP1, PBRM1, SETD2, PTEN) 
-IHC_mat <- driver_mat %>% column_to_rownames("PID") %>% select(BAP1_IHC, PBRM1_IHC, H3K36me_IHC)
-
-## Define colors
-mut_col <- colorRamp2(c(0, 0.5, 1), c("lightgrey","#A6CEE3","#1F78B4"))
-
-## Create heatmap
-ht_mut <- Heatmap(t(mut_mat), col = mut_col)%v%
-  Heatmap(t(IHC_mat), col = viridis(100), na_col = "grey", cluster_columns = FALSE, cluster_rows = FALSE)
-
-ht_mut <- draw(ht_mut)
-
-# Extract column order for manual annotation of genomic subtypes
-col_order_ht <- column_order(ht_mut)
-driver_mat_ordered <- driver_mat[col_order_ht,]
-
-#write_csv(driver_mat_anno, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/genomic_subtype_anno_new.csv")
-```
-
-### Visualization
-
-```{r}
-# Depends on previous code chunk 
-# Read in after manual annotation 
-driver_mat_anno_out <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/genomic_subtype_anno.csv")
-
-# Annotate original dataframe
-driver_mat_anno <- driver_mat
-driver_mat_anno$genomic_subtype <- driver_mat_anno_out$genomic_subtype[match(driver_mat_anno$PID, driver_mat_anno_out$PID)]
-
-# define evolutionary subtypes ("like")
-driver_mat_anno <- driver_mat_anno %>% mutate(evolution_type = ifelse(genomic_subtype %in% c("multiple_drivers", "BAP1_driven", "VHL_wildtype"), "punctuated_like", ifelse(genomic_subtype == "PBRM1_driven", "branched_like", "linear_like")))
-
-driver_mat_anno$evolution_type_comb <- ifelse(driver_mat_anno$evolution_type == "punctuated_like", "punctuated_like", "branched_linear_like")
-
-driver_mat_anno$evolution_type_comb_1 <- ifelse(driver_mat_anno$genomic_subtype %in% c("multiple_drivers", "BAP1_driven"), "punctuated_like", ifelse(driver_mat_anno$genomic_subtype == "PBRM1_driven", "branched_like", "VHL_like"))
-
-# match
-driver_mat_anno <- driver_mat_anno[match(rownames(mut_mat), driver_mat_anno$PID),]
-
-# Column Annotation
-## Define colors 
-library(wesanderson)
-subtype_col <- setNames(c("#046C9A", "#000000", "#D69C4E", "#ECCBAE", "#ABDDDE"),sort(unique(driver_mat_anno$genomic_subtype)))
-evo_col <- setNames(wes_palette("Moonrise3", 5)[1:3],c("punctuated_like","linear_like", "branched_like"))
-
-ca <- columnAnnotation(genomic_subtype = driver_mat_anno$genomic_subtype, 
-                       evolution_type = driver_mat_anno$evolution_type, 
-                       col = list(genomic_subtype = subtype_col, evolution_type = evo_col))
-
-# Select Genes for display
-#mut_mat <- mut_mat %>% select(-PIK3CA)
-
-# Create heatmap 
-ht_mut_anno <- Heatmap(t(mut_mat), name = "Mutation status", 
-                       col = mut_col, 
-                       column_split = driver_mat_anno$genomic_subtype, 
-                       column_title = "Genomic subtypes", 
-                       cluster_column_slices = FALSE, show_column_names = FALSE)%v%
-  Heatmap(t(IHC_mat), name = "IHC score",
-          col = viridis(100), 
-          na_col = "grey", 
-          cluster_columns = FALSE, cluster_rows = FALSE)%v%
-  ca
-
-ht_mut_anno <- draw(ht_mut_anno)
-```
-
-```{r}
-# Save object 
-write_csv(driver_mat_anno, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/genomic_subtype_anno_final.csv")
-```
-
-### Survival testing 
-
-```{r}
-driver_mat_anno$OS_months <- variant_combined_full$OS_months[match(driver_mat_anno$PID, variant_combined_full$PID)]
-driver_mat_anno$status_OS <- variant_combined_full$status_OS[match(driver_mat_anno$PID, variant_combined_full$PID)]
-```
-
-```{r}
-#Plot survival curves
-fit <- survfit(Surv(OS_months, status_OS) ~ genomic_subtype, data = driver_mat_anno)
-print(fit)
-
-ggsurvplot(fit,
-          pval = TRUE,
-          risk.table = TRUE, # Add risk table
-          risk.table.col = "strata", # Change risk table color by groups
-          linetype = "strata", # Change line type by groups
-          surv.median.line = "hv", # Specify median survival
-          ggtheme = theme_classic(), # Change ggplot2 theme¨
-          palette = c("#046C9A", "#000000", "#D69C4E", "#ECCBAE", "#ABDDDE"),
-          conf.int = FALSE
-)
-
-
-fit <- survfit(Surv(OS_months, status_OS) ~ evolution_type, data = driver_mat_anno)
-print(fit)
-
-ggsurvplot(fit,
-          pval = TRUE,
-          risk.table = TRUE, # Add risk table
-          risk.table.col = "strata", # Change risk table color by groups
-          linetype = "strata", # Change line type by groups
-          surv.median.line = "hv", # Specify median survival
-          ggtheme = theme_classic(), # Change ggplot2 theme
-          palette = rev(wes_palette("Moonrise3", 5)[1:3]),
-          conf.int = FALSE
-)
-
-fit <- survfit(Surv(OS_months, status_OS) ~ evolution_type_comb, data = driver_mat_anno)
-print(fit)
-
-ggsurvplot(fit,
-          pval = TRUE,
-          risk.table = TRUE, # Add risk table
-          risk.table.col = "strata", # Change risk table color by groups
-          linetype = "strata", # Change line type by groups
-          surv.median.line = "hv", # Specify median survival
-          ggtheme = theme_classic(), # Change ggplot2 theme
-          palette = "Set1",
-          conf.int = TRUE
-)
-
-fit <- survfit(Surv(OS_months, status_OS) ~ evolution_type_comb_1, data = driver_mat_anno)
-print(fit)
-
-ggsurvplot(fit,
-          pval = TRUE,
-          risk.table = TRUE, # Add risk table
-          risk.table.col = "strata", # Change risk table color by groups
-          linetype = "strata", # Change line type by groups
-          surv.median.line = "hv", # Specify median survival
-          ggtheme = theme_classic(), # Change ggplot2 theme
-          palette = "Set1",
-          conf.int = TRUE
-)
-```
-### Across progression
-
-#### Genomic subtypes 
-
-```{r}
-# Binary genomic subtype matrix 
-genome_matrix <- as.data.frame.matrix(table(driver_mat_anno$genomic_subtype, driver_mat_anno$PID))
-
+for(mut in mut_levels_for_matrix){
   
-# Function to perform Fisher exact test for each category
-  perform_fisher_test <- function(gene_row, group1_cols, group2_cols) {
-    contingency_table <- matrix(0, nrow = 2, ncol = 2)
-    contingency_table[1, 1] <- sum(gene_row[group1_cols] == 1)
-    contingency_table[1, 2] <- sum(gene_row[group2_cols] == 1)
-    contingency_table[2, 1] <- sum(gene_row[group1_cols] == 0)
-    contingency_table[2, 2] <- sum(gene_row[group2_cols] == 0)
-    test_result <- fisher.test(contingency_table)
-    return(c(odds_ratio = test_result$estimate, p_value = test_result$p.value))
-  }
+  #select all SNVs/Indels of the mut_level and give a value of 1
+  x <- snv %>%
+    dplyr::filter(mut_level==mut,
+                  Genes %in% Genes_list | 
+                    grepl(paste0(paste0("^", Genes_list, "[,;]"), collapse="|"), Genes) |       #allow for multi-Genes mutations
+                    grepl(paste0(paste0("[,;]", Genes_list, "$"), collapse="|"), Genes) ) %>%  
+    dplyr::select(PID, Genes) %>%
+    dplyr::mutate(value=1) %>%
+    dplyr::distinct()
   
-  
-fisher_full <- foreach(i = c("ISUP_combined", "pT_combined","PDL1_score","necrose"), .combine = "rbind")%do%{
-
-  #i = "ISUP_combined"
-  if(i %in% c("necrose","PDL1_score")){
-    PID_high <- unique(variant_combined_full[variant_combined_full[, i] == "1",]$PID)
-    PID_low <- unique(variant_combined_full[variant_combined_full[, i] == "0",]$PID)
+  if(dim(x)[1]!=0){
+    x <- x %>%
+      tidyr::spread(Genes, value)
+    
+    #transpose and replace NA by 0
+    y <- x %>% column_to_rownames("PID")
+    y <- t(y)
+    y[is.na(y)] <- 0
+    
   }else{
-    PID_high <- unique(variant_combined_full[variant_combined_full[, i] == "3/4",]$PID)
-    PID_low <- unique(variant_combined_full[variant_combined_full[, i] == "1/2",]$PID)
-  }  
-  
-  PID_high <- PID_high[!is.na(PID_high)]
-  PID_low <- PID_low[!is.na(PID_low)]
-  
-  fisher_results <- apply(genome_matrix, 1, perform_fisher_test, group1_cols = PID_high, group2_cols = PID_low)
-  
-  fisher_results <- as.data.frame(fisher_results)
-  fisher_results <- as.data.frame(t(fisher_results)) %>% rownames_to_column("gene")
-  fisher_results$p_adj <- p.adjust(fisher_results$p_value, method = "BH")
-  fisher_results$category <- i
-  
-  return(fisher_results)
-  }
-
-
-
-isGreater <- fisher_full$odds_ratio > 1
-pVal <- log10(fisher_full$p_value)
-pVal[isGreater] <- abs(pVal[isGreater])
-fisher_full$p_out <- pVal
-colnames(fisher_full) <- c("gene", "odds_ratio", "p_value", "p_adj", "category", "p_out")
-
-# Visualize findings 
-
-## Waterfall plot with ggplot
-ggplot(fisher_full, aes(x = reorder(gene, -p_out), y = p_out, fill = odds_ratio > 1)) +
-  facet_wrap(~category)+
-  geom_segment(aes(xend = gene, y = 0, yend = p_out), color = "black") +
-  geom_point(size = 5, shape = 21, color = "black", fill = ifelse(fisher_full$p_out > -log10(0.1) & fisher_full$odds_ratio > 1, "#E41A1C",
-                                                                  ifelse(fisher_full$p_out < log10(0.1) & fisher_full$odds_ratio < 1, "#377EB8", "grey")))+
-  theme_classic()+
-  geom_hline(yintercept = 0)+
-  geom_hline(yintercept = -log10(0.1), linetype = "dashed", color = "black")+
-  geom_hline(yintercept = log10(0.1), linetype = "dashed", color = "black")+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
-  labs(x = "Genomic subtypes", y = "(-)log10(P-Value)")
-
-## Dotplot with ggnewscale
-library(ggnewscale)
-
-# P-values at 0.1 
-fisher_full$category <- factor(fisher_full$category,levels = c("PDL1_score","necrose","pT_combined","ISUP_combined"))
-fisher_full$result <- ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_value < 0.1, "UP",ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_value < 0.1, "DOWN", "NOTSIG"))
-
-ggplot(fisher_full, aes(x=reorder(gene, -p_out), y = category,col = odds_ratio, size= -log10(p_value)))+
-  geom_point()+
-  theme_classic()+
-  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
-  scale_size(range = c(2,10))+
-  new_scale_colour() +
-  geom_point(data = fisher_full,shape = 1,aes(size = -log10(p_value), col = result), stroke =1.5)+
-  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
-  xlab("Genomic subtype")
-
-# FDR at 0.1 with trends
-fisher_full$category <- factor(fisher_full$category,levels = c("PDL1_score","necrose","pT_combined","ISUP_combined"))
-fisher_full$result <- ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_adj < 0.1, "UP",
-                             ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_value < 0.1, "UP_trend", 
-                                    ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_adj < 0.1, "DOWN", 
-                                           ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_value < 0.1, "DOWN_trend","NOTSIG"))))
-                            
-ggplot(fisher_full, aes(x=reorder(gene, -p_out), y = category,col = odds_ratio, size= -log10(p_adj)))+
-  geom_point()+
-  theme_classic()+
-  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
-  scale_size(range = c(2,10))+
-  new_scale_colour() +
-  geom_point(data = fisher_full,shape = 1,aes(size = -log10(p_adj), col = result), stroke =1.5)+
-  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
-  xlab("Genomic subtype")
-```
-
-#### Evolutionary subtypes 
-
-```{r}
-# Binary genomic subtype matrix 
-genome_matrix <- as.data.frame.matrix(table(driver_mat_anno$evolution_type, driver_mat_anno$PID))
-
-# Function to perform Fisher exact test for each category
-  perform_fisher_test <- function(gene_row, group1_cols, group2_cols) {
-    contingency_table <- matrix(0, nrow = 2, ncol = 2)
-    contingency_table[1, 1] <- sum(gene_row[group1_cols] == 1)
-    contingency_table[1, 2] <- sum(gene_row[group2_cols] == 1)
-    contingency_table[2, 1] <- sum(gene_row[group1_cols] == 0)
-    contingency_table[2, 2] <- sum(gene_row[group2_cols] == 0)
-    test_result <- fisher.test(contingency_table)
-    return(c(odds_ratio = test_result$estimate, p_value = test_result$p.value))
+    y <- tibble(0)
+    colnames(y) <- placeholder_pid
+    rownames(y) <- placeholder_Genes
   }
   
-  
-fisher_full <- foreach(i = c("ISUP_combined", "pT_combined","PDL1_score","necrose"), .combine = "rbind")%do%{
-
-  #i = "ISUP_combined"
-  if(i %in% c("necrose","PDL1_score")){
-    PID_high <- unique(variant_combined_full[variant_combined_full[, i] == "1",]$PID)
-    PID_low <- unique(variant_combined_full[variant_combined_full[, i] == "0",]$PID)
-  }else{
-    PID_high <- unique(variant_combined_full[variant_combined_full[, i] == "3/4",]$PID)
-    PID_low <- unique(variant_combined_full[variant_combined_full[, i] == "1/2",]$PID)
-  }  
-  
-  PID_high <- PID_high[!is.na(PID_high)]
-  PID_low <- PID_low[!is.na(PID_low)]
-  
-  fisher_results <- apply(genome_matrix, 1, perform_fisher_test, group1_cols = PID_high, group2_cols = PID_low)
-  
-  fisher_results <- as.data.frame(fisher_results)
-  fisher_results <- as.data.frame(t(fisher_results)) %>% rownames_to_column("gene")
-  fisher_results$p_adj <- p.adjust(fisher_results$p_value, method = "BH")
-  fisher_results$category <- i
-  
-  return(fisher_results)
-  }
-
-
-
-isGreater <- fisher_full$odds_ratio > 1
-pVal <- log10(fisher_full$p_value)
-pVal[isGreater] <- abs(pVal[isGreater])
-fisher_full$p_out <- pVal
-colnames(fisher_full) <- c("gene", "odds_ratio", "p_value", "p_adj", "category", "p_out")
-
-# Visualize findings 
-
-## Waterfall plot with ggplot
-ggplot(fisher_full, aes(x = reorder(gene, -p_out), y = p_out, fill = odds_ratio > 1)) +
-  facet_wrap(~category)+
-  geom_segment(aes(xend = gene, y = 0, yend = p_out), color = "black") +
-  geom_point(size = 5, shape = 21, color = "black", fill = ifelse(fisher_full$p_out > -log10(0.1) & fisher_full$odds_ratio > 1, "#E41A1C",
-                                                                  ifelse(fisher_full$p_out < log10(0.1) & fisher_full$odds_ratio < 1, "#377EB8", "grey")))+
-  theme_classic()+
-  geom_hline(yintercept = 0)+
-  geom_hline(yintercept = -log10(0.1), linetype = "dashed", color = "black")+
-  geom_hline(yintercept = log10(0.1), linetype = "dashed", color = "black")+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
-  labs(x = "Genomic subtypes", y = "(-)log10(P-Value)")
-
-## Dotplot with ggnewscale
-library(ggnewscale)
-
-# P-values at 0.1 
-fisher_full$category <- factor(fisher_full$category,levels = c("PDL1_score","necrose","pT_combined","ISUP_combined"))
-fisher_full$result <- ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_value < 0.1, "UP",ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_value < 0.1, "DOWN", "NOTSIG"))
-
-ggplot(fisher_full, aes(x=reorder(gene, -p_out), y = category,col = odds_ratio, size= -log10(p_value)))+
-  geom_point()+
-  theme_classic()+
-  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
-  scale_size(range = c(2,10))+
-  new_scale_colour() +
-  geom_point(data = fisher_full,shape = 1,aes(size = -log10(p_value), col = result), stroke =1.5)+
-  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
-  xlab("Genomic subtype")
-
-# FDR at 0.1 with trends
-fisher_full$category <- factor(fisher_full$category,levels = c("PDL1_score","necrose","pT_combined","ISUP_combined"))
-fisher_full$result <- ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_adj < 0.1, "UP",
-                             ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_value < 0.1, "UP_trend", 
-                                    ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_adj < 0.1, "DOWN", 
-                                           ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_value < 0.1, "DOWN_trend","NOTSIG"))))
-                            
-ggplot(fisher_full, aes(x=reorder(gene, -p_out), y = category,col = odds_ratio, size= -log10(p_adj)))+
-  geom_point()+
-  theme_classic()+
-  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
-  scale_size(range = c(2,10))+
-  new_scale_colour() +
-  geom_point(data = fisher_full,shape = 1,aes(size = -log10(p_adj), col = result), stroke =1.5)+
-  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
-  xlab("Genomic subtype")
-
-```
-
-### IHC scores and mutations 
-
-```{r}
-IHC_mut <- driver_mat_anno[,1:9]
-
-# Give subclonal mutations a score of 1
-IHC_mut[,2:6][IHC_mut[,2:6] == 0.5] <- 1
-
-# Give expression a score of 1 if > 0
-#IHC_mut[,6:8][IHC_mut[,6:8] > 0] <- 1
-
-## PBRM1
-PBRM1_viz <- IHC_mut %>% select(PID, PBRM1, PBRM1_IHC) %>% unique() %>% mutate_all(as.character) %>% group_by(PBRM1, PBRM1_IHC) %>% dplyr::count() %>% filter(!is.na(PBRM1_IHC)) %>% group_by(PBRM1) %>% mutate(fra = n/sum(n))
-
-ggplot(PBRM1_viz, aes(x = PBRM1, y = fra, fill = PBRM1_IHC))+
-  geom_bar(stat = "identity", color = "black")+
-  theme_classic()+
-  ggtitle(paste0("Fisher = ", fisher.test(xtabs(n ~ PBRM1 + PBRM1_IHC, data = PBRM1_viz))$p.value))+
-  scale_fill_brewer(palette = "Paired")
-
-## BAP1
-BAP1_viz <- IHC_mut %>% select(PID, BAP1, BAP1_IHC) %>% unique() %>% mutate_all(as.character) %>% group_by(BAP1, BAP1_IHC) %>% dplyr::count() %>% filter(!is.na(BAP1_IHC)) %>% group_by(BAP1) %>% mutate(fra = n/sum(n))
-
-ggplot(BAP1_viz, aes(x = BAP1, y = fra, fill = BAP1_IHC))+
-  geom_bar(stat = "identity", color = "black")+
-  theme_classic()+
-  ggtitle(paste0("Fisher = ", fisher.test(xtabs(n ~ BAP1 + BAP1_IHC, data = BAP1_viz))$p.value))+
-  scale_fill_brewer(palette = "Paired")
-
-## SETD2
-SETD2_viz <- IHC_mut %>% select(PID, SETD2, H3K36me_IHC) %>% unique() %>% mutate_all(as.character) %>% group_by(SETD2, H3K36me_IHC) %>% dplyr::count() %>% filter(!is.na(H3K36me_IHC)) %>% group_by(SETD2) %>% mutate(fra = n/sum(n))
-
-ggplot(SETD2_viz, aes(x = SETD2, y = fra, fill = H3K36me_IHC))+
-  geom_bar(stat = "identity", color = "black")+
-  theme_classic()+
-  ggtitle(paste0("Fisher = ", fisher.test(xtabs(n ~ SETD2 + H3K36me_IHC, data = SETD2_viz))$p.value))+
-  scale_fill_brewer(palette = "Paired")
-```
-
-
-## 6. Cohort comparisons
-
-### Cohort vs Progression 
-
-Check whether there is a cohort bias within progression categories 
-
-```{r}
-library(sjPlot)
-
-# ISUP 
-test_variant <- variant_combined_full %>% select(PID, cohort, ISUP_combined) %>% unique() %>% group_by(cohort, ISUP_combined) %>% dplyr::count() 
-
-ggplot(test_variant, aes(x = cohort, y = n, fill = ISUP_combined))+
-  geom_bar(stat = "identity", color = "black")+
-  theme_classic()+
-  ggtitle(paste0("Fisher = ", fisher.test(xtabs(n ~ cohort + ISUP_combined, data = test_variant))$p.value))
-
-# pT
-test_variant <- variant_combined_full %>% select(PID, cohort, pT_combined) %>% unique() %>% group_by(cohort, pT_combined) %>% dplyr::count() 
-
-ggplot(test_variant, aes(x = cohort, y = n, fill = pT_combined))+
-  geom_bar(stat = "identity", color = "black")+
-  theme_classic()+
-  ggtitle(paste0("Fisher = ", fisher.test(xtabs(n ~ cohort + pT_combined, data = test_variant))$p.value))
-
-# necrose
-test_variant <- variant_combined_full %>% select(PID, cohort, necrose) %>% unique() %>% group_by(cohort, necrose) %>% dplyr::count() 
-
-ggplot(test_variant, aes(x = cohort, y = n, fill = necrose))+
-  geom_bar(stat = "identity", color = "black")+
-  theme_classic()+
-  ggtitle(paste0("Fisher = ", fisher.test(xtabs(n ~ cohort + necrose, data = test_variant))$p.value))
-
-# PDL1
-test_variant <- variant_combined_full %>% select(PID, cohort, PDL1_score) %>% unique() %>% group_by(cohort, PDL1_score) %>% dplyr::count() 
-
-ggplot(test_variant, aes(x = cohort, y = n, fill = PDL1_score))+
-  geom_bar(stat = "identity", color = "black")+
-  theme_classic()+
-  ggtitle(paste0("Fisher = ", fisher.test(xtabs(n ~ cohort + PDL1_score, data = test_variant))$p.value))
-
-## Note: Cohort bias in Tumor stage - Higher number of PID with low stage in cohort new!! 
-```
-
-### Mutational load 
-
-#### Cohort
-
-```{r}
-variant_combined_2 <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_cohort2.csv")
-variant_combined_2$cohort <- "cohort_new"
-
-variant_combined_1 <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_cohort1.csv")
-variant_combined_1$cohort <- "cohort_old"
-variant_combined_1 <- variant_combined_1 %>% select(-sample_id)
-
-variant_full <- rbind(variant_combined_1, variant_combined_2)
-
-variant_full <- variant_full %>% filter(!is.na(PID))
-```
-
-```{r}
-# Option 1: Considering all mutation types and all PID
-mut_out <- variant_full %>% group_by(PID, cohort) %>% dplyr::count(PID) 
-
-coverage_PID$PID_new <- variant_combined_full$PID[match(coverage_PID$PID, variant_combined_full$PID_old)]
-
-mut_out$mean_cov <- coverage_PID$mean_cov[match(mut_out$PID, coverage_PID$PID_new)]
-
-ggplot(mut_out, aes(x=cohort, y = n, size = mean_cov))+
-  geom_jitter(position=position_jitter(w=0.1,h=0.1), aes(color = cohort))+
-  geom_boxplot(outlier.color = NA)+
-  scale_color_brewer(palette = "Set1")+
-  theme_classic()+
-  ylab("Mutational burden (total)")+
-  stat_compare_means()
-  
-ggplot(mut_out, aes(mean_cov, n))+
-  geom_smooth(method='lm', formula= y~x, se = TRUE, color = "darkgrey")+
-  geom_point(size = 2)+
-  theme_classic()
-
-# Option 2: Removing PID with low coverage
-mut_out <- variant_full %>% group_by(PID, cohort) %>% filter(!PID_old %in% PID_kick_out) %>% dplyr::count(PID) 
-
-mut_out$mean_cov <- coverage_PID$mean_cov[match(mut_out$PID, coverage_PID$PID_new)]
-
-ggplot(mut_out, aes(x=cohort, y = n, size = mean_cov))+
-  geom_jitter(position=position_jitter(w=0.1,h=0.1), aes(color = cohort))+
-  geom_boxplot(outlier.color = NA)+
-  scale_color_brewer(palette = "Set1")+
-  theme_classic()+
-  ylab("Mutational burden (total)")+
-  stat_compare_means()
-  
-
-ggplot(mut_out, aes(mean_cov, n))+
-  geom_smooth(method='lm', formula= y~x, se = TRUE, color = "darkgrey")+
-  geom_point(size = 2)+
-  theme_classic()
-```
-
-```{r}
-# Focusing on indels 
-mut_out <- variant_combined_full %>% filter(variant_consequence_combined == "inframe_del_ins") %>% group_by(PID, cohort) %>% dplyr::count(PID) 
-
-ggplot(mut_out, aes(x=cohort, y = n))+
-  geom_jitter(position=position_jitter(w=0.1,h=0.1), aes(color = cohort))+
-  geom_boxplot(outlier.color = NA)+
-  scale_color_brewer(palette = "Set1")+
-  theme_classic()+
-  ylab("Indels (total)")+
-  stat_compare_means()
-```
-
-
-
-#### Across progression categories 
-
-```{r}
-mut_out$ISUP_combined <- variant_combined_full$ISUP_combined[match(mut_out$PID, variant_combined_full$PID)]
-mut_out$pT_combined <- variant_combined_full$pT_combined[match(mut_out$PID, variant_combined_full$PID)]
-mut_out$necrose<- variant_combined_full$necrose[match(mut_out$PID, variant_combined_full$PID)]
-mut_out$PDL1_score <- variant_combined_full$PDL1_score[match(mut_out$PID, variant_combined_full$PID)]
-
-mut_out <- mut_out[complete.cases(mut_out),]
-mut_out$ISUP_combined <- ifelse(mut_out$ISUP_combined == "3/4", "1", "0")
-mut_out$pT_combined <- ifelse(mut_out$pT_combined == "3/4", "1", "0")
-
-mut_out_long <- mut_out %>% pivot_longer(5:8, names_to = "category", values_to = "level")
-
-ggplot(mut_out_long, aes(x=level, y = n))+
-  facet_wrap(~category)+
-  geom_jitter(position=position_jitter(w=0.1,h=0.1), aes(color = category))+
-  geom_boxplot(outlier.color = NA)+
-  scale_color_brewer(palette = "Set1")+
-  theme_classic()+
-  ylab("Mutational burden (total)")+
-  stat_compare_means()
-```
-
-```{r}
-# Focusing on "impact" mutations 
-
-mut_out_2 <- variant_combined_full %>% group_by(PID) %>% dplyr::count(PID) 
-
-mut_out_2$ISUP_combined <- variant_combined_full$ISUP_combined[match(mut_out_2$PID, variant_combined_full$PID)]
-mut_out_2$pT_combined <- variant_combined_full$pT_combined[match(mut_out_2$PID, variant_combined_full$PID)]
-mut_out_2$necrose<- variant_combined_full$necrose[match(mut_out_2$PID, variant_combined_full$PID)]
-mut_out_2$PDL1_score <- variant_combined_full$PDL1_score[match(mut_out_2$PID, variant_combined_full$PID)]
-
-mut_out_2 <- mut_out_2[complete.cases(mut_out_2),]
-mut_out_2$ISUP_combined <- ifelse(mut_out_2$ISUP_combined == "3/4", "1", "0")
-mut_out_2$pT_combined <- ifelse(mut_out_2$pT_combined == "3/4", "1", "0")
-
-mut_out_2_long <- mut_out_2 %>% pivot_longer(3:6, names_to = "category", values_to = "level")
-
-ggplot(mut_out_2_long, aes(x=level, y = n))+
-  facet_wrap(~category)+
-  geom_jitter(position=position_jitter(w=0.1,h=0.1), aes(color = category))+
-  geom_boxplot(outlier.color = NA)+
-  scale_color_brewer(palette = "Set1")+
-  theme_classic()+
-  ylab("Mutational burden (impact - total)")+
-  stat_compare_means()
-```
-```{r}
-# Focusing on indels 
-mut_out_2 <- variant_combined_full %>% filter(variant_consequence_combined == "inframe_del_ins") %>% group_by(PID) %>% dplyr::count(PID) 
-
-mut_out_2$ISUP_combined <- variant_combined_full$ISUP_combined[match(mut_out_2$PID, variant_combined_full$PID)]
-mut_out_2$pT_combined <- variant_combined_full$pT_combined[match(mut_out_2$PID, variant_combined_full$PID)]
-mut_out_2$necrose<- variant_combined_full$necrose[match(mut_out_2$PID, variant_combined_full$PID)]
-mut_out_2$PDL1_score <- variant_combined_full$PDL1_score[match(mut_out_2$PID, variant_combined_full$PID)]
-
-mut_out_2 <- mut_out_2[complete.cases(mut_out_2),]
-mut_out_2$ISUP_combined <- ifelse(mut_out_2$ISUP_combined == "3/4", "1", "0")
-mut_out_2$pT_combined <- ifelse(mut_out_2$pT_combined == "3/4", "1", "0")
-
-mut_out_2_long <- mut_out_2 %>% pivot_longer(3:6, names_to = "category", values_to = "level")
-
-ggplot(mut_out_2_long, aes(x=level, y = n))+
-  facet_wrap(~category)+
-  geom_jitter(position=position_jitter(w=0.1,h=0.1), aes(color = category))+
-  geom_boxplot(outlier.color = NA)+
-  scale_color_brewer(palette = "Set1")+
-  theme_classic()+
-  ylab("Indels (total)")+
-  stat_compare_means()
-
-# Tendency: Lower stage == higher number of indels
-```
-
-### VAF
-
-#### Cohort 
-
-```{r}
-# Option 1: Considering all mutation types 
-
-## Overall VAF
-ggplot(variant_full, aes(x=cohort, y = Frequency))+
-  geom_jitter(position=position_jitter(w=0.1,h=0.1), aes(color = cohort))+
-  geom_boxplot(outlier.color = NA)+
-  scale_color_brewer(palette = "Set1")+
-  theme_classic()+
-  ylab("VAF")+
-  stat_compare_means()
-
-## Mean VAF per PID 
-vaf_out <- variant_full %>% group_by(PID, cohort) %>% summarise(mean_vaf = mean(Frequency))
-
-ggplot(vaf_out, aes(x=cohort, y = mean_vaf))+
-  geom_jitter(position=position_jitter(w=0.1,h=0.1), aes(color = cohort))+
-  geom_boxplot(outlier.color = NA)+
-  scale_color_brewer(palette = "Set1")+
-  theme_classic()+
-  ylab("VAF")+
-  stat_compare_means()
-```
-#### Across progression categories 
-
-```{r}
-vaf_out <- variant_full %>% group_by(PID) %>% summarise(mean_vaf = mean(Frequency))
-
-vaf_out$ISUP_combined <- variant_combined_full$ISUP_combined[match(vaf_out$PID, variant_combined_full$PID)]
-vaf_out$pT_combined <- variant_combined_full$pT_combined[match(vaf_out$PID, variant_combined_full$PID)]
-vaf_out$necrose<- variant_combined_full$necrose[match(vaf_out$PID, variant_combined_full$PID)]
-vaf_out$PDL1_score <- variant_combined_full$PDL1_score[match(vaf_out$PID, variant_combined_full$PID)]
-
-vaf_out <- vaf_out[complete.cases(vaf_out),]
-vaf_out$ISUP_combined <- ifelse(vaf_out$ISUP_combined == "3/4", "1", "0")
-vaf_out$pT_combined <- ifelse(vaf_out$pT_combined == "3/4", "1", "0")
-
-vaf_out_long <- vaf_out %>% pivot_longer(3:6, names_to = "category", values_to = "level")
-
-ggplot(vaf_out_long, aes(x=level, y = mean_vaf))+
-  facet_wrap(~category)+
-  geom_jitter(position=position_jitter(w=0.1,h=0.1), aes(color = category))+
-  geom_boxplot(outlier.color = NA)+
-  scale_color_brewer(palette = "Set1")+
-  theme_classic()+
-  ylab("VAF")+
-  stat_compare_means()
-```
-
-### Mutation frequencies
-
-#### Cohort
-
-```{r}
-sum_matrix <- Reduce(`+`, mut_list_full)
-sum_matrix <- as.matrix(ifelse(sum_matrix >= 1, 1,0))
-#sum_matrix[mut_list_full$subclonal == 1] <- 0.5
-#sum_matrix <- as.matrix(ifelse(sum_matrix >= 1, 1,0))
-
-# Cohort identifiers
-PID_new <- variant_combined_full %>% filter(cohort == "cohort_new") %>% pull(PID) %>% unique()
-PID_older <- variant_combined_full %>% filter(cohort == "cohort_old") %>% pull(PID) %>% unique()
-```
-
-```{r}
-# Function to perform Fisher exact test for each gene
-perform_fisher_test <- function(gene_row, group1_cols, group2_cols) {
-  contingency_table <- matrix(0, nrow = 2, ncol = 2)
-  contingency_table[1, 1] <- sum(gene_row[group1_cols] == 1)
-  contingency_table[1, 2] <- sum(gene_row[group2_cols] == 1)
-  contingency_table[2, 1] <- sum(gene_row[group1_cols] == 0)
-  contingency_table[2, 2] <- sum(gene_row[group2_cols] == 0)
-  test_result <- fisher.test(contingency_table)
-  return(c(odds_ratio = test_result$estimate, p_value = test_result$p.value))
+  mut_list[[mut]] <- as.matrix(y)
 }
 
-# Perform Fisher exact tests for each gene
-fisher_results <- apply(sum_matrix, 1, perform_fisher_test, group1_cols = PID_new, group2_cols = PID_older)
+#Unify matrices
+mut_list_full <- unify_mat_list(mut_list)
 
-fisher_results <- as.data.frame(fisher_results)
-
-fisher_results <- as.data.frame(t(fisher_results)) %>% rownames_to_column("gene")
-fisher_results$p_adj <- p.adjust(fisher_results$p_value, method = "BH")
-colnames(fisher_results) <- c("gene", "odds_ratio", "p_value", "p_adj")
-
-isGreater <- fisher_results$odds_ratio > 1
-pVal <- log10(fisher_results$p_adj)
-pVal[isGreater] <- abs(pVal[isGreater])
-fisher_results$p_out <- pVal
-
-
-# Visualize findings with ggplot2
-ggplot(fisher_results, aes(x = reorder(gene, -p_out), y = p_out, fill = odds_ratio > 1)) +
-  geom_segment(aes(xend = gene, y = 0, yend = p_out), color = "black") +
-  geom_point(size = 5, shape = 21, color = "black", fill = ifelse(fisher_results$p_out > -log10(0.05) & fisher_results$odds_ratio > 1, "#E41A1C",
-                                                                  ifelse(fisher_results$p_out < log10(0.05) & fisher_results$odds_ratio < 1, "#377EB8", "grey")))+
-  theme_classic()+
-  geom_hline(yintercept = 0)+
-  geom_hline(yintercept = -log10(0.05), linetype = "dashed", color = "black")+
-  geom_hline(yintercept = log10(0.05), linetype = "dashed", color = "black")+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
-  labs(x = "Genes", y = "(-)log10(P-Value)")
-```
-
-#### Across progression categories
-
-```{r}
-# Binary mutation matrix 
-  sum_matrix <- Reduce(`+`, mut_list_full)
-  sum_matrix <- as.matrix(ifelse(sum_matrix >= 1, 1,0))
-  
-  # Function to perform Fisher exact test for each gene
-  perform_fisher_test <- function(gene_row, group1_cols, group2_cols) {
-    contingency_table <- matrix(0, nrow = 2, ncol = 2)
-    contingency_table[1, 1] <- sum(gene_row[group1_cols] == 1)
-    contingency_table[1, 2] <- sum(gene_row[group2_cols] == 1)
-    contingency_table[2, 1] <- sum(gene_row[group1_cols] == 0)
-    contingency_table[2, 2] <- sum(gene_row[group2_cols] == 0)
-    test_result <- fisher.test(contingency_table)
-    return(c(odds_ratio = test_result$estimate, p_value = test_result$p.value))
-  }
-  
-  
-fisher_full <- foreach(i = c("ISUP_combined", "pT_combined","PDL1_score","necrose"), .combine = "rbind")%do%{
-
-  if(i %in% c("necrose","PDL1_score")){
-    PID_high <- unique(variant_combined_full[variant_combined_full[, i] == "1",]$PID)
-    PID_low <- unique(variant_combined_full[variant_combined_full[, i] == "0",]$PID)
-  }else{
-    PID_high <- unique(variant_combined_full[variant_combined_full[, i] == "3/4",]$PID)
-    PID_low <- unique(variant_combined_full[variant_combined_full[, i] == "1/2",]$PID)
-  }  
-  
-  PID_high <- PID_high[!is.na(PID_high)]
-  PID_low <- PID_low[!is.na(PID_low)]
-  
-  fisher_results <- apply(sum_matrix, 1, perform_fisher_test, group1_cols = PID_high, group2_cols = PID_low)
-  
-  fisher_results <- as.data.frame(fisher_results)
-  fisher_results <- as.data.frame(t(fisher_results)) %>% rownames_to_column("gene")
-  fisher_results$p_adj <- p.adjust(fisher_results$p_value, method = "BH")
-  fisher_results$category <- i
-  
-  return(fisher_results)
-  }
-
-isGreater <- fisher_full$odds_ratio > 1
-pVal <- log10(fisher_full$p_value)
-pVal[isGreater] <- abs(pVal[isGreater])
-fisher_full$p_out <- pVal
-colnames(fisher_full) <- c("gene", "odds_ratio", "p_value", "p_adj", "category", "p_out")
-
-# Visualize findings 
-
-## Waterfall plot with ggplot
-ggplot(fisher_full, aes(x = reorder(gene, -p_out), y = p_out, fill = odds_ratio > 1)) +
-  facet_wrap(~category)+
-  geom_segment(aes(xend = gene, y = 0, yend = p_out), color = "black") +
-  geom_point(size = 5, shape = 21, color = "black", fill = ifelse(fisher_full$p_out > -log10(0.1) & fisher_full$odds_ratio > 1, "#E41A1C",
-                                                                  ifelse(fisher_full$p_out < log10(0.1) & fisher_full$odds_ratio < 1, "#377EB8", "grey")))+
-  theme_classic()+
-  geom_hline(yintercept = 0)+
-  geom_hline(yintercept = -log10(0.1), linetype = "dashed", color = "black")+
-  geom_hline(yintercept = log10(0.1), linetype = "dashed", color = "black")+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
-  labs(x = "Genes", y = "(-)log10(P-Value)")
-
-## Dotplot with ggnewscale
-library(ggnewscale)
-
-# P-values at 0.1 
-fisher_full$category <- factor(fisher_full$category,levels = c("PDL1_score","necrose","pT_combined","ISUP_combined"))
-fisher_full$result <- ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_value < 0.1, "UP",ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_value < 0.1, "DOWN", "NOTSIG"))
-
-ggplot(fisher_full, aes(x=reorder(gene, -p_out), y = category,col = odds_ratio, size= -log10(p_value)))+
-  geom_point()+
-  theme_classic()+
-  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
-  scale_size(range = c(2,10))+
-  new_scale_colour() +
-  geom_point(data = fisher_full,shape = 1,aes(size = -log10(p_value), col = result), stroke =1.5)+
-  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))
-
-# FDR at 0.1 with trends
-fisher_full$category <- factor(fisher_full$category,levels = c("PDL1_score","necrose","pT_combined","ISUP_combined"))
-fisher_full$result <- ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_adj < 0.1, "UP",
-                             ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_value < 0.1, "UP_trend", 
-                                    ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_adj < 0.1, "DOWN", 
-                                           ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_value < 0.1, "DOWN_trend","NOTSIG"))))
-                            
-ggplot(fisher_full, aes(x=reorder(gene, -p_out), y = category,col = odds_ratio, size= -log10(p_adj)))+
-  geom_point()+
-  theme_classic()+
-  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
-  scale_size(range = c(2,10))+
-  new_scale_colour() +
-  geom_point(data = fisher_full,shape = 1,aes(size = -log10(p_adj), col = result), stroke =1.5)+
-  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
-  xlab("Gene mutation")
-```
-
-### Co-occurence analysis 
-
-```{r}
-# Co-occurence analysis 
+# Create a new list entry called "Multiple" for multiple gene mutations within a PID
 sum_matrix <- Reduce(`+`, mut_list_full)
-sum_matrix <- as.matrix(ifelse(sum_matrix >= 1, 1,0))
+mut_list_full$multiple <- as.matrix(ifelse(sum_matrix > 1, 1,0))
 
-#sum_matrix <- sum_matrix[rownames(sum_matrix) %in% c("VHL","SETD2","BAP1","PBRM1","PTEN"),]
-
-# P-value and odds ratio estimate 
-co_occurrence_results <- list()
-ma <- matrix(NA, nrow = nrow(sum_matrix), ncol = nrow(sum_matrix))
-rownames(ma) <- rownames(sum_matrix)
-colnames(ma) <- rownames(sum_matrix)
-co_occurrence_results[[1]] <- ma
-co_occurrence_results[[2]] <- ma
-names(co_occurrence_results) <- c("p_value", "odds")
-
-for (i in seq_along(rownames(sum_matrix))) {
-  for (j in seq_along(rownames(sum_matrix))) {
-    contingency_table <- matrix(0, nrow = 2, ncol = 2)
-    contingency_table[1, 1] <- sum(sum_matrix[i,] == 1 & sum_matrix[j,] == 1)
-    contingency_table[1, 2] <- sum(sum_matrix[i,] == 1 & sum_matrix[j,] == 0)
-    contingency_table[2, 1] <- sum(sum_matrix[i,] == 0 & sum_matrix[j,] == 1)
-    contingency_table[2, 2] <- sum(sum_matrix[i,] == 0 & sum_matrix[j,] == 0)
-    test_result <- fisher.test(contingency_table)
-    co_occurrence_results$p_value[rownames(sum_matrix)[i], rownames(sum_matrix)[j]] <- test_result$p.value
-    co_occurrence_results$odds[rownames(sum_matrix)[i], rownames(sum_matrix)[j]] <- test_result$estimate
-  }
+# keep the order of annotation and mutation list
+#ord= anno$PID_short
+  
+# show every gene and patient
+# blank for patients  and.or genes missing 
+for (i in seq_along(mut_list_full)){
+  dif_gen = setdiff(Genes_list,rownames(mut_list_full[[i]]))
+  dif_pat = setdiff(pids,colnames(mut_list_full[[i]]))
+  
+  blank= matrix(ncol=length(dif_pat),nrow=length(rownames(mut_list_full[[i]])),0)
+  colnames(blank)=dif_pat
+  rownames(blank)=rownames(mut_list_full[[i]])
+  mut_list_full[[i]]=cbind(mut_list_full[[i]],blank)
+  
+  blank= matrix(ncol=ncol(mut_list_full[[i]]),nrow=length(dif_gen),0)
+  colnames(blank)=colnames(mut_list_full[[i]])
+  rownames(blank)=dif_gen
+  mut_list_full[[i]]=rbind(mut_list_full[[i]],blank)
+  #mut_list_full[[i]]=mut_list_full[[i]][,ord]
 }
 
+# Optional: Create a new list entry called "Clonality" for gene mutation clonality annotation per PID
+subclonal_anno <- full_consensus_GOI %>% select(PID, Genes, clonality) %>% unique() %>% pivot_wider(id_cols = PID, names_from = Genes, values_from = clonality) %>% column_to_rownames("PID")
 
-# Convert results to a data frame
-library(reshape2)
-co_occurrence_df <- melt(co_occurrence_results)
-colnames(co_occurrence_df) <- c("Gene1", "Gene2", "Value","Type")
-co_occurrence_df <- co_occurrence_df %>% pivot_wider(names_from = Type, values_from = Value)
-# Filter out self-comparisons (diagonal) and duplicates
-co_occurrence_df <- co_occurrence_df[co_occurrence_df$Gene1 != co_occurrence_df$Gene2, ]
-co_occurrence_df$Gene1 <- as.character(co_occurrence_df$Gene1) 
-co_occurrence_df$Gene2 <- as.character(co_occurrence_df$Gene2) 
-co_occurrence_df <- co_occurrence_df %>%
-  mutate(pair = ifelse(Gene1 < Gene2, paste(Gene1, Gene2, sep = "_"), paste(Gene2, Gene1, sep = "_"))) %>% arrange(pair) %>% dplyr::slice(seq(2, n(), by = 2))
+subclonal_anno[is.na(subclonal_anno)] <- "none"
+subclonal_anno <- t(ifelse(subclonal_anno == "subclonal", 1, 0))
 
-# Adjust p-value
-co_occurrence_df$p_adj <- p.adjust(co_occurrence_df$p_value, method = "BH")
+subclonal_anno <- subclonal_anno[match(rownames(mut_list_full$missense_variant), rownames(subclonal_anno)),]
+subclonal_anno <- subclonal_anno[,match(colnames(mut_list_full$missense_variant), colnames(subclonal_anno))]
 
-co_occurrence_df
-
-# Visualize 
-isGreater <- co_occurrence_df$odds > 1
-pVal <- log10(co_occurrence_df$p_adj)
-pVal[isGreater] <- abs(pVal[isGreater])
-co_occurrence_df$p_out <- pVal
-
-# Visualize findings with ggplot2
-co_occurrence_df_sig <- co_occurrence_df %>% filter(p_adj < 0.05)
-ggplot(co_occurrence_df_sig, aes(x = reorder(pair, -p_out), y = p_out, fill = odds > 1)) +
-  geom_segment(aes(xend = pair, y = 0, yend = p_out), color = "black") +
-  geom_point(size = 5, shape = 21, color = "black", fill = ifelse(co_occurrence_df_sig$p_out > -log10(0.05) & co_occurrence_df_sig$odds > 1, "#E41A1C",
-                                                                  ifelse(co_occurrence_df_sig$p_out < log10(0.05) & co_occurrence_df_sig$odds < 1, "#377EB8", "grey")))+
-  theme_classic()+
-  geom_hline(yintercept = 0)+
-  geom_hline(yintercept = -log10(0.05), linetype = "dashed", color = "black")+
-  geom_hline(yintercept = log10(0.05), linetype = "dashed", color = "black")+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
-  labs(x = "pairs", y = "(-)log10(P-Value)")
+mut_list_full$subclonal <- subclonal_anno
 ```
 
 
-## 7. Survival comparisons
+```{r print onc, message=FALSE,warning=FALSE, fig.width=10,fig.height=7}
+## Step 1: Define alteration function
 
-### Progression categories 
+#Colors
+col <- colorRampPalette(brewer.pal(8,"Paired"))(length(unique(snv$mut_level)))
 
-```{r}
-library(survival)
-library(survminer)
+names(col) <- c("missense_variant", "DELETION", "frameshift_variant", 
+"inframe_del_ins", "splice_site", "AMPLIFICATION", "protein_altering_variant", "stop_gained_lost_start_lost")
 
-cur_surv <- variant_combined_full %>% select(PID, OS_months, status_OS, ISUP_combined, pT_combined, PDL1_score, necrose) %>% unique()
-
-#Plot survival curves
-fit <- survfit(Surv(OS_months, status_OS) ~ ISUP_combined, data = cur_surv)
-print(fit)
-
-ggsurvplot(fit,
-          pval = TRUE,
-          risk.table = TRUE, # Add risk table
-          risk.table.col = "strata", # Change risk table color by groups
-          linetype = "strata", # Change line type by groups
-          surv.median.line = "hv", # Specify median survival
-          ggtheme = theme_classic(), # Change ggplot2 theme
-          palette = "Set1",
-          conf.int = TRUE
+# alter_fun function 
+fun_alter = list(
+  background = function(x, y, w, h) grid.rect(x, y, w, h, gp = gpar(fill = "#e7e7e7", col = "white")),
+  missense_variant = function(x, y, w, h) grid.rect(x, y, w*0.8, h*0.4, gp = gpar(fill = col[1], col = NA)),
+  DELETION = function(x, y, w, h) grid.rect(x, y, w*0.8, h*0.8, gp = gpar(fill = col[2], col = NA)),
+  frameshift_variant = function(x, y, w, h) grid.rect(x, y, w*0.8, h*0.4, gp = gpar(fill = col[3], col = NA)),
+  inframe_del_ins = function(x, y, w, h) grid.rect(x, y, w*0.4, h*0.8, gp = gpar(fill = col[4], col = NA)),
+  splice_site = function(x, y, w, h) grid.rect(x, y, w*0.4, h*0.8, gp = gpar(fill = col[5], col = NA)),
+  AMPLIFICATION = function(x, y, w, h) grid.rect(x, y, w*0.8, h*0.8, gp = gpar(fill = col[6], col = NA)),
+  protein_altering_variant = function(x, y, w, h) grid.rect(x, y, w*0.4, h*0.8, gp = gpar(fill = col[7], col = NA)),
+  stop_gained_lost_start_lost = function(x, y, w, h) grid.rect(x, y, w*0.8, h*0.4, gp = gpar(fill = col[8], col = NA)),
+  multiple = function(x, y, w, h) grid.points(x, y, size = unit(0.4, "char"), pch = 8),
+  subclonal = function(x, y, w, h) grid.points(x, y, size = unit(0.4, "char"), pch = 16)
 )
 
-fit <- survfit(Surv(OS_months, status_OS) ~ pT_combined, data = cur_surv)
-print(fit)
+test_alter_fun(fun_alter)
 
-ggsurvplot(fit,
-          pval = TRUE,
-          risk.table = TRUE, # Add risk table
-          risk.table.col = "strata", # Change risk table color by groups
-          linetype = "strata", # Change line type by groups
-          surv.median.line = "hv", # Specify median survival
-          ggtheme = theme_classic(), # Change ggplot2 theme
-          palette = "Set1",
-          conf.int = TRUE
-)
+## Step 2: Column Annotation
+c_anno <- data.frame(PID = colnames(mut_list_full[1]$frameshift_variant))
+c_anno$cohort <- full_consensus_GOI$cohort[match(c_anno$PID, full_consensus_GOI$PID)]
 
-fit <- survfit(Surv(OS_months, status_OS) ~ necrose, data = cur_surv)
-print(fit)
+c_anno$gender <- full_consensus_GOI$gender[match(c_anno$PID, full_consensus_GOI$PID)]
+c_anno$age_bin <- full_consensus_GOI$age_bin[match(c_anno$PID, full_consensus_GOI$PID)]
 
-ggsurvplot(fit,
-          pval = TRUE,
-          risk.table = TRUE, # Add risk table
-          risk.table.col = "strata", # Change risk table color by groups
-          linetype = "strata", # Change line type by groups
-          surv.median.line = "hv", # Specify median survival
-          ggtheme = theme_classic(), # Change ggplot2 theme
-          palette = "Set1",
-          conf.int = TRUE
-)
+## 2A: Sequencing related data
+### Define colors
+cohort_col <- setNames(brewer.pal(3, "Set1")[1:2],unique(c_anno$cohort))
 
-fit <- survfit(Surv(OS_months, status_OS) ~ PDL1_score, data = cur_surv)
-print(fit)
+ca <- columnAnnotation(cohort = c_anno$cohort,
+                   #mean_cov = c_anno$mean_cov,
+                   #cov_status = as.character(c_anno$critical),
+                   col = list(cohort = cohort_col),
+                   border = TRUE
+                   )
 
-ggsurvplot(fit,
-          pval = TRUE,
-          risk.table = TRUE, # Add risk table
-          risk.table.col = "strata", # Change risk table color by groups
-          linetype = "strata", # Change line type by groups
-          surv.median.line = "hv", # Specify median survival
-          ggtheme = theme_classic(), # Change ggplot2 theme
-          palette = "Set1",
-          conf.int = TRUE
-)
+## 2A: Patient metadata
+ca_PID <- columnAnnotation(gender = c_anno$gender,
+                           age_bin = c_anno$age_bin,
+                           col = list(gender = metadata(sce)$colors$gender, 
+                                      age_bin = metadata(sce)$colors$age_bin),
+                           border = TRUE
+                           )
+
+## Step 3: Row Annotation 
+r_anno <- data.frame(genes = rownames(mut_list_full[1]$frameshift_variant))
+r_anno$key_genes <- ifelse(r_anno$genes %in% c("VHL","PBRM1","BAP1","SETD2"), "key_driver", "other_driver")
+
+  
+## Step 4: Print Oncoprint
+ht_all <- oncoPrint(mut_list_full,
+                  alter_fun = fun_alter,
+                  row_split = r_anno$key_genes,
+                  #column_split = c_anno$cohort,
+                  col = col, 
+                  show_row_names = TRUE, show_column_names = TRUE, 
+                  pct_side = "right", row_names_side = "left")%v% ca %v% ca_PID #%v% ca_prog
+  
+
+draw(ht_all)
 ```
 
-### Per mutation 
 
-```{r}
-# Only clonal
-#mut_matrix <- as.data.frame(t(ifelse(sum_matrix == 1, TRUE, FALSE))) %>% rownames_to_column("PID") 
-# Clonal + subclonal
-mut_matrix <- as.data.frame(t(ifelse(sum_matrix > 0, TRUE, FALSE))) %>% rownames_to_column("PID") 
-
-mut_matrix$status_OS <- variant_combined_full$status_OS[match(mut_matrix$PID, variant_combined_full$PID)]
-mut_matrix$OS_months <- variant_combined_full$OS_months[match(mut_matrix$PID, variant_combined_full$PID)]
-```
-
-```{r}
-#Assess survival impact across categories
-library(survival)
-library(survminer)
-
-# Extract p-values from log-rank / direction of trend
-cur_surv_out <- foreach(x = colnames(mut_matrix %>% select(-PID, -status_OS, -OS_months)), .combine = "rbind")%do%{
-  formula <- as.formula(paste("Surv(OS_months, status_OS) ~ ", x))
-  fit <- survdiff(formula, data = mut_matrix)
-  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[1], exp_2 = fit$exp[1])
-}
-
-# Adjust p-values using BH 
-cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
-
-# Create and plot heatmap 
-cur_surv_plot <- cur_surv_out %>% mutate(sign = p_adj < 0.1, direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% mutate(p_out = ifelse(sign == TRUE & direction == "high",  -log10(p_adj), ifelse(sign == TRUE & direction == "low", log10(p_adj), 0))) %>% arrange(desc(p_out)) #%>% filter(p < 0.05)
-
-cur_surv_plot <- cur_surv_plot %>% pivot_wider(id_cols = type, names_from = group, values_from = p_out) %>% column_to_rownames("type")
-
-# Define color 
-colours <- c("#4575B4", "white", "#D73027")
-breaks <- c(-2, 2, 0.5)
-breaks <- seq(from = breaks[1], to = breaks[2], by = breaks[3])
-pal <- grDevices::colorRampPalette(colours)(length(breaks))
-col <- colorRamp2(breaks, pal)
-
-Heatmap(cur_surv_plot, col = col, border = FALSE, cluster_columns = FALSE, rect_gp = gpar(col = "black", lwd = 1), name = "log10(p)")
-```
-
-```{r}
-library(survival)
-library(survminer)
-
-cur_surv <- mut_matrix %>% select(PID, OS_months, status_OS, TP53, MET, SETD2) %>% unique()
-
-#Plot survival curves
-fit <- survfit(Surv(OS_months, status_OS) ~ TP53, data = cur_surv)
-print(fit)
-
-ggsurvplot(fit,
-          pval = TRUE,
-          risk.table = TRUE, # Add risk table
-          risk.table.col = "strata", # Change risk table color by groups
-          linetype = "strata", # Change line type by groups
-          surv.median.line = "hv", # Specify median survival
-          ggtheme = theme_classic(), # Change ggplot2 theme
-          palette = "Set1",
-          conf.int = TRUE
-)
-
-fit <- survfit(Surv(OS_months, status_OS) ~ MET, data = cur_surv)
-print(fit)
-
-ggsurvplot(fit,
-          pval = TRUE,
-          risk.table = TRUE, # Add risk table
-          risk.table.col = "strata", # Change risk table color by groups
-          linetype = "strata", # Change line type by groups
-          surv.median.line = "hv", # Specify median survival
-          ggtheme = theme_classic(), # Change ggplot2 theme
-          palette = "Set1",
-          conf.int = TRUE
-)
-
-fit <- survfit(Surv(OS_months, status_OS) ~ SETD2, data = cur_surv)
-print(fit)
-
-ggsurvplot(fit,
-          pval = TRUE,
-          risk.table = TRUE, # Add risk table
-          risk.table.col = "strata", # Change risk table color by groups
-          linetype = "strata", # Change line type by groups
-          surv.median.line = "hv", # Specify median survival
-          ggtheme = theme_classic(), # Change ggplot2 theme
-          palette = "Set1",
-          conf.int = TRUE
-)
-```
 
 # Save plots as pdf
 
@@ -2291,3 +1449,6 @@ dev.off()
 
 ##IMPORTANT: change back to chunk output inline
 ```
+
+
+

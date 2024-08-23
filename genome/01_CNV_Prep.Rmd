@@ -23,7 +23,47 @@ library(ComplexHeatmap)
 library(ggpubr)
 ```
 
-## 1. Focal CNVs (Genes)
+## 1. QC 
+
+```{r}
+ID_match <- read_excel("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/data/ccRCC_ids_LM.xlsx", sheet = 1)
+ID_match_2 <- read_excel("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/data/ccRCC_ids_LM.xlsx", sheet = 2)
+
+ID_match$Bnum_2 <- ID_match_2$Bnum[match(ID_match$expID, ID_match_2$expID)]
+ID_match$Bnum_2[15:16] <- ID_match$BnumGnum[15:16]
+
+ID_match$PID <- c(str_split(ID_match$BnumGnum[1:16], "/", simplify = TRUE)[,2], ID_match$Bnum_2[17:nrow(ID_match)])
+ID_match$PID <- ifelse(ID_match$PID == "", NA, ID_match$PID)
+
+ID_match_3 <- read_excel("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/data/cohort1_PID_noBnumber_withBnr_LM.xlsx", sheet = 1)
+ID_match$PID <- ifelse(is.na(ID_match_3$PID_LM[match(ID_match$Bnum_2, ID_match_3$GNrCode)]), ID_match$PID,ID_match_3$PID_LM[match(ID_match$Bnum_2, ID_match_3$GNrCode)])
+```
+
+```{r}
+# Load patient metadata from IMC 
+patient_meta <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/data/Metadata_combined_RCC.csv",col_names = TRUE)
+patient_meta <- patient_meta %>% filter(type == "primary")
+```
+
+```{r}
+CNV_QC <- read_tsv("/mnt/central_nas/rcc_volume/RCC/genome/results/cohort_1_ena/03_CNV/pureCN_quality_control.tsv")
+
+
+CNV_QC$PID_old <- str_split(CNV_QC$sample, "_", simplify = TRUE)[,1]
+CNV_QC$sample_type <- str_split(CNV_QC$sample, "_", simplify = TRUE)[,3]
+
+# Match identifiers 
+CNV_QC$PID <- ID_match$PID[match(CNV_QC$PID_old,ID_match$Label)]
+
+# Filter out patients, where one/both tumor samples may have cross-contamination
+QC_out <- CNV_QC %>% filter(sample_type != "NO" & cross_contamination == "maybe") %>% count(PID) %>% filter(n > 1) %>% pull(PID)
+QC_out_fine <- CNV_QC %>% filter(sample_type != "NO" & cross_contamination == "maybe") %>% pull(PID)
+
+### NOTE: These patients do not seem to have concerning patterns and will be retained
+```
+
+
+## 2. Focal CNVs (Genes)
 
 ```{r}
 CNV_genes <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/results/cohort_1_ena/03_CNV/pureCN_all_samples_CNA_genes.csv")
@@ -98,15 +138,12 @@ CNV_consensus <- foreach(i = unique(CNV_GOI$PID), .combine = "rbind")%do%{
 ```
 
 
-Check whether I should filter samples anymore by C.flagged for example? 
-
 ```{r}
 write_csv(CNV_consensus, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/CNV_genes_combined_consensus.csv")
 ```
 
 
-
-## 2. Arm-level CNVs 
+## 3. Arm-level CNVs 
 
 ```{r}
 files <- list.files("/mnt/central_nas/rcc_volume/RCC/genome/results/cohort_1_ena/03_CNV/pureCN_raw/")
@@ -178,7 +215,21 @@ CNV_arm_sum_out <- CNV_arm_sum %>%
 CNV_arm_sum_out %>% group_by(type_summarized) %>% count()
 ```
 
-Check whether I should filter samples anymore by C.flagged for example? 
+### Add metadata 
+
+```{r}
+# Add relevant metadata to CNV_arm_sum_out
+meta_add <- colnames(patient_meta)[colnames(patient_meta) %in% c("TMA","subtype_combined", "gender", "age", "age_bin", "necrose", "lymphocytes", "BAP1_IHC", "PBRM1_IHC", "H3K36me_IHC", "status_OS", "OS_months", "tar_sequencing_data", "pT_combined", "ISUP_combined")]
+
+patient_meta <- as.data.frame(patient_meta)
+CNV_arm_sum_out <- as.data.frame(CNV_arm_sum_out)
+              
+for (entry in meta_add) {
+  CNV_arm_sum_out[,entry] <- patient_meta[,entry][match(CNV_arm_sum_out[,"PID"],patient_meta[,"PID"])]
+}
+
+CNV_arm_sum_out$necrose <- as.character(CNV_arm_sum_out$necrose)
+```
 
 ```{r}
 write_csv(CNV_arm_sum_out, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/CNV_armlevel_combined_consensus.csv")
@@ -275,12 +326,303 @@ Heatmap(out_heat_bin_minor)
 
 #### Oncoprint 
 
-TO DO
+##### All events
+
+```{r}
+#Load processed data file and select columns of interest
+cnv <- CNV_arm_sum_out %>% filter(type_summarized %in% c("loss_neutral", "loss", "gain_neutral", "gain"))
+
+cnv$type_final <- ifelse(cnv$type_summarized %in% c("loss_neutral", "loss"), "loss", "gain")
+
+# Optional: Filter quality patients
+#cnv <- cnv %>% filter(!PID_old %in% PID_kick_out)
+
+cnv$mut_level <- cnv$type_final
+
+cnv <- cnv %>% select(PID, chr_arm, mut_level)
+
+mut_levels_for_matrix <- cnv %>% pull(mut_level) %>% unique()
+
+# Select chromsome arms 
+## A: All chr_arm 
+chr_arm_list <- cnv %>% pull(chr_arm) %>% unique()
+
+#Placeholders 
+mut_list <- list()
+placeholder_chr_arm <- chr_arm_list[1]
+pids <- unique(cnv$PID)
+placeholder_pid <- pids[1]
+
+for(mut in mut_levels_for_matrix){
+  
+  #select all cnvs/Indels of the mut_level and give a value of 1
+  x <- cnv %>%
+    dplyr::filter(mut_level==mut,
+                  chr_arm %in% chr_arm_list | 
+                    grepl(paste0(paste0("^", chr_arm_list, "[,;]"), collapse="|"), chr_arm) |       #allow for multi-chr_arm mutations
+                    grepl(paste0(paste0("[,;]", chr_arm_list, "$"), collapse="|"), chr_arm) ) %>%  
+    dplyr::select(PID, chr_arm) %>%
+    dplyr::mutate(value=1) %>%
+    dplyr::distinct()
+  
+  if(dim(x)[1]!=0){
+    x <- x %>%
+      tidyr::spread(chr_arm, value)
+    
+    #transpose and replace NA by 0
+    y <- x %>% column_to_rownames("PID")
+    y <- t(y)
+    y[is.na(y)] <- 0
+    
+  }else{
+    y <- tibble(0)
+    colnames(y) <- placeholder_pid
+    rownames(y) <- placeholder_chr_arm
+  }
+  
+  mut_list[[mut]] <- as.matrix(y)
+}
+
+#Unify matrices
+mut_list_full <- unify_mat_list(mut_list)
+
+# Create a new list entry called "Multiple" for multiple gene mutations within a PID
+#sum_matrix <- Reduce(`+`, mut_list_full)
+#mut_list_full$multiple <- as.matrix(ifelse(sum_matrix > 1, 1,0))
+
+# keep the order of annotation and mutation list
+#ord= anno$PID_short
+  
+# show every gene and patient
+# blank for patients  and.or chr_arm missing 
+for (i in seq_along(mut_list_full)){
+  dif_gen = setdiff(chr_arm_list,rownames(mut_list_full[[i]]))
+  dif_pat = setdiff(pids,colnames(mut_list_full[[i]]))
+  
+  blank= matrix(ncol=length(dif_pat),nrow=length(rownames(mut_list_full[[i]])),0)
+  colnames(blank)=dif_pat
+  rownames(blank)=rownames(mut_list_full[[i]])
+  mut_list_full[[i]]=cbind(mut_list_full[[i]],blank)
+  
+  blank= matrix(ncol=ncol(mut_list_full[[i]]),nrow=length(dif_gen),0)
+  colnames(blank)=colnames(mut_list_full[[i]])
+  rownames(blank)=dif_gen
+  mut_list_full[[i]]=rbind(mut_list_full[[i]],blank)
+  #mut_list_full[[i]]=mut_list_full[[i]][,ord]
+}
+
+# Optional: Create a new list entry called "Clonality" for each arm-level event per PID
+subclonal_anno <- CNV_arm_sum_out %>% pivot_wider(id_cols = PID, names_from = chr_arm, values_from = clonality) %>% column_to_rownames("PID")
+subclonal_anno[is.na(subclonal_anno)] <- "none"
+subclonal_anno <- t(ifelse(subclonal_anno == "subclonal", 1, 0))
+
+subclonal_anno <- subclonal_anno[match(rownames(mut_list_full$loss), rownames(subclonal_anno)),]
+subclonal_anno <- subclonal_anno[,match(colnames(mut_list_full$loss), colnames(subclonal_anno))]
+
+mut_list_full$subclonal <- subclonal_anno
+```
+
+
+```{r print onc, message=FALSE,warning=FALSE, fig.width=10,fig.height=7}
+## Step 1: Define alteration function
+
+#Colors
+col <- c("#E41A1C", "#377EB8")
+
+# alter_fun function 
+fun_alter = list(
+  background = function(x, y, w, h) grid.rect(x, y, w, h, gp = gpar(fill = "#e7e7e7", col = "white")),
+  gain = function(x, y, w, h) grid.rect(x, y, w, h, gp = gpar(fill = "#E41A1C", col = NA)),
+  loss = function(x, y, w, h) grid.rect(x, y, w, h, gp = gpar(fill = "#377EB8", col = NA)),
+  subclonal = function(x, y, w, h) grid.points(x, y, size = unit(0.4, "char"), pch = 16)
+)
+
+names(col) <- c("gain", "loss") 
+
+test_alter_fun(fun_alter)
+
+## Step 2: Column Annotation
+c_anno <- data.frame(PID = colnames(mut_list_full[1]$loss))
+#c_anno$QC <- c_anno$PID %in% QC_out
+##c_anno$QC_fine <- c_anno$PID %in% QC_out_fine
+c_anno$cohort <- "old"
+
+#QC_col <- setNames(brewer.pal(3, "Set1")[1:2],unique(c_anno$QC))
+cohort_col <- setNames(brewer.pal(3, "Set1")[1],unique(c_anno$cohort))
+
+ca <- columnAnnotation(
+  cohort = c_anno$cohort,
+  col = list(cohort = cohort_col),
+  border = TRUE
+  )
+
+## Step 3: Row Annotation 
+#r_anno <- data.frame(chr_arm = rownames(mut_list_full[1]$loss))
+#r_anno$key_chr_arm <- ifelse(r_anno$chr_arm %in% c("VHL","PBRM1","BAP1","SETD2"), "key_driver", "other_driver")
+
+  
+## Step 4: Print Oncoprint
+ht_all <- oncoPrint(mut_list_full,
+                  alter_fun = fun_alter,
+                  #row_split = r_anno$key_chr_arm,
+                  #column_split = c_anno$cohort,
+                  col = col, 
+                  show_row_names = TRUE, show_column_names = TRUE, 
+                  pct_side = "right", row_names_side = "left")%v%ca
+  
+
+draw(ht_all)
+```
+
+##### Clonal only
+
+```{r}
+#Load processed data file and select columns of interest
+cnv <- CNV_arm_sum_out %>% filter(type_summarized %in% c("loss", "gain"))
+
+cnv$type_final <- cnv$type_summarized
+
+# Optional: Filter quality patients
+#cnv <- cnv %>% filter(!PID_old %in% PID_kick_out)
+
+cnv$mut_level <- cnv$type_final
+
+cnv <- cnv %>% select(PID, chr_arm, mut_level)
+
+mut_levels_for_matrix <- cnv %>% pull(mut_level) %>% unique()
+
+# Select chromsome arms 
+## A: All chr_arm 
+chr_arm_list <- cnv %>% pull(chr_arm) %>% unique()
+
+#Placeholders 
+mut_list <- list()
+placeholder_chr_arm <- chr_arm_list[1]
+pids <- unique(CNV_arm_sum_out$PID)
+placeholder_pid <- pids[1]
+
+for(mut in mut_levels_for_matrix){
+  
+  #select all cnvs/Indels of the mut_level and give a value of 1
+  x <- cnv %>%
+    dplyr::filter(mut_level==mut,
+                  chr_arm %in% chr_arm_list | 
+                    grepl(paste0(paste0("^", chr_arm_list, "[,;]"), collapse="|"), chr_arm) |       #allow for multi-chr_arm mutations
+                    grepl(paste0(paste0("[,;]", chr_arm_list, "$"), collapse="|"), chr_arm) ) %>%  
+    dplyr::select(PID, chr_arm) %>%
+    dplyr::mutate(value=1) %>%
+    dplyr::distinct()
+  
+  if(dim(x)[1]!=0){
+    x <- x %>%
+      tidyr::spread(chr_arm, value)
+    
+    #transpose and replace NA by 0
+    y <- x %>% column_to_rownames("PID")
+    y <- t(y)
+    y[is.na(y)] <- 0
+    
+  }else{
+    y <- tibble(0)
+    colnames(y) <- placeholder_pid
+    rownames(y) <- placeholder_chr_arm
+  }
+  
+  mut_list[[mut]] <- as.matrix(y)
+}
+
+#Unify matrices
+mut_list_full <- unify_mat_list(mut_list)
+
+# Create a new list entry called "Multiple" for multiple gene mutations within a PID
+#sum_matrix <- Reduce(`+`, mut_list_full)
+#mut_list_full$multiple <- as.matrix(ifelse(sum_matrix > 1, 1,0))
+  
+# show every gene and patient
+# blank for patients  and.or chr_arm missing 
+for (i in seq_along(mut_list_full)){
+  dif_gen = setdiff(chr_arm_list,rownames(mut_list_full[[i]]))
+  dif_pat = setdiff(pids,colnames(mut_list_full[[i]]))
+  
+  blank = matrix(ncol=length(dif_pat),nrow=length(rownames(mut_list_full[[i]])),0)
+  colnames(blank) = dif_pat
+  rownames(blank) = rownames(mut_list_full[[i]])
+  mut_list_full[[i]] = cbind(mut_list_full[[i]],blank)
+  
+  blank= matrix(ncol = ncol(mut_list_full[[i]]),nrow=length(dif_gen),0)
+  colnames(blank) = colnames(mut_list_full[[i]])
+  rownames(blank) = dif_gen
+  mut_list_full[[i]] = rbind(mut_list_full[[i]],blank)
+}
+```
+
+
+```{r print onc, message=FALSE,warning=FALSE, fig.width=10,fig.height=7}
+## Step 1: Define alteration function
+
+#Colors
+col <- c("#E41A1C", "#377EB8")
+
+# alter_fun function 
+fun_alter = list(
+  background = function(x, y, w, h) grid.rect(x, y, w, h, gp = gpar(fill = "#e7e7e7", col = "white")),
+  gain = function(x, y, w, h) grid.rect(x, y, w, h, gp = gpar(fill = "#E41A1C", col = NA)),
+  loss = function(x, y, w, h) grid.rect(x, y, w, h, gp = gpar(fill = "#377EB8", col = NA))
+)
+
+names(col) <- c("gain", "loss") 
+
+test_alter_fun(fun_alter)
+
+## Step 2: Column Annotation
+c_anno <- data.frame(PID = colnames(mut_list_full[1]$loss))
+c_anno$cohort <- full_consensus_GOI$cohort[match(c_anno$PID, full_consensus_GOI$PID)]
+
+c_anno$gender <- full_consensus_GOI$gender[match(c_anno$PID, full_consensus_GOI$PID)]
+c_anno$age_bin <- full_consensus_GOI$age_bin[match(c_anno$PID, full_consensus_GOI$PID)]
+
+## 2A: Sequencing related data
+### Define colors
+cohort_col <- setNames(brewer.pal(3, "Set1")[1],unique(c_anno$cohort))
+
+ca <- columnAnnotation(cohort = c_anno$cohort,
+                   #mean_cov = c_anno$mean_cov,
+                   #cov_status = as.character(c_anno$critical),
+                   col = list(cohort = cohort_col),
+                   border = TRUE
+                   )
+
+## 2A: Patient metadata
+ca_PID <- columnAnnotation(gender = c_anno$gender,
+                           age_bin = c_anno$age_bin,
+                           col = list(gender = metadata(sce)$colors$gender, 
+                                      age_bin = metadata(sce)$colors$age_bin),
+                           border = TRUE
+                           )
+
+## Step 3: Row Annotation 
+#r_anno <- data.frame(chr_arm = rownames(mut_list_full[1]$loss))
+#r_anno$key_chr_arm <- ifelse(r_anno$chr_arm %in% c("VHL","PBRM1","BAP1","SETD2"), "key_driver", "other_driver")
+
+  
+## Step 4: Print Oncoprint
+ht_all <- oncoPrint(mut_list_full,
+                  alter_fun = fun_alter,
+                  #row_split = r_anno$key_chr_arm,
+                  #column_split = c_anno$cohort,
+                  col = col, 
+                  show_row_names = TRUE, show_column_names = TRUE, 
+                  pct_side = "right", row_names_side = "left")%v%ca_PID
+  
+
+draw(ht_all)
+```
 
 
 
 
-## 3. Utility code
+
+## 4. Utility code
 
 ```{r}
 hg38 <- readRDS("/mnt/central_nas/rcc_volume/RCC/genome/results/cohort_1_ena/03_CNV/pureCN_raw/normalDB_hg38.rds")
