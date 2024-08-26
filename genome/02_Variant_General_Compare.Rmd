@@ -23,15 +23,21 @@ library(foreach)
 library(circlize)
 library(ComplexHeatmap)
 library(ggpubr)
+library(survival)
+library(survminer)
 ```
 
 ## Read in data 
 
+```{r}
+# CNV and SNV
+variant_combined_full <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/SNV_CNV_combined_full_withmeta.csv")
 
-## TO DO: SPLIT THE SCRIPT UP HERE! 
+mut_list_full <- readRDS("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/SNV_CNV_mutlist.rds")
+```
 
 
-## 5. Genomic subtype defintion 
+## 1. Genomic subtype defintion 
 
 ```{r}
 # Create heatmap combining information from mutations and IHC scores
@@ -46,8 +52,6 @@ save_sum <- as.data.frame(t(sum_matrix)) %>% rownames_to_column("PID")
 ```
 
 ### Manual annotation 
-
-TO DO: Change for patients (5 or so) with focal CNV events 
 
 ```{r}
 # Create heatmap combining information from mutations and IHC scores
@@ -80,15 +84,15 @@ ht_mut <- draw(ht_mut)
 col_order_ht <- column_order(ht_mut)
 driver_mat_ordered <- driver_mat[col_order_ht,]
 
-#write_csv(driver_mat_anno, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/genomic_subtype_anno_new.csv")
+#write_csv(driver_mat_ordered, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/genomic_subtype_anno_new.csv")
 ```
 
 ### Visualization
 
 ```{r}
 # Depends on previous code chunk 
-# Read in after manual annotation 
-driver_mat_anno_out <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/genomic_subtype_anno.csv")
+# Read in after manual genomic subtype annotation based on TracerX criteria
+driver_mat_anno_out <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/genomic_subtype_anno_new.csv")
 
 # Annotate original dataframe
 driver_mat_anno <- driver_mat
@@ -99,10 +103,11 @@ driver_mat_anno <- driver_mat_anno %>% mutate(evolution_type = ifelse(genomic_su
 
 driver_mat_anno$evolution_type_comb <- ifelse(driver_mat_anno$evolution_type == "punctuated_like", "punctuated_like", "branched_linear_like")
 
-driver_mat_anno$evolution_type_comb_1 <- ifelse(driver_mat_anno$genomic_subtype %in% c("multiple_drivers", "BAP1_driven"), "punctuated_like", ifelse(driver_mat_anno$genomic_subtype == "PBRM1_driven", "branched_like", "VHL_like"))
+driver_mat_anno$evolution_type_comb_1 <- ifelse(driver_mat_anno$genomic_subtype %in% c("multiple_drivers", "BAP1_driven"), "high_risk", ifelse(driver_mat_anno$genomic_subtype == "PBRM1_driven", "low_risk", "medium_risk"))
 
 # match
 driver_mat_anno <- driver_mat_anno[match(rownames(mut_mat), driver_mat_anno$PID),]
+
 
 # Column Annotation
 ## Define colors 
@@ -126,8 +131,7 @@ ht_mut_anno <- Heatmap(t(mut_mat), name = "Mutation status",
   Heatmap(t(IHC_mat), name = "IHC score",
           col = viridis(100), 
           na_col = "grey", 
-          cluster_columns = FALSE, cluster_rows = FALSE)%v%
-  ca
+          cluster_columns = FALSE, cluster_rows = FALSE)%v%ca
 
 ht_mut_anno <- draw(ht_mut_anno)
 ```
@@ -203,6 +207,7 @@ ggsurvplot(fit,
           conf.int = TRUE
 )
 ```
+
 ### Across progression
 
 #### Genomic subtypes 
@@ -451,7 +456,7 @@ ggplot(SETD2_viz, aes(x = SETD2, y = fra, fill = H3K36me_IHC))+
 ```
 
 
-## 6. Cohort comparisons
+## 2. Cohort comparisons
 
 ### Cohort vs Progression 
 
@@ -497,21 +502,18 @@ ggplot(test_variant, aes(x = cohort, y = n, fill = PDL1_score))+
 
 ### Mutational load 
 
-TO DO: Dive by total number of profiled basepairs - 5364626 (or in megabasepairs - 10^6)
+TO DO: This should be calculated based on all coding region mutations (here I am selecting for "impact" mutations) - Also divide by total number of profiled basepairs - 5364626 (in megabasepairs - 10^6) - e.g. 10 mut/mb 
 
 #### Cohort
 
 ```{r}
-variant_combined_2 <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_cohort2.csv")
-variant_combined_2$cohort <- "cohort_new"
+coverage_PID <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/coverage_PID_QC.csv")
+PID_kick_out <- coverage_PID %>% filter(PID_kick_out == TRUE) %>% pull(PID)
+```
 
-variant_combined_1 <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_cohort1.csv")
-variant_combined_1$cohort <- "cohort_old"
-variant_combined_1 <- variant_combined_1 %>% select(-sample_id)
-
-variant_full <- rbind(variant_combined_1, variant_combined_2)
-
-variant_full <- variant_full %>% filter(!is.na(PID))
+```{r}
+# TO DO: This should be all coding mutations (NOT preselected for impact)
+variant_full <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_full_withmeta.csv")
 ```
 
 ```{r}
@@ -535,29 +537,29 @@ ggplot(mut_out, aes(mean_cov, n))+
   geom_point(size = 2)+
   theme_classic()
 
-# Option 2: Removing PID with low coverage
-mut_out <- variant_full %>% group_by(PID, cohort) %>% filter(!PID_old %in% PID_kick_out) %>% dplyr::count(PID) 
-
-mut_out$mean_cov <- coverage_PID$mean_cov[match(mut_out$PID, coverage_PID$PID_new)]
-
-ggplot(mut_out, aes(x=cohort, y = n, size = mean_cov))+
-  geom_jitter(position=position_jitter(w=0.1,h=0.1), aes(color = cohort))+
-  geom_boxplot(outlier.color = NA)+
-  scale_color_brewer(palette = "Set1")+
-  theme_classic()+
-  ylab("Mutational burden (total)")+
-  stat_compare_means()
-  
-
-ggplot(mut_out, aes(mean_cov, n))+
-  geom_smooth(method='lm', formula= y~x, se = TRUE, color = "darkgrey")+
-  geom_point(size = 2)+
-  theme_classic()
+# # Option 2: Removing PID with low coverage
+# mut_out <- variant_full %>% group_by(PID, cohort) %>% filter(!PID_old %in% PID_kick_out) %>% dplyr::count(PID) 
+# 
+# mut_out$mean_cov <- coverage_PID$mean_cov[match(mut_out$PID, coverage_PID$PID_new)]
+# 
+# ggplot(mut_out, aes(x=cohort, y = n, size = mean_cov))+
+#   geom_jitter(position=position_jitter(w=0.1,h=0.1), aes(color = cohort))+
+#   geom_boxplot(outlier.color = NA)+
+#   scale_color_brewer(palette = "Set1")+
+#   theme_classic()+
+#   ylab("Mutational burden (total)")+
+#   stat_compare_means()
+#   
+# 
+# ggplot(mut_out, aes(mean_cov, n))+
+#   geom_smooth(method='lm', formula= y~x, se = TRUE, color = "darkgrey")+
+#   geom_point(size = 2)+
+#   theme_classic()
 ```
 
 ```{r}
 # Focusing on indels 
-mut_out <- variant_combined_full %>% filter(variant_consequence_combined == "inframe_del_ins") %>% group_by(PID, cohort) %>% dplyr::count(PID) 
+mut_out <- variant_full %>% filter(variant_consequence_combined == "inframe_del_ins") %>% group_by(PID, cohort) %>% dplyr::count(PID) 
 
 ggplot(mut_out, aes(x=cohort, y = n))+
   geom_jitter(position=position_jitter(w=0.1,h=0.1), aes(color = cohort))+
@@ -573,16 +575,18 @@ ggplot(mut_out, aes(x=cohort, y = n))+
 #### Across progression categories 
 
 ```{r}
-mut_out$ISUP_combined <- variant_combined_full$ISUP_combined[match(mut_out$PID, variant_combined_full$PID)]
-mut_out$pT_combined <- variant_combined_full$pT_combined[match(mut_out$PID, variant_combined_full$PID)]
-mut_out$necrose<- variant_combined_full$necrose[match(mut_out$PID, variant_combined_full$PID)]
-mut_out$PDL1_score <- variant_combined_full$PDL1_score[match(mut_out$PID, variant_combined_full$PID)]
+mut_out <- variant_full %>% group_by(PID, cohort) %>% dplyr::count(PID) 
+
+mut_out$ISUP_combined <- variant_full$ISUP_combined[match(mut_out$PID, variant_full$PID)]
+mut_out$pT_combined <- variant_full$pT_combined[match(mut_out$PID, variant_full$PID)]
+mut_out$necrose<- as.character(variant_full$necrose[match(mut_out$PID, variant_full$PID)])
+mut_out$PDL1_score <- as.character(variant_full$PDL1_score[match(mut_out$PID, variant_full$PID)])
 
 mut_out <- mut_out[complete.cases(mut_out),]
 mut_out$ISUP_combined <- ifelse(mut_out$ISUP_combined == "3/4", "1", "0")
 mut_out$pT_combined <- ifelse(mut_out$pT_combined == "3/4", "1", "0")
 
-mut_out_long <- mut_out %>% pivot_longer(5:8, names_to = "category", values_to = "level")
+mut_out_long <- mut_out %>% pivot_longer(4:7, names_to = "category", values_to = "level")
 
 ggplot(mut_out_long, aes(x=level, y = n))+
   facet_wrap(~category)+
@@ -596,13 +600,12 @@ ggplot(mut_out_long, aes(x=level, y = n))+
 
 ```{r}
 # Focusing on "impact" mutations 
+mut_out_2 <- variant_full %>% group_by(PID) %>% dplyr::count(PID) 
 
-mut_out_2 <- variant_combined_full %>% group_by(PID) %>% dplyr::count(PID) 
-
-mut_out_2$ISUP_combined <- variant_combined_full$ISUP_combined[match(mut_out_2$PID, variant_combined_full$PID)]
-mut_out_2$pT_combined <- variant_combined_full$pT_combined[match(mut_out_2$PID, variant_combined_full$PID)]
-mut_out_2$necrose<- variant_combined_full$necrose[match(mut_out_2$PID, variant_combined_full$PID)]
-mut_out_2$PDL1_score <- variant_combined_full$PDL1_score[match(mut_out_2$PID, variant_combined_full$PID)]
+mut_out_2$ISUP_combined <- variant_full$ISUP_combined[match(mut_out_2$PID, variant_full$PID)]
+mut_out_2$pT_combined <- variant_full$pT_combined[match(mut_out_2$PID, variant_full$PID)]
+mut_out_2$necrose<- variant_full$necrose[match(mut_out_2$PID, variant_full$PID)]
+mut_out_2$PDL1_score <- variant_full$PDL1_score[match(mut_out_2$PID, variant_full$PID)]
 
 mut_out_2 <- mut_out_2[complete.cases(mut_out_2),]
 mut_out_2$ISUP_combined <- ifelse(mut_out_2$ISUP_combined == "3/4", "1", "0")
@@ -619,14 +622,15 @@ ggplot(mut_out_2_long, aes(x=level, y = n))+
   ylab("Mutational burden (impact - total)")+
   stat_compare_means()
 ```
+
 ```{r}
 # Focusing on indels 
-mut_out_2 <- variant_combined_full %>% filter(variant_consequence_combined == "inframe_del_ins") %>% group_by(PID) %>% dplyr::count(PID) 
+mut_out_2 <- variant_full %>% filter(variant_consequence_combined == "inframe_del_ins") %>% group_by(PID) %>% dplyr::count(PID) 
 
-mut_out_2$ISUP_combined <- variant_combined_full$ISUP_combined[match(mut_out_2$PID, variant_combined_full$PID)]
-mut_out_2$pT_combined <- variant_combined_full$pT_combined[match(mut_out_2$PID, variant_combined_full$PID)]
-mut_out_2$necrose<- variant_combined_full$necrose[match(mut_out_2$PID, variant_combined_full$PID)]
-mut_out_2$PDL1_score <- variant_combined_full$PDL1_score[match(mut_out_2$PID, variant_combined_full$PID)]
+mut_out_2$ISUP_combined <- variant_full$ISUP_combined[match(mut_out_2$PID, variant_full$PID)]
+mut_out_2$pT_combined <- variant_full$pT_combined[match(mut_out_2$PID, variant_full$PID)]
+mut_out_2$necrose<- variant_full$necrose[match(mut_out_2$PID, variant_full$PID)]
+mut_out_2$PDL1_score <- variant_full$PDL1_score[match(mut_out_2$PID, variant_full$PID)]
 
 mut_out_2 <- mut_out_2[complete.cases(mut_out_2),]
 mut_out_2$ISUP_combined <- ifelse(mut_out_2$ISUP_combined == "3/4", "1", "0")
@@ -923,7 +927,7 @@ ggplot(co_occurrence_df_sig, aes(x = reorder(pair, -p_out), y = p_out, fill = od
 ```
 
 
-## 7. Survival comparisons
+## 3. Survival comparisons
 
 ### Progression categories 
 
@@ -992,10 +996,16 @@ ggsurvplot(fit,
 ```
 
 ### Per mutation 
+```{r}
+sum_matrix <- Reduce(`+`, mut_list_full)
+sum_matrix <- as.matrix(ifelse(sum_matrix >= 1, 1,0))
+sum_matrix[mut_list_full$subclonal == 1] <- 0.5
+```
 
 ```{r}
 # Only clonal
 #mut_matrix <- as.data.frame(t(ifelse(sum_matrix == 1, TRUE, FALSE))) %>% rownames_to_column("PID") 
+
 # Clonal + subclonal
 mut_matrix <- as.data.frame(t(ifelse(sum_matrix > 0, TRUE, FALSE))) %>% rownames_to_column("PID") 
 
@@ -1020,6 +1030,9 @@ cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
 
 # Create and plot heatmap 
 cur_surv_plot <- cur_surv_out %>% mutate(sign = p_adj < 0.1, direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% mutate(p_out = ifelse(sign == TRUE & direction == "high",  -log10(p_adj), ifelse(sign == TRUE & direction == "low", log10(p_adj), 0))) %>% arrange(desc(p_out)) #%>% filter(p < 0.05)
+
+#cur_surv_plot <- cur_surv_out %>% mutate(sign = p < 0.05, direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% mutate(p_out = ifelse(sign == TRUE & direction == "high",  -log10(p_adj), ifelse(sign == TRUE & direction == "low", log10(p_adj), 0))) %>% arrange(desc(p_out)) #%>% filter(p < 0.05)
+
 
 cur_surv_plot <- cur_surv_plot %>% pivot_wider(id_cols = type, names_from = group, values_from = p_out) %>% column_to_rownames("type")
 

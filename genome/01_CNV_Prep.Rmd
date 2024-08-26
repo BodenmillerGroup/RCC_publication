@@ -140,6 +140,7 @@ CNV_consensus <- foreach(i = unique(CNV_GOI$PID), .combine = "rbind")%do%{
 
 ```{r}
 write_csv(CNV_consensus, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/CNV_genes_combined_consensus.csv")
+#CNV_consensus <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/CNV_genes_combined_consensus.csv")
 ```
 
 
@@ -231,8 +232,22 @@ for (entry in meta_add) {
 CNV_arm_sum_out$necrose <- as.character(CNV_arm_sum_out$necrose)
 ```
 
+
+```{r}
+# Select ccRCC cases
+## Also removes NA / chrRCC cases
+CNV_arm_sum_out <- CNV_arm_sum_out %>% filter(subtype_combined == "ccRCC") 
+
+## Add cohort info
+CNV_arm_sum_out$cohort <- "cohort_old"
+```
+
+
+### Save
+
 ```{r}
 write_csv(CNV_arm_sum_out, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/CNV_armlevel_combined_consensus.csv")
+#CNV_arm_sum_out <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/CNV_armlevel_combined_consensus.csv")
 ```
 
 
@@ -412,7 +427,7 @@ for (i in seq_along(mut_list_full)){
 }
 
 # Optional: Create a new list entry called "Clonality" for each arm-level event per PID
-subclonal_anno <- CNV_arm_sum_out %>% pivot_wider(id_cols = PID, names_from = chr_arm, values_from = clonality) %>% column_to_rownames("PID")
+subclonal_anno <- CNV_arm_sum_out %>% filter(type_summarized %in% c("loss_neutral", "loss", "gain_neutral", "gain")) %>% pivot_wider(id_cols = PID, names_from = chr_arm, values_from = clonality) %>% column_to_rownames("PID")
 subclonal_anno[is.na(subclonal_anno)] <- "none"
 subclonal_anno <- t(ifelse(subclonal_anno == "subclonal", 1, 0))
 
@@ -475,6 +490,11 @@ draw(ht_all)
 ```
 
 ##### Clonal only
+
+```{r}
+# From IMC analysis: sce for color assignments 
+sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_04.rds")
+```
 
 ```{r}
 #Load processed data file and select columns of interest
@@ -576,10 +596,10 @@ test_alter_fun(fun_alter)
 
 ## Step 2: Column Annotation
 c_anno <- data.frame(PID = colnames(mut_list_full[1]$loss))
-c_anno$cohort <- full_consensus_GOI$cohort[match(c_anno$PID, full_consensus_GOI$PID)]
+c_anno$cohort <- CNV_arm_sum_out$cohort[match(c_anno$PID, CNV_arm_sum_out$PID)]
 
-c_anno$gender <- full_consensus_GOI$gender[match(c_anno$PID, full_consensus_GOI$PID)]
-c_anno$age_bin <- full_consensus_GOI$age_bin[match(c_anno$PID, full_consensus_GOI$PID)]
+c_anno$gender <- CNV_arm_sum_out$gender[match(c_anno$PID, CNV_arm_sum_out$PID)]
+c_anno$age_bin <- CNV_arm_sum_out$age_bin[match(c_anno$PID, CNV_arm_sum_out$PID)]
 
 ## 2A: Sequencing related data
 ### Define colors
@@ -612,7 +632,7 @@ ht_all <- oncoPrint(mut_list_full,
                   #column_split = c_anno$cohort,
                   col = col, 
                   show_row_names = TRUE, show_column_names = TRUE, 
-                  pct_side = "right", row_names_side = "left")%v%ca_PID
+                  pct_side = "right", row_names_side = "left")%v%ca%v%ca_PID
   
 
 draw(ht_all)
@@ -640,4 +660,9 @@ library(rtracklayer)
 
 cytoband <- getTable(ucscTableQuery(session, table = "cytoBand"))
 ```
+
+
+## TO DO: 
+
+- Add 02_CNV_General_Compare and 02_CNV_Myeloid_Compare - For general and myeloid-specific comparisons of arm-level events across categories 
 

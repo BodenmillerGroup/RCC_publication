@@ -39,6 +39,8 @@ genomic_sub <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/ge
 
 # Differential abundance testing based 
 
+TO DO: Add also analysis for densities (not compositional; they do not sum up to 1) to mutations and subtypes etc. 
+
 ## 1. Immune subtypes
 
 ```{r}

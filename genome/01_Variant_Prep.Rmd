@@ -147,11 +147,20 @@ coverage_filtered$PID <- str_split(coverage_filtered$sample, "_TU", simplify = T
 # Here for overall mean coverage
 coverage_PID <- coverage_filtered %>% group_by(PID) %>% summarise(mean_cov = mean(multiqc_general.mean_coverage), 
                                                                   cov_rcc_5 = mean(rcc_targets_mosdepth_mqc.generalstats.mosdepth.5_x_pc))
+coverage_PID <- coverage_PID %>% mutate(PID_kick_out = ifelse(cov_rcc_5 < 15, TRUE, FALSE))
 ```
 
 ```{r}
+## Since these patients did not show particular patterns, they are retained in the analysis thus far
 PID_kick_out <- coverage_PID %>% filter(cov_rcc_5 < 15) %>% pull(PID) #n=5
 ```
+
+### Save 
+
+```{r}
+write_csv(coverage_PID, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/coverage_PID_QC.csv")
+```
+
 
 ## 2. Cohort 2 - OpenBIS 
 
@@ -1037,12 +1046,37 @@ full_consensus_GOI$necrose <- as.character(full_consensus_GOI$necrose)
 ```
 
 ```{r}
+# From IMC analysis: PDL1 score plus color assignments 
+#sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_04.rds")
+
+full_consensus_GOI$PDL1_score <- sce$PDL1_score[match(full_consensus_GOI$PID, sce$PID)]
+```
+
+### Save 
+
+```{r}
 write_csv(full_consensus_GOI, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/SNV_CNV_combined_full_withmeta.csv")
-#full_consensus_GOI <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/SNV_CNV_combined_full_withmeta.csv")
 ```
 
 
 ## 5. Visualization
+
+```{r}
+full_consensus_GOI <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/SNV_CNV_combined_full_withmeta.csv")
+variant_combined_full <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_full_withmeta.csv")
+```
+
+```{r}
+# ccRCC mutational driver genes 
+GOI_IntOGen <- read_tsv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/data/IntOGen_DriverGenes_CCRCC.tsv")
+GOI <- GOI_IntOGen$Symbol #n = 44
+```
+
+```{r}
+# From IMC analysis: PDL1 score plus color assignments 
+sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_04.rds")
+```
+
 
 ### Oncoprint 
 
@@ -1066,7 +1100,7 @@ mut_levels_for_matrix <- snv %>% pull(mut_level) %>% unique()
 Genes_list <- snv %>% pull(Genes) %>% unique()
 ## B: Genes of Interest e.g. IntOGen driver genes 
 Genes_list <- snv %>% filter(Genes %in% GOI) %>% pull(Genes) %>% unique()
-#Genes_list <- Genes_list[!Genes_list %in% c("SF3B1", "STAG2", "PTEN", "ARHGAP35")]
+Genes_list <- Genes_list[!Genes_list %in% c("SF3B1", "STAG2", "ARHGAP35")]
 
 #Placeholders 
 mut_list <- list()
@@ -1331,6 +1365,10 @@ subclonal_anno <- subclonal_anno[match(rownames(mut_list_full$missense_variant),
 subclonal_anno <- subclonal_anno[,match(colnames(mut_list_full$missense_variant), colnames(subclonal_anno))]
 
 mut_list_full$subclonal <- subclonal_anno
+```
+
+```{r}
+saveRDS(mut_list_full, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/SNV_CNV_mutlist.rds")
 ```
 
 
