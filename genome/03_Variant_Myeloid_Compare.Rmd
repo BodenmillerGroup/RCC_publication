@@ -520,7 +520,7 @@ for (entry in GOI_all) {
 ```{r}
 # Add relevant metadata to sce 
 ## Genomic subtypes and evolution type 
-genom_add <- colnames(genomic_sub)[colnames(genomic_sub) %in% c("genomic_subtype", "evolution_type", "evolution_type_comb")]
+genom_add <- colnames(genomic_sub)[colnames(genomic_sub) %in% c("genomic_subtype", "evolution_type", "evolution_type_comb_1")]
 
 genomic_sub <- as.data.frame(genomic_sub)
 
