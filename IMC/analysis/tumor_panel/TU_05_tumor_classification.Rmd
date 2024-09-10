@@ -652,9 +652,6 @@ cytoviewer(image = cur_images, mask = cur_masks, object = cur_sce, img_id = "sam
 ```
 
 
-
-
-
 # 2. Quality control 
 
 Kick out low expressing cluster
@@ -699,7 +696,7 @@ NOTE: Probably kick out low expressing cluster!
 
 ```{r}
 #Read sce after clustering, astir and GMM
-#sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_05.rds")
+sce <- readRDS("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_05.rds")
 
 ### 1. Heatmap body ###
 

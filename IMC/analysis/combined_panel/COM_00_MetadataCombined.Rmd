@@ -1,0 +1,351 @@
+---
+title: "COM_01_Compare"
+author: "Lasse Meyer"
+date: "`r Sys.Date()`"
+output: html_document
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Software requirements
+
+```{r lib, message=FALSE,warning=FALSE}
+#Data containers
+library(SpatialExperiment)
+library(SingleCellExperiment)
+
+#Data processing
+library(scuttle)
+library(scater)
+library(scran)
+library(imcRtools)
+
+#Data visualization
+library(cytomapper)
+library(dittoSeq)
+library(pheatmap)
+library(cowplot)
+library(ComplexHeatmap)
+library(circlize)
+
+#Utilities
+library(tidyverse)
+library(openxlsx)
+library(stringr)
+library(patchwork)
+library(parallel)
+library(BiocParallel)
+library(BiocNeighbors)
+library(BiocSingular)
+library(tiff)
+library(ggrepel)
+library(EBImage)
+library(viridis)
+library(mclust)
+library(Rphenograph)
+library(igraph)
+library(RColorBrewer)
+library(foreach)
+library(clValid)
+library(bluster)
+```
+
+
+
+# Metadata
+
+Combine metadata from all three panels into a single file. 
+
+## Tumor panel 
+
+```{r}
+sce_tumor <- readRDS("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_05.rds")
+```
+
+```{r}
+metadata_tumor <- colData(sce_tumor) %>% as.data.frame %>% select("sample_id", "width_px", "height_px", "PID", "TMA", "gender", "age", "age_bin", "type", "subtype_combined", "status_OS", "OS_months", "lymphocytes_combined", "pT_combined", "ISUP_combined", "necrose", "PDL1_score") %>% unique()
+
+write_csv(metadata_tumor, "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/IMC/tumor_panel/data_analysis/metadata_tumor.csv")
+```
+
+```{r}
+paste0("Number of images (tumor panel): ", length(unique(metadata_tumor$sample_id)))
+paste0("Number of patients (tumor panel): ", length(unique(metadata_tumor$PID)))
+```
+
+
+## Myeloid panel 
+
+
+```{r}
+sce_myeloid <- readRDS("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_07.rds")
+```
+
+```{r}
+metadata_myeloid <- colData(sce_myeloid) %>% as.data.frame %>% select("sample_id", "width_px", "height_px", "PID", "TMA", "gender", "age", "age_bin", "type", "subtype_combined", "status_OS", "OS_months", "lymphocytes_combined", "pT_combined", "ISUP_combined", "necrose", "PDL1_score") %>% unique()
+
+write_csv(metadata_myeloid, "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/metadata_myeloid.csv")
+```
+
+```{r}
+paste0("Number of images (myeloid panel): ", length(unique(metadata_myeloid$sample_id)))
+paste0("Number of patients (myeloid panel): ", length(unique(metadata_myeloid$PID)))
+```
+
+
+## T cell panel 
+
+```{r}
+sce_Tcell <- readRDS("/Volumes/G_DQBM_BB_Central$/users/marllu/T_panel/data_analysis/sce_ccRCC_T_07.rds")
+```
+
+```{r}
+metadata_Tcell <- colData(sce_Tcell) %>% as.data.frame %>% select("sample_id", "width_px", "height_px", "PID", "TMA", "gender", "age", "age_bin", "type", "subtype_combined", "status_OS", "OS_months", "lymphocytes_combined", "pT_combined", "ISUP_combined", "necrose", "PDL1_score") %>% unique()
+
+write_csv(metadata_Tcell, "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/IMC/T_panel/data_analysis/metadata_Tcell.csv")
+```
+
+```{r}
+paste0("Number of images (T cell panel): ", length(unique(metadata_Tcell$sample_id)))
+paste0("Number of patients (T cell panel): ", length(unique(metadata_Tcell$PID)))
+```
+
+## Genomic info
+
+```{r}
+genomic_info <- read_csv("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/genome/data_analysis/genomic_subtype_anno_final.csv")
+
+genomic_info$genomic_risk <- genomic_info$evolution_type_comb_1
+
+genomic_select <- genomic_info %>% select(PID, genomic_subtype, genomic_risk)
+```
+
+```{r}
+paste0("Number of patients (Genomic info): ", length(unique(genomic_select$PID)))
+```
+
+
+## Metabolic info 
+
+```{r}
+metabolic_info <- read_csv("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/IMC/T_panel/data_analysis/sce07_metadata.csv")
+
+metabolic_info$metabolic_subtype <- metabolic_info$metacluster_mz
+metabolic_info$metabolic_subtype_fine <- metabolic_info$cluster_mz
+
+metabolic_select <- metabolic_info %>% select(PID, metabolic_subtype, metabolic_subtype_fine) %>% unique() %>% filter(complete.cases(.))
+
+write_csv(metadata_Tcell, "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/metadata_metabolome.csv")
+```
+
+```{r}
+paste0("Number of patients (Metabolic info): ", length(unique(metabolic_select$PID)))
+```
+
+
+# Combine information 
+
+## Metadata general 
+
+```{r}
+# Read in external metadata
+patient_meta <- read_csv("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/data/Metadata_combined_RCC.csv",col_names = TRUE)
+patient_meta$TMA_id <- str_replace(paste0(patient_meta$grid,"x",patient_meta$x,"y",patient_meta$y),"NA","")
+patient_meta$TMA_id <- str_replace(patient_meta$TMA_id, "x","X")
+patient_meta$TMA_id <- str_replace(patient_meta$TMA_id, "y","Y")
+patient_meta[is.na(patient_meta$x),]$TMA_id <- "CX7Y8" #was missing in data
+
+# Re-group subtypes 
+patient_meta$subtype_combined <- ifelse(patient_meta$subtype %in% c("clear_cell_RCC", "papillary_RCC", "chromophobe_RCC"), patient_meta$subtype, "other")
+patient_meta$subtype_combined[patient_meta$subtype_combined == "clear_cell_RCC"] <- "ccRCC"
+patient_meta$subtype_combined[patient_meta$subtype_combined == "papillary_RCC"] <- "pRCC"
+patient_meta$subtype_combined[patient_meta$subtype_combined == "chromophobe_RCC"] <- "chrRCC"
+
+# Filter for ccRCC cases and primary tumors
+patient_meta <- patient_meta %>% filter(type == "primary" & subtype_combined == "ccRCC")
+
+## Combine relevant disease progression categories and set colors
+### Tumor stage
+patient_meta$pT_combined <- ifelse(patient_meta$pT_simple %in% c("1","2"),"1/2", ifelse(patient_meta$pT_simple %in% c("3","4"), "3/4", patient_meta$pT_simple))
+
+### ISUP grade 
+patient_meta$ISUP_combined <- ifelse(patient_meta$ISUP %in% c("1","2"),"1/2", ifelse(patient_meta$ISUP %in% c("3","4"), "3/4", patient_meta$ISUP))
+
+patient_meta$lymphocytes_combined <- ifelse(patient_meta$lymphocytes %in% c("1","2"),"1/2", patient_meta$lymphocytes)
+
+## Update survival censoring
+patient_meta$status_OS <- ifelse(patient_meta$censor_dead_0_alive_1 == 1, 0, 
+       ifelse(patient_meta$censor_dead_0_alive_1 == 0, 1, patient_meta$censor_dead_0_alive_1))
+
+patient_meta$OS_months <- patient_meta$survival_months
+
+# Add PDL1 score
+## Based on T cell panel derived PDL1 score
+patient_meta$PDL1_score <- metadata_Tcell$PDL1_score[match(patient_meta$PID, metadata_Tcell$PID)]
+```
+
+```{r}
+metadata_general <- patient_meta %>% filter(subtype_combined == "ccRCC") %>% select("PID", "TMA", "gender", "age", "age_bin", "type", "subtype_combined", "status_OS", "OS_months", "lymphocytes_combined", "pT_combined", "ISUP_combined", "necrose", "PDL1_score")
+```
+
+### Add genomic and metabolic subtype 
+
+```{r}
+# Genomic info
+metadata_general$genomic_subtype <- genomic_select$genomic_subtype[match(metadata_general$PID, genomic_select$PID)]
+metadata_general$genomic_risk <- genomic_select$genomic_risk[match(metadata_general$PID, genomic_select$PID)]
+
+# Metabolic info
+metadata_general$metabolic_subtype <- metabolic_select$metabolic_subtype[match(metadata_general$PID, metabolic_select$PID)]
+metadata_general$metabolic_subtype_fine <- metabolic_select$metabolic_subtype_fine[match(metadata_general$PID, metabolic_select$PID)]
+```
+
+### Add survival censoring 
+
+```{r}
+# Option 1: All patients
+surv_select <- metadata_general #%>% filter(status_OS == "1")
+surv_select$surv_censoring <- ifelse(surv_select$OS_months >= median(surv_select$OS_months, na.rm = TRUE), "long", "short")
+
+## Surv
+fit <- survfit(Surv(OS_months, status_OS) ~ surv_censoring, data = surv_select)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          #palette = c("grey", "#ABCFE5", "#3787C0", "#08306B")
+          #log.rank.weights = "n"
+          )
+
+## Add to patient metadata
+metadata_general$surv_censor_all <- surv_select$surv_censoring[match(metadata_general$PID, surv_select$PID)]
+
+# Option 2: Filter for patients with a survival event
+surv_select <- metadata_general %>% filter(status_OS == "1")
+surv_select$surv_censoring <- ifelse(surv_select$OS_months >= median(surv_select$OS_months, na.rm = TRUE), "long", "short")
+
+# Surv
+fit <- survfit(Surv(OS_months, status_OS) ~ surv_censoring, data = surv_select)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          #palette = c("grey", "#ABCFE5", "#3787C0", "#08306B")
+          #log.rank.weights = "n"
+          )
+
+## Add to patient metadata
+metadata_general$surv_censor_event <- surv_select$surv_censoring[match(metadata_general$PID, surv_select$PID)]
+```
+
+### Save 
+
+```{r}
+write_csv(metadata_general, "/Volumes/G_DQBM_BB_Central$/projects/RCC_DL/metadata_general.csv")
+```
+
+
+
+## Panel-specific 
+
+```{r}
+#Update to consistent PDL1 score (based on T cell panel scoring)
+metadata_myeloid$PDL1_score <- metadata_general$PDL1_score[match(metadata_myeloid$PID, metadata_general$PID)]
+metadata_Tcell$PDL1_score <- metadata_general$PDL1_score[match(metadata_Tcell$PID, metadata_general$PID)]
+metadata_tumor$PDL1_score <- metadata_general$PDL1_score[match(metadata_tumor$PID, metadata_general$PID)]
+```
+
+```{r}
+## Myeloid panel
+# Genomic and metabolic info
+metadata_myeloid$genomic_subtype <- metadata_general$genomic_subtype[match(metadata_myeloid$PID, metadata_general$PID)]
+metadata_myeloid$genomic_risk <- metadata_general$genomic_risk[match(metadata_myeloid$PID, metadata_general$PID)]
+metadata_myeloid$metabolic_subtype <- metadata_general$metabolic_subtype[match(metadata_myeloid$PID, metadata_general$PID)]
+metadata_myeloid$metabolic_subtype_fine <- metadata_general$metabolic_subtype_fine[match(metadata_myeloid$PID, metadata_general$PID)]
+
+# Survival censoring
+metadata_myeloid$surv_censor_all <- metadata_general$surv_censor_all[match(metadata_myeloid$PID, metadata_general$PID)]
+metadata_myeloid$surv_censor_evnt <- metadata_general$surv_censor_event[match(metadata_myeloid$PID, metadata_general$PID)]
+
+
+## T cell panel
+# Genomic and metabolic info
+metadata_Tcell$genomic_subtype <- metadata_general$genomic_subtype[match(metadata_Tcell$PID, metadata_general$PID)]
+metadata_Tcell$genomic_risk <- metadata_general$genomic_risk[match(metadata_Tcell$PID, metadata_general$PID)]
+metadata_Tcell$metabolic_subtype <- metadata_general$metabolic_subtype[match(metadata_Tcell$PID, metadata_general$PID)]
+metadata_Tcell$metabolic_subtype_fine <- metadata_general$metabolic_subtype_fine[match(metadata_Tcell$PID, metadata_general$PID)]
+
+# Survival censoring
+metadata_Tcell$surv_censor_all <- metadata_general$surv_censor_all[match(metadata_Tcell$PID, metadata_general$PID)]
+metadata_Tcell$surv_censor_evnt <- metadata_general$surv_censor_event[match(metadata_Tcell$PID, metadata_general$PID)]
+
+
+## Tumor panel
+# Genomic and metabolic info
+metadata_tumor$genomic_subtype <- metadata_general$genomic_subtype[match(metadata_tumor$PID, metadata_general$PID)]
+metadata_tumor$genomic_risk <- metadata_general$genomic_risk[match(metadata_tumor$PID, metadata_general$PID)]
+metadata_tumor$metabolic_subtype <- metadata_general$metabolic_subtype[match(metadata_tumor$PID, metadata_general$PID)]
+metadata_tumor$metabolic_subtype_fine <- metadata_general$metabolic_subtype_fine[match(metadata_tumor$PID, metadata_general$PID)]
+
+# Survival censoring
+metadata_tumor$surv_censor_all <- metadata_general$surv_censor_all[match(metadata_tumor$PID, metadata_general$PID)]
+metadata_tumor$surv_censor_evnt <- metadata_general$surv_censor_event[match(metadata_tumor$PID, metadata_general$PID)]
+```
+
+### Save 
+
+```{r}
+write_csv(metadata_myeloid, "/Volumes/G_DQBM_BB_Central$/projects/RCC_DL/data/myeloid_panel/metadata_myeloid.csv")
+write_csv(metadata_Tcell, "/Volumes/G_DQBM_BB_Central$/projects/RCC_DL/data/Tcell_panel/metadata_Tcell.csv")
+write_csv(metadata_tumor, "/Volumes/G_DQBM_BB_Central$/projects/RCC_DL/data/tumor_panel/metadata_tumor.csv")
+```
+
+```{r}
+colnames(metadata_general)
+```
+
+# Transfer files
+
+## Myeloid panel 
+
+Already performed. 
+
+## T cell panel 
+
+```{r}
+img_cor <- list.files("/Volumes/G_DQBM_BB_Central$/users/marllu/T_panel/img_cor/")
+
+img_select <- paste0(metadata_Tcell$sample_id, ".tiff")
+
+img_transfer <- paste0("/Volumes/G_DQBM_BB_Central$/users/marllu/T_panel/img_cor/", img_cor[img_cor %in% img_select])
+
+file.copy(img_transfer, to = "/Volumes/G_DQBM_BB_Central$/projects/RCC_DL/data/Tcell_panel/img/")
+```
+
+## Tumor panel 
+
+```{r}
+img_cor <- list.files("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/IMC/tumor_panel/img_cor/")
+
+img_select <- paste0(metadata_tumor$sample_id, ".tiff")
+
+img_transfer <- paste0("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/IMC/tumor_panel/img_cor/", img_cor[img_cor %in% img_select])
+
+file.copy(img_transfer, to = "/Volumes/G_DQBM_BB_Central$/projects/RCC_DL/data/tumor_panel/img/")
+```
+
+
