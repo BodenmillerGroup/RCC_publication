@@ -76,20 +76,22 @@ sce <- sce[,sce$analysis_cat == "tumor"]
 sce
 ```
 
-```{r}
-# 99.7 quantile normalization 
-library(spatialEco)
-assay(sce, "exprs_tu") <- t(apply(assay(sce,"exprs"), MARGIN = 1, function(x) winsorize(x,p=c(0,0.997))))
+Optional normalization (NOT PERFORMED HERE)
 
-#Min-max [0,1] scaling of arcsinh-transformed counts only in tumor compartment
-assay(sce, "min_max_tu") <- assay(sce, "exprs_tu") - rowMins(assay(sce, "exprs_tu"))
-assay(sce, "min_max_tu") <- assay(sce, "min_max_tu") / (rowMaxs(assay(sce, "exprs_tu")) - rowMins(assay(sce, "exprs_tu")))
+```{r}
+# # 99.7 quantile normalization 
+# library(spatialEco)
+# assay(sce, "exprs_tu") <- t(apply(assay(sce,"exprs"), MARGIN = 1, function(x) winsorize(x,p=c(0,0.997))))
+# 
+# #Min-max [0,1] scaling of arcsinh-transformed counts only in tumor compartment
+# assay(sce, "min_max_tu") <- assay(sce, "exprs_tu") - rowMins(assay(sce, "exprs_tu"))
+# assay(sce, "min_max_tu") <- assay(sce, "min_max_tu") / (rowMaxs(assay(sce, "exprs_tu")) - rowMins(assay(sce, "exprs_tu")))
 ```
 
 ```{r}
-max(assay(sce["MYC",], "exprs"))
-max(assay(sce["MYC",], "exprs_tu"))
-max(assay(sce["MYC",], "min_max_tu"))
+# max(assay(sce["MYC",], "exprs"))
+# max(assay(sce["MYC",], "exprs_tu"))
+# max(assay(sce["MYC",], "min_max_tu"))
 ```
 
 # 1. Clustering
@@ -98,16 +100,19 @@ max(assay(sce["MYC",], "min_max_tu"))
 
 ```{r immune_markers, message = FALSE, warning = FALSE}
 # We will again use predefined markers 
-# Option 1: 
-rownames(sce)[rowData(sce)$tumor_cluster]
+# Option 1 (We further remove CD140b): 
+rowData(sce)$tumor_cluster <- rownames(sce) %in% c("GPX4", "HLADR", "NFKB", "CyclinD1", "HIF1a", "p53", "MYC", 
+"ICAM1", "PDK4", "CD73", "BRG1", "PKM2", "PDL1", "CD10", 
+"IDH2", "HIF2a", "AuroraKinaseA", "Tim3", "EGFR", "S6", "VEGFR1", 
+"VHL", "RB1", "mTOR", "GLUT1", "Fumarase", "GLUD1_2")
+
 
 #Option 2: min-max scaled tumor_cluster
 
-#Option 3: Remove very abundant markers and markers with low changes (GLUT1, Fumarase, AuroraKinaseA)
-rowData(sce)$tumor_cluster_1 <- rownames(sce) %in% c("GPX4", "HLADR", "NFKB", "CyclinD1", "HIF1a", "p53", "MYC", 
-"ICAM1", "CD140b", "PDK4", "CD73", "BRG1", "PKM2", "PDL1", "CD10", 
-"IDH2", "HIF2a", "Tim3", "EGFR", "S6", "VEGFR1", 
-"VHL", "RB1", "mTOR", "GLUD1_2")
+#Option 3: Remove noisy markers and markers with low changes
+rowData(sce)$tumor_cluster_1 <- rownames(sce) %in% c("HLADR", "CyclinD1", "p53", "MYC", 
+"ICAM1", "PDK4", "PKM2", "CD10", "HIF2a", "Tim3", "EGFR", "S6", "VEGFR1", "CD73",
+"VHL", "RB1", "mTOR", "GLUT1", "Fumarase", "GLUD1_2")
 
 #Option 4: min-max scaled tumor_cluster_1
 ```
@@ -122,7 +127,7 @@ Next, we will run Rphenoannoy (Jaccard-based weights, Louvain clustering as comm
 library(Rphenoannoy)
 set.seed(22)
 
-mat <- t(assay(sce, "exprs_tu")[rowData(sce)$tumor_cluster,])
+mat <- t(assay(sce, "exprs")[rowData(sce)$tumor_cluster,])
 
 #k=30
 out <- Rphenoannoy(mat, k = 30)
@@ -217,7 +222,7 @@ Min-max scaled markers
 library(Rphenoannoy)
 set.seed(22)
 
-mat <- t(assay(sce, "min_max_tu")[rowData(sce)$tumor_cluster,])
+mat <- t(assay(sce, "min_max")[rowData(sce)$tumor_cluster,])
 
 #k=30
 out <- Rphenoannoy(mat, k = 30)
@@ -311,7 +316,7 @@ Alternatively (Option 2)
 library(Rphenoannoy)
 set.seed(22)
 
-mat <- t(assay(sce, "exprs_tu")[rowData(sce)$tumor_cluster_1,])
+mat <- t(assay(sce, "exprs")[rowData(sce)$tumor_cluster_1,])
 
 #k=30
 out <- Rphenoannoy(mat, k = 30)
@@ -404,7 +409,7 @@ Alternatively (Option 3)
 library(Rphenoannoy)
 set.seed(22)
 
-mat <- t(assay(sce, "min_max_tu")[rowData(sce)$tumor_cluster_1,])
+mat <- t(assay(sce, "min_max")[rowData(sce)$tumor_cluster_1,])
 
 #k=30
 out <- Rphenoannoy(mat, k = 30)
@@ -494,7 +499,7 @@ gc()
 ### Cluster stability testing and comparison
 
 ```{r}
-sce <- readRDS("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_05.rds")
+sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_05.rds")
 ```
 
 ```{r}
@@ -614,7 +619,7 @@ Heatmap(t(assay(mean_sce, "min_max_tu")), col = viridis(100), clustering_method_
   rowAnnotation(id = anno_text(mean_sce$ids))+
   rowAnnotation(n_cells = anno_barplot(mean_sce$ncells))
 
-mean_sce <- aggregateAcrossCells(sce, ids = sce$tu_cluster_mm_130, #select cluster of interest
+mean_sce <- aggregateAcrossCells(sce, ids = sce$tu_cluster_110, #select cluster of interest
                                  statistics = "mean",
                                  use.assay.type = "min_max_tu",
                                  subset.row = rowData(sce)$tumor_cluster)
@@ -637,7 +642,7 @@ masks <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/
 set.seed(22)
 cur_sample <- sample(unique(sce$sample_id), 30)
 
-cur_sample <- (colData(sce) %>% as.data.frame %>% select(sample_id, tu_cluster_110) %>% group_by(sample_id) %>% filter(tu_cluster_110 == "19") %>% count() %>% arrange(desc(n)) %>% pull(sample_id))[1:10]
+cur_sample <- (colData(sce) %>% as.data.frame %>% select(sample_id, tu_cluster_mm_130) %>% group_by(sample_id) %>% filter(tu_cluster_mm_130 == "68") %>% count() %>% arrange(desc(n)) %>% pull(sample_id))[1:10]
 
 cur_images <- images[mcols(images)$sample_id %in% cur_sample]
 cur_masks <- masks[mcols(masks)$sample_id %in% cur_sample]
@@ -672,6 +677,7 @@ var_1 <- var_1 %>% as.data.frame %>% arrange(desc(bio))
 ```{r, fig.height=20, fig.width=20}
 # Cluster channel marker correlation (all markers - does not show distribution which is usually recommended)
 cor_sce <- as.data.frame(t(assay(sce,"exprs")[rowData(sce)$tumor_cluster,]))
+
 cor_sce <- as.data.frame(t(assay(sce,"min_max_tu")[rowData(sce)$tumor_cluster,]))
 
 corrplot(cor(cor_sce,method = "pearson"), method="color", col=brewer.pal(n=8, name="RdBu"),  
@@ -690,6 +696,21 @@ corrplot(cor(cor_sce,method = "pearson"), method="color", col=brewer.pal(n=8, na
 
 # 4. Tumor metacluster
 
+```{r}
+mean_sce <- aggregateAcrossCells(sce, ids = sce$tu_cluster_1_50, #select cluster of interest
+                                 statistics = "mean",
+                                 use.assay.type = "min_max_tu",
+                                 subset.row = rowData(sce)$tumor_cluster)
+
+Heatmap(t(assay(mean_sce, "min_max_tu")), col = viridis(100),clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2")+
+  Heatmap(scale(t(assay(mean_sce, "min_max_tu"))))+
+  rowAnnotation(id = anno_text(mean_sce$ids))+
+  rowAnnotation(n_cells = anno_barplot(mean_sce$ncells))
+```
+
+```{r}
+sce <- sce[,!sce$tu_cluster_mm_130 == "79"]
+```
 
 NOTE: Probably kick out low expressing cluster! 
 
@@ -700,11 +721,11 @@ NOTE: Probably kick out low expressing cluster!
 ### 1. Heatmap body ###
 
 # Aggregrate across cells with the mean
-sce$tu_cluster_selected <- match(sce$tu_cluster_mm_1_130, unique(sort(sce$tu_cluster_mm_1_130)))
+sce$tu_cluster_selected <- match(sce$tu_cluster_1_50, unique(sort(sce$tu_cluster_1_50)))
 mean_sce <- aggregateAcrossCells(sce, ids = sce$tu_cluster_selected,
                                  statistics = "mean",
                                  use.assay.type = "min_max_tu",
-                                 subset.row = rowData(sce)$tumor_cluster)
+                                 subset.row = rowData(sce)$tumor_cluster_1)
 
 library(clValid)
 
@@ -724,7 +745,7 @@ plot(testCL_1, legend = FALSE)
 set.seed(22)
 library(dendextend)
 avg_dend_obj_MCP <- as.dendrogram(agnes(t(assay(mean_sce, "min_max_tu")),metric = "euclidean",method = "ward"))
-avg_col_dend_MCP <- color_branches(avg_dend_obj_MCP, k = 7)
+avg_col_dend_MCP <- color_branches(avg_dend_obj_MCP, k = 18)
 plot(avg_col_dend_MCP)
 ```
 
@@ -735,17 +756,17 @@ set.seed(22)
 mean_sce <- aggregateAcrossCells(sce, ids = sce$tu_cluster_selected,
                                  statistics = "mean",
                                  use.assay.type = "min_max_tu",
-                                 subset.row = rowData(sce)$tumor_cluster)
+                                 subset.row = rowData(sce)$tumor_cluster_1)
 
 # k-means 
-h_k <- Heatmap(t(assay(mean_sce, "min_max_tu")), 
-        col = viridis(100), 
+h_k <- Heatmap(t(assay(mean_sce, "min_max_tu")),
+        col = viridis(100),
         clustering_method_columns = "ward.D2", 
         clustering_method_rows = "ward.D2", 
-        #row_km = 13, row_km_repeats = 3000, 
+        row_km = 12, row_km_repeats = 2000, 
         #cluster_rows = avg_col_dend_MCP,
-        row_split = 9,
-        name = "Fraction per community")+
+        #row_split = 18,
+        name = "Mean expression")+
   Heatmap(scale(t(assay(mean_sce, "min_max_tu"))), clustering_method_columns = "ward.D2", clustering_method_rows = "ward.D2")+
   rowAnnotation(n_cells = anno_barplot(mean_sce$ncells))
 
@@ -788,6 +809,7 @@ Heatmap(scale(t(assay(mean_sce, "min_max_tu"))),
         #col = viridis(100), 
         clustering_method_columns = "ward.D2", 
         clustering_method_rows = "ward.D2")+
+  rowAnnotation(n_cells = anno_barplot(mean_sce$ncells))+
   Heatmap(t(assay(mean_sce, "min_max_tu")), col = viridis(100))
 
 ```
@@ -3018,9 +3040,9 @@ Cox_df$OS_months <- sce$OS_months[match(rownames(Cox_df),sce$PID)]
 #Cox_df$pT <- as.factor(sce$pT_combined[match(rownames(Cox_df),sce$PID)])
 
 #Based on proportions
-covariates <- Cox_df %>% select(-status_OS,-OS_months, -TU_2) %>% colnames
+covariates <- Cox_df %>% select(-status_OS,-OS_months, -TU_8) %>% colnames
 
-multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~",paste(covariates, collapse = " + "),"+ TU_2"))
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~",paste(covariates, collapse = " + "),"+ TU_8"))
 
 multi_model <- coxph(multi_formula, data = Cox_df)
 
@@ -3489,7 +3511,7 @@ cur_surv_plot <- cur_surv_out %>% mutate(sign = p_adj < 0.1, direction = ifelse(
 
 cur_surv_plot <- cur_surv_plot %>% pivot_wider(id_cols = type, names_from = group, values_from = p_out) %>% column_to_rownames("type")
 
-Heatmap(cur_surv_plot, col = col, border = FALSE, cluster_columns = FALSE, rect_gp = gpar(col = "black", lwd = 1), name = "log10(FDR)")
+Heatmap(cur_surv_plot, border = FALSE, cluster_columns = FALSE, rect_gp = gpar(col = "black", lwd = 1), name = "log10(FDR)")
 ```
 
 ```{r}
