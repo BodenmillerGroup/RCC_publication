@@ -84,14 +84,14 @@ Optional normalization (NOT PERFORMED HERE)
 # assay(sce, "exprs_tu") <- t(apply(assay(sce,"exprs"), MARGIN = 1, function(x) winsorize(x,p=c(0,0.997))))
 # 
 # #Min-max [0,1] scaling of arcsinh-transformed counts only in tumor compartment
-# assay(sce, "min_max_tu") <- assay(sce, "exprs_tu") - rowMins(assay(sce, "exprs_tu"))
-# assay(sce, "min_max_tu") <- assay(sce, "min_max") / (rowMaxs(assay(sce, "exprs_tu")) - rowMins(assay(sce, "exprs_tu")))
+assay(sce, "min_max_tu") <- assay(sce, "exprs") - rowMins(assay(sce, "exprs"))
+assay(sce, "min_max_tu") <- assay(sce, "min_max_tu") / (rowMaxs(assay(sce, "exprs")) - rowMins(assay(sce, "exprs")))
 ```
 
 ```{r}
 # max(assay(sce["MYC",], "exprs"))
 # max(assay(sce["MYC",], "exprs_tu"))
-# max(assay(sce["MYC",], "min_max_tu"))
+min(assay(sce["MYC",], "min_max_tu"))
 ```
 
 # 1. Clustering
@@ -110,9 +110,14 @@ rowData(sce)$tumor_cluster <- rownames(sce) %in% c("GPX4", "HLADR", "NFKB", "Cyc
 #Option 2: min-max scaled tumor_cluster
 
 #Option 3: Remove noisy markers and markers with low changes
-rowData(sce)$tumor_cluster_1 <- rownames(sce) %in% c("HLADR", "CyclinD1", "p53", "MYC", 
-"ICAM1", "PDK4", "PKM2", "CD10", "HIF2a", "Tim3", "EGFR", "S6", "VEGFR1", "CD73",
-"VHL", "RB1", "mTOR", "GLUT1", "Fumarase", "GLUD1_2")
+# rowData(sce)$tumor_cluster_1 <- rownames(sce) %in% c("HLADR", "CyclinD1", "p53", "MYC", 
+# "ICAM1", "PDK4", "PKM2", "CD10", "HIF2a", "Tim3", "EGFR", "S6", "VEGFR1", "CD73",
+# "VHL", "RB1", "mTOR", "GLUT1", "Fumarase", "GLUD1_2")
+
+rowData(sce)$tumor_cluster_1 <- rownames(sce) %in% c("GPX4", "HLADR", "NFKB", "CyclinD1", "HIF1a", "p53", "MYC", 
+"ICAM1", "CD73", "BRG1", "PKM2", "PDL1", "CD10", 
+"IDH2", "HIF2a", "AuroraKinaseA", "Tim3", "EGFR", "S6", "VEGFR1", 
+"VHL", "RB1", "mTOR", "Fumarase", "GLUD1_2")
 
 #Option 4: min-max scaled tumor_cluster_1
 ```
@@ -222,7 +227,7 @@ Min-max scaled markers
 library(Rphenoannoy)
 set.seed(22)
 
-mat <- t(assay(sce, "min_max")[rowData(sce)$tumor_cluster,])
+mat <- t(assay(sce, "min_max_tu")[rowData(sce)$tumor_cluster,])
 
 #k=30
 out <- Rphenoannoy(mat, k = 30)
@@ -316,7 +321,7 @@ Alternatively (Option 2)
 library(Rphenoannoy)
 set.seed(22)
 
-mat <- t(assay(sce, "exprs")[rowData(sce)$tumor_cluster_1,])
+mat <- t(assay(sce, "exprs")[rowData(sce)$tumor_cluster_2,])
 
 #k=30
 out <- Rphenoannoy(mat, k = 30)
@@ -409,7 +414,7 @@ Alternatively (Option 3)
 library(Rphenoannoy)
 set.seed(22)
 
-mat <- t(assay(sce, "min_max")[rowData(sce)$tumor_cluster_1,])
+mat <- t(assay(sce, "min_max_tu")[rowData(sce)$tumor_cluster_1,])
 
 #k=30
 out <- Rphenoannoy(mat, k = 30)
