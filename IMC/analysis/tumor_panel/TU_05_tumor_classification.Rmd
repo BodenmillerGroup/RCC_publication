@@ -91,7 +91,11 @@ assay(sce, "min_max_tu") <- assay(sce, "min_max_tu") / (rowMaxs(assay(sce, "expr
 ```{r}
 # max(assay(sce["MYC",], "exprs"))
 # max(assay(sce["MYC",], "exprs_tu"))
-min(assay(sce["MYC",], "min_max_tu"))
+min(assay(sce["CA9",], "min_max_tu"))
+min(assay(sce["CA9",], "min_max"))
+quantile(assay(sce["CA9",], "exprs"))
+quantile(assay(sce["CA9",], "min_max_tu"))
+quantile(assay(sce["CA9",], "min_max"))
 ```
 
 # 1. Clustering
@@ -114,10 +118,10 @@ rowData(sce)$tumor_cluster <- rownames(sce) %in% c("GPX4", "HLADR", "NFKB", "Cyc
 # "ICAM1", "PDK4", "PKM2", "CD10", "HIF2a", "Tim3", "EGFR", "S6", "VEGFR1", "CD73",
 # "VHL", "RB1", "mTOR", "GLUT1", "Fumarase", "GLUD1_2")
 
-rowData(sce)$tumor_cluster_1 <- rownames(sce) %in% c("GPX4", "HLADR", "NFKB", "CyclinD1", "HIF1a", "p53", "MYC", 
-"ICAM1", "CD73", "BRG1", "PKM2", "PDL1", "CD10", 
+rowData(sce)$tumor_cluster_1 <- rownames(sce) %in% c("CA9","panCK","GPX4", "HLADR", "NFKB", "CyclinD1", "HIF1a", "p53", "MYC", 
+"ICAM1", "PDK4", "CD73", "BRG1", "PKM2", "PDL1", "CD10", 
 "IDH2", "HIF2a", "AuroraKinaseA", "Tim3", "EGFR", "S6", "VEGFR1", 
-"VHL", "RB1", "mTOR", "Fumarase", "GLUD1_2")
+"VHL", "RB1", "mTOR", "GLUT1", "Fumarase", "GLUD1_2") #include CA9 and panCK as well
 
 #Option 4: min-max scaled tumor_cluster_1
 ```
@@ -321,7 +325,7 @@ Alternatively (Option 2)
 library(Rphenoannoy)
 set.seed(22)
 
-mat <- t(assay(sce, "exprs")[rowData(sce)$tumor_cluster_2,])
+mat <- t(assay(sce, "exprs")[rowData(sce)$tumor_cluster_1,])
 
 #k=30
 out <- Rphenoannoy(mat, k = 30)
@@ -518,20 +522,20 @@ pairwiseRand(sce$tu_cluster_110,sce$tu_cluster_130, mode = "index")
 ```
 
 ```{r clustree, message = FALSE, warning=FALSE}
-#Over different resolution parameters - Silhouette width [-1,1,max], Purity[0,1,max], Root-mean-squared difference [min]
-tu_clusters <- colnames(colData(sce))[str_detect(colnames(colData(sce)),"tu_cluster_[:digit:]")]
-tu_clusters <- tu_clusters[!str_detect(tu_clusters, "_1_")]
-
-df <- foreach(i = seq_along(tu_clusters),.combine = rbind) %do% {
-num_clus <- length(unique(colData(sce)[,tu_clusters[i]]))
-sil <- approxSilhouette(t(assay(sce, "exprs")), clusters=colData(sce)[,tu_clusters[i]])
-rmsd <- clusterRMSD(t(assay(sce, "exprs")), clusters=colData(sce)[,tu_clusters[i]])
-data.frame(num_clus = num_clus,
-           k = as.numeric(str_split(tu_clusters[i],"_",simplify = TRUE)[,3]), 
-           sil = mean(sil$width), 
-           rmsd = sum(rmsd),
-           type = "tumor_cluster")
-}
+# #Over different resolution parameters - Silhouette width [-1,1,max], Purity[0,1,max], Root-mean-squared difference [min]
+# tu_clusters <- colnames(colData(sce))[str_detect(colnames(colData(sce)),"tu_cluster_[:digit:]")]
+# tu_clusters <- tu_clusters[!str_detect(tu_clusters, "_1_")]
+# 
+# df <- foreach(i = seq_along(tu_clusters),.combine = rbind) %do% {
+# num_clus <- length(unique(colData(sce)[,tu_clusters[i]]))
+# sil <- approxSilhouette(t(assay(sce, "exprs")), clusters=colData(sce)[,tu_clusters[i]])
+# rmsd <- clusterRMSD(t(assay(sce, "exprs")), clusters=colData(sce)[,tu_clusters[i]])
+# data.frame(num_clus = num_clus,
+#            k = as.numeric(str_split(tu_clusters[i],"_",simplify = TRUE)[,3]), 
+#            sil = mean(sil$width), 
+#            rmsd = sum(rmsd),
+#            type = "tumor_cluster")
+# }
 
 tu_clusters <- colnames(colData(sce))[str_detect(colnames(colData(sce)),"tu_cluster_mm_[:digit:]")]
 tu_clusters <- tu_clusters[!str_detect(tu_clusters, "_1_")]
@@ -543,22 +547,22 @@ rmsd <- clusterRMSD(t(assay(sce, "min_max")), clusters=colData(sce)[,tu_clusters
 data.frame(num_clus = num_clus,
            k = as.numeric(str_split(tu_clusters[i],"_",simplify = TRUE)[,4]),
            sil = mean(sil$width),
-           rmsd = sum(rmsd),
+           rmsd = mean(rmsd, na.rm = TRUE),
            type = "tumor_cluster_mm")
 }
 
-tu_clusters <- colnames(colData(sce))[str_detect(colnames(colData(sce)),"tu_cluster_1_[:digit:]")]
-
-df_2 <- foreach(i = seq_along(tu_clusters),.combine = rbind) %do% {
-num_clus <- length(unique(colData(sce)[,tu_clusters[i]]))
-sil <- approxSilhouette(t(assay(sce, "exprs")), clusters=colData(sce)[,tu_clusters[i]])
-rmsd <- clusterRMSD(t(assay(sce, "exprs")), clusters=colData(sce)[,tu_clusters[i]])
-data.frame(num_clus = num_clus,
-           k = as.numeric(str_split(tu_clusters[i],"_",simplify = TRUE)[,4]),
-           sil = mean(sil$width),
-           rmsd = sum(rmsd),
-           type = "tumor_cluster_1")
-}
+# tu_clusters <- colnames(colData(sce))[str_detect(colnames(colData(sce)),"tu_cluster_1_[:digit:]")]
+# 
+# df_2 <- foreach(i = seq_along(tu_clusters),.combine = rbind) %do% {
+# num_clus <- length(unique(colData(sce)[,tu_clusters[i]]))
+# sil <- approxSilhouette(t(assay(sce, "exprs")), clusters=colData(sce)[,tu_clusters[i]])
+# rmsd <- clusterRMSD(t(assay(sce, "exprs")), clusters=colData(sce)[,tu_clusters[i]])
+# data.frame(num_clus = num_clus,
+#            k = as.numeric(str_split(tu_clusters[i],"_",simplify = TRUE)[,4]),
+#            sil = mean(sil$width),
+#            rmsd = sum(rmsd),
+#            type = "tumor_cluster_1")
+# }
 
 tu_clusters <- colnames(colData(sce))[str_detect(colnames(colData(sce)),"tu_cluster_mm_1_[:digit:]")]
 
@@ -569,11 +573,11 @@ rmsd <- clusterRMSD(t(assay(sce, "min_max")), clusters=colData(sce)[,tu_clusters
 data.frame(num_clus = num_clus,
            k = as.numeric(str_split(tu_clusters[i],"_",simplify = TRUE)[,5]),
            sil = mean(sil$width),
-           rmsd = sum(rmsd),
+           rmsd = mean(rmsd, na.rm = TRUE),
            type = "tumor_cluster_mm_1")
 }
 
-df_out <- rbind(df, df_1, df_2, df_3)
+df_out <- rbind(df_1, df_3)
 
 
 p1 <- ggplot(df_out, aes(x=k, y=num_clus, color = type))+
@@ -604,33 +608,33 @@ p1+p2+p3
 
 ```{r}
 # By cluster 
-mean_sce <- aggregateAcrossCells(sce, ids = sce$tu_cluster_mm_1_70, #select cluster of interest
+mean_sce <- aggregateAcrossCells(sce, ids = sce$tu_cluster_mm_1_110, #select cluster of interest
                                  statistics = "mean",
-                                 use.assay.type = "min_max",
+                                 use.assay.type = "min_max_tu",
                                  subset.row = rowData(sce)$tumor_cluster_1)
 
-Heatmap(t(assay(mean_sce, "min_max")), col = viridis(100), clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2")+
-  Heatmap(scale(t(assay(mean_sce, "min_max"))))+
+Heatmap(t(assay(mean_sce, "min_max_tu")), col = viridis(100), clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2")+
+  Heatmap(scale(t(assay(mean_sce, "min_max_tu"))))+
+  rowAnnotation(id = anno_text(mean_sce$ids))+
+  rowAnnotation(n_cells = anno_barplot(mean_sce$ncells))
+
+mean_sce <- aggregateAcrossCells(sce, ids = sce$tu_cluster_mm_90, #select cluster of interest
+                                 statistics = "mean",
+                                 use.assay.type = "min_max_tu",
+                                 subset.row = rowData(sce)$tumor_cluster)
+
+Heatmap(t(assay(mean_sce, "min_max_tu")), col = viridis(100), clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2")+
+  Heatmap(scale(t(assay(mean_sce, "min_max_tu"))))+
   rowAnnotation(id = anno_text(mean_sce$ids))+
   rowAnnotation(n_cells = anno_barplot(mean_sce$ncells))
 
 mean_sce <- aggregateAcrossCells(sce, ids = sce$tu_cluster_mm_130, #select cluster of interest
                                  statistics = "mean",
-                                 use.assay.type = "min_max",
+                                 use.assay.type = "min_max_tu",
                                  subset.row = rowData(sce)$tumor_cluster)
 
-Heatmap(t(assay(mean_sce, "min_max")), col = viridis(100), clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2")+
-  Heatmap(scale(t(assay(mean_sce, "min_max"))))+
-  rowAnnotation(id = anno_text(mean_sce$ids))+
-  rowAnnotation(n_cells = anno_barplot(mean_sce$ncells))
-
-mean_sce <- aggregateAcrossCells(sce, ids = sce$tu_cluster_130, #select cluster of interest
-                                 statistics = "mean",
-                                 use.assay.type = "exprs",
-                                 subset.row = rowData(sce)$tumor_cluster)
-
-Heatmap(t(assay(mean_sce, "exprs")), col = viridis(100),clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2")+
-  Heatmap(scale(t(assay(mean_sce, "exprs"))))+
+Heatmap(t(assay(mean_sce, "min_max_tu")), col = viridis(100),clustering_method_rows = "ward.D2", clustering_method_columns = "ward.D2")+
+  Heatmap(scale(t(assay(mean_sce, "min_max_tu"))))+
   rowAnnotation(id = anno_text(mean_sce$ids))+
   rowAnnotation(n_cells = anno_barplot(mean_sce$ncells))
 ```
@@ -665,10 +669,6 @@ cytoviewer(image = cur_images, mask = cur_masks, object = cur_sce, img_id = "sam
 
 Kick out low expressing cluster
 
-```{r}
-sce <- sce[,!sce$tu_cluster_mm_1_130 == "79"]
-```
-
 
 ```{r}
 var <- modelGeneCV2(sce[rowData(sce)$tumor_cluster,], assay.type = "min_max")
@@ -697,20 +697,13 @@ corrplot(cor(cor_sce,method = "pearson"), method="color", col=brewer.pal(n=8, na
 ```
 
 
-# CONTINUE HERE 
-
-```{r}
-sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_05.rds")
-```
-
 # 3. Differential expression analysis 
 
 ## Progression categories 
 
 ```{r}
-library(EnhancedVolcano)
-
 type_markers <- rownames(sce)[rowData(sce)$tumor_cluster]
+type_markers <- c(type_markers, "CA9", "panCK")
 
 DE <- lapply(c("ISUP_combined", "pT_combined", "necrose", "PDL1_score"), function(x){
   
@@ -788,6 +781,7 @@ plot(hc)
 column_sorted <- hc$order
 data_out$marker <- factor(data_out$marker, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
 
+library(ggnewscale)
 ggplot(data_out, aes(x=marker, y = cat,col = logFC, size= -log10(FDR)))+
   geom_point()+
   theme_classic()+
@@ -1016,22 +1010,26 @@ ggplot(data_out, aes(x = logFC, y = -log10(FDR)))+
 # 4. Tumor metacluster
 
 ```{r}
-mean_sce <- aggregateAcrossCells(sce, ids = sce$tu_cluster_mm_70, #select cluster of interest
-                                 statistics = "mean",
-                                 use.assay.type = "min_max",
-                                 subset.row = rowData(sce)$tumor_cluster)
+sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_05.rds")
+```
 
-Heatmap(t(assay(mean_sce, "min_max")), 
+```{r}
+mean_sce <- aggregateAcrossCells(sce, ids = sce$tu_cluster_mm_1_70, #select cluster of interest
+                                 statistics = "mean",
+                                 use.assay.type = "min_max_tu",
+                                 subset.row = rowData(sce)$tumor_cluster_1)
+
+Heatmap(t(assay(mean_sce, "min_max_tu")), 
         col = viridis(100),
         clustering_method_rows = "ward.D2", 
         clustering_method_columns = "ward.D2")+
-  Heatmap(scale(t(assay(mean_sce, "min_max"))))+
+  Heatmap(scale(t(assay(mean_sce, "min_max_tu"))))+
   rowAnnotation(id = anno_text(mean_sce$ids))+
   rowAnnotation(n_cells = anno_barplot(mean_sce$ncells))
 ```
 
 ```{r}
-sce <- sce[,!sce$tu_cluster_mm_70 == "93"]
+sce <- sce[,!sce$tu_cluster_mm_90 == "89"]
 #sce <- sce[,!sce$tu_cluster_1_110 == "63"]
 ```
 
@@ -1044,32 +1042,32 @@ NOTE: Probably kick out low expressing cluster!
 ### 1. Heatmap body ###
 
 # Aggregrate across cells with the mean
-sce$tu_cluster_selected <- match(sce$tu_cluster_mm_70, unique(sort(sce$tu_cluster_mm_70)))
+sce$tu_cluster_selected <- match(sce$tu_cluster_mm_1_70, unique(sort(sce$tu_cluster_mm_1_70)))
 mean_sce <- aggregateAcrossCells(sce, ids = sce$tu_cluster_selected,
                                  statistics = "mean",
-                                 use.assay.type = "min_max",
-                                 subset.row = rowData(sce)$tumor_cluster)
+                                 use.assay.type = "min_max_tu",
+                                 subset.row = rowData(sce)$tumor_cluster_1)
 
 library(clValid)
 
 #Internal measures
 set.seed(22)
-testCL<- clValid(t(assay(mean_sce, "min_max")),nClust = 4:20,clMethods = c("hierarchical","agnes","kmeans"),validation="internal",metric="euclidean", method = "ward", maxitems = 5000)
+testCL<- clValid(t(assay(mean_sce, "min_max_tu")),nClust = 4:20,clMethods = c("hierarchical","agnes","kmeans"),validation="internal",metric="euclidean", method = "ward", maxitems = 5000)
 summary(testCL)
 plot(testCL, legend = FALSE)
 
 #Stability measures 
-testCL_1<- clValid(t(assay(mean_sce, "min_max")),nClust = 4:20,clMethods = c("hierarchical","agnes","kmeans"),validation="stability",metric="euclidean", method = "ward", maxitems = 3000)
+testCL_1<- clValid(t(assay(mean_sce, "min_max_tu")),nClust = 4:20,clMethods = c("hierarchical","agnes","kmeans"),validation="stability",metric="euclidean", method = "ward", maxitems = 3000)
 summary(testCL_1)
 plot(testCL_1, legend = FALSE)
 
 #chosen method: kmeans, k=8
 
-#set.seed(22)
-#library(dendextend)
-#avg_dend_obj_MCP <- as.dendrogram(agnes(t(assay(mean_sce, "min_max")),metric = "euclidean",method = "ward"))
-#avg_col_dend_MCP <- color_branches(avg_dend_obj_MCP, k = 18)
-#plot(avg_col_dend_MCP)
+set.seed(22)
+library(dendextend)
+avg_dend_obj_MCP <- as.dendrogram(agnes(t(assay(mean_sce, "min_max_tu")),metric = "euclidean",method = "ward"))
+avg_col_dend_MCP <- color_branches(avg_dend_obj_MCP, k = 10)
+plot(avg_col_dend_MCP)
 ```
 
 
@@ -1078,19 +1076,19 @@ set.seed(22)
 
 mean_sce <- aggregateAcrossCells(sce, ids = sce$tu_cluster_selected,
                                  statistics = "mean",
-                                 use.assay.type = "min_max",
-                                 subset.row = rowData(sce)$tumor_cluster)
+                                 use.assay.type = "min_max_tu",
+                                 subset.row = rowData(sce)$tumor_cluster_1)
 
 # k-means 
-h_k <- Heatmap(t(assay(mean_sce, "min_max")),
+h_k <- Heatmap(t(assay(mean_sce, "min_max_tu")),
         col = viridis(100),
         clustering_method_columns = "ward.D2", 
         clustering_method_rows = "ward.D2", 
-        row_km = 12, row_km_repeats = 3000, 
+        row_km = 12, row_km_repeats = 1000, 
         #cluster_rows = avg_col_dend_MCP,
-        #row_split = 18,
+        #row_split = 13,
         name = "Mean expression")+
-  Heatmap(scale(t(assay(mean_sce, "min_max"))), clustering_method_columns = "ward.D2", clustering_method_rows = "ward.D2")+
+  Heatmap(scale(t(assay(mean_sce, "min_max_tu"))), clustering_method_columns = "ward.D2", clustering_method_rows = "ward.D2")+
   rowAnnotation(n_cells = anno_barplot(mean_sce$ncells))
 
 h_select <- draw(h_k)
@@ -1125,15 +1123,22 @@ sce$tumor_metacluster_1 <- anno$metacluster[match(sce$tu_cluster_selected, anno$
 ```{r}
 mean_sce <- aggregateAcrossCells(sce, ids = sce$tumor_metacluster_1,
                                  statistics = "mean",
-                                 use.assay.type = "min_max",
-                                 subset.row = rowData(sce)$tumor_cluster)
+                                 use.assay.type = "min_max_tu",
+                                 subset.row = rowData(sce)$tumor_cluster_1)
 
-Heatmap(t(assay(mean_sce, "min_max")), 
+gen_sce <- aggregateAcrossCells(sce, ids = sce$tumor_metacluster_1,
+                                 statistics = "mean",
+                                 use.assay.type = "min_max_tu",
+                                 subset.row = rownames(sce) %in% c("CA9", "panCK"))
+
+Heatmap(t(assay(mean_sce, "min_max_tu")), 
         col = viridis(100), 
         clustering_method_columns = "ward.D2", 
         clustering_method_rows = "ward.D2")+
   rowAnnotation(n_cells = anno_barplot(mean_sce$ncells))+
-  Heatmap(scale(t(assay(mean_sce, "min_max"))))
+  Heatmap(scale(t(assay(mean_sce, "min_max_tu"))))+
+  Heatmap(t(assay(gen_sce, "min_max_tu")), col = viridis(100))+
+  Heatmap(scale(t(assay(gen_sce, "min_max_tu"))))
 
 ```
 
@@ -1494,15 +1499,15 @@ Heatmap of clusters
 ### 1. Heatmap body ###
 
 # Aggregrate across cells with the mean
-sce$tu_cluster_selected <- match(sce$tu_cluster_mm_110, unique(sort(sce$tu_cluster_mm_110)))
+sce$tu_cluster_selected <- match(sce$tu_cluster_mm_1_70, unique(sort(sce$tu_cluster_mm_1_70)))
 mean_sce <- aggregateAcrossCells(sce, ids = sce$tu_cluster_selected,
                                  statistics = "mean",
-                                 use.assay.type = "exprs",
-                                 subset.row = rowData(sce)$tumor_cluster)
+                                 use.assay.type = "min_max_tu",
+                                 subset.row = rowData(sce)$tumor_cluster_1)
 
 state_sce <- aggregateAcrossCells(sce, ids = sce$tu_cluster_selected,
                                  statistics = "mean",
-                                 use.assay.type = "exprs",
+                                 use.assay.type = "min_max_tu",
                                  subset.row = rownames(sce) %in% c("CA9", "panCK"))
 
 # Heatmap body color 
@@ -1570,7 +1575,7 @@ PDL1_score <- PDL1_score %>% select(-Freq) %>% pivot_wider(id_cols = tu_cluster_
 ha_meta <- HeatmapAnnotation(ISUP_combined = anno_barplot(ISUP_combined, width = unit(12, "mm"),gp = gpar(fill = metadata(sce)$colors$ISUP_combined)),
                             pT_combined = anno_barplot(pT_combined, width = unit(12, "mm"),gp = gpar(fill = metadata(sce)$colors$pT_combined)),
                             necrose = anno_barplot(necrose, width = unit(12, "mm"),gp = gpar(fill = metadata(sce)$colors$necrose)),
-                            PDL1_score = anno_barplot(PDL1_score, width = unit(12, "mm"),gp = gpar(fill = rev(metadata(sce)$colors$PDL1_score))),
+                            PDL1_score = anno_barplot(PDL1_score, width = unit(12, "mm"),gp = gpar(fill = metadata(sce)$colors$PDL1_score)),
                             n_cells = anno_barplot(n_cells$ncells, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),                        n_PID = anno_barplot(n_PID$n_PID, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),
 
                             border = TRUE, 
@@ -1578,19 +1583,18 @@ ha_meta <- HeatmapAnnotation(ISUP_combined = anno_barplot(ISUP_combined, width =
                             gap = unit(1,"mm"),
                             which = "row")
 
-
 ### 3. Define broader categories - Metacluster
 anno <- colData(mean_sce) %>% as.data.frame %>% select(tumor_metacluster_1)
 
 #Create colors for tumor metacluster
 n <- length(unique(anno$tumor_metacluster_1))
-meta_col <- setNames(brewer.pal(n, name = "Paired"), 
+meta_col <- setNames(colorRampPalette(brewer.pal(9,"Paired"))(length(unique(anno$tumor_metacluster_1))), 
                       unique(anno$tumor_metacluster_1))
 
 metadata(sce)$colors$tumor_metacluster <- meta_col
 
 ### 4. Plot combined Heatmap
-h <- Heatmap(t(assay(mean_sce, "exprs")),
+h <- Heatmap(t(assay(mean_sce, "min_max_tu")),
         col = col_main,
         name = "exprs",
         row_title = NULL,
@@ -1602,8 +1606,8 @@ h <- Heatmap(t(assay(mean_sce, "exprs")),
         clustering_method_rows = "ward.D2",
         clustering_method_columns = "ward.D2",
         cluster_row_slices = TRUE)+
-  Heatmap(scale(t(assay(mean_sce, "exprs"))))+
-  #Heatmap(t(assay(state_sce, "exprs")), col = col_main)+
+  Heatmap(scale(t(assay(mean_sce, "min_max_tu"))))+
+  Heatmap(t(assay(state_sce, "min_max_tu")), col = col_main)+
   rowAnnotation(metacluster = anno_simple(unfactor(anno$tumor_metacluster_1), col = metadata(sce)$colors$tumor_metacluster, border = TRUE))+
   #rowAnnotation(names = anno_text(anno$tu_cluster_names))+
   ha_spatial+
@@ -2079,7 +2083,7 @@ metadata(sce_cat)$cluster_codes <- data.frame(tumor_metacluster = factor(sce_cat
 # MDS pseudobulk by tumor_metacluster
 pbMDS(sce_cat, by = "cluster_id", 
       features = rownames(sce_cat)[rowData(sce_cat)$tumor_cluster], 
-      label_by = "cluster_id", k = "tumor_metacluster", assay = "min_max") +
+      label_by = "cluster_id", k = "tumor_metacluster", assay = "min_max_tu") +
   #scale_color_manual(values = metadata(sce_cat)$colors$tumor_metacluster)+
   theme_classic()
 
@@ -3805,6 +3809,79 @@ theme(axis.text.x = element_text(angle = 90))
 hr_mean
 ```
 
+#### Density 
+
+```{r}
+library(survival)
+library(survminer)
+
+PID_tumor_metacluster <- colData(sce) %>% as.data.frame() %>% select(tumor_metacluster,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+
+PID_area <- colData(sce) %>% as.data.frame() %>% select(tissue_area,PID) %>% unique() %>% group_by(PID) %>% mutate(mean_tissue_area = mean(tissue_area))
+
+PID_tumor_metacluster$mean_tissue_area <- PID_area$mean_tissue_area[match(PID_tumor_metacluster$PID, PID_area$PID)]
+  
+PID_tumor_metacluster <- PID_tumor_metacluster %>% group_by(PID) %>% mutate(density = Freq/(mean_tissue_area/1000000))  
+
+### Multivariate cox proportional hazard model on multiple covariates (here density of phenotypes)
+PID_metagroups <- PID_tumor_metacluster %>% pivot_wider(id_cols = "PID",names_from = "tumor_metacluster",values_from = "density") %>% column_to_rownames("PID")
+colnames(PID_metagroups) <- paste0("MC",colnames(PID_metagroups))
+
+## 1. Based on continuous cluster proportions
+Cox_df <- PID_metagroups
+
+#add covariates for correction
+Cox_df$status_OS <- sce$status_OS[match(rownames(Cox_df),sce$PID)]
+Cox_df$OS_months <- sce$OS_months[match(rownames(Cox_df),sce$PID)]
+
+#mean division 
+Cox_df_mean <- foreach(i = Cox_df %>% select(-status_OS,-OS_months) %>% colnames,.combine = "cbind")%do%{
+Cox_df %>% select(i) %>% mutate(mean = ifelse(Cox_df[,i] > mean(Cox_df[,i]),"B","A")) %>% pull(mean)
+}
+
+colnames(Cox_df_mean) <- Cox_df %>% select(-status_OS,-OS_months) %>% colnames
+rownames(Cox_df_mean) <- Cox_df %>% select(-status_OS,-OS_months) %>% rownames
+Cox_df_mean <- as.data.frame(Cox_df_mean)
+
+Cox_df_mean$status_OS <- sce$status_OS[match(rownames(Cox_df_mean),sce$PID)]
+Cox_df_mean$OS_months <- sce$OS_months[match(rownames(Cox_df_mean),sce$PID)]
+
+identical(rownames(Cox_df), rownames(Cox_df_mean))
+
+#run the model
+covariates <- Cox_df_mean %>% select(-status_OS,-OS_months) %>% colnames
+
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + ")))
+
+multi_model <- coxph(multi_formula, data = Cox_df_mean)
+
+multi_res <- summary(multi_model)
+
+plot_df_prop <- data.frame(group = rownames(multi_res$coefficients),
+                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],2),
+                      HR = signif(multi_res$coefficients[,"exp(coef)"],2),
+                      CI_low = signif(multi_res$conf.int[,"lower .95"],2),
+                      CI_high = signif(multi_res$conf.int[,"upper .95"],2),
+                      wald_test = signif(multi_res$waldtest["pvalue"],2))
+
+multi_res$coefficients
+
+#Plot hazard ratios
+hr_prop <- ggplot(plot_df_prop, aes(x = reorder(group,desc(HR)), y = HR, color = p_value < 0.05))+
+geom_point(size = 4)+
+geom_errorbar(aes(ymax = CI_high, ymin = CI_low))+
+geom_hline(yintercept = 1,color = "black",linetype = "dashed")+
+scale_color_brewer(palette = "Set1")+
+xlab("Immune tumor_metaclusters")+
+ylab("HR for mean_density")+
+theme_classic()+
+coord_cartesian(ylim=c(0.01,10))+
+scale_y_continuous(trans = "log10")+
+theme(axis.text.x = element_text(angle = 90))
+
+hr_prop
+```
+
 ### GMM
 
 ```{r}
@@ -4184,11 +4261,11 @@ Heatmap(cur_surv_plot, border = FALSE, cluster_columns = FALSE, rect_gp = gpar(c
 ```{r}
 cur_surv <- colData(sce) %>% as.data.frame() %>% select(PID, OS_months, status_OS) %>% unique() 
 
-cur_surv$TU_6 <- Cox_df_mean$TU_6[match(cur_surv$PID, rownames(Cox_df_mean))]
-cur_surv$TU_2 <- Cox_df_mean$TU_2[match(cur_surv$PID, rownames(Cox_df_mean))]
+cur_surv$TU_12 <- Cox_df_mean$TU_12[match(cur_surv$PID, rownames(Cox_df_mean))]
+cur_surv$TU_1 <- Cox_df_mean$TU_1[match(cur_surv$PID, rownames(Cox_df_mean))]
 
 #Plot specific survival curves
-fit <- survfit(Surv(OS_months, status_OS) ~ TU_2, data = cur_surv)
+fit <- survfit(Surv(OS_months, status_OS) ~ TU_1, data = cur_surv)
 print(fit)
 
 ggsurvplot(fit,
@@ -5047,10 +5124,10 @@ plot(avg_col_dend_MCP)
 # Print heatmap
 h_g <- Heatmap(PID_metagroups, name = "Cluster fraction", 
         col = viridis(100),
-        #row_km = 9, 
+        #row_km = 13, 
         #row_km_repeats = 3000,
         #cluster_rows = avg_col_dend_MCP,
-        row_split = 9,
+        row_split = 13,
         clustering_method_columns = "ward.D2",
         clustering_method_rows = "ward.D2")
 
@@ -5059,7 +5136,7 @@ draw(h_g)
 
 #Retrieve PID groups
 library(foreach)
-row_groups <- foreach(i = 1:9, .combine = rbind) %do%{
+row_groups <- foreach(i = 1:13, .combine = rbind) %do%{
 data.frame(PID = rownames(PID_metagroups[row_order(h_g)[[i]],]), PID_group = i)
 }
 
@@ -5144,7 +5221,7 @@ ggsurvplot(fit,
           linetype = "strata", # Change line type by groups
           surv.median.line = "hv", # Specify median survival
           ggtheme = theme_classic(), # Change ggplot2 theme
-          palette = "Set1",
+          #palette = "Set1",
           conf.int = FALSE)
 ```
 
@@ -5154,7 +5231,7 @@ ggsurvplot(fit,
 library(survival)
 library(survminer)
 
-cur_surv <- colData(sce) %>% as.data.frame() %>% select(OS_months, status_OS, gender, age, pT_combined, ISUP_combined, PID_metagroups) %>% unique()
+cur_surv <- colData(sce) %>% as.data.frame() %>% select(OS_months, status_OS, gender, age, pT_combined, necrose, ISUP_combined, PID_metagroups) %>% unique()
 
 cur_surv <- na.omit(cur_surv) 
 
