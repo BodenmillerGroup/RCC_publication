@@ -1029,7 +1029,7 @@ Heatmap(t(assay(mean_sce, "min_max_tu")),
 ```
 
 ```{r}
-sce <- sce[,!sce$tu_cluster_mm_90 == "89"]
+sce <- sce[,!sce$tu_cluster_mm_1_70 == "96"]
 #sce <- sce[,!sce$tu_cluster_1_110 == "63"]
 ```
 
