@@ -2533,17 +2533,17 @@ set.seed(22)
 
 sce <- detectCommunity(sce, 
                        colPairName = "neighborhood", 
-                       size_threshold = 4,
-                       name = "tumor_community",cluster_fun = "louvain",
+                       size_threshold = 12,
+                       name = "tumor_community_lv",cluster_fun = "louvain",
                        BPPARAM = MulticoreParam(workers = 20, RNGseed = 123))
 
-length(unique(sce$tumor_community))
+length(unique(sce$tumor_community_lv))
 ```
 
 ### Visualization 
 
 ```{r}
-set.seed(22)
+set.seed(2201)
 cur_sample <- sample(sce$sample_id, 10)
 
 plotSpatial(sce[,sce$sample_id %in% cur_sample], 
@@ -2554,7 +2554,7 @@ plotSpatial(sce[,sce$sample_id %in% cur_sample],
     ggtitle("Spatial tumor communities")
 
 plotSpatial(sce[,sce$sample_id %in% cur_sample], 
-            node_color_by = "tumor_community", 
+            node_color_by = "tumor_community_lv", 
             img_id = "sample_id", 
             node_size_fix = 0.5) +
     theme(legend.position = "none") +
@@ -2562,21 +2562,11 @@ plotSpatial(sce[,sce$sample_id %in% cur_sample],
 ```
 
 ```{r}
-for_plot <- prop.table(table(sce$tumor_community_lv_30, sce$tumor_metacluster), margin = 1)
-
-Heatmap(for_plot, col = viridis(100), name = "Fraction per community", clustering_method_columns = "ward.D2", clustering_method_rows = "ward.D2")+
-  Heatmap(scale(for_plot), clustering_method_columns = "ward.D2", clustering_method_rows = "ward.D2")
-
-for_plot <- prop.table(table(sce$tumor_community_lv_20, sce$tumor_metacluster), margin = 1)
-
-Heatmap(for_plot, col = viridis(100), name = "Fraction per community", clustering_method_columns = "ward.D2", clustering_method_rows = "ward.D2")+
-  Heatmap(scale(for_plot), clustering_method_columns = "ward.D2", clustering_method_rows = "ward.D2")
-
 for_plot <- prop.table(table(sce$tumor_community_lv, sce$tumor_metacluster), margin = 1)
+for_plot <- for_plot[complete.cases(for_plot),]
 
 Heatmap(for_plot, col = viridis(100), name = "Fraction per community", clustering_method_columns = "ward.D2", clustering_method_rows = "ward.D2")+
   Heatmap(scale(for_plot), clustering_method_columns = "ward.D2", clustering_method_rows = "ward.D2")
-
 ```
 
 ### Patient number estimation 
@@ -2594,6 +2584,7 @@ summary(colSums(abundances) == 0)
 sce$tumor_community <- sce$tumor_community_lv
 
 for_plot <- prop.table(table(sce$tumor_community, sce$tumor_metacluster), margin = 1)
+for_plot <- for_plot[complete.cases(for_plot),]
 ```
 
 ## Detect district 
@@ -2605,7 +2596,7 @@ library(clValid)
 
 #Internal measures
 set.seed(22)
-testCL<- clValid(as.matrix.data.frame(for_plot),nClust = 4:20,clMethods = c("hierarchical","agnes","kmeans"),validation="internal",metric="euclidean", method = "ward", maxitems = 5000)
+testCL<- clValid(as.matrix.data.frame(for_plot),nClust = 4:20,clMethods = c("hierarchical","agnes","kmeans"),validation="internal",metric="euclidean", method = "ward", maxitems = 8000)
 summary(testCL)
 plot(testCL, legend = FALSE)
 
