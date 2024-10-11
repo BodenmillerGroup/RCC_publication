@@ -669,14 +669,12 @@ cytoviewer(image = cur_images, mask = cur_masks, object = cur_sce, img_id = "sam
 
 Kick out low expressing cluster
 
-
 ```{r}
-var <- modelGeneCV2(sce[rowData(sce)$tumor_cluster,], assay.type = "min_max")
+var <- modelGeneCV2(sce[rowData(sce)$tumor_cluster,], assay.type = "exprs")
 var <- var %>% as.data.frame %>% arrange(desc(ratio))
 
-var_1 <- modelGeneVar(sce[rowData(sce)$tumor_cluster,], assay.type = "min_max")
+var_1 <- modelGeneVar(sce[rowData(sce)$tumor_cluster,], assay.type = "exprs")
 var_1 <- var_1 %>% as.data.frame %>% arrange(desc(bio))
-
 ```
 
 ```{r, fig.height=20, fig.width=20}
@@ -696,318 +694,24 @@ corrplot(cor(cor_sce,method = "pearson"), method="color", col=brewer.pal(n=8, na
 )
 ```
 
-
-# 3. Differential expression analysis 
-
-## Progression categories 
+## Add metadata 
 
 ```{r}
-type_markers <- rownames(sce)[rowData(sce)$tumor_cluster]
-type_markers <- c(type_markers, "CA9", "panCK")
+## Read in metadata
+metadata_general <- read_csv("/mnt/central_nas_full/projects/RCC_DL/metadata_general.csv")
 
-DE <- lapply(c("ISUP_combined", "pT_combined", "necrose", "PDL1_score"), function(x){
-  
-# 1. Aggregate expression per PID and category 
-df_select <- DataFrame(sce$PID, colData(sce)[,x])
-colnames(df_select) <- c("sce.PID", paste0("sce.",x))
+## Add to sce
+sce$genomic_subtype <- metadata_general$genomic_subtype[match(sce$PID, metadata_general$PID)]
+sce$genomic_risk <- metadata_general$genomic_risk[match(sce$PID, metadata_general$PID)]
+sce$metabolic_subtype <- metadata_general$metabolic_subtype_name[match(sce$PID, metadata_general$PID)]
 
-mean_sce <- aggregateAcrossCells(sce,
-                                 ids = df_select,
-                                 statistics = "mean",
-                                 use.assay.type = "min_max")
-# 2. Calculate log2FC 
-## Aggregate per category 
-mean_sce_1 <- aggregateAcrossCells(mean_sce, 
-                     ids = colData(mean_sce)[,paste0("sce.",x)], 
-                     statistics = "mean",
-                     use.assay.type = "min_max")
-
-if(x %in% c("ISUP_combined", "pT_combined")){
-logFC <- log2(assay(mean_sce_1, "min_max")[,colData(mean_sce_1)[,paste0("sce.",x)] == "3/4"]/assay(mean_sce_1, "min_max")[,colData(mean_sce_1)[,paste0("sce.",x)] == "1/2"])
-}else{
-logFC <- log2(assay(mean_sce_1, "min_max")[,colData(mean_sce_1)[,paste0("sce.",x)] == "1"]/assay(mean_sce_1, "min_max")[,colData(mean_sce_1)[,paste0("sce.",x)] == "0"])
-}
-
-# 3. Calculate p-value (based on t-test)
-exprs <- as.data.frame(t(assay(mean_sce)))
-
-exprs$cat <- colData(mean_sce)[,x]
-
-p_value <- c()
-
-if(x %in% c("ISUP_combined", "pT_combined")){
-for (i in 1:(length(colnames(exprs))-1)) {
-  t <- t.test(exprs[exprs$cat == "3/4",i], exprs[exprs$cat == "1/2",i])
-  p_value[i] <- t$p.value
-}}else{
-  for (i in 1:(length(colnames(exprs))-1)) {
-  t <- t.test(exprs[exprs$cat == "1",i], exprs[exprs$cat == "0",i])
-  p_value[i] <- t$p.value
-}}
-
-## Adjust p.value 
-FDR <- p.adjust(p_value, method = "BH")
-names(FDR) <- colnames(exprs)[1:44]
-
-# 4. Plotting df
-data <- as.data.frame(cbind(logFC, FDR))
-data <- data[which(rownames(data) %in% type_markers),]
-data$cat <- x
-
-data <- data %>% rownames_to_column("marker") %>% mutate(result = ifelse(data$logFC > 0.25 & data$FDR < 0.05, "UP",ifelse(data$logFC < -0.25 & data$FDR < 0.05, "DOWN", "NOTSIG"))) %>% 
-  arrange(desc(logFC))
-
-return(data)
-})
-
-data_out <- do.call("rbind", DE)
-
-data_out$cat <- factor(data_out$cat,levels = c("PDL1_score", "necrose","pT_combined","ISUP_combined"))
-
-## hierarchical markering on logFC
-cur_df <- data_out %>% select(marker, cat, logFC) %>% pivot_wider(values_from = logFC, names_from = marker)
-
-# rows 
-dd <- dist(cur_df[2:ncol(cur_df)], method = "euclidean")
-hc <- hclust(dd, method = "ward.D2")
-plot(hc)
-row_sorted <- hc$order
-data_out$cat <- factor(data_out$cat, levels = cur_df[row_sorted,]$cat)
-
-# columns 
-dd <- dist(t(cur_df[2:ncol(cur_df)]), method = "euclidean")
-hc <- hclust(dd, method = "ward.D2")
-plot(hc)
-column_sorted <- hc$order
-data_out$marker <- factor(data_out$marker, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
-
-library(ggnewscale)
-ggplot(data_out, aes(x=marker, y = cat,col = logFC, size= -log10(FDR)))+
-  geom_point()+
-  theme_classic()+
-  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8")+
-  scale_size(range = c(2,10))+
-  new_scale_colour() +
-  geom_point(data = data_out,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
-  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))
-
-
-#Volcano plot  
-ggplot(data_out, aes(x = logFC, y = -log10(FDR)))+
-  geom_point(aes(col=marker, size = -log10(FDR)))+
-  geom_label_repel(data = data_out %>% filter(result != "NOTSIG"), aes(label = marker))+
-  facet_wrap(~cat)+
-  #scale_color_manual(values = metadata(sce)$colors$metacluster)+
-  xlab("logFC (pN: 0 vs 1/2/3)")+
-  ylab("-log10(FDR)")+
-  theme_classic()+
-  geom_hline(yintercept = -log10(0.05), linetype = "dashed")+
-  geom_vline(xintercept = 0, linetype = "dashed")+
-  labs(color = "cluster")
+## UPDATE PDL1 score (from T cell panel)
+sce$PDL1_score <- metadata_general$PDL1_score[match(sce$PID, metadata_general$PID)]
 ```
 
+# 3. Tumor metacluster
 
-## Genomic subtypes 
-
-```{r}
-library(EnhancedVolcano)
-
-sce_genome <- sce[,!is.na(sce$genomic_subtype)]
-
-type_markers <- rownames(sce)[rowData(sce)$tumor_cluster]
-
-DE <- lapply(c("VHL_wildtype", "PBRM1_driven", "VHL_monodriver", "BAP1_driven", 
-"multiple_drivers"), function(x){
-  
-# 1. Aggregate expression per PID and category 
-df_select <- DataFrame(sce_genome$PID, colData(sce_genome)[,x])
-colnames(df_select) <- c("sce_genome.PID", paste0("sce_genome.",x))
-
-mean_sce_genome <- aggregateAcrossCells(sce_genome,
-                                 ids = df_select,
-                                 statistics = "mean",
-                                 use.assay.type = "min_max")
-# 2. Calculate log2FC 
-## Aggregate per category 
-mean_sce_genome_1 <- aggregateAcrossCells(mean_sce_genome, 
-                     ids = colData(mean_sce_genome)[,paste0("sce_genome.",x)], 
-                     statistics = "mean",
-                     use.assay.type = "min_max")
-
-logFC <- log2(assay(mean_sce_genome_1, "min_max")[,colData(mean_sce_genome_1)[,paste0("sce_genome.",x)] == "1"]/assay(mean_sce_genome_1, "min_max")[,colData(mean_sce_genome_1)[,paste0("sce_genome.",x)] == "0"])
-
-# 3. Calculate p-value (based on t-test)
-exprs <- as.data.frame(t(assay(mean_sce_genome)))
-
-exprs$cat <- colData(mean_sce_genome)[,x]
-
-p_value <- c()
-for (i in 1:(length(colnames(exprs))-1)) {
-  t <- t.test(exprs[exprs$cat == "1",i], exprs[exprs$cat == "0",i])
-  p_value[i] <- t$p.value
-}
-
-## Adjust p.value 
-FDR <- p.adjust(p_value, method = "BH")
-names(FDR) <- colnames(exprs)[1:44]
-
-# 4. Plotting df
-data <- as.data.frame(cbind(logFC, FDR))
-data <- data[which(rownames(data) %in% type_markers),]
-data$cat <- x
-
-data <- data %>% rownames_to_column("marker") %>% mutate(result = ifelse(data$logFC > 0 & data$FDR < 0.1, "UP",ifelse(data$logFC < 0 & data$FDR < 0.1, "DOWN", "NOTSIG"))) %>% 
-  arrange(desc(logFC))
-
-return(data)
-})
-
-data_out <- do.call("rbind", DE)
-
-## hierarchical markering on logFC
-cur_df <- data_out %>% select(marker, cat, logFC) %>% pivot_wider(values_from = logFC, names_from = marker)
-
-# rows 
-dd <- dist(cur_df[2:ncol(cur_df)], method = "euclidean")
-hc <- hclust(dd, method = "ward.D2")
-plot(hc)
-row_sorted <- hc$order
-data_out$cat <- factor(data_out$cat, levels = cur_df[row_sorted,]$cat)
-
-# columns 
-dd <- dist(t(cur_df[2:ncol(cur_df)]), method = "euclidean")
-hc <- hclust(dd, method = "ward.D2")
-plot(hc)
-column_sorted <- hc$order
-data_out$marker <- factor(data_out$marker, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
-
-ggplot(data_out, aes(x=marker, y = cat,col = logFC, size= -log10(FDR)))+
-  geom_point()+
-  theme_classic()+
-  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8")+
-  scale_size(range = c(2,10))+
-  new_scale_colour() +
-  geom_point(data = data_out,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
-  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))
-
-
-#Volcano plot  
-ggplot(data_out, aes(x = logFC, y = -log10(FDR)))+
-  geom_point(aes(col=marker, size = -log10(FDR)))+
-  geom_label_repel(data = data_out %>% filter(result != "NOTSIG"), aes(label = marker))+
-  facet_wrap(~cat)+
-  #scale_color_manual(values = metadata(sce_genome)$colors$metacluster)+
-  xlab("logFC (pN: 0 vs 1/2/3)")+
-  ylab("-log10(FDR)")+
-  theme_classic()+
-  geom_hline(yintercept = -log10(0.05), linetype = "dashed")+
-  geom_vline(xintercept = 0, linetype = "dashed")+
-  labs(color = "cluster")
-```
-
-## Metabolic subtypes
-
-```{r}
-library(EnhancedVolcano)
-
-sce_met <- sce[,!is.na(sce$metabolic_subtype)]
-
-type_markers <- rownames(sce)[rowData(sce)$tumor_cluster]
-
-DE <- lapply(c("meta_sub_1", "meta_sub_2", "meta_sub_3", "meta_sub_4"), function(x){
-  
-# 1. Aggregate expression per PID and category 
-df_select <- DataFrame(sce_met$PID, colData(sce_met)[,x])
-colnames(df_select) <- c("sce_met.PID", paste0("sce_met.",x))
-
-mean_sce_met <- aggregateAcrossCells(sce_met,
-                                 ids = df_select,
-                                 statistics = "mean",
-                                 use.assay.type = "min_max")
-# 2. Calculate log2FC 
-## Aggregate per category 
-mean_sce_met_1 <- aggregateAcrossCells(mean_sce_met, 
-                     ids = colData(mean_sce_met)[,paste0("sce_met.",x)], 
-                     statistics = "mean",
-                     use.assay.type = "min_max")
-
-logFC <- log2(assay(mean_sce_met_1, "min_max")[,colData(mean_sce_met_1)[,paste0("sce_met.",x)] == "1"]/assay(mean_sce_met_1, "min_max")[,colData(mean_sce_met_1)[,paste0("sce_met.",x)] == "0"])
-
-# 3. Calculate p-value (based on t-test)
-exprs <- as.data.frame(t(assay(mean_sce_met)))
-
-exprs$cat <- colData(mean_sce_met)[,x]
-
-p_value <- c()
-for (i in 1:(length(colnames(exprs))-1)) {
-  t <- t.test(exprs[exprs$cat == "1",i], exprs[exprs$cat == "0",i])
-  p_value[i] <- t$p.value
-}
-
-## Adjust p.value 
-FDR <- p.adjust(p_value, method = "BH")
-names(FDR) <- colnames(exprs)[1:44]
-
-# 4. Plotting df
-data <- as.data.frame(cbind(logFC, FDR))
-data <- data[which(rownames(data) %in% type_markers),]
-data$cat <- x
-
-data <- data %>% rownames_to_column("marker") %>% mutate(result = ifelse(data$logFC > 0 & data$FDR < 0.1, "UP",ifelse(data$logFC < 0 & data$FDR < 0.1, "DOWN", "NOTSIG"))) %>% 
-  arrange(desc(logFC))
-
-return(data)
-})
-
-data_out <- do.call("rbind", DE)
-
-## hierarchical markering on logFC
-cur_df <- data_out %>% select(marker, cat, logFC) %>% pivot_wider(values_from = logFC, names_from = marker)
-
-# rows 
-dd <- dist(cur_df[2:ncol(cur_df)], method = "euclidean")
-hc <- hclust(dd, method = "ward.D2")
-plot(hc)
-row_sorted <- hc$order
-data_out$cat <- factor(data_out$cat, levels = cur_df[row_sorted,]$cat)
-
-# columns 
-dd <- dist(t(cur_df[2:ncol(cur_df)]), method = "euclidean")
-hc <- hclust(dd, method = "ward.D2")
-plot(hc)
-column_sorted <- hc$order
-data_out$marker <- factor(data_out$marker, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
-
-ggplot(data_out, aes(x=marker, y = cat,col = logFC, size= -log10(FDR)))+
-  geom_point()+
-  theme_classic()+
-  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8")+
-  scale_size(range = c(2,10))+
-  new_scale_colour() +
-  geom_point(data = data_out,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
-  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))
-
-
-#Volcano plot  
-ggplot(data_out, aes(x = logFC, y = -log10(FDR)))+
-  geom_point(aes(col=marker, size = -log10(FDR)))+
-  geom_label_repel(data = data_out %>% filter(result != "NOTSIG"), aes(label = marker))+
-  facet_wrap(~cat)+
-  #scale_color_manual(values = metadata(sce_met)$colors$metacluster)+
-  xlab("logFC (pN: 0 vs 1/2/3)")+
-  ylab("-log10(FDR)")+
-  theme_classic()+
-  geom_hline(yintercept = -log10(0.05), linetype = "dashed")+
-  geom_vline(xintercept = 0, linetype = "dashed")+
-  labs(color = "cluster")
-```
-
-
-
-# 4. Tumor metacluster
+NOTE: Extensive evaluation of tu_clus_mm_90 and tu_clus_130 (chosen) 
 
 ```{r}
 sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_05.rds")
@@ -1016,7 +720,7 @@ sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sc
 ```{r}
 mean_sce <- aggregateAcrossCells(sce, ids = sce$tu_cluster_130, #select cluster of interest
                                  statistics = "mean",
-                                 use.assay.type = "min_max",
+                                 use.assay.type = "min_max", #for metaclustering we use min_max and not exprs
                                  subset.row = rowData(sce)$tumor_cluster)
 
 Heatmap(t(assay(mean_sce, "min_max")), 
@@ -1026,24 +730,26 @@ Heatmap(t(assay(mean_sce, "min_max")),
   Heatmap(scale(t(assay(mean_sce, "min_max"))))+
   rowAnnotation(id = anno_text(mean_sce$ids))+
   rowAnnotation(n_cells = anno_barplot(mean_sce$ncells))
+
+# QC: we kick out the low expressing cluster (reduces total tumor cell number slightly)
+sce <- sce[,!sce$tu_cluster_130 == "71"]
 ```
 
 
 ```{r}
-#Read sce after clustering, astir and GMM
-#sce <- readRDS("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_05.rds")
+#Check metacluster stability measures
 
 ### 1. Heatmap body ###
 
 # Aggregrate across cells with the mean
 sce$tu_cluster_selected <- match(sce$tu_cluster_130, unique(sort(sce$tu_cluster_130)))
+
 mean_sce <- aggregateAcrossCells(sce, ids = sce$tu_cluster_selected,
                                  statistics = "mean",
                                  use.assay.type = "min_max",
                                  subset.row = rowData(sce)$tumor_cluster)
 
-# Optional: we kick out the low expressing cluster - We could later assign this a separate metacluster?
-mean_sce <- mean_sce[,!mean_sce$tu_cluster_selected == "71"]
+
 
 library(clValid)
 
@@ -1058,22 +764,19 @@ testCL_1<- clValid(t(assay(mean_sce, "min_max")),nClust = 4:20,clMethods = c("hi
 summary(testCL_1)
 plot(testCL_1, legend = FALSE)
 
-#chosen method: kmeans, k=8
-
-set.seed(22)
-library(dendextend)
-avg_dend_obj_MCP <- as.dendrogram(agnes(t(assay(mean_sce, "min_max")),metric = "euclidean",method = "ward"))
-avg_col_dend_MCP <- color_branches(avg_dend_obj_MCP, k = 11)
-plot(avg_col_dend_MCP)
+#chosen method: kmeans, k=14
 ```
 
 
 
 ```{r}
-mean_sce <- aggregateAcrossCells(sce, ids = sce$tu_cluster_selected,
-                                 statistics = "mean",
-                                 use.assay.type = "min_max",
-                                 subset.row = rowData(sce)$tumor_cluster)
+# # Agnes
+# set.seed(22)
+# library(dendextend)
+# avg_dend_obj_MCP <- as.dendrogram(agnes(t(assay(mean_sce, "min_max")),metric = "euclidean",method = "ward"))
+# avg_col_dend_MCP <- color_branches(avg_dend_obj_MCP, k = 11)
+# plot(avg_col_dend_MCP)
+
 
 # k-means 
 set.seed(22)
@@ -1090,20 +793,6 @@ h_k <- Heatmap(t(assay(mean_sce, "min_max")),
 
 h_select <- draw(h_k)
 
-# # agnes
-# h_ag <- Heatmap(t(assay(mean_sce, "min_max")), 
-#         col = viridis(100), 
-#         clustering_method_columns = "ward.D2", 
-#         clustering_method_rows = "ward.D2", 
-#         #row_km = 7, row_km_repeats = 1000, 
-#         cluster_rows = avg_col_dend_MCP,
-#         row_split = 7,
-#         name = "Fraction per community")+
-#   Heatmap(scale(t(assay(mean_sce, "min_max"))), clustering_method_columns = "ward.D2", clustering_method_rows = "ward.D2")+
-#   rowAnnotation(n_cells = anno_barplot(mean_sce$ncells))
-# 
-# h_select <- draw(h_ag)
-
 ## Selection 
 row_order_h_ag <- row_order(h_select)
 anno <- colData(mean_sce) %>% as.data.frame %>% select(tu_cluster_selected,ncells)
@@ -1113,412 +802,14 @@ anno$metacluster <- as.factor((ifelse(anno$tu_cluster_selected %in% row_order_h_
 }
 
 ## Add to sce
-sce$tumor_metacluster_1 <- anno$metacluster[match(sce$tu_cluster_selected, anno$tu_cluster_selected)]
+sce$tumor_metacluster <- anno$metacluster[match(sce$tu_cluster_selected, anno$tu_cluster_selected)]
 mean_sce$tumor_metacluster_1 <- anno$metacluster[match(mean_sce$tu_cluster_selected, anno$tu_cluster_selected)]
 ```
 
 ```{r}
-mean_sce <- runPCA(mean_sce, exprs_values = "min_max", name = "PCA", subset_row = rownames(mean_sce))
-
-sce <- runPCA(sce, exprs_values = "min_max", subset_row = rownames(mean_sce) %in% c("MYC", "ICAM1", "mTOR"), name = "PCA_sub")
-
-plotReducedDim(mean_sce, dimred = "PCA", colour_by = "tu_cluster_selected", size_by = "ncells")
-
-
-plotReducedDim(mean_sce, dimred = "PCA", by_exprs_values = "min_max",colour_by = "MYC")+
-plotReducedDim(mean_sce, dimred = "PCA", by_exprs_values = "min_max",colour_by = "ICAM1")+
-plotReducedDim(mean_sce, dimred = "PCA", by_exprs_values = "min_max",colour_by = "mTOR")+
-plotReducedDim(mean_sce, dimred = "PCA", by_exprs_values = "min_max",colour_by = "VEGFR1")+
-plotReducedDim(mean_sce, dimred = "PCA", by_exprs_values = "min_max",colour_by = "HLADR")
-
-plotReducedDim(mean_sce, dimred = "PCA_sub", colour_by = "tu_cluster_selected", size_by = "ncells")
-plotReducedDim(mean_sce, dimred = "PCA_sub", colour_by = "tumor_metacluster_1", size_by = "ncells")
-
-plotReducedDim(mean_sce, dimred = "PCA_sub", by_exprs_values = "min_max",colour_by = "MYC")+
-plotReducedDim(mean_sce, dimred = "PCA_sub", by_exprs_values = "min_max",colour_by = "ICAM1")+
-plotReducedDim(mean_sce, dimred = "PCA_sub", by_exprs_values = "min_max",colour_by = "mTOR")+
-plotReducedDim(mean_sce, dimred = "PCA_sub", by_exprs_values = "min_max",colour_by = "VEGFR1")+
-plotReducedDim(mean_sce, dimred = "PCA_sub", by_exprs_values = "min_max",colour_by = "CD73")+
-plotReducedDim(mean_sce, dimred = "PCA_sub", by_exprs_values = "min_max",colour_by = "VHL")
-```
-```{r}
-sce <- runPCA(sce, exprs_values = "exprs", subset_row = rownames(sce) %in% c("MYC", "ICAM1", "mTOR"), name = "PCA_sub")
-
-plotReducedDim(sce, dimred = "PCA_sub", colour_by = "tumor_metacluster_1")
-
-plotReducedDim(sce, dimred = "PCA_sub", by_exprs_values = "exprs",colour_by = "MYC")+
-plotReducedDim(sce, dimred = "PCA_sub", by_exprs_values = "exprs",colour_by = "ICAM1")+
-plotReducedDim(sce, dimred = "PCA_sub", by_exprs_values = "exprs",colour_by = "mTOR")
-
+saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_05.rds")
 ```
 
-
-```{r}
-mean_sce <- aggregateAcrossCells(sce, ids = sce$tumor_metacluster_1,
-                                 statistics = "mean",
-                                 use.assay.type = "min_max",
-                                 subset.row = rowData(sce)$tumor_cluster)
-
-gen_sce <- aggregateAcrossCells(sce, ids = sce$tumor_metacluster_1,
-                                 statistics = "mean",
-                                 use.assay.type = "min_max",
-                                 subset.row = rownames(sce) %in% c("CA9", "panCK"))
-
-Heatmap(t(assay(mean_sce, "min_max")), 
-        col = viridis(100), 
-        clustering_method_columns = "ward.D2", 
-        clustering_method_rows = "ward.D2")+
-  Heatmap(t(assay(gen_sce, "min_max")), col = viridis(100))+
-  rowAnnotation(n_cells = anno_barplot(mean_sce$ncells))+
-  Heatmap(scale(t(assay(mean_sce, "min_max"))))+
-  Heatmap(scale(t(assay(gen_sce, "min_max"))))
-
-```
-
-
-### Quick checks 
-
-Diff abundance 
-
-
-Survival 
-
-
-Genomic subtype 
-
-```{r}
-## Read in metadata
-metadata_general <- read_csv("/mnt/central_nas_full/projects/RCC_DL/metadata_general.csv")
-
-## Add to sce
-sce$genomic_subtype <- metadata_general$genomic_subtype[match(sce$PID, metadata_general$PID)]
-sce$genomic_risk <- metadata_general$genomic_risk[match(sce$PID, metadata_general$PID)]
-sce$metabolic_subtype <- metadata_general$metabolic_subtype_name[match(sce$PID, metadata_general$PID)]
-
-## UPDATE PDL1 score
-sce$PDL1_score <- metadata_general$PDL1_score[match(sce$PID, metadata_general$PID)]
-```
-
-```{r}
-# Read in genomics data 
-## 1A: Mutations 
-mut_anno <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_full_withmeta.csv")
-mut_per_PID <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/mutation_per_PID_binary.csv")
-```
-
-```{r}
-# Add relevant metadata to sce 
-mut_per_PID <- as.data.frame(mut_per_PID)
-
-# Mutation encoding 
-## Only clonal 
-mut_per_PID_clonal <- mut_per_PID
-mut_per_PID_clonal[2:ncol(mut_per_PID_clonal)] <- ifelse(mut_per_PID_clonal[2:ncol(mut_per_PID_clonal)] >= 1, 1,0)
-colnames(mut_per_PID_clonal)[2:ncol(mut_per_PID_clonal)] <- paste0(colnames(mut_per_PID_clonal)[2:ncol(mut_per_PID_clonal)], "_clonal")
-GOI_clonal <- colnames(mut_per_PID_clonal %>% select(-PID))
-
-for (entry in GOI_clonal) {
-  colData(sce)[,entry] <- mut_per_PID_clonal[,entry][match(colData(sce)[,"PID"],mut_per_PID_clonal[,"PID"])]
-}
-```
-
-
-```{r}
-### Differential abundance analysis based on edgeR
-library(edgeR)
-
-GOI_clonal <- GOI_clonal[!GOI_clonal %in% c("SF3B1_clonal","ELOC_clonal","STAG2_clonal","ARHGAP35_clonal")]
-  
-DA <- lapply(GOI_clonal, function(x){
-
-abundances <- table(sce$tumor_metacluster, sce$PID)
-abundances <- unclass(abundances) 
-
-#relevant patient metadata (Re-level for baseline)
-meta <- colData(sce)[match(colnames(abundances), sce$PID),]
-
-meta[,x] <- relevel(x=factor(meta[,x]), ref = "0")
-
-#filter
-meta <- meta[!is.na(meta[,x]),]
-abundances <- abundances[,colnames(abundances) %in% meta$PID]
-
-#create DGEList - based on edgeR package
-y.ab <- DGEList(abundances, samples=meta, group = meta[,x])
-
-#Design matrix
-design <- model.matrix(~group, data = y.ab$samples)
-
-#Visualize
-# logCPM of abundances per cluster
-cur_mat <- edgeR::cpm(abundances,prior.count = 1,log = TRUE)
-
-# Estimate NB and QL dispersion 
-y.ab <- estimateDisp(y.ab, design, trend="none")
-
-fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
-
-# Test for differential abundance of clusters between tumor stages
-res <- glmQLFTest(fit.ab, coef=ncol(design))
-
-DA <- res$table
-
-DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
-
-DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.1, result = ifelse(DA$logFC > 0 & DA$FDR < 0.1, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.1, "DOWN", "NOTSIG"))) %>% 
-  arrange(desc(logFC))
-
-DA$cluster <- factor(DA$cluster, levels = DA$cluster)
-DA$category <- x
-
-return(DA)
-})
-
-DA_out <- do.call(rbind, DA)
-```
-
-```{r}
-# FDR at 0.1 with trends
-DA_out$result <- ifelse(DA_out$logFC > 0 & DA_out$FDR < 0.1, "UP",
-                             ifelse(DA_out$logFC > 0 & DA_out$PValue < 0.1, "UP_trend", 
-                                    ifelse(DA_out$logFC < 0 & DA_out$FDR < 0.1, "DOWN", 
-                                           ifelse(DA_out$logFC < 0 & DA_out$PValue < 0.1, "DOWN_trend","NOTSIG"))))
-
-# Select myeloid cells only 
-#DA_out <- DA_out[str_detect(DA_out$cluster, "MY"),]
-#DA_out <- DA_out[complete.cases(DA_out),]
-
-## hierarchical clustering on logFC
-cur_df <- DA_out %>% select(cluster, category, logFC) %>% pivot_wider(values_from = logFC, names_from = cluster)
-
-# rows 
-dd <- dist(cur_df[2:ncol(cur_df)], method = "euclidean")
-hc <- hclust(dd, method = "ward.D2")
-plot(hc)
-row_sorted <- hc$order
-DA_out$category <- factor(DA_out$category, levels = cur_df[row_sorted,]$category)
-
-# columns 
-dd <- dist(t(cur_df[2:ncol(cur_df)]), method = "euclidean")
-hc <- hclust(dd, method = "ward.D2")
-plot(hc)
-column_sorted <- hc$order
-DA_out$cluster <- factor(DA_out$cluster, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
-
-
-ggplot(DA_out, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
-  geom_point()+
-  theme_classic()+
-  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8")+
-  scale_size(range = c(2,10))+
-  new_scale_colour() +
-  geom_point(data = DA_out,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
-  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))
-```
-
-```{r}
-# Create binary categories 
-## Genomic subtypes
-sce$VHL_wildtype <- ifelse(sce$genomic_subtype == "VHL_wildtype", "1", "0")
-sce$PBRM1_driven <- ifelse(sce$genomic_subtype == "PBRM1_driven", "1", "0")
-sce$BAP1_driven <- ifelse(sce$genomic_subtype == "BAP1_driven", "1", "0")
-sce$VHL_monodriver <- ifelse(sce$genomic_subtype == "VHL_monodriver", "1", "0")
-sce$multiple_drivers <- ifelse(sce$genomic_subtype == "multiple_drivers", "1", "0")
-```
-
-```{r}
-### Differential abundance analysis based on edgeR
-library(edgeR)
-
-DA <- lapply(c("VHL_wildtype", "PBRM1_driven", "VHL_monodriver", "BAP1_driven", 
-"multiple_drivers"), function(x){
-
-abundances <- table(sce$tumor_metacluster, sce$PID)
-abundances <- unclass(abundances) 
-
-#relevant patient metadata (Re-level for baseline)
-meta <- colData(sce)[match(colnames(abundances), sce$PID),]
-
-meta[,x] <- relevel(x=factor(meta[,x]), ref = "0")
-
-#filter
-meta <- meta[!is.na(meta[,x]),]
-abundances <- abundances[,colnames(abundances) %in% meta$PID]
-
-#create DGEList - based on edgeR package
-y.ab <- DGEList(abundances, samples=meta, group = meta[,x])
-
-#Design matrix
-design <- model.matrix(~group, data = y.ab$samples)
-
-#Visualize
-# logCPM of abundances per cluster
-cur_mat <- edgeR::cpm(abundances,prior.count = 1,log = TRUE)
-
-# Estimate NB and QL dispersion 
-y.ab <- estimateDisp(y.ab, design, trend="none")
-
-fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
-
-# Test for differential abundance of clusters between tumor stages
-res <- glmQLFTest(fit.ab, coef=ncol(design))
-
-DA <- res$table
-
-DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
-
-DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.1, result = ifelse(DA$logFC > 0 & DA$FDR < 0.1, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.1, "DOWN", "NOTSIG"))) %>% 
-  arrange(desc(logFC))
-
-DA$cluster <- factor(DA$cluster, levels = DA$cluster)
-DA$category <- x
-
-return(DA)
-})
-
-DA_out <- do.call(rbind, DA)
-```
-
-```{r}
-# FDR at 0.1 with trends
-DA_out$result <- ifelse(DA_out$logFC > 0 & DA_out$FDR < 0.1, "UP",
-                             ifelse(DA_out$logFC > 0 & DA_out$PValue < 0.1, "UP_trend", 
-                                    ifelse(DA_out$logFC < 0 & DA_out$FDR < 0.1, "DOWN", 
-                                           ifelse(DA_out$logFC < 0 & DA_out$PValue < 0.1, "DOWN_trend","NOTSIG"))))
-
-## hierarchical clustering on logFC
-cur_df <- DA_out %>% select(cluster, category, logFC) %>% pivot_wider(values_from = logFC, names_from = cluster)
-
-# rows 
-dd <- dist(cur_df[2:ncol(cur_df)], method = "euclidean")
-hc <- hclust(dd, method = "ward.D2")
-plot(hc)
-row_sorted <- hc$order
-DA_out$category <- factor(DA_out$category, levels = cur_df[row_sorted,]$category)
-
-# columns 
-dd <- dist(t(cur_df[2:ncol(cur_df)]), method = "euclidean")
-hc <- hclust(dd, method = "ward.D2")
-plot(hc)
-column_sorted <- hc$order
-
-
-DA_out$cluster <- factor(DA_out$cluster, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
-
-
-ggplot(DA_out, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
-  geom_point()+
-  theme_classic()+
-  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8")+
-  scale_size(range = c(2,10))+
-  new_scale_colour() +
-  geom_point(data = DA_out,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
-  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))
-```
-
-```{r}
-# Create binary categories 
-unique(sce$metabolic_subtype)
-
-## Metabolic subtypes
-sce$Down_carb_lipid_remodeling_AA_degradation <- ifelse(sce$metabolic_subtype == "Down_carb_lipid_remodeling_AA_degradation", "1", "0")
-sce$Down_lipid <- ifelse(sce$metabolic_subtype == "Down_lipid", "1", "0")
-sce$Moderate_carbo_moderate_lipid <- ifelse(sce$metabolic_subtype == "Moderate_carbo_moderate_lipid", "1", "0")
-sce$High_carbo_moderate_lipid_moderate_AA <- ifelse(sce$metabolic_subtype == "High_carbo_moderate_lipid_moderate_AA", "1", "0")
-```
-
-
-```{r}
-### Differential abundance analysis based on edgeR
-library(edgeR)
-
-DA <- lapply(c("Down_carb_lipid_remodeling_AA_degradation", "Down_lipid", "Moderate_carbo_moderate_lipid", "High_carbo_moderate_lipid_moderate_AA"), function(x){
-
-abundances <- table(sce$tumor_metacluster, sce$PID)
-abundances <- unclass(abundances) 
-
-#relevant patient metadata (Re-level for baseline)
-meta <- colData(sce)[match(colnames(abundances), sce$PID),]
-
-meta[,x] <- relevel(x=factor(meta[,x]), ref = "0")
-
-#filter
-meta <- meta[!is.na(meta[,x]),]
-abundances <- abundances[,colnames(abundances) %in% meta$PID]
-
-#create DGEList - based on edgeR package
-y.ab <- DGEList(abundances, samples=meta, group = meta[,x])
-
-#Design matrix
-design <- model.matrix(~group, data = y.ab$samples)
-
-#Visualize
-# logCPM of abundances per cluster
-cur_mat <- edgeR::cpm(abundances,prior.count = 1,log = TRUE)
-
-# Estimate NB and QL dispersion 
-y.ab <- estimateDisp(y.ab, design, trend="none")
-
-fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
-
-# Test for differential abundance of clusters between tumor stages
-res <- glmQLFTest(fit.ab, coef=ncol(design))
-
-DA <- res$table
-
-DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
-
-DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.1, result = ifelse(DA$logFC > 0 & DA$FDR < 0.1, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.1, "DOWN", "NOTSIG"))) %>% 
-  arrange(desc(logFC))
-
-DA$cluster <- factor(DA$cluster, levels = DA$cluster)
-DA$category <- x
-
-return(DA)
-})
-
-DA_out <- do.call(rbind, DA)
-```
-
-```{r}
-# FDR at 0.1 with trends
-DA_out$result <- ifelse(DA_out$logFC > 0 & DA_out$FDR < 0.1, "UP",
-                             ifelse(DA_out$logFC > 0 & DA_out$PValue < 0.1, "UP_trend", 
-                                    ifelse(DA_out$logFC < 0 & DA_out$FDR < 0.1, "DOWN", 
-                                           ifelse(DA_out$logFC < 0 & DA_out$PValue < 0.1, "DOWN_trend","NOTSIG"))))
-
-## hierarchical clustering on logFC
-cur_df <- DA_out %>% select(cluster, category, logFC) %>% pivot_wider(values_from = logFC, names_from = cluster)
-
-# rows 
-dd <- dist(cur_df[2:ncol(cur_df)], method = "euclidean")
-hc <- hclust(dd, method = "ward.D2")
-plot(hc)
-row_sorted <- hc$order
-DA_out$category <- factor(DA_out$category, levels = cur_df[row_sorted,]$category)
-
-# columns 
-dd <- dist(t(cur_df[2:ncol(cur_df)]), method = "euclidean")
-hc <- hclust(dd, method = "ward.D2")
-plot(hc)
-column_sorted <- hc$order
-
-
-DA_out$cluster <- factor(DA_out$cluster, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
-
-
-ggplot(DA_out, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
-  geom_point()+
-  theme_classic()+
-  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8")+
-  scale_size(range = c(2,10))+
-  new_scale_colour() +
-  geom_point(data = DA_out,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
-  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))
-```
 
 ### Rich heatmap 
 
@@ -1531,15 +822,15 @@ Heatmap of clusters
 ### 1. Heatmap body ###
 
 # Aggregrate across cells with the mean
-sce$tu_cluster_selected <- match(sce$tu_cluster_mm_1_70, unique(sort(sce$tu_cluster_mm_1_70)))
+sce$tu_cluster_selected <- match(sce$tu_cluster_130, unique(sort(sce$tu_cluster_130)))
 mean_sce <- aggregateAcrossCells(sce, ids = sce$tu_cluster_selected,
                                  statistics = "mean",
-                                 use.assay.type = "min_max_tu",
-                                 subset.row = rowData(sce)$tumor_cluster_1)
+                                 use.assay.type = "min_max",
+                                 subset.row = rowData(sce)$tumor_cluster)
 
 state_sce <- aggregateAcrossCells(sce, ids = sce$tu_cluster_selected,
                                  statistics = "mean",
-                                 use.assay.type = "min_max_tu",
+                                 use.assay.type = "min_max",
                                  subset.row = rownames(sce) %in% c("CA9", "panCK"))
 
 # Heatmap body color 
@@ -1616,17 +907,17 @@ ha_meta <- HeatmapAnnotation(ISUP_combined = anno_barplot(ISUP_combined, width =
                             which = "row")
 
 ### 3. Define broader categories - Metacluster
-anno <- colData(mean_sce) %>% as.data.frame %>% select(tumor_metacluster_1)
+anno <- colData(mean_sce) %>% as.data.frame %>% select(tumor_metacluster)
 
 #Create colors for tumor metacluster
-n <- length(unique(anno$tumor_metacluster_1))
-meta_col <- setNames(colorRampPalette(brewer.pal(9,"Paired"))(length(unique(anno$tumor_metacluster_1))), 
-                      unique(anno$tumor_metacluster_1))
+n <- length(unique(anno$tumor_metacluster))
+meta_col <- setNames(colorRampPalette(brewer.pal(9,"Paired"))(length(unique(anno$tumor_metacluster))), 
+                      unique(anno$tumor_metacluster))
 
 metadata(sce)$colors$tumor_metacluster <- meta_col
 
 ### 4. Plot combined Heatmap
-h <- Heatmap(t(assay(mean_sce, "min_max_tu")),
+h <- Heatmap(t(assay(mean_sce, "min_max")),
         col = col_main,
         name = "exprs",
         row_title = NULL,
@@ -1634,13 +925,13 @@ h <- Heatmap(t(assay(mean_sce, "min_max_tu")),
         show_row_dend = TRUE,
         row_names_side = "left",
         show_column_names =  TRUE,
-        row_split = anno$tumor_metacluster_1,
+        row_split = anno$tumor_metacluster,
         clustering_method_rows = "ward.D2",
         clustering_method_columns = "ward.D2",
         cluster_row_slices = TRUE)+
-  Heatmap(scale(t(assay(mean_sce, "min_max_tu"))))+
-  Heatmap(t(assay(state_sce, "min_max_tu")), col = col_main)+
-  rowAnnotation(metacluster = anno_simple(unfactor(anno$tumor_metacluster_1), col = metadata(sce)$colors$tumor_metacluster, border = TRUE))+
+  Heatmap(scale(t(assay(mean_sce, "min_max"))))+
+  Heatmap(t(assay(state_sce, "min_max")), col = col_main)+
+  rowAnnotation(metacluster = anno_simple(unfactor(anno$tumor_metacluster), col = metadata(sce)$colors$tumor_metacluster, border = TRUE))+
   #rowAnnotation(names = anno_text(anno$tu_cluster_names))+
   ha_spatial+
   ha_meta
@@ -1660,22 +951,23 @@ draw(h, annotation_legend_list = list(lgd))
 #sce$tumor_metacluster <- anno$tu_metacluster[match(sce$tu_cluster_selected, anno$tu_cluster_selected)]
 #sce$tu_cluster_names <- as.factor(anno$tu_cluster_names[match(sce$tu_cluster_selected, anno$tu_cluster_selected)])
 
-colData(sce) %>% as.data.frame %>% group_by(tumor_metacluster_1) %>% count()
+colData(sce) %>% as.data.frame %>% group_by(tumor_metacluster) %>% count()
 ```
+# CONTINUE HERE 
 
 #### Aggregated 
 
 ```{r}
 #Read sce after clustering, astir and GMM
-sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_05.rds")
+#sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_05.rds")
 
 ### 1. Heatmap body ###
 
 # Aggregrate across cells with the mean
 mean_sce <- aggregateAcrossCells(sce, ids = sce$tumor_metacluster,
                                  statistics = "mean",
-                                 use.assay.type = "exprs",
-                                 subset.row = rowData(sce)$tumor_cluster_1)
+                                 use.assay.type = "min_max",
+                                 subset.row = rowData(sce)$tumor_cluster)
 
 
 # Heatmap body color 
@@ -2069,15 +1361,26 @@ cytoviewer(image = cur_images, mask = cur_masks, object = cur_sce, img_id = "sam
 
 #### Dimensionality reduction 
 
+##### TSNE / UMAP
+
 ```{r dim_red}
 ## Subsample 10% of cells from each core
 #to save time and not get super crowded dimensionality reduction plots
 
 #Run UMAP/TSNE
-reducedDim(sce, "TSNE") <- calculateTSNE(sce[rowData(sce)$tumor_cluster,], n_neighbors = 50, pca = 50,exprs_values = "min_max", external_neighbors=TRUE, BPPARAM = MulticoreParam())
+set.seed(220195)
+sub <- colData(sce) %>% as.data.frame() %>% group_by("sample_id") %>% slice_sample(prop = 0.1) %>% arrange("sample_id") %>% mutate(sub_id = paste(sample_id,ObjectNumber,sep="_")) %>% pull(sub_id)
+sce_sub <- sce[,sub]
 
-plotReducedDim(sce, dimred = "UMAP", colour_by = "tu_cluster_selected")
-plotReducedDim(sce, dimred = "UMAP", colour_by = "tumor_metacluster_1")
+reducedDim(sce_sub, "TSNE") <- calculateTSNE(sce_sub[rowData(sce_sub)$tumor_cluster,], n_neighbors = 50, pca = 50,exprs_values = "exprs", external_neighbors=TRUE, BPPARAM = MulticoreParam())
+
+plotReducedDim(sce_sub, dimred = "TSNE", colour_by = "tu_cluster_selected")
+plotReducedDim(sce_sub, dimred = "TSNE", colour_by = "tumor_metacluster")
+
+reducedDim(sce_sub, "UMAP") <- calculateUMAP(sce_sub[rowData(sce_sub)$tumor_cluster,], n_neighbors = 50, pca = 50,exprs_values = "exprs", external_neighbors=TRUE, BPPARAM = MulticoreParam())
+
+plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "tu_cluster_selected")
+plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "tumor_metacluster")
 
 #+
   #scale_color_manual(values = metadata(sce)$colors$tu_cluster_selected)
@@ -2092,6 +1395,43 @@ plotReducedDim(sce, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "MP
   plotReducedDim(sce, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "CD16")+
   plotReducedDim(sce, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "CD163")
 
+
+```
+
+##### PCA 
+
+```{r}
+mean_sce <- runPCA(mean_sce, exprs_values = "min_max", name = "PCA", subset_row = rownames(mean_sce))
+
+mean_sce <- runPCA(mean_sce, exprs_values = "min_max", subset_row = rownames(mean_sce) %in% c("MYC", "ICAM1", "mTOR"), name = "PCA_sub")
+
+plotReducedDim(mean_sce, dimred = "PCA", colour_by = "tu_cluster_selected", size_by = "ncells")
+
+
+plotReducedDim(mean_sce, dimred = "PCA", by_exprs_values = "min_max",colour_by = "MYC")+
+plotReducedDim(mean_sce, dimred = "PCA", by_exprs_values = "min_max",colour_by = "ICAM1")+
+plotReducedDim(mean_sce, dimred = "PCA", by_exprs_values = "min_max",colour_by = "mTOR")+
+plotReducedDim(mean_sce, dimred = "PCA", by_exprs_values = "min_max",colour_by = "VEGFR1")+
+plotReducedDim(mean_sce, dimred = "PCA", by_exprs_values = "min_max",colour_by = "HLADR")
+
+plotReducedDim(mean_sce, dimred = "PCA_sub", colour_by = "tu_cluster_selected", size_by = "ncells")
+plotReducedDim(mean_sce, dimred = "PCA_sub", colour_by = "tumor_metacluster_1", size_by = "ncells")
+
+plotReducedDim(mean_sce, dimred = "PCA_sub", by_exprs_values = "min_max",colour_by = "MYC")+
+plotReducedDim(mean_sce, dimred = "PCA_sub", by_exprs_values = "min_max",colour_by = "ICAM1")+
+plotReducedDim(mean_sce, dimred = "PCA_sub", by_exprs_values = "min_max",colour_by = "mTOR")+
+plotReducedDim(mean_sce, dimred = "PCA_sub", by_exprs_values = "min_max",colour_by = "VEGFR1")+
+plotReducedDim(mean_sce, dimred = "PCA_sub", by_exprs_values = "min_max",colour_by = "CD73")+
+plotReducedDim(mean_sce, dimred = "PCA_sub", by_exprs_values = "min_max",colour_by = "VHL")
+```
+```{r}
+sce <- runPCA(sce, exprs_values = "exprs", subset_row = rownames(sce) %in% c("MYC", "ICAM1", "mTOR"), name = "PCA_sub")
+
+plotReducedDim(sce, dimred = "PCA_sub", colour_by = "tumor_metacluster_1")
+
+plotReducedDim(sce, dimred = "PCA_sub", by_exprs_values = "exprs",colour_by = "MYC")+
+plotReducedDim(sce, dimred = "PCA_sub", by_exprs_values = "exprs",colour_by = "ICAM1")+
+plotReducedDim(sce, dimred = "PCA_sub", by_exprs_values = "exprs",colour_by = "mTOR")
 
 ```
 
@@ -2219,321 +1559,20 @@ PID_tumor_metacluster <- PID_tumor_metacluster %>% group_by(PID) %>% mutate(fra 
 write.csv(PID_tumor_metacluster, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/05_my/tumor_metacluster_PID.csv")
 ```
 
-# 5. tumor neighborhood
-
-NOTE: Neighborhood detection did not work as intended. One neighborhood contains most cells, which is hard to interpret. 
-
-
-## Filter for tumor low images 
-
-```{r}
-# Filter samples that contain at least 5 tumor cells
-cur_sample <- colData(sce) %>% as.data.frame %>% group_by(sample_id) %>% count() %>% ungroup() %>% mutate(mean(n)) %>% arrange(n) %>% filter(n >=5) %>% pull(sample_id)
-
-sce_spatial <- sce[,sce$sample_id %in% cur_sample]
-```
-
-## Build different spatial graphs 
-
-```{r}
-## Aggregate neighbors
-# Build spatial knn graph
-sce_spatial <- buildSpatialGraph(sce_spatial, img_id = "sample_id", type = "knn", k = 20, 
-                         coords = c("Pos_X",  "Pos_Y"),
-                         max_dist = 30,
-                         name = "knn_20",
-                         BPPARAM = MulticoreParam(workers = 20))
-
-sce_spatial <- buildSpatialGraph(sce_spatial, img_id = "sample_id", type = "knn", k = 40, 
-                         coords = c("Pos_X",  "Pos_Y"),
-                         max_dist = 60,
-                         name = "knn_40",
-                         BPPARAM = MulticoreParam(workers = 20))
-
-sce_spatial <- buildSpatialGraph(sce_spatial, img_id = "sample_id", type = "expansion", 
-                                 threshold = 20,
-                         coords = c("Pos_X",  "Pos_Y"),
-                         name = "expansion_20",
-                         BPPARAM = MulticoreParam(workers = 20))
-
-sce_spatial <- buildSpatialGraph(sce_spatial, img_id = "sample_id", type = "expansion", 
-                                 threshold = 40,
-                         coords = c("Pos_X",  "Pos_Y"),
-                         name = "expansion_40",
-                         BPPARAM = MulticoreParam(workers = 20))
-
-## Neighborhood graph already build with steinbock 
-```
-
-## Detect CN
-
-In the next section, we will define cellular neighborhoods by clustering tumor cells based on their neighboring cells.
-
-### Based on Metacluster
-
-```{r neighborhood-1, message=FALSE, warning=FALSE}
-library(imcRtools)
-library(bluster)
-
-# Aggregate neighbors 
-### A: KNN graph
-sce_spatial <- aggregateNeighbors(sce_spatial, colPairName = "knn_20", aggregate_by = "metadata", count_by = "tumor_metacluster", proportions = FALSE, name = "count_knn_20")
-
-sce_spatial <- aggregateNeighbors(sce_spatial, colPairName = "knn_40", aggregate_by = "metadata", count_by = "tumor_metacluster", proportions = FALSE, name = "count_knn_40")
-
-### B: Neighborhood expansion graph
-sce_spatial <- aggregateNeighbors(sce_spatial, colPairName = "neighborhood", aggregate_by = "metadata", count_by = "tumor_metacluster", proportions = FALSE, name = "count_steinbock")
-
-sce_spatial <- aggregateNeighbors(sce_spatial, colPairName = "expansion_20", aggregate_by = "metadata", count_by = "tumor_metacluster", proportions = FALSE, name = "count_exp_20")
-
-sce_spatial <- aggregateNeighbors(sce_spatial, colPairName = "expansion_40", aggregate_by = "metadata", count_by = "tumor_metacluster", proportions = FALSE, name = "count_exp_40")
-```
-
-```{r}
-# A) Perform cluster sweep for kmeans (silhouette width, wcss)
-library(doParallel)
-registerDoParallel(cores = 5)
-
-out_test <- foreach(i = c("count_knn_20","count_knn_40","count_steinbock", "count_exp_40", "count_exp_20"), .combine = rbind)%dopar%{
-
-set.seed(22)
-clust_list <- lapply(2:20, function(k){
-  cur_km <- kmeans(colData(sce_spatial)[,i], centers = k, nstart = 10)
-  return(list(wss = sum(cur_km$withinss),
-           clusters = cur_km$cluster))
-})
-
-sil <- vapply(lapply(clust_list, `[[`, 2), 
-              function(x) mean(approxSilhouette(colData(sce_spatial)[,i], x)$width), 
-              0)
-
-data.frame(k = 2:20, 
-           sil = sil,
-           wss = unlist(lapply(clust_list, `[[`, 1)), 
-           type = i)
-}
-
-
-ggplot(out_test, aes(x = k, y = sil, color = type))+
-  geom_point(size = 3)+
-  geom_line()+
-  theme_classic()+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
-  xlab("k")+
-  ylab("Mean silhouette width")+
-  scale_color_brewer(palette = "Paired")
-
-ggplot(out_test, aes(x = k, y = wss, color = type))+
-  geom_point(size = 3)+
-  geom_line()+
-  theme_classic()+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
-  xlab("k")+
-  ylab("Total WCSS")+
-  scale_color_brewer(palette = "Paired")
-
-ggplot(out_test %>% filter(!type %in% c("count_knn_40","count_knn_20")), aes(x = k, y = wss, color = type))+
-  geom_point(size = 3)+
-  geom_line()+
-  theme_classic()+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
-  xlab("k")+
-  ylab("Total WCSS")+
-  scale_color_brewer(palette = "Paired")
-
-
-# Select 13 clusters
-set.seed(22)
-cur_clusters <- kmeans(sce_spatial$count_exp_20, centers = 8, nstart = 100)$cluster
-
-sce_spatial$tumor_neighborhood <- as.factor(cur_clusters)
-
-```
-
-```{r}
-library(tidyverse)
-for_plot <- colData(sce_spatial) %>% as_tibble() %>%
-    group_by(tumor_neighborhood, tumor_metacluster) %>%
-    summarize(count = n()) %>%
-    mutate(freq = count / sum(count)) %>%
-    pivot_wider(id_cols = tumor_neighborhood, names_from = tumor_metacluster, 
-                values_from = freq, values_fill = 0) %>%
-    ungroup() %>%
-    select(-tumor_neighborhood)
-
-pheatmap(for_plot, #color = colorRampPalette(c("dark blue", "white", "dark red"))(100), 
-         scale = "column", show_rownames = TRUE)
-
-for_plot <- table(as.character(sce_spatial$tumor_neighborhood), sce_spatial$tumor_metacluster)
-
-pheatmap(for_plot, 
-         color = viridis(100), display_numbers = TRUE, 
-         number_color = "white", number_format = "%.0f")
-
-for_plot <- prop.table(table(as.character(sce_spatial$tumor_neighborhood), sce_spatial$tumor_metacluster), margin = 2)
-
-pheatmap(for_plot, 
-         color = viridis(100), display_numbers = TRUE, 
-         number_color = "white", number_format = "%.2f")
-
-for_plot <- prop.table(table(as.character(sce_spatial$tumor_neighborhood), sce_spatial$tumor_metacluster), margin = 1)
-
-pheatmap(for_plot, 
-         color = viridis(100), display_numbers = TRUE, 
-         number_color = "white", number_format = "%.2f")
-
-pheatmap(for_plot, 
-         color = colorRampPalette(c("dark blue", "white", "dark red"))(100), 
-         scale = "column")
-```
-
-### Based on Cluster
-
-```{r neighborhood-1, message=FALSE, warning=FALSE}
-library(imcRtools)
-library(bluster)
-
-# Aggregate neighbors 
-### A: KNN graph
-sce_spatial <- aggregateNeighbors(sce_spatial, colPairName = "knn_20", aggregate_by = "metadata", count_by = "tu_cluster_names", proportions = FALSE, name = "count_knn_20")
-
-sce_spatial <- aggregateNeighbors(sce_spatial, colPairName = "knn_40", aggregate_by = "metadata", count_by = "tu_cluster_names", proportions = FALSE, name = "count_knn_40")
-
-### B: Neighborhood expansion graph
-sce_spatial <- aggregateNeighbors(sce_spatial, colPairName = "neighborhood", aggregate_by = "metadata", count_by = "tu_cluster_names", proportions = FALSE, name = "count_steinbock")
-
-sce_spatial <- aggregateNeighbors(sce_spatial, colPairName = "expansion_20", aggregate_by = "metadata", count_by = "tu_cluster_names", proportions = FALSE, name = "count_exp_20")
-
-sce_spatial <- aggregateNeighbors(sce_spatial, colPairName = "expansion_40", aggregate_by = "metadata", count_by = "tu_cluster_names", proportions = FALSE, name = "count_exp_40")
-```
-
-```{r}
-# A) Perform cluster sweep for kmeans (silhouette width, wcss)
-library(doParallel)
-registerDoParallel(cores = 5)
-
-out_test <- foreach(i = c("count_knn_20","count_knn_40","count_steinbock", "count_exp_40", "count_exp_20"), .combine = rbind)%dopar%{
-
-set.seed(22)
-clust_list <- lapply(2:20, function(k){
-  cur_km <- kmeans(scale(colData(sce_spatial)[,i]), centers = k, nstart = 10)
-  return(list(wss = sum(cur_km$withinss),
-           clusters = cur_km$cluster))
-})
-
-sil <- vapply(lapply(clust_list, `[[`, 2), 
-              function(x) mean(approxSilhouette(scale(colData(sce_spatial)[,i]), x)$width), 
-              0)
-
-data.frame(k = 2:20, 
-           sil = sil,
-           wss = unlist(lapply(clust_list, `[[`, 1)), 
-           type = i)
-}
-
-
-ggplot(out_test, aes(x = k, y = sil, color = type))+
-  geom_point(size = 3)+
-  geom_line()+
-  theme_classic()+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
-  xlab("k")+
-  ylab("Mean silhouette width")+
-  scale_color_brewer(palette = "Paired")
-
-ggplot(out_test, aes(x = k, y = wss, color = type))+
-  geom_point(size = 3)+
-  geom_line()+
-  theme_classic()+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
-  xlab("k")+
-  ylab("Total WCSS")+
-  scale_color_brewer(palette = "Paired")
-
-ggplot(out_test %>% filter(!type %in% c("count_knn_40","count_knn_20")), aes(x = k, y = wss, color = type))+
-  geom_point(size = 3)+
-  geom_line()+
-  theme_classic()+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
-  xlab("k")+
-  ylab("Total WCSS")+
-  scale_color_brewer(palette = "Paired")
-
-
-# Select 13 clusters
-set.seed(22)
-cur_clusters <- kmeans(scale(sce_spatial$count_knn_20), centers = 12, nstart = 100)$cluster
-
-sce_spatial$tumor_neighborhood <- as.factor(cur_clusters)
-sce$tumor_neighborhood <- factor(paste0("D_",sce_spatial$tumor_neighborhood[match(sce$cell_id, sce_spatial$cell_id)]))
-
-sce$tumor_neighborhood[sce$tumor_neighborhood == "D_NA"] <- NA
-```
-
-
-```{r}
-
-scale(sce_spatial$count_exp_40)
-
-cur_clusters <- kmeans(scale(sce_spatial$count_exp_40), centers = 15, nstart = 100)$cluster
-sce_spatial$tumor_neighborhood <- as.factor(cur_clusters)
-```
-
-
-
-
-
-
-
-```{r}
-library(tidyverse)
-for_plot <- colData(sce_spatial) %>% as_tibble() %>%
-    group_by(tumor_neighborhood, tu_cluster_names) %>%
-    summarize(count = n()) %>%
-    mutate(freq = count / sum(count)) %>%
-    pivot_wider(id_cols = tumor_neighborhood, names_from = tu_cluster_names, 
-                values_from = freq, values_fill = 0) %>%
-    ungroup() %>%
-    select(-tumor_neighborhood)
-
-pheatmap(for_plot, #color = colorRampPalette(c("dark blue", "white", "dark red"))(100), 
-         scale = "column", show_rownames = TRUE)
-
-for_plot <- table(as.character(sce_spatial$tumor_neighborhood), sce_spatial$tu_cluster_names)
-
-pheatmap(for_plot, 
-         color = viridis(100), display_numbers = TRUE, 
-         number_color = "white", number_format = "%.0f")
-
-for_plot <- prop.table(table(as.character(sce_spatial$tumor_neighborhood), sce_spatial$tu_cluster_names), margin = 2)
-
-pheatmap(for_plot, 
-         color = viridis(100), display_numbers = TRUE, 
-         number_color = "white", number_format = "%.2f")
-
-for_plot <- prop.table(table(as.character(sce_spatial$tumor_neighborhood), sce_spatial$tu_cluster_names), margin = 1)
-
-pheatmap(for_plot, 
-         color = viridis(100), display_numbers = TRUE, 
-         number_color = "white", number_format = "%.2f")
-
-pheatmap(for_plot, 
-         color = colorRampPalette(c("dark blue", "white", "dark red"))(100), 
-         scale = "column")
-```
-
 # 6. tumor districts
 
 ## Build spatial graph 
 
 ## Detect community 
 
+TO DO: Check different sizes 
+
 ```{r}
 set.seed(22)
 
 sce <- detectCommunity(sce, 
                        colPairName = "neighborhood", 
-                       size_threshold = 12,
+                       size_threshold = 16,
                        name = "tumor_community_lv",cluster_fun = "louvain",
                        BPPARAM = MulticoreParam(workers = 20, RNGseed = 123))
 
@@ -2543,7 +1582,7 @@ length(unique(sce$tumor_community_lv))
 ### Visualization 
 
 ```{r}
-set.seed(2201)
+set.seed(22)
 cur_sample <- sample(sce$sample_id, 10)
 
 plotSpatial(sce[,sce$sample_id %in% cur_sample], 
@@ -2596,9 +1635,9 @@ library(clValid)
 
 #Internal measures
 set.seed(22)
-testCL<- clValid(as.matrix.data.frame(for_plot),nClust = 4:20,clMethods = c("hierarchical","agnes","kmeans"),validation="internal",metric="euclidean", method = "ward", maxitems = 8000)
+testCL<- clValid(as.matrix.data.frame(for_plot),nClust = 14:18,clMethods = c("agnes","kmeans"),validation="internal",metric="euclidean", method = "ward", maxitems = 6000)
 summary(testCL)
-plot(testCL, legend = FALSE)
+plot(testCL, legend = TRUE)
 
 #Stability measures 
 #testCL_1<- clValid(as.matrix.data.frame(for_plot),nClust = 4:20,clMethods = c("hierarchical","agnes","kmeans"),validation="stability",metric="euclidean", method = "ward", maxitems = 3000)
@@ -2610,7 +1649,7 @@ plot(testCL, legend = FALSE)
 set.seed(22)
 library(dendextend)
 avg_dend_obj_MCP <- as.dendrogram(agnes(for_plot,metric = "euclidean",method = "ward"))
-avg_col_dend_MCP <- color_branches(avg_dend_obj_MCP, k = 10)
+avg_col_dend_MCP <- color_branches(avg_dend_obj_MCP, k = 16)
 plot(avg_col_dend_MCP)
 ```
 
@@ -2622,9 +1661,9 @@ h_com <- Heatmap(for_plot,
         col = viridis(100), 
         clustering_method_columns = "ward.D2", 
         clustering_method_rows = "ward.D2", 
-        #row_km = 11, row_km_repeats = 100, 
+        #row_km = 17, row_km_repeats = 100, 
         cluster_rows = avg_col_dend_MCP,
-        row_split = 10,
+        row_split = 16,
         name = "Fraction per community")+
   Heatmap(scale(for_plot), clustering_method_columns = "ward.D2", clustering_method_rows = "ward.D2")
 
@@ -2647,7 +1686,7 @@ anno$metacluster <- ifelse(anno$position %in% row_order_h_com[[i]], i,anno$metac
 }
 
 # From dendrogram (only relevant for agnes)
-branches <- cutree(avg_col_dend_MCP, k = 10)
+branches <- cutree(avg_col_dend_MCP, k = 15)
 
 samples_per_branch <- lapply(unique(branches), function(branch) {
   names(branches)[branches == branch]
@@ -2667,6 +1706,11 @@ sce$tumor_district[sce$tumor_district == "D_NA"] <- NA
 ### Visualization 
 
 #### Rich heatmap 
+```{r}
+#sce$tumor_district_names <- sce$tumor_district
+for_district <- prop.table(table(sce$tumor_district, sce$tumor_metacluster), margin = 1)
+Heatmap(for_district, col = viridis(100), row_names_side = "left")
+```
 
 ```{r}
 for_district <- prop.table(table(sce$tumor_district, sce$tumor_metacluster), margin = 1)
@@ -2866,9 +1910,10 @@ draw(fraction_anno + NULL)
 # 7. Differential abundance analysis 
 
 
-## Loop over categories 
+## Progression
 
-### tumor cluster 
+### tumor cluster
+
 ```{r}
 sce$tu_cluster_names <- sce$tu_cluster_1_90
 ```
@@ -3103,294 +2148,639 @@ ggplot(DA_out, aes(x = cluster, y = category, col = logFC, size = -log10(FDR))) 
   theme(axis.text.x = element_text(angle = 90, hjust = 1))
 ```
 
+## Genomic subtypes 
 
-## Individual categories 
+```{r}
+## Read in metadata
+metadata_general <- read_csv("/mnt/central_nas_full/projects/RCC_DL/metadata_general.csv")
 
-### ISUP grade
+# Read in genomics data 
+## 1A: Mutations 
+mut_anno <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_full_withmeta.csv")
+mut_per_PID <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/mutation_per_PID_binary.csv")
+```
+
+```{r}
+# Add relevant metadata to sce 
+mut_per_PID <- as.data.frame(mut_per_PID)
+
+# Mutation encoding 
+## Only clonal 
+mut_per_PID_clonal <- mut_per_PID
+mut_per_PID_clonal[2:ncol(mut_per_PID_clonal)] <- ifelse(mut_per_PID_clonal[2:ncol(mut_per_PID_clonal)] >= 1, 1,0)
+colnames(mut_per_PID_clonal)[2:ncol(mut_per_PID_clonal)] <- paste0(colnames(mut_per_PID_clonal)[2:ncol(mut_per_PID_clonal)], "_clonal")
+GOI_clonal <- colnames(mut_per_PID_clonal %>% select(-PID))
+
+for (entry in GOI_clonal) {
+  colData(sce)[,entry] <- mut_per_PID_clonal[,entry][match(colData(sce)[,"PID"],mut_per_PID_clonal[,"PID"])]
+}
+```
+
 
 ```{r}
 ### Differential abundance analysis based on edgeR
 library(edgeR)
 
-abundances <- table(unfactor(sce$tu_cluster_110), sce$PID)
-abundances <- unclass(abundances) 
-head(abundances)
+GOI_clonal <- GOI_clonal[!GOI_clonal %in% c("SF3B1_clonal","ELOC_clonal","STAG2_clonal","ARHGAP35_clonal")]
+  
+DA <- lapply(GOI_clonal, function(x){
 
-#relevant patient metadata (Relevel so that ISUP 1/2 is baseline)
+abundances <- table(sce$tumor_metacluster, sce$PID)
+abundances <- unclass(abundances) 
+
+#relevant patient metadata (Re-level for baseline)
 meta <- colData(sce)[match(colnames(abundances), sce$PID),]
-meta$ISUP_combined <- relevel(x=factor(meta$ISUP_combined), ref = "1/2")
+
+meta[,x] <- relevel(x=factor(meta[,x]), ref = "0")
 
 #filter
-meta <- meta[!is.na(meta$ISUP_combined),]
+meta <- meta[!is.na(meta[,x]),]
 abundances <- abundances[,colnames(abundances) %in% meta$PID]
 
 #create DGEList - based on edgeR package
-y.ab <- DGEList(abundances, samples=meta, group = meta$ISUP_combined)
+y.ab <- DGEList(abundances, samples=meta, group = meta[,x])
 
 #Design matrix
-design <- model.matrix(~ISUP_combined, data = y.ab$samples)
+design <- model.matrix(~group, data = y.ab$samples)
 
 #Visualize
 # logCPM of abundances per cluster
-cur_mat <- cpm(abundances,prior.count = 1,log = TRUE)
-
-Heatmap(cur_mat, 
-        col = viridis(100),
-        column_split = unfactor(meta$ISUP_combined))%v%
-  columnAnnotation(ISUP_combined = anno_simple(unfactor(meta$ISUP_combined)))
-
+cur_mat <- edgeR::cpm(abundances,prior.count = 1,log = TRUE)
 
 # Estimate NB and QL dispersion 
 y.ab <- estimateDisp(y.ab, design, trend="none")
-summary(y.ab$common.dispersion)
-plotBCV(y.ab, cex=1)
 
 fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
-summary(fit.ab$var.prior)
-plotQLDisp(fit.ab, cex=1)
 
 # Test for differential abundance of clusters between tumor stages
 res <- glmQLFTest(fit.ab, coef=ncol(design))
-
-res$coefficients
-summary(decideTests(res))
 
 DA <- res$table
 
 DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
 
-DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.05, result = ifelse(DA$logFC > 0 & DA$FDR < 0.05, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.05, "DOWN", "NOTSIG"))) %>% 
+DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.1, result = ifelse(DA$logFC > 0 & DA$FDR < 0.1, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.1, "DOWN", "NOTSIG"))) %>% 
   arrange(desc(logFC))
 
 DA$cluster <- factor(DA$cluster, levels = DA$cluster)
+DA$category <- x
 
-sig <- DA %>% filter(FDR<0.05) %>% pull(cluster) %>% unfactor
+return(DA)
+})
 
-## Visualize
-#Barplot
-ggplot(DA, aes(cluster, y = logFC))+
-  geom_col(aes(fill=result), col = "black")+
-  #scale_fill_manual(values = c("#377EB8","lightgrey","#E41A1C"))+
-  ylab("logFC")+
-  xlab("Cluster")+
-  labs(fill = "FDR<0.1")+
-  ggtitle("ISUP 1/2 vs. 3/4")+
-  theme_classic()
+DA_out <- do.call(rbind, DA)
+```
+
+```{r}
+# FDR at 0.1 with trends
+DA_out$result <- ifelse(DA_out$logFC > 0 & DA_out$FDR < 0.1, "UP",
+                             ifelse(DA_out$logFC > 0 & DA_out$PValue < 0.1, "UP_trend", 
+                                    ifelse(DA_out$logFC < 0 & DA_out$FDR < 0.1, "DOWN", 
+                                           ifelse(DA_out$logFC < 0 & DA_out$PValue < 0.1, "DOWN_trend","NOTSIG"))))
+
+# Select myeloid cells only 
+#DA_out <- DA_out[str_detect(DA_out$cluster, "MY"),]
+#DA_out <- DA_out[complete.cases(DA_out),]
+
+## hierarchical clustering on logFC
+cur_df <- DA_out %>% select(cluster, category, logFC) %>% pivot_wider(values_from = logFC, names_from = cluster)
+
+# rows 
+dd <- dist(cur_df[2:ncol(cur_df)], method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+row_sorted <- hc$order
+DA_out$category <- factor(DA_out$category, levels = cur_df[row_sorted,]$category)
+
+# columns 
+dd <- dist(t(cur_df[2:ncol(cur_df)]), method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+column_sorted <- hc$order
+DA_out$cluster <- factor(DA_out$cluster, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
+
+
+ggplot(DA_out, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8")+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = DA_out,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+```{r}
+# Create binary categories 
+## Genomic subtypes
+sce$VHL_wildtype <- ifelse(sce$genomic_subtype == "VHL_wildtype", "1", "0")
+sce$PBRM1_driven <- ifelse(sce$genomic_subtype == "PBRM1_driven", "1", "0")
+sce$BAP1_driven <- ifelse(sce$genomic_subtype == "BAP1_driven", "1", "0")
+sce$VHL_monodriver <- ifelse(sce$genomic_subtype == "VHL_monodriver", "1", "0")
+sce$multiple_drivers <- ifelse(sce$genomic_subtype == "multiple_drivers", "1", "0")
+```
+
+```{r}
+### Differential abundance analysis based on edgeR
+library(edgeR)
+
+DA <- lapply(c("VHL_wildtype", "PBRM1_driven", "VHL_monodriver", "BAP1_driven", 
+"multiple_drivers"), function(x){
+
+abundances <- table(sce$tumor_metacluster, sce$PID)
+abundances <- unclass(abundances) 
+
+#relevant patient metadata (Re-level for baseline)
+meta <- colData(sce)[match(colnames(abundances), sce$PID),]
+
+meta[,x] <- relevel(x=factor(meta[,x]), ref = "0")
+
+#filter
+meta <- meta[!is.na(meta[,x]),]
+abundances <- abundances[,colnames(abundances) %in% meta$PID]
+
+#create DGEList - based on edgeR package
+y.ab <- DGEList(abundances, samples=meta, group = meta[,x])
+
+#Design matrix
+design <- model.matrix(~group, data = y.ab$samples)
+
+#Visualize
+# logCPM of abundances per cluster
+cur_mat <- edgeR::cpm(abundances,prior.count = 1,log = TRUE)
+
+# Estimate NB and QL dispersion 
+y.ab <- estimateDisp(y.ab, design, trend="none")
+
+fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
+
+# Test for differential abundance of clusters between tumor stages
+res <- glmQLFTest(fit.ab, coef=ncol(design))
+
+DA <- res$table
+
+DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
+
+DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.1, result = ifelse(DA$logFC > 0 & DA$FDR < 0.1, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.1, "DOWN", "NOTSIG"))) %>% 
+  arrange(desc(logFC))
+
+DA$cluster <- factor(DA$cluster, levels = DA$cluster)
+DA$category <- x
+
+return(DA)
+})
+
+DA_out <- do.call(rbind, DA)
+```
+
+```{r}
+# FDR at 0.1 with trends
+DA_out$result <- ifelse(DA_out$logFC > 0 & DA_out$FDR < 0.1, "UP",
+                             ifelse(DA_out$logFC > 0 & DA_out$PValue < 0.1, "UP_trend", 
+                                    ifelse(DA_out$logFC < 0 & DA_out$FDR < 0.1, "DOWN", 
+                                           ifelse(DA_out$logFC < 0 & DA_out$PValue < 0.1, "DOWN_trend","NOTSIG"))))
+
+## hierarchical clustering on logFC
+cur_df <- DA_out %>% select(cluster, category, logFC) %>% pivot_wider(values_from = logFC, names_from = cluster)
+
+# rows 
+dd <- dist(cur_df[2:ncol(cur_df)], method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+row_sorted <- hc$order
+DA_out$category <- factor(DA_out$category, levels = cur_df[row_sorted,]$category)
+
+# columns 
+dd <- dist(t(cur_df[2:ncol(cur_df)]), method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+column_sorted <- hc$order
+
+
+DA_out$cluster <- factor(DA_out$cluster, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
+
+
+ggplot(DA_out, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8")+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = DA_out,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+```{r}
+# Create binary categories 
+unique(sce$metabolic_subtype)
+
+## Metabolic subtypes
+sce$Down_carb_lipid_remodeling_AA_degradation <- ifelse(sce$metabolic_subtype == "Down_carb_lipid_remodeling_AA_degradation", "1", "0")
+sce$Down_lipid <- ifelse(sce$metabolic_subtype == "Down_lipid", "1", "0")
+sce$Moderate_carbo_moderate_lipid <- ifelse(sce$metabolic_subtype == "Moderate_carbo_moderate_lipid", "1", "0")
+sce$High_carbo_moderate_lipid_moderate_AA <- ifelse(sce$metabolic_subtype == "High_carbo_moderate_lipid_moderate_AA", "1", "0")
+```
+
+
+```{r}
+### Differential abundance analysis based on edgeR
+library(edgeR)
+
+DA <- lapply(c("Down_carb_lipid_remodeling_AA_degradation", "Down_lipid", "Moderate_carbo_moderate_lipid", "High_carbo_moderate_lipid_moderate_AA"), function(x){
+
+abundances <- table(sce$tumor_metacluster, sce$PID)
+abundances <- unclass(abundances) 
+
+#relevant patient metadata (Re-level for baseline)
+meta <- colData(sce)[match(colnames(abundances), sce$PID),]
+
+meta[,x] <- relevel(x=factor(meta[,x]), ref = "0")
+
+#filter
+meta <- meta[!is.na(meta[,x]),]
+abundances <- abundances[,colnames(abundances) %in% meta$PID]
+
+#create DGEList - based on edgeR package
+y.ab <- DGEList(abundances, samples=meta, group = meta[,x])
+
+#Design matrix
+design <- model.matrix(~group, data = y.ab$samples)
+
+#Visualize
+# logCPM of abundances per cluster
+cur_mat <- edgeR::cpm(abundances,prior.count = 1,log = TRUE)
+
+# Estimate NB and QL dispersion 
+y.ab <- estimateDisp(y.ab, design, trend="none")
+
+fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
+
+# Test for differential abundance of clusters between tumor stages
+res <- glmQLFTest(fit.ab, coef=ncol(design))
+
+DA <- res$table
+
+DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
+
+DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.1, result = ifelse(DA$logFC > 0 & DA$FDR < 0.1, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.1, "DOWN", "NOTSIG"))) %>% 
+  arrange(desc(logFC))
+
+DA$cluster <- factor(DA$cluster, levels = DA$cluster)
+DA$category <- x
+
+return(DA)
+})
+
+DA_out <- do.call(rbind, DA)
+```
+
+```{r}
+# FDR at 0.1 with trends
+DA_out$result <- ifelse(DA_out$logFC > 0 & DA_out$FDR < 0.1, "UP",
+                             ifelse(DA_out$logFC > 0 & DA_out$PValue < 0.1, "UP_trend", 
+                                    ifelse(DA_out$logFC < 0 & DA_out$FDR < 0.1, "DOWN", 
+                                           ifelse(DA_out$logFC < 0 & DA_out$PValue < 0.1, "DOWN_trend","NOTSIG"))))
+
+## hierarchical clustering on logFC
+cur_df <- DA_out %>% select(cluster, category, logFC) %>% pivot_wider(values_from = logFC, names_from = cluster)
+
+# rows 
+dd <- dist(cur_df[2:ncol(cur_df)], method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+row_sorted <- hc$order
+DA_out$category <- factor(DA_out$category, levels = cur_df[row_sorted,]$category)
+
+# columns 
+dd <- dist(t(cur_df[2:ncol(cur_df)]), method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+column_sorted <- hc$order
+
+
+DA_out$cluster <- factor(DA_out$cluster, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
+
+
+ggplot(DA_out, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8")+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = DA_out,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+## Metabolic subtypes 
+
+
+# 3. Differential expression analysis 
+
+## Progression categories 
+
+```{r}
+type_markers <- rownames(sce)[rowData(sce)$tumor_cluster]
+type_markers <- c(type_markers, "CA9", "panCK")
+
+DE <- lapply(c("ISUP_combined", "pT_combined", "necrose", "PDL1_score"), function(x){
+  
+# 1. Aggregate expression per PID and category 
+df_select <- DataFrame(sce$PID, colData(sce)[,x])
+colnames(df_select) <- c("sce.PID", paste0("sce.",x))
+
+mean_sce <- aggregateAcrossCells(sce,
+                                 ids = df_select,
+                                 statistics = "mean",
+                                 use.assay.type = "min_max")
+# 2. Calculate log2FC 
+## Aggregate per category 
+mean_sce_1 <- aggregateAcrossCells(mean_sce, 
+                     ids = colData(mean_sce)[,paste0("sce.",x)], 
+                     statistics = "mean",
+                     use.assay.type = "min_max")
+
+if(x %in% c("ISUP_combined", "pT_combined")){
+logFC <- log2(assay(mean_sce_1, "min_max")[,colData(mean_sce_1)[,paste0("sce.",x)] == "3/4"]/assay(mean_sce_1, "min_max")[,colData(mean_sce_1)[,paste0("sce.",x)] == "1/2"])
+}else{
+logFC <- log2(assay(mean_sce_1, "min_max")[,colData(mean_sce_1)[,paste0("sce.",x)] == "1"]/assay(mean_sce_1, "min_max")[,colData(mean_sce_1)[,paste0("sce.",x)] == "0"])
+}
+
+# 3. Calculate p-value (based on t-test)
+exprs <- as.data.frame(t(assay(mean_sce)))
+
+exprs$cat <- colData(mean_sce)[,x]
+
+p_value <- c()
+
+if(x %in% c("ISUP_combined", "pT_combined")){
+for (i in 1:(length(colnames(exprs))-1)) {
+  t <- t.test(exprs[exprs$cat == "3/4",i], exprs[exprs$cat == "1/2",i])
+  p_value[i] <- t$p.value
+}}else{
+  for (i in 1:(length(colnames(exprs))-1)) {
+  t <- t.test(exprs[exprs$cat == "1",i], exprs[exprs$cat == "0",i])
+  p_value[i] <- t$p.value
+}}
+
+## Adjust p.value 
+FDR <- p.adjust(p_value, method = "BH")
+names(FDR) <- colnames(exprs)[1:44]
+
+# 4. Plotting df
+data <- as.data.frame(cbind(logFC, FDR))
+data <- data[which(rownames(data) %in% type_markers),]
+data$cat <- x
+
+data <- data %>% rownames_to_column("marker") %>% mutate(result = ifelse(data$logFC > 0.25 & data$FDR < 0.05, "UP",ifelse(data$logFC < -0.25 & data$FDR < 0.05, "DOWN", "NOTSIG"))) %>% 
+  arrange(desc(logFC))
+
+return(data)
+})
+
+data_out <- do.call("rbind", DE)
+
+data_out$cat <- factor(data_out$cat,levels = c("PDL1_score", "necrose","pT_combined","ISUP_combined"))
+
+## hierarchical markering on logFC
+cur_df <- data_out %>% select(marker, cat, logFC) %>% pivot_wider(values_from = logFC, names_from = marker)
+
+# rows 
+dd <- dist(cur_df[2:ncol(cur_df)], method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+row_sorted <- hc$order
+data_out$cat <- factor(data_out$cat, levels = cur_df[row_sorted,]$cat)
+
+# columns 
+dd <- dist(t(cur_df[2:ncol(cur_df)]), method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+column_sorted <- hc$order
+data_out$marker <- factor(data_out$marker, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
+
+library(ggnewscale)
+ggplot(data_out, aes(x=marker, y = cat,col = logFC, size= -log10(FDR)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8")+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = data_out,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
 
 #Volcano plot  
-ggplot(DA, aes(x = logFC, y = -log10(FDR)))+
-  geom_point(aes(col=cluster, size = -log10(FDR)))+
-  geom_label_repel(data = DA %>% filter(FDR<0.05), aes(label = cluster))+
-  #scale_color_manual(values = metadata(sce)$colors$tu_cluster_130)+
-  xlab("logFC (ISUP 1/2 vs. 3/4)")+
+ggplot(data_out, aes(x = logFC, y = -log10(FDR)))+
+  geom_point(aes(col=marker, size = -log10(FDR)))+
+  geom_label_repel(data = data_out %>% filter(result != "NOTSIG"), aes(label = marker))+
+  facet_wrap(~cat)+
+  #scale_color_manual(values = metadata(sce)$colors$metacluster)+
+  xlab("logFC (pN: 0 vs 1/2/3)")+
   ylab("-log10(FDR)")+
   theme_classic()+
   geom_hline(yintercept = -log10(0.05), linetype = "dashed")+
-  geom_vline(xintercept = 0, linetype = "dashed")+
-  labs(color = "cluster")
-
-#Abundance vs log fold change
-ggplot(DA, aes(x = logFC, y = logCPM))+
-  geom_point(aes(col= cluster, 
-                 size = -log10(FDR)))+
-  geom_label_repel(data = DA %>% filter(FDR<0.05), aes(label = cluster))+
-  #scale_color_manual(values = metadata(sce)$colors$tu_cluster_130)+
-  xlab("logFC (ISUP 1/2 vs. 3/4)")+
-  ylab("Abundance (logCPM)")+
-  theme_classic()+
   geom_vline(xintercept = 0, linetype = "dashed")+
   labs(color = "cluster")
 ```
 
-### Tumor stage
+
+## Genomic subtypes 
 
 ```{r}
-### Differential abundance analysis based on edgeR
-library(edgeR)
+library(EnhancedVolcano)
 
-abundances <- table(unfactor(sce$tu_cluster_110), sce$PID)
-abundances <- unclass(abundances) 
-head(abundances)
+sce_genome <- sce[,!is.na(sce$genomic_subtype)]
 
-#relevant patient metadata (Relevel so that pT 1/2 is baseline)
-meta <- colData(sce)[match(colnames(abundances), sce$PID),]
-meta$pT_combined <- relevel(x=factor(meta$pT_combined), ref = "1/2")
+type_markers <- rownames(sce)[rowData(sce)$tumor_cluster]
 
-#filter
-meta <- meta[!is.na(meta$pT_combined),]
-abundances <- abundances[,colnames(abundances) %in% meta$PID]
+DE <- lapply(c("VHL_wildtype", "PBRM1_driven", "VHL_monodriver", "BAP1_driven", 
+"multiple_drivers"), function(x){
+  
+# 1. Aggregate expression per PID and category 
+df_select <- DataFrame(sce_genome$PID, colData(sce_genome)[,x])
+colnames(df_select) <- c("sce_genome.PID", paste0("sce_genome.",x))
 
-#create DGEList - based on edgeR package
-y.ab <- DGEList(abundances, samples=meta, group = meta$pT_combined)
+mean_sce_genome <- aggregateAcrossCells(sce_genome,
+                                 ids = df_select,
+                                 statistics = "mean",
+                                 use.assay.type = "min_max")
+# 2. Calculate log2FC 
+## Aggregate per category 
+mean_sce_genome_1 <- aggregateAcrossCells(mean_sce_genome, 
+                     ids = colData(mean_sce_genome)[,paste0("sce_genome.",x)], 
+                     statistics = "mean",
+                     use.assay.type = "min_max")
 
-#Design matrix
-design <- model.matrix(~pT_combined, data = y.ab$samples)
+logFC <- log2(assay(mean_sce_genome_1, "min_max")[,colData(mean_sce_genome_1)[,paste0("sce_genome.",x)] == "1"]/assay(mean_sce_genome_1, "min_max")[,colData(mean_sce_genome_1)[,paste0("sce_genome.",x)] == "0"])
 
-#Visualize
-# logCPM of abundances per cluster
-cur_mat <- cpm(abundances,prior.count = 1,log = TRUE)
+# 3. Calculate p-value (based on t-test)
+exprs <- as.data.frame(t(assay(mean_sce_genome)))
 
-Heatmap(cur_mat, 
-        col = viridis(100),
-        column_split = unfactor(meta$pT_combined))%v%
-  columnAnnotation(pT_combined = anno_simple(unfactor(meta$pT_combined)))
+exprs$cat <- colData(mean_sce_genome)[,x]
 
+p_value <- c()
+for (i in 1:(length(colnames(exprs))-1)) {
+  t <- t.test(exprs[exprs$cat == "1",i], exprs[exprs$cat == "0",i])
+  p_value[i] <- t$p.value
+}
 
-# Estimate NB and QL dispersion 
-y.ab <- estimateDisp(y.ab, design, trend="none")
-summary(y.ab$common.dispersion)
-plotBCV(y.ab, cex=1)
+## Adjust p.value 
+FDR <- p.adjust(p_value, method = "BH")
+names(FDR) <- colnames(exprs)[1:44]
 
-fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
-summary(fit.ab$var.prior)
-plotQLDisp(fit.ab, cex=1)
+# 4. Plotting df
+data <- as.data.frame(cbind(logFC, FDR))
+data <- data[which(rownames(data) %in% type_markers),]
+data$cat <- x
 
-# Test for differential abundance of clusters between tumor stages
-res <- glmQLFTest(fit.ab, coef=ncol(design))
-
-res$coefficients
-summary(decideTests(res))
-
-DA <- res$table
-
-DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
-
-DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.05, result = ifelse(DA$logFC > 0 & DA$FDR < 0.05, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.05, "DOWN", "NOTSIG"))) %>% 
+data <- data %>% rownames_to_column("marker") %>% mutate(result = ifelse(data$logFC > 0 & data$FDR < 0.1, "UP",ifelse(data$logFC < 0 & data$FDR < 0.1, "DOWN", "NOTSIG"))) %>% 
   arrange(desc(logFC))
 
-DA$cluster <- factor(DA$cluster, levels = DA$cluster)
+return(data)
+})
 
-sig <- DA %>% filter(FDR<0.05) %>% pull(cluster) %>% unfactor
+data_out <- do.call("rbind", DE)
 
-## Visualize
-#Barplot
-ggplot(DA, aes(cluster, y = logFC))+
-  geom_col(aes(fill=result), col = "black")+
-  scale_fill_manual(values = c("#377EB8","lightgrey","#E41A1C"))+
-  ylab("logFC")+
-  xlab("Cluster")+
-  labs(fill = "FDR<0.05")+
-  ggtitle("pT_stage (1/2 vs 3/4)")+
-  theme_classic()
+## hierarchical markering on logFC
+cur_df <- data_out %>% select(marker, cat, logFC) %>% pivot_wider(values_from = logFC, names_from = marker)
+
+# rows 
+dd <- dist(cur_df[2:ncol(cur_df)], method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+row_sorted <- hc$order
+data_out$cat <- factor(data_out$cat, levels = cur_df[row_sorted,]$cat)
+
+# columns 
+dd <- dist(t(cur_df[2:ncol(cur_df)]), method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+column_sorted <- hc$order
+data_out$marker <- factor(data_out$marker, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
+
+ggplot(data_out, aes(x=marker, y = cat,col = logFC, size= -log10(FDR)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8")+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = data_out,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
 
 #Volcano plot  
-ggplot(DA, aes(x = logFC, y = -log10(FDR)))+
-  geom_point(aes(col=cluster, size = -log10(FDR)))+
-    geom_label_repel(data = DA %>% filter(FDR<0.05), aes(label = cluster))+
-  #scale_color_manual(values = metadata(sce)$colors$tu_cluster_130)+
-  xlab("logFC (pT: 1/2 vs 3/4)")+
+ggplot(data_out, aes(x = logFC, y = -log10(FDR)))+
+  geom_point(aes(col=marker, size = -log10(FDR)))+
+  geom_label_repel(data = data_out %>% filter(result != "NOTSIG"), aes(label = marker))+
+  facet_wrap(~cat)+
+  #scale_color_manual(values = metadata(sce_genome)$colors$metacluster)+
+  xlab("logFC (pN: 0 vs 1/2/3)")+
   ylab("-log10(FDR)")+
   theme_classic()+
   geom_hline(yintercept = -log10(0.05), linetype = "dashed")+
-  geom_vline(xintercept = 0, linetype = "dashed")+
-  labs(color = "cluster")
-
-#Abundance vs log fold change (best?)
-ggplot(DA, aes(x = logFC, y = logCPM))+
-  geom_point(aes(col= cluster, 
-                 size = -log10(FDR)))+
-  geom_label_repel(data = DA %>% filter(FDR<0.05), aes(label = cluster))+
-  #scale_color_manual(values = metadata(sce)$colors$tu_cluster_130)+
-  xlab("logFC (pT: 1/2 vs 3/4)")+
-  ylab("Abundance (logCPM)")+
-  theme_classic()+
   geom_vline(xintercept = 0, linetype = "dashed")+
   labs(color = "cluster")
 ```
 
-### Necrose 
+## Metabolic subtypes
 
 ```{r}
-### Differential abundance analysis based on edgeR
-library(edgeR)
+library(EnhancedVolcano)
 
-sce <- sce
-abundances <- table(unfactor(sce$tu_cluster_110), sce$PID)
-abundances <- unclass(abundances) 
-head(abundances)
+sce_met <- sce[,!is.na(sce$metabolic_subtype)]
 
-#relevant patient metadata (Relevel so that Necrose 0 is baseline)
-meta <- colData(sce)[match(colnames(abundances), sce$PID),]
-meta$necrose <- relevel(x=factor(meta$necrose), ref = "0")
+type_markers <- rownames(sce)[rowData(sce)$tumor_cluster]
 
-#filter
-meta <- meta[!is.na(meta$necrose),]
-abundances <- abundances[,colnames(abundances) %in% meta$PID]
+DE <- lapply(c("meta_sub_1", "meta_sub_2", "meta_sub_3", "meta_sub_4"), function(x){
+  
+# 1. Aggregate expression per PID and category 
+df_select <- DataFrame(sce_met$PID, colData(sce_met)[,x])
+colnames(df_select) <- c("sce_met.PID", paste0("sce_met.",x))
 
-#create DGEList - based on edgeR package
-y.ab <- DGEList(abundances, samples=meta, group = meta$necrose)
+mean_sce_met <- aggregateAcrossCells(sce_met,
+                                 ids = df_select,
+                                 statistics = "mean",
+                                 use.assay.type = "min_max")
+# 2. Calculate log2FC 
+## Aggregate per category 
+mean_sce_met_1 <- aggregateAcrossCells(mean_sce_met, 
+                     ids = colData(mean_sce_met)[,paste0("sce_met.",x)], 
+                     statistics = "mean",
+                     use.assay.type = "min_max")
 
-#Design matrix
-design <- model.matrix(~necrose, data = y.ab$samples)
+logFC <- log2(assay(mean_sce_met_1, "min_max")[,colData(mean_sce_met_1)[,paste0("sce_met.",x)] == "1"]/assay(mean_sce_met_1, "min_max")[,colData(mean_sce_met_1)[,paste0("sce_met.",x)] == "0"])
 
-#Visualize
-# logCPM of abundances per cluster
-cur_mat <- cpm(abundances,prior.count = 1,log = TRUE)
+# 3. Calculate p-value (based on t-test)
+exprs <- as.data.frame(t(assay(mean_sce_met)))
 
-Heatmap(cur_mat, 
-        col = viridis(100),
-        column_split = unfactor(meta$necrose))%v%
-  columnAnnotation(necrose = anno_simple(unfactor(meta$necrose)))
+exprs$cat <- colData(mean_sce_met)[,x]
 
+p_value <- c()
+for (i in 1:(length(colnames(exprs))-1)) {
+  t <- t.test(exprs[exprs$cat == "1",i], exprs[exprs$cat == "0",i])
+  p_value[i] <- t$p.value
+}
 
-# Estimate NB and QL dispersion 
-y.ab <- estimateDisp(y.ab, design, trend="none")
-summary(y.ab$common.dispersion)
-plotBCV(y.ab, cex=1)
+## Adjust p.value 
+FDR <- p.adjust(p_value, method = "BH")
+names(FDR) <- colnames(exprs)[1:44]
 
-fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
-summary(fit.ab$var.prior)
-plotQLDisp(fit.ab, cex=1)
+# 4. Plotting df
+data <- as.data.frame(cbind(logFC, FDR))
+data <- data[which(rownames(data) %in% type_markers),]
+data$cat <- x
 
-# Test for differential abundance of clusters between tumor stages
-res <- glmQLFTest(fit.ab, coef=ncol(design))
-
-res$coefficients
-summary(decideTests(res))
-
-DA <- res$table
-
-DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
-
-DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.05, result = ifelse(DA$logFC > 0 & DA$FDR < 0.05, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.05, "DOWN", "NOTSIG"))) %>% 
+data <- data %>% rownames_to_column("marker") %>% mutate(result = ifelse(data$logFC > 0 & data$FDR < 0.1, "UP",ifelse(data$logFC < 0 & data$FDR < 0.1, "DOWN", "NOTSIG"))) %>% 
   arrange(desc(logFC))
 
-DA$cluster <- factor(DA$cluster, levels = DA$cluster)
+return(data)
+})
 
-sig <- DA %>% filter(FDR<0.05) %>% pull(cluster) %>% unfactor
+data_out <- do.call("rbind", DE)
 
-## Visualize
-#Barplot
-ggplot(DA, aes(cluster, y = logFC))+
-  geom_col(aes(fill=result), col = "black")+
-  scale_fill_manual(values = c("#377EB8","lightgrey","#E41A1C"))+
-  ylab("logFC")+
-  xlab("Cluster")+
-  labs(fill = "FDR<0.1")+
-  ggtitle("Necrose (0 vs 1)")+
-  theme_classic()
+## hierarchical markering on logFC
+cur_df <- data_out %>% select(marker, cat, logFC) %>% pivot_wider(values_from = logFC, names_from = marker)
+
+# rows 
+dd <- dist(cur_df[2:ncol(cur_df)], method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+row_sorted <- hc$order
+data_out$cat <- factor(data_out$cat, levels = cur_df[row_sorted,]$cat)
+
+# columns 
+dd <- dist(t(cur_df[2:ncol(cur_df)]), method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+column_sorted <- hc$order
+data_out$marker <- factor(data_out$marker, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
+
+ggplot(data_out, aes(x=marker, y = cat,col = logFC, size= -log10(FDR)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8")+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = data_out,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
 
 #Volcano plot  
-ggplot(DA, aes(x = logFC, y = -log10(FDR)))+
-  geom_point(aes(col=cluster, size = -log10(FDR)))+
-    geom_label_repel(data = DA %>% filter(FDR<0.05), aes(label = cluster))+
-  #scale_color_manual(values = metadata(sce)$colors$tu_cluster_130)+
-  xlab("logFC (Necrose: 0 vs 1)")+
+ggplot(data_out, aes(x = logFC, y = -log10(FDR)))+
+  geom_point(aes(col=marker, size = -log10(FDR)))+
+  geom_label_repel(data = data_out %>% filter(result != "NOTSIG"), aes(label = marker))+
+  facet_wrap(~cat)+
+  #scale_color_manual(values = metadata(sce_met)$colors$metacluster)+
+  xlab("logFC (pN: 0 vs 1/2/3)")+
   ylab("-log10(FDR)")+
   theme_classic()+
   geom_hline(yintercept = -log10(0.05), linetype = "dashed")+
-  geom_vline(xintercept = 0, linetype = "dashed")+
-  labs(color = "cluster")
-
-#Abundance vs log fold change (best?)
-ggplot(DA, aes(x = logFC, y = logCPM))+
-  geom_point(aes(col= cluster, 
-                 size = -log10(FDR)))+
-  geom_label_repel(data = DA %>% filter(FDR<0.05), aes(label = cluster))+
-  #scale_color_manual(values = metadata(sce)$colors$tu_cluster_130)+
-  xlab("logFC (Necrose: 0 vs 1)")+
-  ylab("Abundance (logCPM)")+
-  theme_classic()+
   geom_vline(xintercept = 0, linetype = "dashed")+
   labs(color = "cluster")
 ```
@@ -3729,7 +3119,7 @@ colnames(Cox_df) <- paste0("TU_", colnames(Cox_df))
 
 ## Based on categories (mean or median division of cluster proportions) 
 Cox_df_mean <- foreach(i = colnames(Cox_df),.combine = "cbind")%do%{
-Cox_df %>% select(all_of(i)) %>% mutate(mean = ifelse(Cox_df[,i] > mean(Cox_df[,i]),"B","A")) %>% pull(mean)
+Cox_df %>% select(all_of(i)) %>% mutate(mean = ifelse(Cox_df[,i] > median(Cox_df[,i]),"B","A")) %>% pull(mean)
 }
 
 colnames(Cox_df_mean) <- colnames(Cox_df)
@@ -3806,7 +3196,7 @@ Cox_df$OS_months <- sce$OS_months[match(rownames(Cox_df),sce$PID)]
 
 #mean division 
 Cox_df_mean <- foreach(i = Cox_df %>% select(-status_OS,-OS_months) %>% colnames,.combine = "cbind")%do%{
-Cox_df %>% select(i) %>% mutate(mean = ifelse(Cox_df[,i] > mean(Cox_df[,i]),"B","A")) %>% pull(mean)
+Cox_df %>% select(i) %>% mutate(mean = ifelse(Cox_df[,i] > median(Cox_df[,i]),"B","A")) %>% pull(mean)
 }
 
 colnames(Cox_df_mean) <- Cox_df %>% select(-status_OS,-OS_months) %>% colnames
@@ -4001,7 +3391,7 @@ Cox_df <- PID_metagroups
 
 ## Based on categories (mean or median division of cluster proportions) 
 Cox_df_mean <- foreach(i = colnames(Cox_df),.combine = "cbind")%do%{
-Cox_df %>% select(all_of(i)) %>% mutate(mean = ifelse(Cox_df[,i] > median(Cox_df[,i]),"B","A")) %>% pull(mean)
+Cox_df %>% select(all_of(i)) %>% mutate(mean = ifelse(Cox_df[,i] > mean(Cox_df[,i]),"B","A")) %>% pull(mean)
 }
 
 colnames(Cox_df_mean) <- colnames(Cox_df)
@@ -4049,6 +3439,79 @@ theme_classic()+
 theme(axis.text.x = element_text(angle = 90))
 
 hr_mean
+```
+
+#### Density 
+
+```{r}
+library(survival)
+library(survminer)
+
+PID_tumor_district_names <- colData(sce) %>% as.data.frame() %>% select(tumor_district_names,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+
+PID_area <- colData(sce) %>% as.data.frame() %>% select(tissue_area,PID) %>% unique() %>% group_by(PID) %>% mutate(mean_tissue_area = mean(tissue_area))
+
+PID_tumor_district_names$mean_tissue_area <- PID_area$mean_tissue_area[match(PID_tumor_district_names$PID, PID_area$PID)]
+  
+PID_tumor_district_names <- PID_tumor_district_names %>% group_by(PID) %>% mutate(density = Freq/(mean_tissue_area/1000000))  
+
+### Multivariate cox proportional hazard model on multiple covariates (here density of phenotypes)
+PID_metagroups <- PID_tumor_district_names %>% pivot_wider(id_cols = "PID",names_from = "tumor_district_names",values_from = "density") %>% column_to_rownames("PID")
+colnames(PID_metagroups) <- paste0("MC",colnames(PID_metagroups))
+
+## 1. Based on continuous cluster proportions
+Cox_df <- PID_metagroups
+
+#add covariates for correction
+Cox_df$status_OS <- sce$status_OS[match(rownames(Cox_df),sce$PID)]
+Cox_df$OS_months <- sce$OS_months[match(rownames(Cox_df),sce$PID)]
+
+#mean division 
+Cox_df_mean <- foreach(i = Cox_df %>% select(-status_OS,-OS_months) %>% colnames,.combine = "cbind")%do%{
+Cox_df %>% select(i) %>% mutate(mean = ifelse(Cox_df[,i] > median(Cox_df[,i]),"B","A")) %>% pull(mean)
+}
+
+colnames(Cox_df_mean) <- Cox_df %>% select(-status_OS,-OS_months) %>% colnames
+rownames(Cox_df_mean) <- Cox_df %>% select(-status_OS,-OS_months) %>% rownames
+Cox_df_mean <- as.data.frame(Cox_df_mean)
+
+Cox_df_mean$status_OS <- sce$status_OS[match(rownames(Cox_df_mean),sce$PID)]
+Cox_df_mean$OS_months <- sce$OS_months[match(rownames(Cox_df_mean),sce$PID)]
+
+identical(rownames(Cox_df), rownames(Cox_df_mean))
+
+#run the model
+covariates <- Cox_df_mean %>% select(-status_OS,-OS_months) %>% colnames
+
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + ")))
+
+multi_model <- coxph(multi_formula, data = Cox_df_mean)
+
+multi_res <- summary(multi_model)
+
+plot_df_prop <- data.frame(group = rownames(multi_res$coefficients),
+                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],2),
+                      HR = signif(multi_res$coefficients[,"exp(coef)"],2),
+                      CI_low = signif(multi_res$conf.int[,"lower .95"],2),
+                      CI_high = signif(multi_res$conf.int[,"upper .95"],2),
+                      wald_test = signif(multi_res$waldtest["pvalue"],2))
+
+multi_res$coefficients
+
+#Plot hazard ratios
+hr_prop <- ggplot(plot_df_prop, aes(x = reorder(group,desc(HR)), y = HR, color = p_value < 0.05))+
+geom_point(size = 4)+
+geom_errorbar(aes(ymax = CI_high, ymin = CI_low))+
+geom_hline(yintercept = 1,color = "black",linetype = "dashed")+
+scale_color_brewer(palette = "Set1")+
+xlab("Immune tumor_district_namess")+
+ylab("HR for mean_density")+
+theme_classic()+
+#coord_cartesian(ylim=c(0.01,10))+
+scale_y_continuous(trans = "log10")+
+theme(axis.text.x = element_text(angle = 90))
+
+hr_prop
 ```
 
 ### GMM
