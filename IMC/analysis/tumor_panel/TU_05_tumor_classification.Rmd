@@ -1002,77 +1002,100 @@ ha_spatial <- HeatmapAnnotation(
     border = TRUE,
     which = "row")
 
-### 2.2 Astir / GMM prediction 
-
-## Astir cell types per cluster
-astir_anno <- colData(sce) %>% as.data.frame() %>% select(tumor_metacluster,astir_tumor_combined) %>% group_by(tumor_metacluster) %>% table() %>% as.data.frame
-astir_anno <- astir_anno %>% group_by(tumor_metacluster) %>% mutate(fra = Freq/sum(Freq)) 
-astir_anno <- astir_anno %>% select(-Freq) %>% pivot_wider(id_cols = tumor_metacluster,names_from = astir_tumor_combined,values_from = fra) %>% column_to_rownames("tumor_metacluster")
-
-#Create colors for astir cell types 
-astir_col <- setNames(c("#E31A1C","#A6CEE3","#FB9A99","#FDBF6F","#33A02C","#CAB2D6"), 
-                      c("M2_like", "C_M", "Neutro_MDSC", "M1_like", "Ag_M","Unknown/Other"))
-
-#astir_col <- setNames(c("#E31A1C", "#EB4445", "#F36F6F", "#FB9A99", "#CA7194", "#994A8F", "#68228B"), 
-#                     c("M2_like", "M1_like", "Neutro_MDSC","Granu", "C_M", "Ag_M", "Other"))
-
-metadata(sce)$colors$tu_astir_col <- astir_col
-metadata(sce)$colors$tu_astir_col <- metadata(sce)$colors$tu_astir_col[match(colnames(astir_anno),names(metadata(sce)$colors$tu_astir_col))]
-
-## GMM cell types per cluster
-GMM_anno <- colData(sce) %>% as.data.frame() %>% select(tumor_metacluster,GMM_tumor_combined) %>% group_by(tumor_metacluster) %>% table() %>% as.data.frame
-GMM_anno <- GMM_anno %>% group_by(tumor_metacluster) %>% mutate(fra = Freq/sum(Freq)) 
-GMM_anno <- GMM_anno %>% select(-Freq) %>% pivot_wider(id_cols = tumor_metacluster,names_from = GMM_tumor_combined,values_from = fra) %>% column_to_rownames("tumor_metacluster")
-
-#Create colors for GMM cell types 
-GMM_col <- setNames(c("#E31A1C","#A6CEE3","#FB9A99","#FDBF6F","#33A02C","#CAB2D6"), 
-                      c("M2_like", "C_M", "Neutro_MDSC", "M1_like", "Ag_M","Unknown/Other"))
-
-#GMM_col <- setNames(c("#E31A1C", "#EB4445", "#F36F6F", "#FB9A99", "#CA7194", "#994A8F", "#68228B"), 
-#                     c("M2_like", "M1_like", "Neutro_MDSC","Granu", "C_M", "Ag_M", "Other"))
-
-metadata(sce)$colors$tu_GMM_col <- GMM_col
-metadata(sce)$colors$tu_GMM_col <- metadata(sce)$colors$tu_GMM_col[match(colnames(GMM_anno),names(metadata(sce)$colors$tu_GMM_col))]
-
-ha_GMM_astir <- HeatmapAnnotation(
-  astir_tumor = anno_barplot(astir_anno, width = unit(20, "mm"), gp = gpar(fill = metadata(sce)$colors$tu_astir_col)),
-  GMM_tumor = anno_barplot(GMM_anno, width = unit(20, "mm"), gp = gpar(fill = metadata(sce)$colors$tu_GMM_col)),
-                            border = TRUE, 
-                            annotation_name_rot = 90,
-                            gap = unit(3,"mm"),
-                            which = "row")
+# ### 2.2 Astir / GMM prediction 
+# 
+# ## Astir cell types per cluster
+# astir_anno <- colData(sce) %>% as.data.frame() %>% select(tumor_metacluster,astir_tumor_combined) %>% group_by(tumor_metacluster) %>% table() %>% as.data.frame
+# astir_anno <- astir_anno %>% group_by(tumor_metacluster) %>% mutate(fra = Freq/sum(Freq)) 
+# astir_anno <- astir_anno %>% select(-Freq) %>% pivot_wider(id_cols = tumor_metacluster,names_from = astir_tumor_combined,values_from = fra) %>% column_to_rownames("tumor_metacluster")
+# 
+# #Create colors for astir cell types 
+# astir_col <- setNames(c("#E31A1C","#A6CEE3","#FB9A99","#FDBF6F","#33A02C","#CAB2D6"), 
+#                       c("M2_like", "C_M", "Neutro_MDSC", "M1_like", "Ag_M","Unknown/Other"))
+# 
+# #astir_col <- setNames(c("#E31A1C", "#EB4445", "#F36F6F", "#FB9A99", "#CA7194", "#994A8F", "#68228B"), 
+# #                     c("M2_like", "M1_like", "Neutro_MDSC","Granu", "C_M", "Ag_M", "Other"))
+# 
+# metadata(sce)$colors$tu_astir_col <- astir_col
+# metadata(sce)$colors$tu_astir_col <- metadata(sce)$colors$tu_astir_col[match(colnames(astir_anno),names(metadata(sce)$colors$tu_astir_col))]
+# 
+# ## GMM cell types per cluster
+# GMM_anno <- colData(sce) %>% as.data.frame() %>% select(tumor_metacluster,GMM_tumor_combined) %>% group_by(tumor_metacluster) %>% table() %>% as.data.frame
+# GMM_anno <- GMM_anno %>% group_by(tumor_metacluster) %>% mutate(fra = Freq/sum(Freq)) 
+# GMM_anno <- GMM_anno %>% select(-Freq) %>% pivot_wider(id_cols = tumor_metacluster,names_from = GMM_tumor_combined,values_from = fra) %>% column_to_rownames("tumor_metacluster")
+# 
+# #Create colors for GMM cell types 
+# GMM_col <- setNames(c("#E31A1C","#A6CEE3","#FB9A99","#FDBF6F","#33A02C","#CAB2D6"), 
+#                       c("M2_like", "C_M", "Neutro_MDSC", "M1_like", "Ag_M","Unknown/Other"))
+# 
+# #GMM_col <- setNames(c("#E31A1C", "#EB4445", "#F36F6F", "#FB9A99", "#CA7194", "#994A8F", "#68228B"), 
+# #                     c("M2_like", "M1_like", "Neutro_MDSC","Granu", "C_M", "Ag_M", "Other"))
+# 
+# metadata(sce)$colors$tu_GMM_col <- GMM_col
+# metadata(sce)$colors$tu_GMM_col <- metadata(sce)$colors$tu_GMM_col[match(colnames(GMM_anno),names(metadata(sce)$colors$tu_GMM_col))]
+# 
+# ha_GMM_astir <- HeatmapAnnotation(
+#   astir_tumor = anno_barplot(astir_anno, width = unit(20, "mm"), gp = gpar(fill = metadata(sce)$colors$tu_astir_col)),
+#   GMM_tumor = anno_barplot(GMM_anno, width = unit(20, "mm"), gp = gpar(fill = metadata(sce)$colors$tu_GMM_col)),
+#                             border = TRUE, 
+#                             annotation_name_rot = 90,
+#                             gap = unit(3,"mm"),
+#                             which = "row")
 
 ### 2.2 Metadata features
 
 #Number of cells per tumor_metacluster 
 n_cells <- colData(mean_sce) %>% as.data.frame %>% select(tumor_metacluster, ncells)
 
-# # Number of contributing patients (at least 1 cell)
+# # Number of contributing patients (at least 5 cells)
 cluster_PID <- colData(sce) %>% as.data.frame() %>% select(tumor_metacluster,PID) %>% group_by(tumor_metacluster) %>% table() %>% as.data.frame
 n_PID <- cluster_PID %>% filter(Freq>=5) %>% group_by(tumor_metacluster) %>% count(name = "n_PID") %>% column_to_rownames("tumor_metacluster")
 
+# Proportion of ISUP_combined grade per cluster
+ISUP_combined <- colData(sce) %>% as.data.frame() %>% select(tumor_metacluster,ISUP_combined) %>% group_by(tumor_metacluster) %>% table() %>% as.data.frame
+ISUP_combined <- ISUP_combined %>% group_by(tumor_metacluster) %>% mutate(fra = Freq/sum(Freq)) 
+ISUP_combined <- ISUP_combined %>% select(-Freq) %>% pivot_wider(id_cols = tumor_metacluster,names_from = ISUP_combined,values_from = fra) %>% column_to_rownames("tumor_metacluster")
 
-ha_meta <- HeatmapAnnotation(
-  n_cells = anno_barplot(n_cells$ncells, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),                        
-  n_PID = anno_barplot(n_PID$n_PID, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),
-  border = TRUE, 
-  annotation_name_rot = 90,
-  gap = unit(1,"mm"),
-  which = "row")
+# Proportion of pT_combined stage per cluster
+pT_combined <- colData(sce) %>% as.data.frame() %>% select(tumor_metacluster,pT_combined) %>% group_by(tumor_metacluster) %>% table() %>% as.data.frame
+pT_combined <- pT_combined %>% group_by(tumor_metacluster) %>% mutate(fra = Freq/sum(Freq)) 
+pT_combined <- pT_combined %>% select(-Freq) %>% pivot_wider(id_cols = tumor_metacluster,names_from = pT_combined,values_from = fra) %>% column_to_rownames("tumor_metacluster")
+
+# Proportion of necrose per cluster
+necrose <- colData(sce) %>% as.data.frame() %>% select(tumor_metacluster,necrose) %>% group_by(tumor_metacluster) %>% table() %>% as.data.frame
+necrose <- necrose %>% group_by(tumor_metacluster) %>% mutate(fra = Freq/sum(Freq)) 
+necrose <- necrose %>% select(-Freq) %>% pivot_wider(id_cols = tumor_metacluster,names_from = necrose,values_from = fra) %>% column_to_rownames("tumor_metacluster")
+
+PDL1_score <- colData(sce) %>% as.data.frame() %>% select(tumor_metacluster,PDL1_score) %>% group_by(tumor_metacluster) %>% table() %>% as.data.frame
+PDL1_score <- PDL1_score %>% group_by(tumor_metacluster) %>% mutate(fra = Freq/sum(Freq)) 
+PDL1_score <- PDL1_score %>% select(-Freq) %>% pivot_wider(id_cols = tumor_metacluster,names_from = PDL1_score,values_from = fra) %>% column_to_rownames("tumor_metacluster")
+
+
+ha_meta <- HeatmapAnnotation(ISUP_combined = anno_barplot(ISUP_combined, width = unit(12, "mm"),gp = gpar(fill = metadata(sce)$colors$ISUP_combined)),
+                            pT_combined = anno_barplot(pT_combined, width = unit(12, "mm"),gp = gpar(fill = metadata(sce)$colors$pT_combined)),
+                            necrose = anno_barplot(necrose, width = unit(12, "mm"),gp = gpar(fill = metadata(sce)$colors$necrose)),
+                            PDL1_score = anno_barplot(PDL1_score, width = unit(12, "mm"),gp = gpar(fill = metadata(sce)$colors$PDL1_score)),
+                            n_cells = anno_barplot(n_cells$ncells, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),                        n_PID = anno_barplot(n_PID$n_PID, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),
+
+                            border = TRUE, 
+                            annotation_name_rot = 90,
+                            gap = unit(1,"mm"),
+                            which = "row")
 
 ### 3. Define broader categories
 anno <- colData(mean_sce) %>% as.data.frame %>% select(tumor_metacluster, ncells)
 
 #Create colors for tumor metacluster
-meta_col <- setNames(c("#E31A1C","#A6CEE3","#FB9A99","#FDBF6F","#33A02C"), 
-                      c("M2_like", "C_M", "Neutro_MDSC", "M1_like", "Ag_M"))
+n <- length(unique(anno$tumor_metacluster))
+meta_col <- setNames(colorRampPalette(brewer.pal(9,"Paired"))(length(unique(anno$tumor_metacluster))), 
+                      unique(anno$tumor_metacluster))
 
 metadata(sce)$colors$tumor_metacluster <- meta_col
 
 ### 4. Plot combined Heatmap
-h <- Heatmap(t(assay(mean_sce, "exprs")),
+h <- Heatmap(t(assay(mean_sce, "min_max")),
         col = col_main,
-        name = "exprs",
+        name = "min_max",
         row_title = NULL,
         show_row_names = TRUE, 
         show_row_dend = TRUE,
@@ -1082,21 +1105,17 @@ h <- Heatmap(t(assay(mean_sce, "exprs")),
         clustering_method_rows = "ward.D2",
         clustering_method_columns = "ward.D2",
         cluster_row_slices = TRUE)+
-  Heatmap(scale(t(assay(mean_sce, "exprs"))))+
+  Heatmap(scale(t(assay(mean_sce, "min_max"))))+
   rowAnnotation(metacluster = anno_simple(unfactor(anno$tumor_metacluster), col = metadata(sce)$colors$tumor_metacluster, border = TRUE))+
-  ha_GMM_astir+
   ha_spatial+
   ha_meta
 
 # Create legends for annotation 
 lgd <- Legend(title = "metacluster", at = names(metadata(sce)$colors$tumor_metacluster), 
                legend_gp = gpar(fill = metadata(sce)$colors$tumor_metacluster))
- 
-lgd_1 <- Legend(title = "astir/GMM", at = names(metadata(sce)$colors$tu_astir_col), 
-               legend_gp = gpar(fill = metadata(sce)$colors$tu_astir_col))
 
 # Draw heatmap
-draw(h, annotation_legend_list = list(lgd, lgd_1))
+draw(h, annotation_legend_list = list(lgd))
 ```
 
 ### Visualization 
@@ -1993,10 +2012,6 @@ ggplot(DA_out, aes(x = cluster, y = category, col = logFC, size = -log10(FDR))) 
 ```
 
 ### tumor metacluster 
-
-```{r}
-sce$tumor_metacluster <- sce$tumor_metacluster_1
-```
 
 ```{r}
 ### Differential abundance analysis based on edgeR
