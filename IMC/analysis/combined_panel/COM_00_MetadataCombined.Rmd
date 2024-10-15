@@ -132,14 +132,15 @@ paste0("Number of patients (Genomic info): ", length(unique(genomic_select$PID))
 ## Metabolic info 
 
 ```{r}
-metabolic_info <- read_csv("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/IMC/T_panel/data_analysis/sce07_metadata.csv")
+metabolic_info <- read_csv("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/IMC/T_panel/data_analysis/PID_info_metabolomics.csv")
 
 metabolic_info$metabolic_subtype <- metabolic_info$metacluster_mz
-metabolic_info$metabolic_subtype_fine <- metabolic_info$cluster_mz
+metabolic_info$metabolic_subtype_name <- metabolic_info$metacluster_mz_named
+metabolic_info$metabolic_subtype_name <- metabolic_info$cluster_mz
 
-metabolic_select <- metabolic_info %>% select(PID, metabolic_subtype, metabolic_subtype_fine) %>% unique() %>% filter(complete.cases(.))
+metabolic_select <- metabolic_info %>% select(PID, metabolic_subtype, metabolic_subtype_name, metabolic_subtype_name) %>% unique() %>% filter(complete.cases(.))
 
-write_csv(metadata_Tcell, "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/metadata_metabolome.csv")
+write_csv(metabolic_select, "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/metadata_metabolome.csv")
 ```
 
 ```{r}
@@ -201,7 +202,7 @@ metadata_general$genomic_risk <- genomic_select$genomic_risk[match(metadata_gene
 
 # Metabolic info
 metadata_general$metabolic_subtype <- metabolic_select$metabolic_subtype[match(metadata_general$PID, metabolic_select$PID)]
-metadata_general$metabolic_subtype_fine <- metabolic_select$metabolic_subtype_fine[match(metadata_general$PID, metabolic_select$PID)]
+metadata_general$metabolic_subtype_name <- metabolic_select$metabolic_subtype_name[match(metadata_general$PID, metabolic_select$PID)]
 ```
 
 ### Add survival censoring 
@@ -212,6 +213,8 @@ surv_select <- metadata_general #%>% filter(status_OS == "1")
 surv_select$surv_censoring <- ifelse(surv_select$OS_months >= median(surv_select$OS_months, na.rm = TRUE), "long", "short")
 
 ## Surv
+library(survival)
+library(survminer)
 fit <- survfit(Surv(OS_months, status_OS) ~ surv_censoring, data = surv_select)
 print(fit)
 
@@ -252,6 +255,19 @@ ggsurvplot(fit,
 metadata_general$surv_censor_event <- surv_select$surv_censoring[match(metadata_general$PID, surv_select$PID)]
 ```
 
+### Add panel info 
+
+```{r}
+## IMC data analysis
+# Available in specific panel
+metadata_general$PID_in_tumor <- metadata_general$PID %in% metadata_tumor$PID
+metadata_general$PID_in_myeloid <- metadata_general$PID %in% metadata_myeloid$PID
+metadata_general$PID_in_Tcell <- metadata_general$PID %in% metadata_Tcell$PID
+
+# Available across all panels (n=490)
+metadata_general$PID_in_all <- metadata_general$PID_in_tumor & metadata_general$PID_in_myeloid & metadata_general$PID_in_Tcell
+```
+
 ### Save 
 
 ```{r}
@@ -275,7 +291,7 @@ metadata_tumor$PDL1_score <- metadata_general$PDL1_score[match(metadata_tumor$PI
 metadata_myeloid$genomic_subtype <- metadata_general$genomic_subtype[match(metadata_myeloid$PID, metadata_general$PID)]
 metadata_myeloid$genomic_risk <- metadata_general$genomic_risk[match(metadata_myeloid$PID, metadata_general$PID)]
 metadata_myeloid$metabolic_subtype <- metadata_general$metabolic_subtype[match(metadata_myeloid$PID, metadata_general$PID)]
-metadata_myeloid$metabolic_subtype_fine <- metadata_general$metabolic_subtype_fine[match(metadata_myeloid$PID, metadata_general$PID)]
+metadata_myeloid$metabolic_subtype_name <- metadata_general$metabolic_subtype_name[match(metadata_myeloid$PID, metadata_general$PID)]
 
 # Survival censoring
 metadata_myeloid$surv_censor_all <- metadata_general$surv_censor_all[match(metadata_myeloid$PID, metadata_general$PID)]
@@ -287,7 +303,7 @@ metadata_myeloid$surv_censor_evnt <- metadata_general$surv_censor_event[match(me
 metadata_Tcell$genomic_subtype <- metadata_general$genomic_subtype[match(metadata_Tcell$PID, metadata_general$PID)]
 metadata_Tcell$genomic_risk <- metadata_general$genomic_risk[match(metadata_Tcell$PID, metadata_general$PID)]
 metadata_Tcell$metabolic_subtype <- metadata_general$metabolic_subtype[match(metadata_Tcell$PID, metadata_general$PID)]
-metadata_Tcell$metabolic_subtype_fine <- metadata_general$metabolic_subtype_fine[match(metadata_Tcell$PID, metadata_general$PID)]
+metadata_Tcell$metabolic_subtype_name <- metadata_general$metabolic_subtype_name[match(metadata_Tcell$PID, metadata_general$PID)]
 
 # Survival censoring
 metadata_Tcell$surv_censor_all <- metadata_general$surv_censor_all[match(metadata_Tcell$PID, metadata_general$PID)]
@@ -299,7 +315,7 @@ metadata_Tcell$surv_censor_evnt <- metadata_general$surv_censor_event[match(meta
 metadata_tumor$genomic_subtype <- metadata_general$genomic_subtype[match(metadata_tumor$PID, metadata_general$PID)]
 metadata_tumor$genomic_risk <- metadata_general$genomic_risk[match(metadata_tumor$PID, metadata_general$PID)]
 metadata_tumor$metabolic_subtype <- metadata_general$metabolic_subtype[match(metadata_tumor$PID, metadata_general$PID)]
-metadata_tumor$metabolic_subtype_fine <- metadata_general$metabolic_subtype_fine[match(metadata_tumor$PID, metadata_general$PID)]
+metadata_tumor$metabolic_subtype_name <- metadata_general$metabolic_subtype_name[match(metadata_tumor$PID, metadata_general$PID)]
 
 # Survival censoring
 metadata_tumor$surv_censor_all <- metadata_general$surv_censor_all[match(metadata_tumor$PID, metadata_general$PID)]
@@ -327,25 +343,25 @@ Already performed.
 ## T cell panel 
 
 ```{r}
-img_cor <- list.files("/Volumes/G_DQBM_BB_Central$/users/marllu/T_panel/img_cor/")
-
-img_select <- paste0(metadata_Tcell$sample_id, ".tiff")
-
-img_transfer <- paste0("/Volumes/G_DQBM_BB_Central$/users/marllu/T_panel/img_cor/", img_cor[img_cor %in% img_select])
-
-file.copy(img_transfer, to = "/Volumes/G_DQBM_BB_Central$/projects/RCC_DL/data/Tcell_panel/img/")
+# img_cor <- list.files("/Volumes/G_DQBM_BB_Central$/users/marllu/T_panel/img_cor/")
+# 
+# img_select <- paste0(metadata_Tcell$sample_id, ".tiff")
+# 
+# img_transfer <- paste0("/Volumes/G_DQBM_BB_Central$/users/marllu/T_panel/img_cor/", img_cor[img_cor %in% img_select])
+# 
+# file.copy(img_transfer, to = "/Volumes/G_DQBM_BB_Central$/projects/RCC_DL/data/Tcell_panel/img/")
 ```
 
 ## Tumor panel 
 
 ```{r}
-img_cor <- list.files("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/IMC/tumor_panel/img_cor/")
-
-img_select <- paste0(metadata_tumor$sample_id, ".tiff")
-
-img_transfer <- paste0("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/IMC/tumor_panel/img_cor/", img_cor[img_cor %in% img_select])
-
-file.copy(img_transfer, to = "/Volumes/G_DQBM_BB_Central$/projects/RCC_DL/data/tumor_panel/img/")
+# img_cor <- list.files("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/IMC/tumor_panel/img_cor/")
+# 
+# img_select <- paste0(metadata_tumor$sample_id, ".tiff")
+# 
+# img_transfer <- paste0("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/IMC/tumor_panel/img_cor/", img_cor[img_cor %in% img_select])
+# 
+# file.copy(img_transfer, to = "/Volumes/G_DQBM_BB_Central$/projects/RCC_DL/data/tumor_panel/img/")
 ```
 
 
