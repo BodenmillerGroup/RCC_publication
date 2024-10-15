@@ -82,7 +82,7 @@ paste0("Number of patients (tumor panel): ", length(unique(metadata_tumor$PID)))
 
 
 ```{r}
-sce_myeloid <- readRDS("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_07.rds")
+sce_myeloid <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_07.rds")
 ```
 
 ```{r}
@@ -100,7 +100,7 @@ paste0("Number of patients (myeloid panel): ", length(unique(metadata_myeloid$PI
 ## T cell panel 
 
 ```{r}
-sce_Tcell <- readRDS("/Volumes/G_DQBM_BB_Central$/users/marllu/T_panel/data_analysis/sce_ccRCC_T_07.rds")
+sce_Tcell <- readRDS("/mnt/central_nas_full/users/marllu/T_panel/data_analysis/sce_ccRCC_T_07.rds")
 ```
 
 ```{r}
