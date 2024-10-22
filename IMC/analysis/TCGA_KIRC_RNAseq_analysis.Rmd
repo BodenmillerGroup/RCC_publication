@@ -303,6 +303,10 @@ mat <- assay(vsd)
 saveRDS(res, "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_nodesign.rds") 
 saveRDS(vsd, "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_vsd_nodesign.rds") 
 saveRDS(kirc.clean,"/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_cleaned.rds")
+
+res <- readRDS("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_nodesign.rds") 
+vsd <- readRDS("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_vsd_nodesign.rds") 
+kirc.clean <- readRDS("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_cleaned.rds")
 ```
 
 ## ICAM1 and mTOR signature 
@@ -464,13 +468,139 @@ ggsurvplot(fit,
           ggtheme = theme_classic())
 ```
 
+### Cox models
 
-
+Univariate
 
 ```{r}
+## 1. Disease-free interval 
+### Multivariate cox proportional hazard model on multiple covariates (here PID_ICAM_mTOR_group)
+PID_metagroups <- colData(vsd) %>% as.data.frame() %>% 
+  dplyr::select(PID_ICAM_mTOR_group, PID) %>% 
+  group_by(PID) %>% table() %>% as.data.frame
 
+PID_metagroups <- PID_metagroups %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq))
+
+PID_metagroups <- PID_metagroups %>% pivot_wider(id_cols = "PID",names_from = "PID_ICAM_mTOR_group",values_from = "fra") %>% column_to_rownames("PID")
+
+Cox_df <- PID_metagroups
+
+#add covariates for correction
+Cox_df$status_OS <- vsd$status_OS[match(rownames(Cox_df),vsd$PID)]
+Cox_df$OS_days <- vsd$OS_days[match(rownames(Cox_df),vsd$PID)]
+
+#Based on proportions
+covariates <- Cox_df %>% dplyr::select(-status_OS,-OS_days, -Not_ICAM_mTOR_driven) %>% colnames
+
+multi_formula <- as.formula(paste("Surv(OS_days, status_OS) ~ ", paste(covariates, collapse = " + "), "+ Not_ICAM_mTOR_driven"))
+
+multi_model <- coxph(multi_formula, data = Cox_df)
+
+multi_res <- summary(multi_model)
+
+plot_df_prop <- data.frame(group = rownames(multi_res$coefficients),
+                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],3),
+                      HR = signif(multi_res$coefficients[,"exp(coef)"],3),
+                      CI_low = signif(multi_res$conf.int[,"lower .95"],3),
+                      CI_high = signif(multi_res$conf.int[,"upper .95"],3),
+                      wald_test = signif(multi_res$waldtest["pvalue"],3))
+
+#write.csv(plot_df_prop, "/mnt/central_nas/rcc_volume/TNBC/data_analysis/01_figures/supp_tables/TCGA_Cox_Multi_PIDgroups.csv")
+
+#Plot hazard ratios
+hr_prop <- ggplot(plot_df_prop, aes(x = reorder(group,dplyr::desc(HR)), y = HR, color = p_value < 0.05))+
+geom_point(size = 4)+
+geom_errorbar(aes(ymax = CI_high, ymin = CI_low))+
+geom_hline(yintercept = 1,color = "black",linetype = "dashed")+
+#scale_color_brewer(palette = "Set1")+
+scale_color_manual(values = c("#377EB8"))+
+xlab("Covariates")+
+ylab("HR for PID groups")+
+theme_classic()+
+scale_y_log10()+
+theme(axis.text.x = element_text(angle = 90))
+
+hr_prop
 ```
 
+Multivariate 
+
+```{r}
+## 1. Disease-free interval 
+### Multivariate cox proportional hazard model on multiple covariates (here PID_ICAM_mTOR_group)
+PID_metagroups <- colData(vsd) %>% as.data.frame() %>% 
+  dplyr::select(PID_ICAM_mTOR_group, PID) %>% 
+  group_by(PID) %>% table() %>% as.data.frame
+
+PID_metagroups <- PID_metagroups %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq))
+
+PID_metagroups <- PID_metagroups %>% pivot_wider(id_cols = "PID",names_from = "PID_ICAM_mTOR_group",values_from = "fra") %>% column_to_rownames("PID")
+
+Cox_df <- PID_metagroups
+
+#add covariates for correction
+Cox_df$status_OS <- vsd$status_OS[match(rownames(Cox_df),vsd$PID)]
+Cox_df$OS_days <- vsd$OS_days[match(rownames(Cox_df),vsd$PID)]
+
+Cox_df$gender <- vsd$gender[match(rownames(Cox_df),vsd$PID)]
+Cox_df$pT_simple <- as.factor(vsd$pT_combined[match(rownames(Cox_df),vsd$PID)])
+Cox_df$ISUP_simple <- as.factor(vsd$ISUP_combined[match(rownames(Cox_df),vsd$PID)])
+
+#Based on proportions
+covariates <- Cox_df %>% dplyr::select(-status_OS,-OS_days, -gender, -pT_simple, -ISUP_simple, -mTOR_driven) %>% colnames
+
+multi_formula <- as.formula(paste("Surv(OS_days, status_OS) ~ gender + pT_simple + ISUP_simple +", paste(covariates, collapse = " + "), "+ mTOR_driven"))
+
+multi_model <- coxph(multi_formula, data = Cox_df)
+
+multi_res <- summary(multi_model)
+
+plot_df_prop <- data.frame(group = rownames(multi_res$coefficients),
+                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],3),
+                      HR = signif(multi_res$coefficients[,"exp(coef)"],3),
+                      CI_low = signif(multi_res$conf.int[,"lower .95"],3),
+                      CI_high = signif(multi_res$conf.int[,"upper .95"],3),
+                      wald_test = signif(multi_res$waldtest["pvalue"],3))
+
+#write.csv(plot_df_prop, "/mnt/central_nas/rcc_volume/TNBC/data_analysis/01_figures/supp_tables/TCGA_Cox_Multi_PIDgroups.csv")
+
+#Plot hazard ratios
+hr_prop <- ggplot(plot_df_prop, aes(x = reorder(group,dplyr::desc(HR)), y = HR, color = p_value < 0.05))+
+geom_point(size = 4)+
+geom_errorbar(aes(ymax = CI_high, ymin = CI_low))+
+#coord_cartesian(ylim=c(0,20))+
+geom_hline(yintercept = 1,color = "black",linetype = "dashed")+
+scale_color_brewer(palette = "Set1")+
+xlab("Covariates")+
+ylab("HR for PID groups")+
+theme_classic()+
+scale_y_log10()+
+theme(axis.text.x = element_text(angle = 90))
+
+hr_prop
+```
+
+
+### Barplot visualization 
+
+```{r}
+dittoBarPlot(vsd, var = "pT_combined", group.by = "PID_ICAM_mTOR_group",retain.factor.levels = FALSE)+
+  scale_fill_manual(values = metadata(vsd)$colors$pT_combined)+
+  ggtitle("")+
+
+dittoBarPlot(vsd, var = "ISUP_combined", group.by = "PID_ICAM_mTOR_group",retain.factor.levels = FALSE)+
+  scale_fill_manual(values = metadata(vsd)$colors$ISUP_combined)+
+  ggtitle("")
+
+dittoBarPlot(vsd, var = "BAP1", group.by = "PID_ICAM_mTOR_group",retain.factor.levels = FALSE)+
+  ggtitle("")
+dittoBarPlot(vsd, var = "PBRM1", group.by = "PID_ICAM_mTOR_group",retain.factor.levels = FALSE)+
+  ggtitle("")
+dittoBarPlot(vsd, var = "SETD2", group.by = "PID_ICAM_mTOR_group",retain.factor.levels = FALSE)+
+  ggtitle("")
+dittoBarPlot(vsd, var = "VHL", group.by = "PID_ICAM_mTOR_group",retain.factor.levels = FALSE)+
+  ggtitle("")
+```
 
 ### Marker expression comparison for PID groups 
 
@@ -552,7 +682,7 @@ Heatmap(scale(ht), name = "Scaled mean Z-scores")+
 ```{r}
 # Define GOI of interest
 
-GOI <- c("PROM1", "CD24", "CD44", "CXCR4","ALDH1A3", "ENG", "DNAJB8", "NT5E") #Cancer Cell study 2023 (Li et al.)
+GOI <- c("PROM1", "CD24", "CD44", "CXCR4","ALDH1A3", "ENG", "DNAJB8", "NT5E", "SOX9", "IL32") #Cancer Cell study 2023 (Li et al.)
 
 GOI_rel <- GOI[GOI %in% rownames(vsd)]
 
@@ -577,12 +707,50 @@ anno <- df %>% select(PID_ICAM_mTOR_group) %>% group_by(PID_ICAM_mTOR_group) %>%
 anno <- anno[match(anno$PID_ICAM_mTOR_group, rownames(ht)),]
 
 ## Print heatmap 
-Heatmap(ht, name = "Mean Z-scores")
+Heatmap(ht, col = viridis(100), name = "Mean Z-scores")
 
 Heatmap(scale(ht), name = "Scaled mean Z-scores")+
   rowAnnotation(n = anno_barplot(anno$n, gp = gpar(fill = "#440154FF")))+
   rowAnnotation(anno = anno_text(anno$PID_ICAM_mTOR_group))
 ```
+
+#### Metastatic markers
+
+```{r}
+# Define GOI of interest
+
+GOI <- c("SAA1", "SAA2", "APOL1", "MET") #Nature Communications study 2022 (Alchachin et al.)
+
+GOI_rel <- GOI[GOI %in% rownames(vsd)]
+
+#c("CA9", "KRT19", "GPX4", "HLA-DRA", "NFKB1", "CCND1", "HIF1A", "TP53", "MYC", "ICAM1", "PDK4", "NT5E", "SMARCA4", "PKM", "CD274", "MME", "IDH2", "EPAS1", "AURKA", "HAVCR2", "EGFR", "RPS6", "FLT1", "VHL", "RB1", "MTOR", "SLC2A1", "FH", "GLUD1", "CD44", "VIM")
+
+# Define heatmap based on normalized counts 
+## Option 1: size-factor normalized counts 
+#df <- t(counts(dds, normalized = TRUE)[GOI,]) %>% as.data.frame %>% rownames_to_column("PID")
+## Option 2: vst counts
+df <- t(assay(vsd)[GOI_rel,]) %>% as.data.frame 
+df <- df %>% rownames_to_column("PID")
+
+## Create heatmap body 
+df$PID_ICAM_mTOR_group <- vsd$PID_ICAM_mTOR_group[match(df$PID, colnames(vsd))]
+
+mat <- df %>% pivot_longer(cols = 2:(ncol(df)-1), names_to = "gene", values_to = "exprs") %>% group_by(PID_ICAM_mTOR_group, gene) %>% summarize(mean = mean(exprs))
+
+ht <- mat %>% pivot_wider(names_from = "gene", values_from = "mean") %>% column_to_rownames("PID_ICAM_mTOR_group")
+
+## Create row annotation 
+anno <- df %>% select(PID_ICAM_mTOR_group) %>% group_by(PID_ICAM_mTOR_group) %>% count()
+anno <- anno[match(anno$PID_ICAM_mTOR_group, rownames(ht)),]
+
+## Print heatmap 
+Heatmap(ht, col = viridis(100), name = "Mean Z-scores")
+
+Heatmap(scale(ht), name = "Scaled mean Z-scores")+
+  rowAnnotation(n = anno_barplot(anno$n, gp = gpar(fill = "#440154FF")))+
+  rowAnnotation(anno = anno_text(anno$PID_ICAM_mTOR_group))
+```
+
 
 ### DCCD signature - Hu et al (Nature Genetics)
 
@@ -824,9 +992,9 @@ saveRDS(res, "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation
 saveRDS(vsd, "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_vsd_nodesign.rds") 
 saveRDS(kirc.clean,"/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_cleaned.rds")
 
-res <- readRDS("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_nodesign.rds") 
-vsd <- readRDS("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_vsd_nodesign.rds") 
-kirc.clean <- readRDS("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_cleaned.rds")
+# res <- readRDS("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_nodesign.rds") 
+# vsd <- readRDS("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_vsd_nodesign.rds") 
+# kirc.clean <- readRDS("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_cleaned.rds")
 ```
 
 ## DEA - Combined
@@ -853,6 +1021,7 @@ dds <- DESeq(ddsSE_1, )
 
 # Check which specific comparison for downstream analysis
 resultsNames(dds)
+rownames(dds) <- rowData(dds)$gene_name
 
 # Extract results - also performs independent filtering
 #res <- DESeq2::results(dds, name = "PID_ICAM_mTOR_group_mTOR_driven_vs_ICAM1_driven") #alpha = 0.05, 
@@ -861,6 +1030,8 @@ res <- DESeq2::results(dds, contrast = c("PID_ICAM_mTOR_group", "mTOR_driven", "
 # Variance-stabilizing transformation
 vsd <- DESeq2::vst(dds)
 ```
+
+### Save
 
 ```{r}
 #Save objects 
@@ -915,7 +1086,267 @@ emapplot(pairwise_termsim(gse), showCategory = 15, color = "enrichmentScore", la
 # gseaplot2(gse, title = gse$Description[14], geneSetID = 1)
 ```
 
-# CONTINUE HERE
+## KEGG pathway enrichment 
+
+With `clusterProfiler`. 
+
+```{r}
+# KEGG requires Entrez IDs 
+library(org.Hs.eg.db)
+
+entrez.ids <- mapIds(org.Hs.eg.db, keys=rownames(res), column="ENTREZID", keytype="SYMBOL")
+entrez.ids <- entrez.ids[!duplicated(entrez.ids)]
+
+df <- data.frame(log_change = gene_list, 
+           SYMBOL = names(gene_list))
+
+df$ENTREZ <- entrez.ids[match(df$SYMBOL, names(entrez.ids))]
+df <- df[!is.na(df$ENTREZ),]
+
+gene_list_kegg <- df$log_change
+names(gene_list_kegg) <- df$ENTREZ
+
+# Run KEGG
+gseKEGG <- gseKEGG(geneList=gene_list_kegg, 
+        organism = "hsa",
+        keyType = "kegg", 
+        minGSSize = 100, 
+        maxGSSize = 1000, 
+        pvalueCutoff = 0.05, 
+        verbose = TRUE, 
+        pAdjustMethod = "BH")
+
+# Visualization 
+## Dotplot 
+dotplot(gseKEGG, showCategory = 10, title = "Enriched Pathways" , split=".sign") + facet_grid(.~.sign)
+
+## EMAP plot 
+emapplot(pairwise_termsim(gseKEGG), showCategory = 15,color = "enrichmentScore", layout = "circle")
+
+## GSEA plot
+gseaplot2(gseKEGG, title = gseKEGG$Description[4], geneSetID = 1)
+gseaplot2(gseKEGG, title = gseKEGG$Description[12], geneSetID = 1)
+gseaplot2(gseKEGG, title = gseKEGG$Description[20], geneSetID = 1)
+```
+
+## Immune cell deconvolution 
+
+```{r}
+library(immunedeconv)
+
+deconvolution_methods
+
+kirc.clean$PID_ICAM_mTOR_group <- vsd$PID_ICAM_mTOR_group[match(kirc.clean$PID, vsd$PID)]
+
+# TPM gene expression matrix 
+TPM_mat <- assay(kirc.clean, "tpm_unstrand")
+rownames(TPM_mat) <- rowData(kirc.clean)$gene_name
+```
+
+### MCP-counter 
+
+```{r}
+#res_MCP <- readRDS("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_MCP.rds") 
+res_MCP <- immunedeconv::deconvolute(TPM_mat, method = "mcp_counter")
+```
+
+```{r}
+#Z-scoring of MCP results by cell type
+res_MCP_1 <- res_MCP %>% dplyr::select(-cell_type)
+rownames(res_MCP_1) <- res_MCP$cell_type
+res_MCP_z <- as.data.frame(t(scale(t(res_MCP_1), center=TRUE, scale=TRUE)))
+res_MCP_z <- res_MCP_z %>% rownames_to_column("cell_type")
+
+res_MCP_plot <- res_MCP_z %>% pivot_longer(2:ncol(res_MCP_z), names_to = "PID", values_to = "score")
+
+res_MCP_plot$PID_ICAM_mTOR_group <- kirc.clean$PID_ICAM_mTOR_group[match(res_MCP_plot$PID, colnames(kirc.clean))]
+
+res_MCP_plot$TNBC <- kirc.clean$TNBC[match(res_MCP_plot$PID, colnames(kirc.clean))]
+
+ggplot(res_MCP_plot, aes(x = PID_ICAM_mTOR_group, y = score))+
+  geom_boxplot(outlier.colour = NA)+
+  geom_jitter(aes(color = PID_ICAM_mTOR_group), size = 3, position=position_jitter(w=0.1,h=0.1))+
+  facet_wrap(~cell_type, scales = "free_y")+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90))+
+  scale_color_brewer(palette = "Set1")+
+  guides(color = "none")
+  #stat_compare_means(method = "t.test")
+  
+
+# Heatmap visualization  
+ht_MCP <- res_MCP_plot %>% group_by(PID_ICAM_mTOR_group, cell_type) %>% dplyr::summarize(mean = mean(score)) %>% pivot_wider(names_from = PID_ICAM_mTOR_group, values_from = mean) %>% column_to_rownames("cell_type")
+
+Heatmap(ht_MCP, name = "mean MCP-Z-score")
+```
+
+```{r}
+saveRDS(res_MCP, "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_MCP.rds") 
+```
+
+### Quanti-Seq 
+
+```{r}
+#res_quanti <- readRDS("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_quantiseq.rds") 
+res_quanti <- immunedeconv::deconvolute(TPM_mat, method = "quantiseq")
+```
+
+```{r}
+#Z-scoring of quanti results by cell type
+res_quanti_z <- res_quanti %>% filter(cell_type != "uncharacterized cell") %>% column_to_rownames("cell_type")
+
+res_quanti_z <- as.data.frame(t(scale(t(res_quanti_z), center=TRUE, scale=TRUE)))
+res_quanti_z <- res_quanti_z %>% rownames_to_column("cell_type")
+
+res_quanti_plot <- res_quanti_z %>% pivot_longer(2:ncol(res_quanti_z), names_to = "PID", values_to = "score")
+
+res_quanti_plot$PID_ICAM_mTOR_group <- kirc.clean$PID_ICAM_mTOR_group[match(res_quanti_plot$PID, colnames(kirc.clean))]
+
+res_quanti_plot$TNBC <- kirc.clean$TNBC[match(res_quanti_plot$PID, colnames(kirc.clean))]
+
+ggplot(res_quanti_plot, aes(x = PID_ICAM_mTOR_group, y = score))+
+  geom_boxplot(outlier.colour = NA)+
+  geom_jitter(aes(color = PID_ICAM_mTOR_group), size = 3, position=position_jitter(w=0.1,h=0.1))+
+  facet_wrap(~cell_type, scales = "free_y")+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90))+
+  scale_color_brewer(palette = "Set1")+
+  guides(color = "none")
+  #scale_color_manual(values = metadata(vsd)$colors$KRT57_score)
+  #stat_compare_means(method = "t.test")
+  
+
+# Heatmap visualization  
+ht_quanti <- res_quanti_plot %>% group_by(PID_ICAM_mTOR_group, cell_type) %>% dplyr::summarize(mean = mean(score)) %>% pivot_wider(names_from = PID_ICAM_mTOR_group, values_from = mean) %>% column_to_rownames("cell_type")
+
+Heatmap(ht_quanti, name = "mean quanti-Z-score")
+```
+
+```{r}
+saveRDS(res_quanti, "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_quantiseq.rds") 
+```
+
+
+## Genomic subtypes 
+
+### Manual annotation 
+
+```{r}
+# Select mutations of interest
+driver_mat <- colData(vsd) %>% as.data.frame %>% dplyr::select(VHL, BAP1, PBRM1, SETD2, PTEN) %>% rownames_to_column("PID") %>% filter(complete.cases(.))
+
+# Create two heatmaps for mutations and IHC scores
+mut_mat <- driver_mat %>% column_to_rownames("PID") %>% dplyr::select(VHL, BAP1, PBRM1, SETD2, PTEN) 
+
+## Define colors
+mut_col <- colorRamp2(c(0, 0.5, 1), c("lightgrey","#A6CEE3","#1F78B4"))
+
+## Create heatmap
+ht_mut <- Heatmap(t(mut_mat), col = mut_col)
+ht_mut <- draw(ht_mut)
+
+# Extract column order for manual annotation of genomic subtypes
+col_order_ht <- column_order(ht_mut)
+driver_mat_ordered <- driver_mat[col_order_ht,]
+
+write_csv(driver_mat_ordered, "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_genomic_subtype_anno.csv")
+```
+
+### Visualization
+
+```{r}
+# Depends on previous code chunk 
+# Read in after manual genomic subtype annotation based on TracerX criteria
+driver_mat_anno_out <- read_csv("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_genomic_subtype_anno_new.csv")
+
+# Annotate original dataframe
+driver_mat_anno <- driver_mat
+driver_mat_anno$genomic_subtype <- driver_mat_anno_out$genomic_subtype[match(driver_mat_anno$PID, driver_mat_anno_out$PID)]
+
+# define risk subtypes ("like")
+driver_mat_anno$genomic_risk <- ifelse(driver_mat_anno$genomic_subtype %in% c("multiple_drivers", "BAP1_driven"), "high_risk", ifelse(driver_mat_anno$genomic_subtype == "PBRM1_driven", "low_risk", "medium_risk"))
+
+# match
+driver_mat_anno <- driver_mat_anno[match(rownames(mut_mat), driver_mat_anno$PID),]
+
+
+# Column Annotation
+## Define colors 
+library(wesanderson)
+subtype_col <- setNames(c("#046C9A", "#000000", "#D69C4E", "#ECCBAE", "#ABDDDE"),sort(unique(driver_mat_anno$genomic_subtype)))
+risk_col <- setNames(wes_palette("Moonrise3", 5)[1:3],c("high_risk", "medium_risk", "low_risk"))
+
+ca <- columnAnnotation(genomic_subtype = driver_mat_anno$genomic_subtype, 
+                       genomic_risk = driver_mat_anno$genomic_risk, 
+                       col = list(genomic_subtype = subtype_col, genomic_risk = risk_col))
+
+# Select Genes for display
+#mut_mat <- mut_mat %>% select(-PIK3CA)
+
+# Create heatmap 
+ht_mut_anno <- Heatmap(t(mut_mat), name = "Mutation status", 
+                       col = mut_col, 
+                       column_split = driver_mat_anno$genomic_subtype, 
+                       column_title = "Genomic subtypes", 
+                       cluster_column_slices = FALSE, show_column_names = FALSE)%v%ca
+
+ht_mut_anno <- draw(ht_mut_anno)
+```
+
+```{r}
+# Save object 
+write_csv(driver_mat_anno, "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_genomic_subtype_final.csv")
+```
+
+### Survival testing 
+
+```{r}
+driver_mat_anno$OS_months <- vsd$OS_days[match(driver_mat_anno$PID, vsd$PID)]
+driver_mat_anno$status_OS <- vsd$status_OS[match(driver_mat_anno$PID, vsd$PID)]
+```
+
+```{r}
+#Plot survival curves
+fit <- survfit(Surv(OS_months, status_OS) ~ genomic_subtype, data = driver_mat_anno)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme¨
+          palette = c("#046C9A", "#000000", "#D69C4E", "#ECCBAE", "#ABDDDE"),
+          conf.int = FALSE, 
+          log.rank.weights = "n"
+)
+
+
+fit <- survfit(Surv(OS_months, status_OS) ~ genomic_risk, data = driver_mat_anno)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = rev(wes_palette("Moonrise3", 5)[1:3]),
+          conf.int = FALSE,
+          log.rank.weights = "n"
+)
+```
+
+
+
+
+
+
+
+
+# OLD CODE BELOW - CONTINUE HERE
 
 ```{r}
 main <- ggplot(plot, aes(x=KRT7, y=KRT5, color = KRT5_7_score)) +
