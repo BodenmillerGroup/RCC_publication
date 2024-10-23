@@ -80,6 +80,9 @@ paste0("Number of patients (tumor panel): ", length(unique(metadata_tumor$PID)))
 
 ## Myeloid panel 
 
+```{r}
+sce_
+```
 
 ```{r}
 sce_myeloid <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_07.rds")

@@ -228,39 +228,6 @@ saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_
 gc()
 ```
 
-### FlowSOM
-
-```{r}
-library(CATALYST)
-
-# Run FlowSOM and ConsensusClusterPlus clustering
-set.seed(220410)
-sce <- cluster(sce, 
-               features = rownames(sce)[rowData(sce)$sub_cluster],
-               maxK = 30)
-
-# Assess cluster stability
-delta_area(sce)
-
-delta_area(sce)+
-  coord_cartesian(ylim = c(0,0.01), xlim = c(4, 25))# select k = 8
-
-saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_immune_05.rds")
-```
-
-```{r}
-# Delete old clusters from broad classification 
-clusters <- colnames(colData(sce))[str_detect(colnames(colData(sce)),"cluster_som_[:digit:]")] 
-for(i in clusters){
-  colData(sce)[,i] <- NULL
-}
-
-# Add new SOM clusters to SCE (select pretty high k for "overclustering")
-sce$cluster_som_14 <- cluster_ids(sce, "meta14")
-sce$cluster_som_16 <- cluster_ids(sce, "meta16")
-sce$cluster_som_18 <- cluster_ids(sce, "meta18")
-sce$cluster_som_20 <- cluster_ids(sce, "meta20")
-```
 
 ### Cluster stability testing and comparison
 
@@ -419,17 +386,17 @@ cur_sample <- sample(colData(sce) %>% as.data.frame %>% select(sample_id, subtyp
 
 cur_sample <- (colData(sce) %>% as.data.frame %>% select(sample_id, astir_immune_combined) %>% group_by(sample_id) %>% filter(astir_immune_combined == "B_cell") %>% count() %>% arrange(desc(n)) %>% pull(sample_id))[1:10]
 
-cur_sample <- (colData(sce) %>% as.data.frame %>% select(sample_id, cluster_1_130) %>% group_by(sample_id) %>% filter(cluster_1_130 == "11") %>% count() %>% arrange(desc(n)) %>% pull(sample_id))[1:10]
+cur_sample <- (colData(sce) %>% as.data.frame %>% select(sample_id, cluster_110) %>% group_by(sample_id) %>% filter(cluster_110 == "4") %>% count() %>% arrange(desc(n)) %>% pull(sample_id))[1:10]
 
 cur_sample <- (colData(sce) %>% as.data.frame %>% select(sample_id, immune_metacluster) %>% group_by(sample_id) %>% filter(immune_metacluster == "CD8_T_cell") %>% count() %>% arrange(desc(n)) %>% pull(sample_id))[1:10]
-
-cur_images <- images[mcols(images)$sample_id %in% cur_sample]
-cur_masks <- masks[mcols(masks)$sample_id %in% cur_sample]
-cur_sce <- sce[,sce$sample_id %in% cur_sample]
 ```
 
 
 ```{r}
+cur_images <- images[mcols(images)$sample_id %in% cur_sample]
+cur_masks <- masks[mcols(masks)$sample_id %in% cur_sample]
+cur_sce <- sce[,sce$sample_id %in% cur_sample]
+
 library(cytoviewer)
 cytoviewer(image = cur_images, mask = cur_masks, object = cur_sce, img_id = "sample_id", cell_id = "ObjectNumber")
 ```
@@ -450,7 +417,7 @@ Heatmap of clusters with ASTIR information
 ### 1. Heatmap body ###
 
 # Aggregrate across cells with the mean
-sce$cluster_selected <- sce$cluster_70
+sce$cluster_selected <- sce$cluster_110
 mean_sce <- aggregateAcrossCells(sce, ids = sce$cluster_selected,
                                  statistics = "mean",
                                  use.assay.type = "min_max",
@@ -566,17 +533,17 @@ ha_meta <- HeatmapAnnotation(ISUP = anno_barplot(ISUP, width = unit(12, "mm"),gp
 
 ### 3. Assign labels to clusters 
 
-# anno <- colData(mean_sce) %>% as.data.frame %>% select(cluster_selected, ncells)
-# 
-# anno <- anno %>% mutate(metacluster = ifelse(cluster_selected %in% c("1","2","11"),"CD8_T_cell",
-#                                      ifelse(cluster_selected %in% c("17"),"B_cell",
-#                                                    ifelse(cluster_selected %in% c("4"),"CD4_T_cell",
-#                                                           ifelse(cluster_selected %in% c("22"),"Plasma_cell",
-#                                                                         ifelse(cluster_selected %in% c("7"),"Neutrophil",
-#                                                                                ifelse(cluster_selected %in% c("3","8","16","14"),"Macrophage",
-#                                                                                       ifelse(cluster_selected %in% c("21","9","13"),"Stromal",
-#                                                                                              ifelse(cluster_selected %in% c("20","18"),"Endothelial", "Unknown/Other")
-#                                                                                       )))))))) %>% mutate(metacluster = as.factor(metacluster))
+anno <- colData(mean_sce) %>% as.data.frame %>% select(cluster_selected, ncells)
+
+anno <- anno %>% mutate(metacluster = ifelse(cluster_selected %in% c("2", "5", "9"),"CD8_T_cell",
+                                     ifelse(cluster_selected %in% c("14"),"B_cell",
+                                                   ifelse(cluster_selected %in% c("3"),"CD4_T_cell",
+                                                          ifelse(cluster_selected %in% c("17"),"Plasma_cell",
+                                                                        ifelse(cluster_selected %in% c(),"Neutrophil",
+                                                                               ifelse(cluster_selected %in% c("6","8"),"Macrophage",
+                                                                                      ifelse(cluster_selected %in% c("15", "16", "20", "21", "22", "23"),"Stromal",
+                                                                                             ifelse(cluster_selected %in% c("7", "18", "19"),"Endothelial", "Unknown/Other")
+                                                                                      )))))))) %>% mutate(metacluster = as.factor(metacluster))
 
 
 ### 4. Plot combined Heatmap
@@ -586,11 +553,12 @@ h <- Heatmap(t(assay(mean_sce, "min_max")),
         show_row_names = T, 
         row_names_side = "left",
         show_column_names =  T, 
-        #row_split = anno$metacluster,
+        row_split = anno$metacluster,
         clustering_method_rows = "ward.D2",
         clustering_method_columns = "ward.D2", 
         cluster_row_slices = FALSE)+
   Heatmap(scale(t(assay(mean_sce, "min_max"))))+
+  Heatmap(scale(t(assay(other_mean_sce, "min_max"))))+
   ha_astir_GMM+
   ha_spatial+
   ha_meta
@@ -605,33 +573,14 @@ lgd_2 <- Legend(title = "GMM", at = names(metadata(sce)$colors$GMM_col),
 draw(h, annotation_legend_list = list(lgd, lgd_2))
 
 # ## Add pre-metacluster to SCE 
-# sce$pre_immune_metacluster_graph <- anno$metacluster[match(sce$cluster_selected, anno$cluster_selected)]
-# 
-# colData(sce) %>% as.data.frame %>% group_by(pre_immune_metacluster_graph) %>% count()
+sce$pre_immune_metacluster_graph <- anno$metacluster[match(sce$cluster_selected, anno$cluster_selected)]
+
+colData(sce) %>% as.data.frame %>% group_by(pre_immune_metacluster_graph) %>% count()
 ```
 
 ### Test different immune metacluster 
 
-#### Based on SOM 
-
-```{r ana_cat}
-# Use 1. GMM and then 2. Astir for Unknown/Other category 
-sce$immune_metacluster_SOM <- colData(sce) %>% as.data.frame %>% 
-  select(pre_immune_metacluster_SOM, GMM_immune_combined) %>% 
-  mutate(immune_metacluster = ifelse(sce$pre_immune_metacluster_SOM == "Unknown/Other", ifelse(sce$GMM_immune_combined != "Unknown/Other", sce$GMM_immune_combined, "Unknown/Other"), unfactor(sce$pre_immune_metacluster_SOM))) %>% pull(immune_metacluster)
-
-sce$immune_metacluster_SOM <- factor(sce$immune_metacluster_SOM)
-
-sce$immune_metacluster_SOM_test <- colData(sce) %>% as.data.frame %>% 
-  select(immune_metacluster_SOM, astir_immune_combined) %>% mutate(immune_metacluster_SOM_test = ifelse(sce$immune_metacluster_SOM == "Unknown/Other", ifelse(sce$astir_immune_combined != "Unknown/Other", sce$astir_immune_combined, "Unknown/Other"), unfactor(sce$immune_metacluster_SOM))) %>% pull(immune_metacluster_SOM_test)
-
-sce$immune_metacluster_SOM_test <- factor(sce$immune_metacluster_SOM_test) 
-
-# Counts per category
-colData(sce) %>% as.data.frame %>% select(immune_metacluster_SOM) %>% group_by(immune_metacluster_SOM) %>% dplyr::count()
-# Counts per category
-colData(sce) %>% as.data.frame %>% select(immune_metacluster_SOM_test) %>% group_by(immune_metacluster_SOM_test) %>% dplyr::count()
-```
+Here we go with graph clustering as with myeloid and T cell panel. 
 
 #### Based on Graph
 
@@ -665,19 +614,6 @@ alluvial_wide(data = colData(sce) %>% as.data.frame %>% select(immune_metacluste
 pairwiseRand(sce$immune_metacluster_graph_test,sce$immune_metacluster_SOM_test, mode = "index")
 ```
 
-#### Combined 
-
-```{r}
-sce$immune_metacluster_combined <- ifelse(sce$immune_metacluster_graph_test == sce$immune_metacluster_SOM_test, unfactor(sce$immune_metacluster_SOM_test), 
-       ifelse(sce$immune_metacluster_graph_test == "Unknown/Other" & sce$immune_metacluster_SOM_test != "Unknown/Other", unfactor(sce$immune_metacluster_SOM_test), 
-              ifelse(sce$immune_metacluster_SOM_test == "Unknown/Other" & sce$immune_metacluster_graph_test != "Unknown/Other", unfactor(sce$immune_metacluster_graph_test), "Unknown/Other")))
-
-sce$immune_metacluster_combined <- factor(sce$immune_metacluster_combined)
-
-sce$immune_metacluster_overlap <- sce$immune_metacluster_graph_test == sce$immune_metacluster_SOM_test
-
-colData(sce) %>% as.data.frame %>% select(immune_metacluster_combined) %>% group_by(immune_metacluster_combined) %>% dplyr::count()
-```
 
 #### Scatter plots for key markers
 
