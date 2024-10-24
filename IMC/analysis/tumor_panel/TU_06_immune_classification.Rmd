@@ -81,7 +81,51 @@ sce
 
 # 1. GMM 
 
+## Re-do MPO GMM scores 
+
+"Under-classification" of neutrophils / stromal?
+
+```{r}
+## Gaussian mixture model for all markers relevant for initial celltype assignment 
+type_markers <- c("MPO", "CD31")
+
+plot_list <- list()
+
+library(doParallel)
+registerDoParallel(cores = 20)
+
+out_list <- foreach (x = type_markers) %dopar%{ #replace with for-loop to also access plot_list (slower)
+  
+  GMM_marker <- Mclust(assay(sce, "exprs")[x,], G = 2)
+  
+  GMM_df <- data.frame(class_marker = ifelse(GMM_marker$classification == 2, paste0(x, "_pos"), paste0(x, "_neg")), 
+                     marker_exprs = assay(sce, "exprs")[x,],
+                     uncertainty = GMM_marker$uncertainty)
+  
+  plot_list[[x]] <- ggplot(GMM_df, aes(x = marker_exprs))+
+  geom_density()+
+  geom_rug(aes(color = class_marker))+
+  theme_classic()+
+  scale_fill_brewer(palette = "Set1")
+  
+  return(GMM_df$class_marker)
+}
+
+for (i in seq_along(out_list)){
+  colData(sce)[,paste0(type_markers[i],"_GMM_test")] <- out_list[[i]]
+}
+```
+
 ## GMM scores per immune subtype
+
+```{r}
+sce$MPO_GMM_original <- sce$MPO_GMM
+sce$MPO_GMM <- sce$MPO_GMM_test
+
+sce$CD31_GMM_original <- sce$CD31_GMM
+sce$CD31_GMM <- sce$CD31_GMM_test
+#sce$CD31_GMM <- sce$CD31_GMM_original
+```
 
 ```{r}
 ## For non_epithelial cells 
@@ -122,6 +166,11 @@ GMM_sum
 ```
 
 
+
+
+
+
+
 # 2. Clustering
 
 ## Define markers for clustering
@@ -153,7 +202,7 @@ sce$cluster_30 <- clusters
 unique(sce$cluster_30)
 
 #Save SCEs after clustering
-saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_immune_05.rds")
+saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_immune_06.rds")
 
 gc()
 
@@ -167,7 +216,7 @@ sce$cluster_50 <- clusters
 unique(sce$cluster_50)
 
 #Save SCEs after clustering
-saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_immune_05.rds")
+saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_immune_06.rds")
 
 gc()
 
@@ -181,7 +230,7 @@ sce$cluster_70 <- clusters
 unique(sce$cluster_70)
 
 #Save SCEs after clustering
-saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_immune_05.rds")
+saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_immune_06.rds")
 
 gc()
 
@@ -195,7 +244,7 @@ sce$cluster_90 <- clusters
 unique(sce$cluster_90)
 
 #Save SCEs after clustering
-saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_immune_05.rds")
+saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_immune_06.rds")
 
 gc()
 
@@ -209,7 +258,7 @@ sce$cluster_110 <- clusters
 unique(sce$cluster_110)
 
 #Save SCEs after clustering
-saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_immune_05.rds")
+saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_immune_06.rds")
 
 gc()
 
@@ -223,7 +272,7 @@ sce$cluster_130 <- clusters
 unique(sce$cluster_130)
 
 #Save SCEs after clustering
-saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_immune_05.rds")
+saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_immune_06.rds")
 
 gc()
 ```
@@ -233,7 +282,7 @@ gc()
 
 ```{r}
 #Over different resolution parameters - Silhouette width [-1,1,max], Purity[0,1,max], Root-mean-squared difference [min]
-sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_immune_05.rds")
+sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_immune_06.rds")
 
 
 my_clusters <- colnames(colData(sce))[str_detect(colnames(colData(sce)),"cluster_[:digit:]")]
@@ -412,7 +461,7 @@ Heatmap of clusters with ASTIR information
 
 ```{r heatmap, message=FALSE, warning=FALSE}
 #Read sce after clustering, astir and GMM
-#sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_immune_05.rds")
+#sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_immune_06.rds")
 
 ### 1. Heatmap body ###
 
@@ -541,7 +590,7 @@ anno <- anno %>% mutate(metacluster = ifelse(cluster_selected %in% c("2", "5", "
                                                           ifelse(cluster_selected %in% c("17"),"Plasma_cell",
                                                                         ifelse(cluster_selected %in% c(),"Neutrophil",
                                                                                ifelse(cluster_selected %in% c("6","8"),"Macrophage",
-                                                                                      ifelse(cluster_selected %in% c("15", "16", "20", "21", "22", "23"),"Stromal",
+                                                                                      ifelse(cluster_selected %in% c("16", "20", "21", "22", "23"),"Stromal",
                                                                                              ifelse(cluster_selected %in% c("7", "18", "19"),"Endothelial", "Unknown/Other")
                                                                                       )))))))) %>% mutate(metacluster = as.factor(metacluster))
 
@@ -606,108 +655,12 @@ colData(sce) %>% as.data.frame %>% select(immune_metacluster_graph_test) %>% gro
 
 ```{r}
 library(easyalluvial)
-alluvial_wide(data = colData(sce) %>% as.data.frame %>% select(immune_metacluster_graph_test,immune_metacluster_SOM_test), 
+alluvial_wide(data = colData(sce) %>% as.data.frame %>% select(pre_immune_metacluster_graph, immune_metacluster_graph, immune_metacluster_graph_test), 
               max_variables = 4,
               fill_by = 'all_flows')+
   theme_classic(base_size = 12, base_line_size = 0.5)
 
 pairwiseRand(sce$immune_metacluster_graph_test,sce$immune_metacluster_SOM_test, mode = "index")
-```
-
-
-#### Scatter plots for key markers
-
-```{r}
-## Scatterplot for key markers
-cur_dat <- t(assay(sce,"exprs")) %>% as.matrix %>% as.data.frame 
-
-cur_dat$immune_metacluster_SOM_test <- sce$immune_metacluster_SOM_test[match(rownames(cur_dat), sce$cell_id)]
-cur_dat$immune_metacluster_graph_test <- sce$immune_metacluster_graph_test[match(rownames(cur_dat), sce$cell_id)]
-
-cur_dat$astir_immune_combined <- sce$astir_immune_combined[match(rownames(cur_dat), sce$cell_id)]
-cur_dat$GMM_immune_combined <- sce$GMM_immune_combined[match(rownames(cur_dat), sce$cell_id)]
-
-## 1. CD4 and CD8 T cells
-plot_out <- lapply(colnames(cur_dat)[44:47],
-                    function(x){
-                      cur_out <- cur_dat %>% filter(.[,x] %in% c("CD4_T_cell","CD8_T_cell"))
-                      p <- ggplot(cur_out, aes_string(x="CD8a", y="CD4", color = x))+
-                        geom_point(alpha = 0.5)+
-                        geom_density2d(color = "black")+
-                        guides(color = "none")+
-                        coord_cartesian(ylim = c(0,4), xlim = c(0,4))+
-                        theme_classic()+
-                        ggtitle(x)
-                      return(p)                    
-                    })
-
-cowplot::plot_grid(plotlist = plot_out)
-
-# Check whether categories contain cells with 0 exprs
-CD4_low <- cur_dat %>% pivot_longer(44:47, names_to = "category", values_to = "type") %>% filter(CD4 < 0.1 & type == "CD4_T_cell") %>% group_by(category) %>% count()
-CD8_low <- cur_dat %>% pivot_longer(44:47, names_to = "category", values_to = "type") %>% filter(CD8a < 0.1 & type == "CD8_T_cell") %>% group_by(category) %>% count()
-
-
-## 2. Stromal and Endothelial
-plot_out <- lapply(colnames(cur_dat)[44:47],
-                    function(x){
-                      cur_out <- cur_dat %>% filter(.[,x] %in% c("Stromal","Endothelial"))
-                      p <- ggplot(cur_out, aes_string(x="SMA", y="CD31_vWF", color = x))+
-                        geom_point(alpha = 0.5)+
-                        geom_density2d(color = "black")+
-                        guides(color = "none")+
-                        coord_cartesian(ylim = c(0,4), xlim = c(0,4))+
-                        theme_classic()+
-                        ggtitle(x)
-                      return(p)                    
-                    })
-
-cowplot::plot_grid(plotlist = plot_out)
-
-# Check whether categories contain cells with 0 exprs
-SMA_low <- cur_dat %>% pivot_longer(44:47, names_to = "category", values_to = "type") %>% filter(SMA < 0.1 & type == "Stromal") %>% group_by(category) %>% count()
-Endo_low <- cur_dat %>% pivot_longer(44:47, names_to = "category", values_to = "type") %>% filter(CD31_vWF < 0.1 & type == "Endothelial") %>% group_by(category) %>% count()
-
-## 3. B cells and Plasma cells
-plot_out <- lapply(colnames(cur_dat)[44:47],
-                    function(x){
-                      cur_out <- cur_dat %>% filter(.[,x] %in% c("B_cell","Plasma_cell"))
-                      p <- ggplot(cur_out, aes_string(x="CD20", y="CD38", color = x))+
-                        geom_point(alpha = 0.5)+
-                        geom_density2d(color = "black")+
-                        guides(color = "none")+
-                        coord_cartesian(ylim = c(0,4), xlim = c(0,4))+
-                        theme_classic()+
-                        ggtitle(x)
-                      return(p)                    
-                    })
-
-cowplot::plot_grid(plotlist = plot_out)
-
-# Check whether categories contain cells with 0 exprs
-B_low <- cur_dat %>% pivot_longer(44:47, names_to = "category", values_to = "type") %>% filter(CD20 < 0.1 & type == "B_cell") %>% group_by(category) %>% count()
-Plasma_low <- cur_dat %>% pivot_longer(44:47, names_to = "category", values_to = "type") %>% filter(CD38 < 0.1 & type == "Plasma_cell") %>% group_by(category) %>% count()
-
-
-## 4. Macrophages / Neutrophils
-plot_out <- lapply(colnames(cur_dat)[44:47],
-                    function(x){
-                      cur_out <- cur_dat %>% filter(.[,x] %in% c("Macrophage","Neutrophil"))
-                      p <- ggplot(cur_out, aes_string(x="CD68", y="MPO", color = x))+
-                        geom_point(alpha = 0.5)+
-                        geom_density2d(color = "black")+
-                        guides(color = "none")+
-                        coord_cartesian(ylim = c(0,4), xlim = c(0,4))+
-                        theme_classic()+
-                        ggtitle(x)
-                      return(p)                    
-                    })
-
-cowplot::plot_grid(plotlist = plot_out)
-
-# Check whether categories contain cells with 0 exprs
-Mac_low <- cur_dat %>% pivot_longer(44:47, names_to = "category", values_to = "type") %>% filter(CD68 < 0.1 & type == "Macrophage") %>% group_by(category) %>% count()
-Neutro_low <- cur_dat %>% pivot_longer(44:47, names_to = "category", values_to = "type") %>% filter(MPO < 0.1 & type == "Neutrophil") %>% group_by(category) %>% count()
 ```
 
 
@@ -976,13 +929,19 @@ immune_meta_col <- setNames(
 metadata(sce)$colors$immune_metacluster <- immune_meta_col
 ```
 
+#### Save 
+
+```{r}
+saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_immune_06.rds")
+```
+
 #### Visualization 
 
 #### Rich heatmap 
 
 ```{r}
 #Read sce after clustering, astir and GMM
-sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_immune_05.rds")
+#sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_immune_06.rds")
 
 ### 1. Heatmap body ###
 
@@ -1332,15 +1291,15 @@ cur_sample <- (colData(sce) %>% as.data.frame %>% select(sample_id, astir_immune
 
 cur_sample <- (colData(sce) %>% as.data.frame %>% select(sample_id, cluster_130) %>% group_by(sample_id) %>% filter(cluster_130 == "17") %>% count() %>% arrange(desc(n)) %>% pull(sample_id))[1:10]
 
-cur_sample <- (colData(sce) %>% as.data.frame %>% select(sample_id, immune_metacluster) %>% group_by(sample_id) %>% filter(immune_metacluster == "Plasma_cell") %>% count() %>% arrange(desc(n)) %>% pull(sample_id))[1:20]
-
-cur_images <- images[mcols(images)$sample_id %in% cur_sample]
-cur_masks <- masks[mcols(masks)$sample_id %in% cur_sample]
-cur_sce <- sce[,sce$sample_id %in% cur_sample]
+cur_sample <- (colData(sce) %>% as.data.frame %>% select(sample_id, immune_metacluster) %>% group_by(sample_id) %>% filter(immune_metacluster == "Neutrophil") %>% count() %>% arrange(desc(n)) %>% pull(sample_id))[1:20]
 ```
   
 
 ```{r}
+cur_images <- images[mcols(images)$sample_id %in% cur_sample]
+cur_masks <- masks[mcols(masks)$sample_id %in% cur_sample]
+cur_sce <- sce[,sce$sample_id %in% cur_sample]
+
 library(cytoviewer)
 cytoviewer(image = cur_images, mask = cur_masks, object = cur_sce, img_id = "sample_id", cell_id = "ObjectNumber")
 ```
@@ -1355,32 +1314,24 @@ sub <- colData(sce) %>% as.data.frame() %>% group_by("sample_id") %>% slice_samp
 sce_sub <- sce[,sub]
 
 #Run UMAP/TSNE
-reducedDim(sce_sub, "UMAP") <- calculateUMAP(sce_sub[rowData(sce_sub)$sub_cluster,], n_neighbors = 50, pca = 50,exprs_values = "min_max", external_neighbors=TRUE, BPPARAM = MulticoreParam())
+reducedDim(sce_sub, "UMAP") <- calculateUMAP(sce_sub[rowData(sce_sub)$sub_cluster,], n_neighbors = 50, pca = 10,exprs_values = "min_max", external_neighbors=TRUE, BPPARAM = MulticoreParam())
+
+plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "immune_metacluster_graph_test")+
+  scale_color_manual(values = metadata(sce)$colors$immune_metacluster)
+plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "GMM_immune_combined")
+plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "astir_immune_combined")
 
 plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "immune_metacluster")+
   scale_color_manual(values = metadata(sce)$colors$immune_metacluster)
 
-plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "immune_metacluster_SOM_test")+
-  scale_color_manual(values = metadata(sce)$colors$immune_metacluster)
-plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "immune_metacluster_graph_test")+
-  scale_color_manual(values = metadata(sce)$colors$immune_metacluster)
-
-plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "immune_metacluster_overlap")
-
-plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "GMM_immune_combined")
-plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "astir_immune_combined")
-
-plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "cluster_som_14")
-plotReducedDim(sce_sub, dimred = "UMAP", colour_by = "cluster_90")+scale_color_discrete()
-
-
 plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "CD68")+
 plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "SMA")+
-plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "CD31_vWF")+
+plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "CD31")+
 plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "CD8a")+
   plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "CD20")+
   plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "MPO")+
-  plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "CD38")
+  plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "CD38")+
+  plotReducedDim(sce_sub, dimred = "UMAP", by_exprs_values = "min_max",colour_by = "CD4")
 ```
 
 
@@ -1406,116 +1357,6 @@ dittoHeatmap(sce[,cur_cells],
              annot.by = c("immune_metacluster"))
 
 ```
-
-#### Differential expression analysis 
-
-```{r, fig.width=5, fig.height=7}
-library(EnhancedVolcano)
-
-# Myeloid category
-sce$myeloid_other <- ifelse(sce$immune_metacluster %in% c("Macrophage","Neutrophil"), "Myeloid","Other")
-
-# Myeloid relevant markers 
-other_immune <- c("CD16","HLADR","TMEM173","CD303","CD163","IDO1","DCLAMP","CD11b","CD73","MMP9","CCR2","CD274","Arginase","CXCL13","CD33","VISTA","CD209", "CD206")
-
-# 1. Aggregate expression per PID and category 
-mean_sce <- aggregateAcrossCells(sce,
-                                 ids = DataFrame(sce$PID, sce$myeloid_other),
-                                 statistics = "mean",
-                                 use.assay.type = "exprs")
-
-
-# 2. Calculate log2FC 
-## Aggregate per category 
-mean_sce_1 <- aggregateAcrossCells(mean_sce, 
-                     ids = mean_sce$sce.myeloid_other, 
-                     statistics = "mean",
-                     use.assay.type = "exprs")
-
-logFC <- log2(assay(mean_sce_1, "exprs")[,mean_sce_1$sce.myeloid_other == "Myeloid"]/assay(mean_sce_1, "exprs")[,mean_sce_1$sce.myeloid_other == "Other"])
-
-# 3. Calculate p-value (based on t-test)
-exprs <- as.data.frame(t(assay(mean_sce)))
-
-exprs$myeloid_other <- mean_sce$myeloid_other
-
-p_value <- c()
-for (i in 1:(length(colnames(exprs))-1)) {
-  t <- t.test(exprs[exprs$myeloid_other == "Myeloid",i], exprs[exprs$myeloid_other == "Other",i])
-  p_value[i] <- t$p.value
-}
-## Adjust p.value 
-p_value_adj <- p.adjust(p_value, method = "BH")
-names(p_value_adj) <- colnames(exprs)[1:43]
-
-# 4. Plot VolcanoPlot 
-data <- as.data.frame(cbind(logFC, p_value_adj))
-#data <- data[which(rownames(data) %in% other_immune),]
-
-keyvals <- ifelse(
-   data$logFC < -0.58, "#377EB8",
-      ifelse(data$logFC > 0.58, "#E41A1C",
-        'black'))
-  keyvals[is.na(keyvals)] <- 'black'
-  names(keyvals)[keyvals == "#E41A1C"] <- 'High Myeloid'
-  names(keyvals)[keyvals == 'black'] <- 'Not Sig'
-  names(keyvals)[keyvals == "#377EB8"] <- 'High Other'
-  
-EnhancedVolcano(data,
-    lab = rownames(data),
-    x = 'logFC',
-    y = 'p_value_adj',
-    title = 'Myeloid and non-myeloid cells',
-    boxedLabels = TRUE,
-    pCutoff = 0.0001,
-    FCcutoff = 0.58,
-    drawConnectors = TRUE,
-    pointSize = 4.0,
-    labSize = 2.0, 
-    colCustom = keyvals)
-```
-
-Check for double-positive CD8+ T cells 
-
-```{r}
-## Check for CD4/CD8a DP cells 
-sce_T <- sce[,sce$immune_metacluster %in% c("CD8_T_cell","CD4_T_cell")]
-sce_T
-
-## Scatterplot for key markers
-cur_dat <- t(assay(sce_T,"exprs")) %>% as.matrix %>% as.data.frame 
-
-cur_dat$immune_metacluster <- sce_T$immune_metacluster[match(rownames(cur_dat), sce_T$cell_id)]
-cur_dat$astir_immune_combined <- sce_T$astir_immune_combined[match(rownames(cur_dat), sce_T$cell_id)]
-cur_dat$sample_id <- sce_T$sample_id[match(rownames(cur_dat), sce_T$cell_id)]
-
-ggplot(cur_dat, aes_string(x="CD8a", y="CD4", color = "immune_metacluster"))+
-  geom_point(alpha = 0.5)+
-  geom_density2d(color = "black")+
-  coord_cartesian(ylim = c(0,4), xlim = c(0,4))+
-  theme_classic()+
-  scale_color_brewer(palette = "Set1")
-
-ggplot(cur_dat, aes_string(x="CD8a", y="CD4", color = "astir_immune_combined"))+
-  geom_point(alpha = 0.5)+
-  geom_density2d(color = "black")+
-  coord_cartesian(ylim = c(0,4), xlim = c(0,4))+
-  theme_classic()+
-  scale_color_brewer(palette = "Set1")
-
-cur_sample <- cur_dat %>% select(CD8a, CD4, sample_id) %>% filter(CD8a > 2, CD4 > 2) %>% rownames_to_column("cell_id") %>% count(sample_id) %>% arrange(desc(n)) %>% pull(sample_id)
-```
-
-```{r}
-cur_images <- images[mcols(images)$sample_id %in% cur_sample]
-cur_masks <- masks[mcols(masks)$sample_id %in% cur_sample]
-cur_sce <- sce[,sce$sample_id %in% cur_sample]
-
-library(cytoviewer)
-cytoviewer(image = cur_images, mask = cur_masks, object = cur_sce, img_id = "sample_id", cell_id = "ObjectNumber")
-```
-
-
 
 
 # 5. Differential abundance analysis 
@@ -1995,6 +1836,7 @@ anova(basic_model, multi_model)
 
 library(faraway)
 faraway::vif(model.matrix(multi_model))
+faraway::vif(model.matrix(basic_model))
 ```
 
 Conclusion: For multivariate cox models, we should use (age + gender +) pT_combined + necrose as co-variates.
@@ -2092,11 +1934,11 @@ Cox_df_mean <- as.data.frame(Cox_df_mean)
 Cox_df_mean$status_OS <- sce$status_OS[match(rownames(Cox_df_mean),sce$PID)]
 Cox_df_mean$OS_months <- sce$OS_months[match(rownames(Cox_df_mean),sce$PID)]
 
-Cox_df_mean$gender <- as.factor(sce$gender[match(rownames(Cox_df_mean),sce$PID)])
-Cox_df_mean$age <- sce$age[match(rownames(Cox_df_mean),sce$PID)]
-#Cox_df_mean$ISUP <- as.factor(sce$ISUP_combined[match(rownames(Cox_df_mean),sce$PID)])
-Cox_df_mean$pT <- as.factor(sce$pT_combined[match(rownames(Cox_df_mean),sce$PID)])
-Cox_df_mean$necrose <- as.factor(sce$necrose[match(rownames(Cox_df_mean),sce$PID)])
+# Cox_df_mean$gender <- as.factor(sce$gender[match(rownames(Cox_df_mean),sce$PID)])
+# Cox_df_mean$age <- sce$age[match(rownames(Cox_df_mean),sce$PID)]
+# #Cox_df_mean$ISUP <- as.factor(sce$ISUP_combined[match(rownames(Cox_df_mean),sce$PID)])
+# Cox_df_mean$pT <- as.factor(sce$pT_combined[match(rownames(Cox_df_mean),sce$PID)])
+# Cox_df_mean$necrose <- as.factor(sce$necrose[match(rownames(Cox_df_mean),sce$PID)])
 
 #Based on proportions
 #covariates <- Cox_df_mean %>% select(-status_OS,-OS_months, -gender, -age, -ISUP, -pT, -Unknown/Other) %>% colnames
@@ -2207,7 +2049,7 @@ hr_GMM
 
 
 ```{r}
-sce$PID_myeloid_mean <- Cox_df_mean$Macrophage[match(sce$PID, rownames(Cox_df_mean))]
+#sce$PID_myeloid_mean <- Cox_df_mean$Macrophage[match(sce$PID, rownames(Cox_df_mean))]
 sce$PID_neutrophil_mean <- Cox_df_mean$Neutrophil[match(sce$PID, rownames(Cox_df_mean))]
 sce$PID_B_mean <- Cox_df_mean$B_cell[match(sce$PID, rownames(Cox_df_mean))]
 ```
@@ -2220,22 +2062,7 @@ sce$PID_B_mean <- Cox_df_mean$B_cell[match(sce$PID, rownames(Cox_df_mean))]
 library(survival)
 library(survminer)
 
-cur_surv <- colData(sce) %>% as.data.frame() %>% select(PID, PID_myeloid_mean, PID_neutrophil_mean, PID_B_mean, OS_months, status_OS) %>% unique()
-
-#Plot survival curves
-fit <- survfit(Surv(OS_months, status_OS) ~ PID_myeloid_mean, data = cur_surv)
-print(fit)
-
-ggsurvplot(fit,
-          pval = TRUE,
-          risk.table = TRUE, # Add risk table
-          risk.table.col = "strata", # Change risk table color by groups
-          linetype = "strata", # Change line type by groups
-          surv.median.line = "hv", # Specify median survival
-          ggtheme = theme_classic(), # Change ggplot2 theme
-          palette = "Set1",
-          conf.int = TRUE
-)
+cur_surv <- colData(sce) %>% as.data.frame() %>% select(PID, PID_neutrophil_mean, PID_B_mean, OS_months, status_OS) %>% unique()
 
 #Plot survival curves
 fit <- survfit(Surv(OS_months, status_OS) ~ PID_neutrophil_mean, data = cur_surv)
@@ -2269,7 +2096,7 @@ ggsurvplot(fit,
 )
 ```
 
-### Export fraction of tumor and TME cells per PID 
+## Export fraction of tumor and TME cells per PID 
 
 ```{r}
 immune_cell_PID <- colData(sce) %>% as.data.frame() %>% select(PID,immune_metacluster) %>% group_by(PID) %>% table() %>% as.data.frame
@@ -2282,17 +2109,11 @@ write_csv(immune_cell_PID, file = "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_pan
 
 ```{r save_objects, message = FALSE, warning=FALSE}
 #Save sce
-saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_immune_05.rds")
+saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_immune_06.rds")
         
 # Save sce_sub
-saveRDS(sce_sub, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_sub_ccRCC_TU_immune_05.rds")
+saveRDS(sce_sub, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_sub_ccRCC_TU_immune_06.rds")
 ```
-
-
-
-### CONTINUE HERE 
-
-
 
 # Save plots as pdf
 

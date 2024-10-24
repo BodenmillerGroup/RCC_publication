@@ -70,7 +70,9 @@ library(batchelor)
 
 ```{r}
 fraction_my <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/04_broad/analysis_cat_PID.csv")
-  
+
+fraction_tu <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/04_broad/analysis_cat_PID.csv")
+
 fraction_T <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/04_broad/analysis_cat_PID_ccRCC_Tcell.csv")
 ```
 
@@ -79,8 +81,12 @@ fraction_T <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_a
 fraction_combined <- fraction_my %>% filter(analysis_cat == "tumor") %>% mutate(fra_my = fra) %>% select(PID, fra_my)
 
 fraction_combined_1 <- fraction_T %>% filter(analysis_cat == "tumor") %>% mutate(fra_T = fra) %>% select(PID, fra_T)
+fraction_combined_2 <- fraction_tu %>% filter(analysis_cat == "tumor") %>% mutate(fra_tu = fra) %>% select(PID, fra_tu)
 
 fraction_combined$fra_T <- fraction_combined_1$fra_T[match(fraction_combined$PID, fraction_combined_1$PID)]
+fraction_combined$fra_tu <- fraction_combined_2$fra_tu[match(fraction_combined$PID, fraction_combined_2$PID)]
+
+fraction_combined <- fraction_combined %>% filter(complete.cases(.))
 ```
 
 ```{r}
@@ -89,9 +95,27 @@ sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/
 ```
 
 ```{r}
-cor_test <- cor.test(fraction_combined$fra_my, fraction_combined$fra_T, method = "pearson")
+# Cluster channel marker correlation (all markers - does not show distribution which is usually recommended)
+cor_sce <- fraction_combined %>% select(fra_my, fra_T, fra_tu) %>% as.data.frame
 
-ggplot(fraction_combined, aes(x = fra_my, y = fra_T))+  
+corrplot(cor(cor_sce,method = "pearson"), method="color", col=brewer.pal(n=8, name="RdBu"),  
+         type="upper", order="hclust",hclust.method = "ward.D2", 
+         addCoef.col = "black", addCoefasPercent = F,# Add coefficient of correlation
+         tl.col="black", tl.srt=40, #Text label color and rotation
+         # Combine with significance
+         #p.mat = , sig.level = 0.01, insig = "blank", 
+         # hide correlation coefficient on the principal diagonal
+         diag=F
+)
+```
+
+```{r}
+cor_test <- cor.test(x = fraction_combined$fra_my, fraction_combined$fra_tu, method = "pearson")
+
+cor_test <- cor.mtest(fraction_combined %>% select(fra_my, fra_T, fra_tu), method = "pearson")
+cor_test
+
+ggplot(fraction_combined, aes(x = fra_my, y = fra_tu))+  
   geom_point(aes(color = PID),size = 3)+
   geom_smooth(method='lm', formula= y~x, se = TRUE, color = "black")+
   scale_color_manual(values=metadata(sce)$colors$PID)+
@@ -108,36 +132,45 @@ ggplot(fraction_combined, aes(x = fra_my, y = fra_T))+
 fraction_my <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/05_sub/immune_metacluster_PID.csv")
   
 fraction_T <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/05_sub/immune_metacluster_PID_Tcell.csv")
+
+fraction_tu <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/06_immune/immune_metacluster_PID.csv")
 ```
 
 #### Per celltype 
 
 ```{r}
-fraction_combined <- fraction_my %>% filter(immune_metacluster == "CD8_T_cell") %>% mutate(fra_my = fra) %>% select(PID, fra_my)
+# Select celltype
+COI = "Endothelial"
 
-fraction_combined_1 <- fraction_T %>% filter(immune_metacluster == "CD8_T_cell") %>% mutate(fra_T = fra) %>% select(PID, fra_T)
+fraction_combined <- fraction_my %>% filter(immune_metacluster == COI) %>% mutate(fra_my = fra) %>% select(PID, fra_my)
+
+fraction_combined_1 <- fraction_T %>% filter(immune_metacluster == COI) %>% mutate(fra_T = fra) %>% select(PID, fra_T)
+fraction_combined_2 <- fraction_tu %>% filter(immune_metacluster == COI) %>% mutate(fra_tu = fra) %>% select(PID, fra_tu)
 
 fraction_combined$fra_T <- fraction_combined_1$fra_T[match(fraction_combined$PID, fraction_combined_1$PID)]
+fraction_combined$fra_tu <- fraction_combined_2$fra_tu[match(fraction_combined$PID, fraction_combined_2$PID)]
+
+fraction_combined <- fraction_combined %>% filter(complete.cases(.))
 ```
 
 ```{r}
-# Read in sce for PID colors
-sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_immune_05.rds")
+# Cluster channel marker correlation (all markers - does not show distribution which is usually recommended)
+cor_sce <- fraction_combined %>% select(fra_my, fra_T, fra_tu) %>% as.data.frame
+
+corrplot(cor(cor_sce,method = "pearson"), method="color", col=brewer.pal(n=8, name="RdBu"),  
+         type="upper", order="hclust",hclust.method = "ward.D2", 
+         addCoef.col = "black", addCoefasPercent = F,# Add coefficient of correlation
+         tl.col="black", tl.srt=40, #Text label color and rotation
+         # Combine with significance
+         #p.mat = , sig.level = 0.01, insig = "blank", 
+         # hide correlation coefficient on the principal diagonal
+         diag=F
+)
+
+cor_out <- cor(cor_sce,method = "pearson")
+cor_out[cor_out !=1] %>% as.numeric() %>% unique()
 ```
 
-```{r}
-cor_test <- cor.test(fraction_combined$fra_my, fraction_combined$fra_T, method = "pearson")
-
-ggplot(fraction_combined, aes(x = fra_my, y = fra_T))+  
-  geom_point(aes(color = PID),size = 3)+
-  geom_smooth(method='lm', formula= y~x, se = TRUE, color = "black")+
-  scale_color_manual(values=metadata(sce)$colors$PID)+
-  guides(color = "none")+
-  ylab("CD8 cell fraction (T cell)")+
-  xlab("CD8 cell fraction (Myeloid)")+
-  theme_classic()+
-  ggtitle(paste("Pearson = ",round(cor_test$estimate, digits = 2)))
-```
 
 ```{r}
 out_cor <- foreach(i = unique(fraction_my$immune_metacluster), .combine = "rbind")%do%{
@@ -145,28 +178,45 @@ out_cor <- foreach(i = unique(fraction_my$immune_metacluster), .combine = "rbind
 fraction_combined <- fraction_my %>% filter(immune_metacluster == i) %>% mutate(fra_my = fra) %>% select(PID, fra_my)
 
 fraction_combined_1 <- fraction_T %>% filter(immune_metacluster == i) %>% mutate(fra_T = fra) %>% select(PID, fra_T)
+fraction_combined_2 <- fraction_tu %>% filter(immune_metacluster == i) %>% mutate(fra_tu = fra) %>% select(PID, fra_tu)
 
 fraction_combined$fra_T <- fraction_combined_1$fra_T[match(fraction_combined$PID, fraction_combined_1$PID)]
+fraction_combined$fra_tu <- fraction_combined_2$fra_tu[match(fraction_combined$PID, fraction_combined_2$PID)]
 
-cor_test <- cor.test(fraction_combined$fra_my, fraction_combined$fra_T, method = "pearson")
+fraction_combined <- fraction_combined %>% filter(complete.cases(.))
 
-data.frame(immune_metacluster = i, cor = cor_test$estimate, category = "celltype")
+cor_sce <- fraction_combined %>% select(fra_my, fra_T, fra_tu) %>% as.data.frame
+
+cor_out <- cor(cor_sce,method = "pearson")
+cor_out[cor_out !=1] %>% as.numeric() %>% unique()
+
+data.frame(immune_metacluster = i, 
+           cor = cor_out[cor_out !=1] %>% as.numeric() %>% unique(), 
+           category = "celltype")
 }
 ```
+
+
+```{r}
+# Read in sce for PID colors
+sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_immune_05.rds")
+```
+
 
 ```{r}
 # Optional: kick out Unknown/Other
 out_cor <- out_cor %>% filter(immune_metacluster != "Unknown_Other")
 
-ggplot(out_cor, aes(x = category, y = cor))+  
+ggplot(out_cor, aes(x = reorder(immune_metacluster,-cor), y = cor))+  
+  #geom_boxplot(outlier.colour = NA)+
   geom_jitter(aes(color = immune_metacluster), size = 5)+
-  geom_boxplot(outlier.colour = NA, alpha = 0.5)+#position=position_jitter(w=0.3,h=0.3))+
+  geom_boxplot(outlier.colour = NA)+
   scale_color_manual(values=metadata(sce)$colors$immune_metacluster)+
   ylab("PCC")+
   xlab("Per celltype")+
   theme_classic()+
-  #coord_cartesian(ylim = c(0.5,1.1))+
-  ggtitle(paste("Mean PCC = ",round(mean(out_cor$cor), digits = 2)))
+  coord_cartesian(ylim = c(0,1))+
+  ggtitle(paste("Mean PCC = ",round(mean(out_cor$cor), digits = 3)))
 ```
 
 
@@ -177,28 +227,46 @@ fraction_combined <- fraction_my %>% mutate(fra_my = fra) %>% select(PID, immune
 
 fraction_combined_1 <- fraction_T %>% mutate(fra_T = fra) %>% select(PID, immune_metacluster, fra_T) %>% mutate(PID_mc = paste0(PID, "_",immune_metacluster))
 
+fraction_combined_2 <- fraction_tu %>% mutate(fra_tu = fra) %>% select(PID, immune_metacluster, fra_tu) %>% mutate(PID_mc = paste0(PID, "_",immune_metacluster))
+
 fraction_combined$fra_T <- fraction_combined_1$fra_T[match(fraction_combined$PID_mc, fraction_combined_1$PID_mc)]
+fraction_combined$fra_tu <- fraction_combined_2$fra_tu[match(fraction_combined$PID_mc, fraction_combined_2$PID_mc)]
+
+fraction_combined <- fraction_combined %>% filter(complete.cases(.))
 ```
 
 
 ```{r}
 PID_cor <- foreach(i = unique(fraction_combined$PID), .combine = "rbind")%do%{
 PID_out <- fraction_combined %>% filter(PID %in% i) %>% select(- PID, - immune_metacluster, - PID_mc)
-cor <- cor.test(PID_out$fra_my, PID_out$fra_T, method = "pearson")
-data.frame(PID = i, cor = cor$estimate, category = "PID")
+
+
+cor_sce <- fraction_combined %>% select(fra_my, fra_T, fra_tu) %>% as.data.frame
+
+cor_out <- cor(PID_out,method = "pearson")
+
+data.frame(PID = i, 
+           cor = cor_out[cor_out !=1] %>% as.numeric() %>% unique(), 
+           category = "PID")
+
+
+# cor <- cor.test(PID_out$fra_my, PID_out$fra_T, method = "pearson")
+# data.frame(PID = i, cor = cor$estimate, category = "PID")
 }
+
+PID_cor_out <- PID_cor %>% group_by(PID) %>% summarize(cor_mean = mean(cor), category = "PID")
 ```
 
 ```{r}
-ggplot(PID_cor, aes(x = category, y = cor))+  
-  geom_jitter(aes(color = PID), size = 3)+
+ggplot(PID_cor_out, aes(x = category, y = cor_mean))+  
+  geom_jitter(aes(color = PID), size = 3)+#position=position_jitter(w=0.1,h=0.1)
   geom_boxplot(outlier.colour = NA)+
   scale_color_manual(values=metadata(sce)$colors$PID)+
   guides(color = "none")+
   ylab("PCC")+
   xlab("Per PID")+
   theme_classic()+
-  #coord_cartesian(ylim = c(0.5,1.1))+
+  coord_cartesian(ylim = c(0,1))+
   ggtitle(paste("Mean PCC = ",round(mean(PID_cor$cor), digits = 2)))
 ```
 
