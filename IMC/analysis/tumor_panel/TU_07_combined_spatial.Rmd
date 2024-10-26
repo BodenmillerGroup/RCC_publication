@@ -136,11 +136,11 @@ rowData(sce)$TU_cluster_channel <- rowData(sce_TU)$tumor_cluster
 ```{r}
 ## Create combined cell type category 
 sce$celltype_combined <- ifelse(!is.na(sce$tumor_metacluster_names), sce$tumor_metacluster_names,
-       ifelse(!is.na(sce$immune_metacluster), unfactor(sce$immune_metacluster), sce$analysis_cat))
+       ifelse(!is.na(sce$immune_metacluster), unfactor(sce$immune_metacluster), NA))
 unique(sce$celltype_combined)
 
 sce$celltype_combined_fine <- ifelse(!is.na(sce$tu_cluster_selected), sce$tu_cluster_selected,
-       ifelse(!is.na(sce$immune_metacluster), unfactor(sce$immune_metacluster), sce$analysis_cat))
+       ifelse(!is.na(sce$immune_metacluster), unfactor(sce$immune_metacluster), NA))
 unique(sce$celltype_combined_fine)
 ```
 
@@ -158,7 +158,7 @@ saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_
 ### Celltype 
 
 ```{r}
-#sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_07.rds")
+sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_07.rds")
 
 ### General phenotype interaction difference
 
@@ -170,7 +170,7 @@ library(lisaClust)
 set.seed(22)
 
 # Generate segmentedCells object 
-cur_sce <- sce
+cur_sce <- sce[,!is.na(sce$celltype_combined)]
 
 cells <- data.frame(row.names = colnames(cur_sce))
 cells$x <- cur_sce$Pos_X
@@ -197,6 +197,7 @@ cells_sc
 spicyTest <- spicy(cells_sc, 
       condition = "ISUP", 
       subject = "PID", 
+      includeZeroCells = TRUE,
       BPPARAM = BiocParallel::MulticoreParam())
 
 saveRDS(spicyTest, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/07_comb/spicyTest_ISUP.rds")
@@ -213,7 +214,7 @@ out_ISUP
 ## Tumor stage
 
 # Generate segmentedCells object 
-cur_sce <- sce
+cur_sce <- sce[,!is.na(sce$celltype_combined)]
 
 cells <- data.frame(row.names = colnames(cur_sce))
 cells$x <- cur_sce$Pos_X
@@ -240,6 +241,7 @@ cells_sc
 spicyTest_1 <- spicy(cells_sc, 
       condition = "pT", 
       subject = "PID", 
+      includeZeroCells = TRUE,
       BPPARAM = BiocParallel::MulticoreParam())
 
 saveRDS(spicyTest_1, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/07_comb/spicyTest_pT.rds")
@@ -256,7 +258,7 @@ out_pT
 ## Necrose
 
 # Generate segmentedCells object 
-cur_sce <- sce
+cur_sce <- sce[,!is.na(sce$celltype_combined)]
 
 cells <- data.frame(row.names = colnames(cur_sce))
 cells$x <- cur_sce$Pos_X
@@ -283,6 +285,7 @@ cells_sc
 spicyTest_2 <- spicy(cells_sc, 
       condition = "necrose", 
       subject = "PID", 
+      includeZeroCells = TRUE,
       BPPARAM = BiocParallel::MulticoreParam())
 
 saveRDS(spicyTest_2, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/07_comb/spicyTest_necrose.rds")
@@ -299,7 +302,7 @@ out_necrose
 ## PDL1_score
 
 # Generate segmentedCells object 
-cur_sce <- sce
+cur_sce <- sce[,!is.na(sce$celltype_combined)]
 
 cells <- data.frame(row.names = colnames(cur_sce))
 cells$x <- cur_sce$Pos_X
@@ -326,6 +329,7 @@ cells_sc
 spicyTest_3 <- spicy(cells_sc, 
       condition = "PDL1_score", 
       subject = "PID", 
+      includeZeroCells = TRUE,
       BPPARAM = BiocParallel::MulticoreParam())
 
 saveRDS(spicyTest_3, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/07_comb/spicyTest_PDL1.rds")
@@ -338,8 +342,6 @@ out_PDL1_score <- signifPlot(spicyTest_3,
 
 out_PDL1_score
 ```
-
-# CONTINUE HERE 
 
 #### Heatmap visualization 
 
@@ -355,7 +357,7 @@ spicyTest_3 <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_ana
 ```{r}
 ### 1. ISUP 
 results <- spicyTest
-marksToPlot <- unique(sce$celltype_combined)
+marksToPlot <- unique(cur_sce$celltype_combined)
 breaks <- NULL
 comparisonGroup <- NULL
 colours = c("#4575B4", "white", "#D73027")
@@ -424,7 +426,7 @@ h_ISUP
 ### 2. pT stage
 
 results <- spicyTest_1
-marksToPlot <- unique(sce$celltype_combined)
+marksToPlot <- unique(cur_sce$celltype_combined)
 breaks <- NULL
 comparisonGroup <- NULL
 colours = c("#4575B4", "white", "#D73027")
@@ -492,7 +494,7 @@ h_pT
 ### 3. Necrose
 
 results <- spicyTest_2
-marksToPlot <- unique(sce$celltype_combined)
+marksToPlot <- unique(cur_sce$celltype_combined)
 breaks <- NULL
 comparisonGroup <- NULL
 colours = c("#4575B4", "white", "#D73027")
@@ -561,7 +563,7 @@ h_necrose
 ### 4. PDL1_score
 
 results <- spicyTest_3
-marksToPlot <- unique(sce$celltype_combined)
+marksToPlot <- unique(cur_sce$celltype_combined)
 breaks <- NULL
 comparisonGroup <- NULL
 colours = c("#4575B4", "white", "#D73027")
@@ -910,97 +912,14 @@ ggplot(pair_decrease, aes(x = reorder(sorted_type,-n), y = n))+
   xlab("celltype_pair")
 ```
 
-#### Heterotypic interactions 
-
-##### Tumor 
-
-```{r}
-### Neighborhood expansion graph
-sce <- aggregateNeighbors(sce, colPairName = "neighborhood", aggregate_by = "metadata", count_by = "celltype_combined", proportions = FALSE, name = "count_neighbors")
-```
-
-```{r}
-## Step 1: Retrieve neighbors table
-cur_dat <- sce$count_neighbors %>% as.data.frame
-rownames(cur_dat) <- sce$cell_id
-cur_dat$PID <- sce$PID
-cur_dat$celltype_combined <- sce$celltype_combined
-
-cur_dat$ISUP_combined <- sce$ISUP_combined
-cur_dat$pT_combined <- sce$pT_combined
-cur_dat$necrose <- sce$necrose
-cur_dat$PDL1_score <- sce$PDL1_score
-
-cur_dat$ISUP_combined[cur_dat$ISUP_combined == "3/4"] <- "1"
-cur_dat$ISUP_combined[cur_dat$ISUP_combined == "1/2"] <- "0"
-cur_dat$pT_combined[cur_dat$pT_combined == "3/4"] <- "1"
-cur_dat$pT_combined[cur_dat$pT_combined == "1/2"] <- "0"
-
-# Count heterotypic interactions of immune cells / stromal TO tumor cells
-out_1 <- cur_dat %>% filter(celltype_combined != "tumor") %>% rownames_to_column("cell_id") %>% pivot_longer(2:14, names_to = "celltype_int", values_to = "int_n") %>% filter(celltype_int == "tumor") %>% group_by(cell_id) %>% mutate(n_sum = sum(int_n)) %>% ungroup() 
-
-# Mean number of heterotypic interactions per PID 
-out_2 <- out_1 %>% pivot_longer(4:7, names_to = "cat", values_to = "cat_value") %>% select(cell_id, PID, cat, cat_value, n_sum) %>% unique() %>% group_by(PID) %>% mutate(n_av = mean(n_sum)) %>% select(PID, cat,cat_value, n_av) %>% unique() %>% filter(!is.na(cat_value))
-
-p_values_df <- compare_means(formula = n_av ~ cat_value, data = out_2, group.by = "cat", p.adjust.method = "BH")
-
-ggplot(out_2, aes(x = cat_value, y = n_av, fill = cat))+
-  facet_wrap(~cat)+
-  geom_boxplot()+
-  scale_fill_brewer(palette = "Greys")+
-  theme_classic()+
-  ylab("Mean number of heterotypic tumor interactions per PID")+
-  geom_text(data = p_values_df, aes(x = 1.5, y = Inf, label = paste0("p = ", p.adj)),
-            vjust = 1.5, hjust = 0.5, size = 4)
-  
-```
-
-##### M2-like 
-
-```{r}
-## Step 1: Retrieve neighbors table
-cur_dat <- sce$count_neighbors %>% as.data.frame
-rownames(cur_dat) <- sce$cell_id
-cur_dat$PID <- sce$PID
-cur_dat$celltype_combined <- sce$celltype_combined
-
-cur_dat$ISUP_combined <- sce$ISUP_combined
-cur_dat$pT_combined <- sce$pT_combined
-cur_dat$necrose <- sce$necrose
-cur_dat$PDL1_score <- sce$PDL1_score
-
-cur_dat$ISUP_combined[cur_dat$ISUP_combined == "3/4"] <- "1"
-cur_dat$ISUP_combined[cur_dat$ISUP_combined == "1/2"] <- "0"
-cur_dat$pT_combined[cur_dat$pT_combined == "3/4"] <- "1"
-cur_dat$pT_combined[cur_dat$pT_combined == "1/2"] <- "0"
-
-# Count heterotypic interactions of all cells TO M2_like macrophages
-out_1 <- cur_dat %>% filter(celltype_combined != "TU_M2_like") %>% rownames_to_column("cell_id") %>% pivot_longer(2:14, names_to = "celltype_int", values_to = "int_n") %>% filter(celltype_int == "TU_M2_like") %>% group_by(cell_id) %>% mutate(n_sum = sum(int_n)) %>% ungroup() 
-
-# Mean number of heterotypic interactions per PID 
-out_2 <- out_1 %>% pivot_longer(4:7, names_to = "cat", values_to = "cat_value") %>% select(cell_id, PID, cat, cat_value, n_sum) %>% unique() %>% group_by(PID) %>% mutate(n_av = mean(n_sum)) %>% select(PID, cat,cat_value, n_av) %>% unique() %>% filter(!is.na(cat_value))
-
-p_values_df <- compare_means(formula = n_av ~ cat_value, data = out_2, group.by = "cat", p.adjust.method = "BH")
-
-ggplot(out_2, aes(x = cat_value, y = n_av, fill = cat))+
-  facet_wrap(~cat)+
-  geom_boxplot()+
-  scale_fill_brewer(palette = "Greys")+
-  theme_classic()+
-  ylab("Mean number of heterotypic M2 interactions per PID")+
-  geom_text(data = p_values_df, aes(x = 1.5, y = Inf, label = paste0("p = ", p.adj)),
-            vjust = 1.5, hjust = 0.5, size = 4)
-  
-```
-
-
+# CONTINUE HERE 
 
 #### Survival testing 
 
 ```{r}
 # Extract spicy output from L function (mean difference across specific radi)
 ## This is the same for all different comparisons 
-spicy_out <- spicyTest$dataframe
+spicy_out <- spicyTest$df #not sure check in other panels? 
 
 ## Different options for selecting interactions
 # A: Only select interactions FROM tumor cells
