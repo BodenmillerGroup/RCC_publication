@@ -164,7 +164,7 @@ saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_
 TO DO: Re-run all with includeZeroCells = FALSE
 
 ```{r}
-#sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_07.rds")
+sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_07.rds")
 
 ### General phenotype interaction difference
 
@@ -358,8 +358,8 @@ out_PDL1_score
 
 ```{r}
 sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_07.rds")
-spicyTest <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/07_comb/spicyTest_ISUP.rds")
-#spicyTest <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/07_comb/spicyTest_ISUP_includeOFF.rds")
+#spicyTest <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/07_comb/spicyTest_ISUP.rds")
+spicyTest <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/07_comb/spicyTest_ISUP_includeOFF.rds")
 spicyTest_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/07_comb/spicyTest_pT.rds")
 spicyTest_2 <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/07_comb/spicyTest_necrose.rds")
 spicyTest_3 <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/07_comb/spicyTest_PDL1.rds")
@@ -926,6 +926,8 @@ ggplot(pair_decrease, aes(x = reorder(sorted_type,-n), y = n))+
 
 #### Survival testing 
 
+##### Mean 
+
 ```{r}
 # Extract spicy output from L function (mean difference across specific radi)
 ## This is the same for all different comparisons 
@@ -936,11 +938,15 @@ rownames(spicy_out) <- spicyTest$imageIDs
 
 ## Different options for selecting interactions
 # A: Only select interactions FROM tumor cells
-selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "TU") & str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "TU")
+#selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "TU") & str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "TU")
 # B: Only select interactions FROM tumor cells TO non-tumor cells
-#selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "TU") &
- # (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "TU")) & 
-  #(!str_detect(colnames(spicy_out), "Unknown"))
+# selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "TU") &
+#   (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "TU")) & 
+#   (!str_detect(colnames(spicy_out), "Unknown"))
+
+selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "TU") |
+  (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "TU")) & 
+  (!str_detect(colnames(spicy_out), "Unknown"))
 
 spicy_out_selected <- spicy_out[,selected_pairs]
 
@@ -960,6 +966,10 @@ spicy_out_loop <- spicy_out_loop %>% mutate(cat = ifelse(mean_coef < mean(spicy_
 out_df[,i] <- spicy_out_loop$cat[match(out_df$PID, spicy_out_loop$PID)]
 }
 
+# Filter columns with only one entry of high/low
+include <- c("PID",out_df %>% pivot_longer(2:ncol(out_df), names_to = "int", values_to = "value") %>% group_by(int) %>% count(value) %>% count(value) %>% mutate(sum = sum(n)) %>% filter(sum > 2) %>% pull("int") %>% unique())
+out_df <- out_df[, colnames(out_df) %in% include]
+
 ## Add survival information 
 out_df$status_OS <- sce$status_OS[match(out_df$PID, sce$PID)]
 out_df$OS_months <- sce$OS_months[match(out_df$PID, sce$PID)]
@@ -970,7 +980,7 @@ out_df$OS_months <- sce$OS_months[match(out_df$PID, sce$PID)]
 ```{r}
 # Color for heatmaps 
 colours <- c("#4575B4", "white", "#D73027")
-breaks <- c(-2, 2, 0.5)
+breaks <- c(-1, 1, 0.5)
 breaks <- seq(from = breaks[1], to = breaks[2], by = breaks[3])
 pal <- grDevices::colorRampPalette(colours)(length(breaks))
 col <- colorRamp2(breaks, pal)
@@ -992,7 +1002,7 @@ cur_surv_out <- foreach(x = colnames(out_df %>% select(-PID, -status_OS, -OS_mon
 cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
 
 # Create and plot heatmap 
-cur_surv_plot <- cur_surv_out %>% mutate(sign = p_adj < 0.05, direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% mutate(p_out = ifelse(sign == TRUE & direction == "high",  -log10(p_adj), ifelse(sign == TRUE & direction == "low", log10(p_adj), 0))) %>% arrange(desc(p_out)) %>% filter(p_adj < 0.05)
+cur_surv_plot <- cur_surv_out %>% mutate(sign = p < 0.01, direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% mutate(p_out = ifelse(sign == TRUE & direction == "high",  -log10(p_adj), ifelse(sign == TRUE & direction == "low", log10(p_adj), 0))) %>% arrange(desc(p_out)) %>% filter(p < 0.01)
 
 cur_surv_plot <- cur_surv_plot %>% pivot_wider(id_cols = type, names_from = group, values_from = p_out) %>% column_to_rownames("type")
 
@@ -1003,40 +1013,37 @@ Heatmap(cur_surv_plot, border = FALSE, cluster_columns = FALSE, rect_gp = gpar(c
 ```{r}
 cur_surv <- colData(sce) %>% as.data.frame() %>% select(PID, OS_months, status_OS) %>% unique() 
 
-cur_surv$ICAM1Macro <- out_df$TU_ICAM1hi_CD73__Macrophage[match(cur_surv$PID, out_df$PID)]
-cur_surv$mTOR_Stromal <- out_df$TU_mTORhi_PKM2hi__Stromal[match(cur_surv$PID, out_df$PID)]
-
 cur_surv$HLADR_CD8 <- out_df$TU_HLADRhi__CD8_T_cell[match(cur_surv$PID, out_df$PID)]
 
-#Plot specific survival curves
-fit <- survfit(Surv(OS_months, status_OS) ~ ICAM1Macro, data = cur_surv)
-print(fit)
-
-ggsurvplot(fit,
-          pval = TRUE,
-          risk.table = TRUE, # Add risk table
-          risk.table.col = "strata", # Change risk table color by groups
-          linetype = "strata", # Change line type by groups
-          surv.median.line = "hv", # Specify median survival
-          ggtheme = theme_classic(), # Change ggplot2 theme
-          palette = "Set1",
-          conf.int = TRUE
-)
-
-#Plot specific survival curves
-fit <- survfit(Surv(OS_months, status_OS) ~ mTOR_Stromal, data = cur_surv)
-print(fit)
-
-ggsurvplot(fit,
-          pval = TRUE,
-          risk.table = TRUE, # Add risk table
-          risk.table.col = "strata", # Change risk table color by groups
-          linetype = "strata", # Change line type by groups
-          surv.median.line = "hv", # Specify median survival
-          ggtheme = theme_classic(), # Change ggplot2 theme
-          palette = "Set1",
-          conf.int = TRUE
-)
+# #Plot specific survival curves
+# fit <- survfit(Surv(OS_months, status_OS) ~ ICAM1Macro, data = cur_surv)
+# print(fit)
+# 
+# ggsurvplot(fit,
+#           pval = TRUE,
+#           risk.table = TRUE, # Add risk table
+#           risk.table.col = "strata", # Change risk table color by groups
+#           linetype = "strata", # Change line type by groups
+#           surv.median.line = "hv", # Specify median survival
+#           ggtheme = theme_classic(), # Change ggplot2 theme
+#           palette = "Set1",
+#           conf.int = TRUE
+# )
+# 
+# #Plot specific survival curves
+# fit <- survfit(Surv(OS_months, status_OS) ~ mTOR_Stromal, data = cur_surv)
+# print(fit)
+# 
+# ggsurvplot(fit,
+#           pval = TRUE,
+#           risk.table = TRUE, # Add risk table
+#           risk.table.col = "strata", # Change risk table color by groups
+#           linetype = "strata", # Change line type by groups
+#           surv.median.line = "hv", # Specify median survival
+#           ggtheme = theme_classic(), # Change ggplot2 theme
+#           palette = "Set1",
+#           conf.int = TRUE
+# )
 #Plot specific survival curves
 fit <- survfit(Surv(OS_months, status_OS) ~ HLADR_CD8, data = cur_surv)
 print(fit)
@@ -1052,101 +1059,123 @@ ggsurvplot(fit,
           conf.int = TRUE
 )
 ```
-
-##### Cox Model 
-
-###### Categorical
+##### Median 
 
 ```{r}
-## Add covariates 
-out_df
+# Extract spicy output from L function (median difference across specific radi)
+## This is the same for all different comparisons 
+spicy_out <- spicyTest$df 
 
-for(i in c(2:41)){
-  out_df[,i] <- as.factor(out_df[,i])
-  out_df[,i] <- relevel(out_df[,i], ref = "low")
-}
+spicy_out <- as.data.frame(do.call("cbind",spicyTest$pairwiseAssoc))
+rownames(spicy_out) <- spicyTest$imageIDs
 
-#Based on proportions
-covariates <- out_df %>% select(-status_OS,-OS_months,-PID) %>% colnames
+## Different options for selecting interactions
+# A: Only select interactions FROM tumor cells
+#selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "TU") & str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "TU")
+# B: Only select interactions FROM tumor cells TO non-tumor cells
+#selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "TU") &
+#  (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "TU")) & 
+#  (!str_detect(colnames(spicy_out), "Unknown"))
 
-multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + ")))
+selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "TU") |
+  (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "TU")) & 
+  (!str_detect(colnames(spicy_out), "Unknown"))
 
-multi_model <- coxph(multi_formula, data = out_df)
+spicy_out_selected <- spicy_out[,selected_pairs]
 
-multi_res <- summary(multi_model)
+spicy_out_selected <- spicy_out_selected %>% rownames_to_column("sample_id")
+spicy_out_selected$PID <- sce$PID[match(spicy_out_selected$sample_id, sce$sample_id)]
 
-plot_df_mean <- data.frame(group = rownames(multi_res$coefficients),
-                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],2),
-                      HR = signif(multi_res$coefficients[,"exp(coef)"],2),
-                      CI_low = signif(multi_res$conf.int[,"lower .95"],2),
-                      CI_high = signif(multi_res$conf.int[,"upper .95"],2),
-                      wald_test = signif(multi_res$waldtest["pvalue"],2))
+spicy_out_selected_long <- spicy_out_selected %>% pivot_longer(cols = 2:(ncol(spicy_out_selected)-1), names_to = "pair", values_to = "coef")
 
-
-#Plot hazard ratios
-hr_mean <- ggplot(plot_df_mean, aes(x = reorder(group,desc(HR)), y = HR, color = p_value < 0.05))+
-geom_point(size = 4)+
-geom_errorbar(aes(ymax = CI_high, ymin = CI_low))+
-#coord_cartesian(ylim=c(0,20))+
-geom_hline(yintercept = 1,color = "black",linetype = "dashed")+
-scale_color_brewer(palette = "Set1")+
-xlab("Immune metaclusters")+
-ylab("HR for con_mean")+
-theme_classic()+
-theme(axis.text.x = element_text(angle = 90))
-
-hr_mean
-```
-
-###### Continious 
-
-```{r}
-## 2. Based on continious interaction scores
-
-# Get mean interaction score per PID
-out_df_1 <- data.frame(PID = unique(sce$PID))
+# Perform median interaction score split for all categories 
+out_df <- data.frame(PID = unique(sce$PID))
 
 for(i in unique(spicy_out_selected_long$pair)){
-spicy_out_loop <- spicy_out_selected_long %>% filter(pair == i) %>% group_by(PID) %>% mutate(mean_coef = mean(coef,na.rm = TRUE)) %>% select(PID, mean_coef) %>% unique()
+spicy_out_loop <- spicy_out_selected_long %>% filter(pair == i) %>% group_by(PID) %>% mutate(median_coef = median(coef,na.rm = TRUE)) %>% select(PID, median_coef) %>% unique()
 
-out_df_1[,i] <- spicy_out_loop$mean_coef[match(out_df_1$PID, spicy_out_loop$PID)]
+spicy_out_loop <- spicy_out_loop %>% mutate(cat = ifelse(median_coef < median(spicy_out_loop$median_coef, na.rm = TRUE), "low", "high"))
+
+out_df[,i] <- spicy_out_loop$cat[match(out_df$PID, spicy_out_loop$PID)]
 }
 
+# Filter columns with only one entry of high/low
+include <- c("PID",out_df %>% pivot_longer(2:ncol(out_df), names_to = "int", values_to = "value") %>% group_by(int) %>% count(value) %>% count(value) %>% mutate(sum = sum(n)) %>% filter(sum > 2) %>% pull("int") %>% unique())
+out_df <- out_df[, colnames(out_df) %in% include]
+
 ## Add survival information 
-out_df_1$status_OS <- sce$status_OS[match(out_df_1$PID, sce$PID)]
-out_df_1$OS_months <- sce$OS_months[match(out_df_1$PID, sce$PID)]
-
-#Based on proportions
-covariates <- out_df_1 %>% select(-status_OS,-OS_months,-PID) %>% colnames
-
-multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + ")))
-
-multi_model <- coxph(multi_formula, data = out_df_1)
-
-multi_res <- summary(multi_model)
-
-plot_df_mean <- data.frame(group = rownames(multi_res$coefficients),
-                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],3),
-                      HR = signif(multi_res$coefficients[,"exp(coef)"],3),
-                      CI_low = signif(multi_res$conf.int[,"lower .95"],3),
-                      CI_high = signif(multi_res$conf.int[,"upper .95"],3),
-                      wald_test = signif(multi_res$waldtest["pvalue"],3))
-
-
-#Plot hazard ratios
-hr_mean <- ggplot(plot_df_mean, aes(x = reorder(group,desc(HR)), y = HR, color = p_value < 0.05))+
-geom_point(size = 4)+
-geom_errorbar(aes(ymax = CI_high, ymin = CI_low))+
-#coord_cartesian(ylim=c(0,20))+
-geom_hline(yintercept = 1,color = "black",linetype = "dashed")+
-scale_color_brewer(palette = "Set1")+
-xlab("Immune metaclusters")+
-ylab("HR for con_mean")+
-theme_classic()+
-theme(axis.text.x = element_text(angle = 90))
-
-hr_mean
+out_df$status_OS <- sce$status_OS[match(out_df$PID, sce$PID)]
+out_df$OS_months <- sce$OS_months[match(out_df$PID, sce$PID)]
 ```
+
+
+
+```{r}
+# Color for heatmaps 
+colours <- c("#4575B4", "white", "#D73027")
+breaks <- c(-1, 1, 0.5)
+breaks <- seq(from = breaks[1], to = breaks[2], by = breaks[3])
+pal <- grDevices::colorRampPalette(colours)(length(breaks))
+col <- colorRamp2(breaks, pal)
+```
+
+```{r}
+#Assess survival impact across categories
+library(survival)
+library(survminer)
+
+# Extract p-values from log-rank / direction of trend
+cur_surv_out <- foreach(x = colnames(out_df %>% select(-PID, -status_OS, -OS_months)), .combine = "rbind")%do%{
+  formula <- as.formula(paste("Surv(OS_months, status_OS) ~ ", x))
+  fit <- survdiff(formula, data = out_df)
+  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[1], exp_2 = fit$exp[1])
+}
+
+# Adjust p-values using BH 
+cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
+
+# Create and plot heatmap 
+cur_surv_plot <- cur_surv_out %>% mutate(sign = p < 0.01, direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% mutate(p_out = ifelse(sign == TRUE & direction == "high",  -log10(p_adj), ifelse(sign == TRUE & direction == "low", log10(p_adj), 0))) %>% arrange(desc(p_out)) %>% filter(p < 0.01)
+
+cur_surv_plot <- cur_surv_plot %>% pivot_wider(id_cols = type, names_from = group, values_from = p_out) %>% column_to_rownames("type")
+
+Heatmap(cur_surv_plot, col = col, border = FALSE, cluster_columns = FALSE, rect_gp = gpar(col = "black", lwd = 1), name = "log10(p)")
+Heatmap(cur_surv_plot, border = FALSE, cluster_columns = FALSE, rect_gp = gpar(col = "black", lwd = 1), name = "log10(p)")
+```
+
+
+
+
+
+
+
+### Extract survival relevant features
+
+```{r}
+colnames(cur_surv_plot)
+
+
+D_surv_relevant_df <- PID_tumor_district_names %>% filter(tumor_district_names %in% D_surv_relevant) %>% select(PID, tumor_district_names, density) %>% pivot_wider(id_cols = PID, names_from = tumor_district_names, values_from = density) %>% as.data.frame
+
+colnames(D_surv_relevant_df) <- paste0("D_",colnames(D_surv_relevant_df))
+colnames(D_surv_relevant_df)[1] <- "PID"
+```
+
+Add to tumor key features 
+
+```{r}
+# Read
+tumor_key_features <- as.data.frame(read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/tumor_key_features.csv"))
+```
+
+```{r}
+for (entry in colnames(D_surv_relevant_df)[2:ncol(D_surv_relevant_df)]) {
+  tumor_key_features[,entry] <- D_surv_relevant_df[,entry][match(tumor_key_features[,"PID"],D_surv_relevant_df[,"PID"])]
+}
+```
+
+
+
 
 ```{r}
 ## Add relevant categories to sce 
@@ -1154,6 +1183,7 @@ sce$M2_CD8_int_score <- out_df_1$TU_M2_like__CD8_T_cell[match(sce$PID, out_df_1$
 sce$M2_CD8_int_cat <- out_df$TU_M2_like__CD8_T_cell[match(sce$PID, out_df$PID)]
 ```
 
+#### Lasso 
 
 ```{r}
 ## 1. Based on categorical interaction scores
