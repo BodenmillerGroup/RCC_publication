@@ -1,0 +1,227 @@
+---
+title: "TU_08_SurvivalPred_Test"
+author: "Lasse Meyer"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Software requirements
+
+```{r lib, message=FALSE,warning=FALSE}
+#Data containers
+library(SpatialExperiment)
+library(SingleCellExperiment)
+
+#Data processing
+library(scuttle)
+library(scater)
+library(scran)
+library(imcRtools)
+
+#Data visualization
+library(cytomapper)
+library(dittoSeq)
+library(pheatmap)
+library(cowplot)
+library(ComplexHeatmap)
+library(circlize)
+
+#Utilities
+library(tidyverse)
+library(openxlsx)
+library(stringr)
+library(patchwork)
+library(parallel)
+library(BiocParallel)
+library(BiocNeighbors)
+library(BiocSingular)
+library(tiff)
+library(ggrepel)
+library(EBImage)
+library(viridis)
+library(mclust)
+library(Rphenograph)
+library(igraph)
+library(RColorBrewer)
+library(foreach)
+library(clValid)
+library(bluster)
+library(psych)
+library(corrplot)
+library(psych)
+
+#Batch correction
+library(batchelor)
+```
+
+
+# Test BlockForest 
+
+```{r}
+library(blockForest)
+```
+
+```{r}
+# NOTE: There is no association between covariates and response for the
+# simulated data below.
+# Moreover, the input parameters of blockfor() are highly unrealistic
+# (e.g., nsets = 10 is specified much too small).
+# The purpose of the shown examples is merely to illustrate the
+# application of predict.blockForest().
+
+
+# Generate data:
+################
+
+set.seed(1234)
+
+# Covariate matrix:
+X <- cbind(matrix(nrow=40, ncol=5, data=rnorm(40*5)), 
+           matrix(nrow=40, ncol=30, data=rnorm(40*30, mean=1, sd=2)),
+           matrix(nrow=40, ncol=100, data=rnorm(40*100, mean=2, sd=3)))
+colnames(X) <- paste("X", 1:ncol(X), sep="")
+
+# Block variable (list):
+block <- rep(1:3, times=c(5, 30, 100))
+block <- lapply(1:3, function(x) which(block==x))
+
+# Binary outcome:
+ybin <- factor(sample(c(0,1), size=40, replace=TRUE), levels=c(0,1))
+
+# Survival outcome:
+ysurv <- cbind(rnorm(40), sample(c(0,1), size=40, replace=TRUE))
+
+
+
+# Divide in training and test data:
+
+Xtrain <- X[1:30,]
+Xtest <- X[31:40,]
+
+ybintrain <- ybin[1:30]
+ybintest <- ybin[31:40]
+
+ysurvtrain <- ysurv[1:30,]
+ysurvtest <- ysurv[31:40,]
+
+
+
+
+# Binary outcome: Apply algorithm to training data and obtain predictions
+# for the test data:
+#########################################################################
+
+# Apply a variant to the training data:
+
+blockforobj <- blockfor(Xtrain, ybintrain, num.trees = 100, replace = TRUE, block=block,
+                        nsets = 10, num.trees.pre = 50, splitrule="extratrees", 
+                        block.method = "BlockForest")
+
+
+# Obtain prediction for the test data:
+
+(predres <- predict(blockforobj$forest, data = Xtest, block.method = "SplitWeights"))
+predres$predictions
+
+
+
+# Survival outcome: Apply algorithm to training data and obtain predictions
+# for the test data:
+###########################################################################
+
+# Apply a variant to the training data:
+
+blockforobj <- blockfor(Xtrain, ysurvtrain, num.trees = 100, replace = TRUE, blocks=block,
+                        nsets = 100, num.trees.pre = 50, splitrule="extratrees", 
+                        block.method = "BlockForest")
+
+blockforobj$paramvalues
+blockforobj$biased_oob_error_donotuse
+
+blockforobj$forest$forest
+  
+  
+# Obtain prediction for the test data:
+
+(predres <- predict(blockforobj$forest, data = Xtest))
+
+predres <- predict(blockforobj$forest, data = Xtest, type = "se", se.method = "jack")
+
+predres$chf
+predres$survival
+predres$unique.death.times
+
+rowSums(predres$chf)
+```
+
+
+```{r}
+library(survival)
+concordance_index <- concordance(Surv(ysurvtest[,1], ysurvtest[,2]) ~ rowSums(predres$chf))
+concordance_index
+
+coef(concordance_index)
+concordance_index$concordance
+concordance_index$var
+```
+
+```{r}
+library(survival)
+# Create risk groups based on cumulative hazard estimates
+risk_group <- ifelse(rowSums(predres$chf) > median(rowSums(predres$chf)), "high", "low")
+
+surv_test <- survdiff(Surv(ysurvtest[,1], ysurvtest[,2]) ~ risk_group)
+surv_test
+```
+
+
+```{r}
+library(survival)
+# Evaluate Brier score at each unique death time
+times <- predres$unique.death.times
+
+# Assuming the `pec` package is available
+library(pec)
+library(survival)
+# Prepare data
+y_surv <- Surv(ysurvtest[,1], ysurvtest[,2])
+
+
+ibs_score <- pec::ibs(pec(object = list(blockForest = blockforobj), 
+                          formula = y_surv ~ ., 
+                          data = data.frame(Xtest), 
+                          times = times))
+
+```
+
+```{r}
+# Train the blockForest model with importance measure
+blockforobj <- blockfor(Xtrain, ysurvtrain, num.trees = 100, replace = TRUE, blocks = block,
+                        nsets = 100, num.trees.pre = 50, splitrule = "extratrees", 
+                        block.method = "BlockForest", importance = "permutation")
+
+variable_importance <- blockforobj$forest$variable.importance
+
+# Calculate block-wise aggregated importance
+aggregate_importance <- sapply(block, function(indices) {
+  mean(variable_importance[indices])  # Mean importance of variables in each block
+})
+names(aggregate_importance) <- paste("Block", 1:length(block), sep="_")
+aggregate_importance
+
+
+
+
+blockforobj$forest$
+# Retrieve block-wise importance
+block_importance <- blockforobj$forest$importance.mode. 
+
+
+block.importance
+block_importance
+```
+

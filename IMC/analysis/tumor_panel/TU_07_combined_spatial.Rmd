@@ -980,7 +980,7 @@ out_df$OS_months <- sce$OS_months[match(out_df$PID, sce$PID)]
 ```{r}
 # Color for heatmaps 
 colours <- c("#4575B4", "white", "#D73027")
-breaks <- c(-1, 1, 0.5)
+breaks <- c(-2, 2, 0.5)
 breaks <- seq(from = breaks[1], to = breaks[2], by = breaks[3])
 pal <- grDevices::colorRampPalette(colours)(length(breaks))
 col <- colorRamp2(breaks, pal)
@@ -1002,18 +1002,19 @@ cur_surv_out <- foreach(x = colnames(out_df %>% select(-PID, -status_OS, -OS_mon
 cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
 
 # Create and plot heatmap 
-cur_surv_plot <- cur_surv_out %>% mutate(sign = p < 0.01, direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% mutate(p_out = ifelse(sign == TRUE & direction == "high",  -log10(p_adj), ifelse(sign == TRUE & direction == "low", log10(p_adj), 0))) %>% arrange(desc(p_out)) %>% filter(p < 0.01)
+cur_surv_plot <- cur_surv_out %>% mutate(sign = p_adj < 0.1, direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% mutate(p_out = ifelse(sign == TRUE & direction == "high",  -log10(p_adj), ifelse(sign == TRUE & direction == "low", log10(p_adj), 0))) %>% arrange(desc(p_out)) %>% filter(p_adj < 0.1)
 
-cur_surv_plot <- cur_surv_plot %>% pivot_wider(id_cols = type, names_from = group, values_from = p_out) %>% column_to_rownames("type")
+cur_surv_mean <- cur_surv_plot %>% pivot_wider(id_cols = type, names_from = group, values_from = p_out) %>% column_to_rownames("type")
 
-Heatmap(cur_surv_plot, col = col, border = FALSE, cluster_columns = FALSE, rect_gp = gpar(col = "black", lwd = 1), name = "log10(p)")
-Heatmap(cur_surv_plot, border = FALSE, cluster_columns = FALSE, rect_gp = gpar(col = "black", lwd = 1), name = "log10(p)")
+Heatmap(cur_surv_mean, col = col, border = FALSE, cluster_columns = FALSE, rect_gp = gpar(col = "black", lwd = 1), name = "log10(p)")
+Heatmap(cur_surv_mean, border = FALSE, cluster_columns = FALSE, rect_gp = gpar(col = "black", lwd = 1), name = "log10(p)")
 ```
 
 ```{r}
 cur_surv <- colData(sce) %>% as.data.frame() %>% select(PID, OS_months, status_OS) %>% unique() 
 
 cur_surv$HLADR_CD8 <- out_df$TU_HLADRhi__CD8_T_cell[match(cur_surv$PID, out_df$PID)]
+cur_surv$ICAM_2 <- out_df$TU_ICAM1hi_CD73__TU_ICAM1hi_CD73[match(cur_surv$PID, out_df$PID)]
 
 # #Plot specific survival curves
 # fit <- survfit(Surv(OS_months, status_OS) ~ ICAM1Macro, data = cur_surv)
@@ -1030,20 +1031,20 @@ cur_surv$HLADR_CD8 <- out_df$TU_HLADRhi__CD8_T_cell[match(cur_surv$PID, out_df$P
 #           conf.int = TRUE
 # )
 # 
-# #Plot specific survival curves
-# fit <- survfit(Surv(OS_months, status_OS) ~ mTOR_Stromal, data = cur_surv)
-# print(fit)
-# 
-# ggsurvplot(fit,
-#           pval = TRUE,
-#           risk.table = TRUE, # Add risk table
-#           risk.table.col = "strata", # Change risk table color by groups
-#           linetype = "strata", # Change line type by groups
-#           surv.median.line = "hv", # Specify median survival
-#           ggtheme = theme_classic(), # Change ggplot2 theme
-#           palette = "Set1",
-#           conf.int = TRUE
-# )
+#Plot specific survival curves
+fit <- survfit(Surv(OS_months, status_OS) ~ ICAM_2, data = cur_surv)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = "Set1",
+          conf.int = TRUE
+)
 #Plot specific survival curves
 fit <- survfit(Surv(OS_months, status_OS) ~ HLADR_CD8, data = cur_surv)
 print(fit)
@@ -1092,7 +1093,7 @@ spicy_out_selected_long <- spicy_out_selected %>% pivot_longer(cols = 2:(ncol(sp
 out_df <- data.frame(PID = unique(sce$PID))
 
 for(i in unique(spicy_out_selected_long$pair)){
-spicy_out_loop <- spicy_out_selected_long %>% filter(pair == i) %>% group_by(PID) %>% mutate(median_coef = median(coef,na.rm = TRUE)) %>% select(PID, median_coef) %>% unique()
+spicy_out_loop <- spicy_out_selected_long %>% filter(pair == i) %>% group_by(PID) %>% mutate(median_coef = mean(coef,na.rm = TRUE)) %>% select(PID, median_coef) %>% unique()
 
 spicy_out_loop <- spicy_out_loop %>% mutate(cat = ifelse(median_coef < median(spicy_out_loop$median_coef, na.rm = TRUE), "low", "high"))
 
@@ -1135,12 +1136,12 @@ cur_surv_out <- foreach(x = colnames(out_df %>% select(-PID, -status_OS, -OS_mon
 cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
 
 # Create and plot heatmap 
-cur_surv_plot <- cur_surv_out %>% mutate(sign = p < 0.01, direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% mutate(p_out = ifelse(sign == TRUE & direction == "high",  -log10(p_adj), ifelse(sign == TRUE & direction == "low", log10(p_adj), 0))) %>% arrange(desc(p_out)) %>% filter(p < 0.01)
+cur_surv_plot <- cur_surv_out %>% mutate(sign = p_adj < 0.1, direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% mutate(p_out = ifelse(sign == TRUE & direction == "high",  -log10(p_adj), ifelse(sign == TRUE & direction == "low", log10(p_adj), 0))) %>% arrange(desc(p_out)) %>% filter(p_adj < 0.1)
 
-cur_surv_plot <- cur_surv_plot %>% pivot_wider(id_cols = type, names_from = group, values_from = p_out) %>% column_to_rownames("type")
+cur_surv_median <- cur_surv_plot %>% pivot_wider(id_cols = type, names_from = group, values_from = p_out) %>% column_to_rownames("type")
 
-Heatmap(cur_surv_plot, col = col, border = FALSE, cluster_columns = FALSE, rect_gp = gpar(col = "black", lwd = 1), name = "log10(p)")
-Heatmap(cur_surv_plot, border = FALSE, cluster_columns = FALSE, rect_gp = gpar(col = "black", lwd = 1), name = "log10(p)")
+Heatmap(cur_surv_median, col = col, border = FALSE, cluster_columns = FALSE, rect_gp = gpar(col = "black", lwd = 1), name = "log10(p)")
+Heatmap(cur_surv_median, border = FALSE, cluster_columns = FALSE, rect_gp = gpar(col = "black", lwd = 1), name = "log10(p)")
 ```
 
 
@@ -1149,16 +1150,17 @@ Heatmap(cur_surv_plot, border = FALSE, cluster_columns = FALSE, rect_gp = gpar(c
 
 
 
-### Extract survival relevant features
+#### Extract survival relevant features
 
 ```{r}
-colnames(cur_surv_plot)
+INT_surv_relevant <- c(colnames(cur_surv_mean), colnames(cur_surv_median))
 
+INT_surv_relevant_df <- spicy_out_selected_long %>% group_by(PID, pair) %>% mutate(mean_coef = mean(coef,na.rm = TRUE)) %>% select(PID,pair, mean_coef) %>% unique() %>% filter(pair %in% INT_surv_relevant) %>% pivot_wider(id_cols = "PID",names_from = "pair", values_from = "mean_coef") %>% as.data.frame
 
-D_surv_relevant_df <- PID_tumor_district_names %>% filter(tumor_district_names %in% D_surv_relevant) %>% select(PID, tumor_district_names, density) %>% pivot_wider(id_cols = PID, names_from = tumor_district_names, values_from = density) %>% as.data.frame
+colnames(INT_surv_relevant_df) <- paste0("INT_",colnames(INT_surv_relevant_df))
+colnames(INT_surv_relevant_df)[1] <- "PID"
 
-colnames(D_surv_relevant_df) <- paste0("D_",colnames(D_surv_relevant_df))
-colnames(D_surv_relevant_df)[1] <- "PID"
+INT_surv_relevant_df
 ```
 
 Add to tumor key features 
@@ -1169,93 +1171,35 @@ tumor_key_features <- as.data.frame(read_csv("/mnt/central_nas/rcc_volume/RCC/IM
 ```
 
 ```{r}
-for (entry in colnames(D_surv_relevant_df)[2:ncol(D_surv_relevant_df)]) {
-  tumor_key_features[,entry] <- D_surv_relevant_df[,entry][match(tumor_key_features[,"PID"],D_surv_relevant_df[,"PID"])]
+for (entry in colnames(INT_surv_relevant_df)[2:ncol(INT_surv_relevant_df)]) {
+  tumor_key_features[,entry] <- INT_surv_relevant_df[,entry][match(tumor_key_features[,"PID"],INT_surv_relevant_df[,"PID"])]
 }
 ```
 
-
-
-
 ```{r}
-## Add relevant categories to sce 
-sce$M2_CD8_int_score <- out_df_1$TU_M2_like__CD8_T_cell[match(sce$PID, out_df_1$PID)]
-sce$M2_CD8_int_cat <- out_df$TU_M2_like__CD8_T_cell[match(sce$PID, out_df$PID)]
+# Save
+write_csv(tumor_key_features, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/tumor_key_features.csv")
 ```
 
-#### Lasso 
-
-```{r}
-## 1. Based on categorical interaction scores
-out_df <- na.omit(out_df)
-out_df <- out_df %>% filter(OS_months != 0)
-
-out_df
-
-x <- data.matrix(out_df %>% select(-PID, -status_OS, -OS_months)) #predictor variables
-
-y <- Surv(time = out_df$OS_months, event = out_df$status_OS) #response variables
-
-## Run lasso 
-require(doMC)
-library(glmnet)
-library(broom) 
-
-registerDoMC(cores = 20)
-set.seed(220195)
-cv.fit <- cv.glmnet(x, y, family="cox", type.measure = "C", nfolds = 100, parallel = TRUE)
-plot(cv.fit)
-
-fit <- glmnet(x, y, family="cox")
-
-coef(fit, s = cv.fit$lambda.min)
-
-# ## Run lasso 10 times (with 10 fold validation each run) and average error curves to be more robust
-# MSEs <- NULL
-# for (i in 1:10){
-#                   cv <- cv.glmnet(x, y, family="cox", type.measure = "C", nfolds = 100, parallel = TRUE)
-#                   MSEs <- cbind(MSEs, cv$cvm)
-#                   }
-# 
-# rownames(MSEs) <- cv$lambda
-# lambda.min <- as.numeric(names(which.min(rowMeans(MSEs))))
-# 
-# fit <- glmnet(x, y, family="cox")
-# coef(fit, s = lambda.min)
-
-#Extract output
-lasso_df <- broom::tidy(fit) %>% filter(lambda == cv.fit$lambda.min)
-
-ggplot(lasso_df, aes(x = reorder(term,-exp(estimate)), y = exp(estimate))) +
-  geom_point(size = 4, aes(color = exp(estimate)>1)) +
-  geom_hline(yintercept = 1,color = "black")+
-  scale_y_continuous(trans="log")+
-  ylab("Lasso HR")+
-  xlab("Predictors")+
-  theme_classic()+
-  theme(axis.text.x = element_text(angle = 90))+
-  ggtitle("DFS")+
-  scale_color_brewer(palette = "Set1")
-```
 
 #### Visualization 
 
 ```{r}
 ## TU_M2_like__CD8_T_cell
 # High interaction scores
-cur_sample <- (spicy_out_selected_long %>% filter(pair == "TU_M2_like__CD8_T_cell") %>% group_by(imageID) %>% arrange(desc(coef)) %>% pull(imageID))[1:12]
-cur_sample <- cur_sample[9]
+cur_sample <- (spicy_out_selected_long %>% filter(pair == "TU_HLADRhi__CD8_T_cell") %>% group_by(sample_id) %>% arrange(desc(coef)) %>% pull(sample_id))[1:12]
+#cur_sample <- cur_sample[9]
 
-plotSpatial(sce[,sce$sample_id %in% cur_sample & sce$celltype_combined %in% c("CD8_T_cell","TU_M2_like")], 
+plotSpatial(sce[,sce$sample_id %in% cur_sample & sce$celltype_combined %in% c("CD8_T_cell","TU_HLADRhi")], 
             node_color_by = "celltype_combined", 
             img_id = "sample_id", 
             node_size_fix = 2)
 
 # Low interaction scores
-cur_sample <- (spicy_out_selected_long %>% filter(pair == "TU_M2_like__CD8_T_cell") %>% group_by(imageID) %>% arrange(coef) %>% pull(imageID))[1:12]
-cur_sample <- cur_sample[8]
+cur_sample <- (spicy_out_selected_long %>% filter(pair == "TU_HLADRhi__CD8_T_cell") %>% group_by(sample_id) %>% arrange(coef) %>% pull(sample_id))[1:12]
+#cur_sample <- cur_sample[8]
 
-plotSpatial(sce[,sce$sample_id %in% cur_sample & sce$celltype_combined %in% c("CD8_T_cell","TU_M2_like")], 
+plotSpatial(sce[,sce$sample_id %in% cur_sample & sce$celltype_combined %in% c("CD8_T_cell","TU_HLADRhi")], 
             node_color_by = "celltype_combined", 
             img_id = "sample_id", 
             node_size_fix = 2)
