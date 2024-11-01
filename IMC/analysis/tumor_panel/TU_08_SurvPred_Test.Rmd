@@ -59,11 +59,13 @@ library(batchelor)
 ```
 
 
-# Test BlockForest 
+# BlockForest survival prediction
 
 ```{r}
 library(blockForest)
 ```
+
+# 1. Example data 
 
 ```{r}
 # NOTE: There is no association between covariates and response for the
@@ -92,53 +94,82 @@ block <- lapply(1:3, function(x) which(block==x))
 # Survival outcome:
 ysurv <- cbind(abs(rnorm(40)), sample(c(0,1), size=40, replace=TRUE))
 
-
 # Divide in training and test data:
 Xtrain <- X[1:30,]
 Xtest <- X[31:40,]
 
 ysurvtrain <- ysurv[1:30,]
 ysurvtest <- ysurv[31:40,]
-
-
-# Survival outcome: Apply algorithm to training data and obtain predictions
-# for the test data:
-###########################################################################
-
-# Apply a variant to the training data:
-
-blockforobj <- blockfor(Xtrain, ysurvtrain, num.trees = 100, replace = TRUE, blocks=block,
-                        nsets = 100, num.trees.pre = 50, splitrule="extratrees", 
-                        block.method = "BlockForest")
-
-blockforobj$paramvalues
-blockforobj$biased_oob_error_donotuse
-
-blockforobj$forest$forest
-  
-  # Obtain prediction for the test data:
-
-(predres <- predict(blockforobj$forest, data = Xtest))
-
-
-predres$chf
-predres$survival
-predres$unique.death.times
-
-rowSums(predres$chf)
 ```
 
+
+## Perform BlockForest
+
+### Simple
 
 ```{r}
-library(survival)
-concordance_index <- concordance(Surv(ysurvtest[,1], ysurvtest[,2]) ~ rowSums(predres$chf), timewt = "n/G2") #Unos C
-
-concordance_index
-
-coef(concordance_index)
-concordance_index$concordance
-concordance_index$var
+# Train the blockForest model
+    blockforobj <- blockfor(Xtrain, ysurvtrain, num.trees = 100, replace = TRUE, 
+                            blocks = block, nsets = 100, num.trees.pre = 50, 
+                            splitrule = "extratrees", block.method = "BlockForest",
+                            importance = "impurity")
+    
+    # Make predictions on the test data
+    predres <- predict(blockforobj$forest, data = Xtest)
 ```
+
+### 5fold CV (Outer)
+
+```{r}
+# Load necessary libraries
+library(blockForest)
+library(survival)
+
+# Create a function for cross-validation
+cross_validate_blockforest <- function(X, ysurv, folds) {
+  results <- vector("list", length(folds))
+  
+  for (i in seq_along(folds)) {
+    # Split the data into training and test sets
+    test_indices <- folds[[i]]
+    train_indices <- setdiff(seq_len(nrow(X)), test_indices)
+    
+    Xtrain <- X[train_indices, ]
+    Xtest <- X[test_indices, ]
+    
+    ysurvtrain <- ysurv[train_indices, ]
+    ysurvtest <- ysurv[test_indices, ]
+    
+    # Train the blockForest model
+    blockforobj <- blockfor(Xtrain, ysurvtrain, num.trees = 100, replace = TRUE, 
+                            blocks = block, nsets = 100, num.trees.pre = 50, 
+                            splitrule = "extratrees", block.method = "BlockForest",
+                            importance = "impurity")
+    
+    # Make predictions on the test data
+    predres <- predict(blockforobj$forest, data = Xtest)
+    
+    # Store the results for evaluation, e.g., store predicted survival functions
+    results[[i]] <- list(predictions = predres, 
+                         actual = ysurvtest, 
+                         variable_importance = blockforobj$forest$variable.importance)
+  }
+  
+  return(results)
+}
+
+# Create 5 folds for cross-validation
+set.seed(123)  # For reproducibility
+n <- nrow(X)
+folds <- split(sample(1:n), rep(1:5, length.out = n))
+
+# Run cross-validation
+cv_results <- cross_validate_blockforest(X, ysurv, folds)
+```
+
+## Performance metrics 
+
+### Integrated Brier Score 
 
 ```{r}
 library(SurvMetrics)
@@ -153,10 +184,57 @@ IBSrange <- seq(min(ysurvtest[,1]), quantile(ysurvtest[,1], 0.9), length.out = 1
 SurvMetrics::IBS(Surv(ysurvtest[,1], ysurvtest[,2]), predres$survival, IBSrange = c(IBSrange))
 ```
 
+```{r}
+ibs_scores <- sapply(cv_results, function(res) {
+  IBS(Surv(res$actual[, 1], res$actual[, 2]), res$predictions$survival)
+})
+
+ibs_scores_1 <- sapply(cv_results, function(res) {
+  IBS(Surv(res$actual[, 1], res$actual[, 2]), res$predictions$survival)
+})
+
+# Compare two models
+out <- data.frame(fold = 1:5, ibs_scores = ibs_scores, model = "test")
+out_1 <- data.frame(fold = 1:5, ibs_scores = ibs_scores_1, model = "test_1")
+
+plot <- rbind(out, out_1)
+
+ggplot(plot, aes(x = model, y = ibs_scores, fill = model))+
+  geom_boxplot(outlier.colour = NA)+
+  coord_cartesian(ylim = c(0,0.3))+
+  theme_classic()+
+  stat_compare_means()
+```
+
+### Concordance (Uno)
+
+```{r}
+# timewt specifies 
+concordance_scores <- sapply(cv_results, function(res) {
+  out <- concordance(Surv(res$actual[, 1], res$actual[, 2]) ~ rowSums(res$predictions$chf), timewt = "n/G2")
+  return(out$concordance)
+})
+
+concordance_scores_1 <- sapply(cv_results, function(res) {
+  out <- concordance(Surv(res$actual[, 1], res$actual[, 2]) ~ rowSums(res$predictions$chf), timewt = "n/G2")
+  return(out$concordance)
+})
+
+# Compare two models
+out <- data.frame(fold = 1:5, concordance_scores = concordance_scores, model = "test")
+out_1 <- data.frame(fold = 1:5, concordance_scores = concordance_scores_1, model = "test_1")
+
+plot <- rbind(out, out_1)
+
+ggplot(plot, aes(x = model, y = concordance_scores, fill = model))+
+  geom_boxplot(outlier.colour = NA)+
+  #coord_cartesian(ylim = c(0,0.3))+
+  theme_classic()+
+  stat_compare_means()
+```
 
 
-
-
+### Kaplan-Meier and risk group definition
 
 ```{r}
 library(survival)
@@ -187,151 +265,9 @@ ggsurvplot(fit,
 
 ```
 
+### Importance
 
-
-```{r}
-# Load required packages
-library(pec)
-library(survival)
-
-# Prepare the test data as a data frame with time and status columns
-test_data <- data.frame(time = ysurvtest[,1], status = ysurvtest[,2])
-
-# Get unique death times from the test data
-unique_test_times <- sort(unique(ysurvtest[, 1]))
-
-# Check the number of unique times in the test data
-n_unique_test_times <- length(unique_test_times)
-
-# Get the unique times from the predictions
-unique_times <- predres$unique.death.times
-
-# Print information about unique times
-cat("Number of unique test times: ", n_unique_test_times, "\n")
-cat("Number of unique predicted times: ", length(unique_times), "\n")
-
-# Ensure that the survival matrix has the correct dimensions
-survival_matrix <- predres$survival  # Should be samples x times
-cat("Dimensions of survival matrix: ", dim(survival_matrix), "\n")
-
-# Check if the survival matrix dimensions match the expected sizes
-if (nrow(survival_matrix) != nrow(test_data) || ncol(survival_matrix) != length(unique_times)) {
-  stop("Dimensions of survival matrix do not match the expected number of test samples or unique times.")
-}
-
-# Calculate the IBS using pec
-ibs_score <- pec::pec(object = list("blockForest" = predres$survival), 
-                      formula = Surv(ysurvtest[,1], ysurvtest[,2]) ~ 1, 
-                      cens.model = "marginal", 
-                      data = test_data,
-                      times = unique_test_times,  # Use unique times from the test data
-                      exact = TRUE)
-
-# Print IBS score
-ibs_score
-
-?pec
-```
-
-
-```{r}
-# Load required packages
-library(pec)
-library(survival)
-
-# Prepare test data with columns for time and status
-test_data <- data.frame(time = ysurvtest[, 1], status = ysurvtest[, 2])
-
-# Extract and validate unique death times for prediction times
-times <- predres$unique.death.times
-survival_matrix <- predres$survival  # Ensure this is in the right dimensions: samples x times
-
-# Adjust the dimensions of `survival_matrix` if necessary
-# Confirm the rows correspond to samples and columns correspond to time points
-
-# Specify formula for the survival model
-surv_formula <- Surv(time, status) ~ 1
-
-# Ensure times are correct by combining with unique death times if exact = TRUE
-test_times <- c(times, unique(test_data$time))  # Merge unique times if exact=TRUE is set
-
-# Run the Integrated Brier Score with `testIBS` parameter
-ibs_score <- pec::pec(
-  object = list(blockForest = survival_matrix),
-  formula = Surv(ysurvtest[, 1], ysurvtest[, 2])~rowSums(predres$chf),
-  data = test_data,
-  times = test_times,
-  exact = TRUE,
-  testIBS = TRUE  # Testing IBS at the specified time point # Kaplan-Meier for censoring
-)
-
-# Print results
-print(ibs_score)
-```
-
-
-
-```{r}
-# Load required packages
-library(pec)
-library(survival)
-
-# Prepare the test data as a data frame with time and status columns
-test_data <- data.frame(time = ysurvtest[,1], status = ysurvtest[,2])
-
-# Get unique death times from the test data
-unique_test_times <- sort(unique(ysurvtest[, 1]))
-
-# Check the number of unique times in the test data
-n_unique_test_times <- length(unique_test_times)
-
-# Get the unique times from the predictions
-unique_times <- predres$unique.death.times
-
-# Print information about unique times
-cat("Number of unique test times: ", n_unique_test_times, "\n")
-cat("Number of unique predicted times: ", length(unique_times), "\n")
-
-# Ensure that the survival matrix has the correct dimensions
-survival_matrix <- predres$survival  # Should be samples x times
-
-
-# Calculate the IBS using pec
-ibs_score <- pec::pec(object = list("blockForest" = survival_matrix), 
-                      formula = Surv(time, status) ~ 1, 
-                      cens.model = "marginal", 
-                      data = test_data,
-                      times = unique_test_times,  # Use unique times from the test data
-                      exact = TRUE)
-
-# Print IBS score
-ibs_score
-```
-
-
-
-
-
-
-
-```{r}
-library(survival)
-# Evaluate Brier score at each unique death time
-times <- predres$unique.death.times
-
-# Assuming the `pec` package is available
-library(pec)
-library(survival)
-# Prepare data
-y_surv <- Surv(ysurvtest[,1], ysurvtest[,2])
-
-
-ibs_score <- pec::ibs(pec(object = list(blockForest = blockforobj), 
-                          formula = y_surv ~ ., 
-                          data = data.frame(Xtest), 
-                          times = times))
-
-```
+#### Feature-level
 
 ```{r}
 # Train the blockForest model with importance measure
@@ -347,16 +283,336 @@ aggregate_importance <- sapply(block, function(indices) {
 })
 names(aggregate_importance) <- paste("Block", 1:length(block), sep="_")
 aggregate_importance
-
-
-
-
-blockforobj$forest$
-# Retrieve block-wise importance
-block_importance <- blockforobj$forest$importance.mode. 
-
-
-block.importance
-block_importance
 ```
+
+
+```{r}
+variable_importance <- sapply(cv_results, function(res) {
+  res$variable_importance
+})
+
+
+
+plot %in% block
+
+plot <- variable_importance %>% rownames_to_column("feature") %>% pivot_longer(cols = 2:ncol(.),names_to = "fold", values_to = "importance")
+
+ggplot(plot, aes(x = reorder(feature, -importance), y = importance))+
+  geom_boxplot()+
+  theme_classic()
+```
+
+#### Block-level 
+
+```{r}
+variable_importance <- lapply(cv_results, function(res) {
+  res$variable_importance
+})
+
+
+
+block_importance #calculate the mean importance values (here impurity)
+
+
+# Calculate block-wise aggregated importance
+aggregate_importance <- sapply(block, function(indices) {
+  mean(variable_importance[indices])  # Mean importance of variables in each block
+})
+names(aggregate_importance) <- paste("Block", 1:length(block), sep="_")
+aggregate_importance
+
+block
+```
+
+# 1. Clinical-only
+
+## Load clinical data
+
+```{r}
+metadata_general <- read_csv("/mnt/central_nas_full/projects/RCC_DL/metadata_general.csv")
+```
+
+
+```{r}
+colnames(metadata_general)
+
+metadata_select <- metadata_general %>% select(PID, OS_months, status_OS, pT_combined, ISUP_combined, necrose) %>% filter(complete.cases(.))
+
+metadata_select$pT_combined <- factor(metadata_select$pT_combined, levels = sort(unique(metadata_select$pT_combined)))
+
+metadata_select$ISUP_combined <- factor(metadata_select$ISUP_combined, levels = sort(unique(metadata_select$ISUP_combined)))
+
+metadata_select$necrose <- factor(metadata_select$necrose, levels = sort(unique(metadata_select$necrose)))
+
+metadata_select$gender <- factor(metadata_select$gender, levels = sort(unique(metadata_select$gender)))
+```
+
+
+```{r}
+set.seed(22)
+
+# Create train/test splits considering similar censoring rates
+folds <- createDataPartition(metadata_select$status_OS, p = 0.75, times = 5)
+
+meta_survival <- metadata_select %>% column_to_rownames("PID") %>% select(OS_months, status_OS)
+meta_info <- metadata_select %>% column_to_rownames("PID") %>% select(-OS_months, -status_OS)
+
+colnames(meta_info) <- paste0("CLIN_", colnames(meta_info))
+
+x_train <- meta_info[folds[[2]],]
+x_test <- meta_info[-folds[[2]],]
+
+y_train <- meta_survival[folds[[2]],]
+y_test <- meta_survival[-folds[[2]],]
+
+all.equal(rownames(x_train), rownames(y_train))
+all.equal(rownames(x_test), rownames(y_test))
+```
+
+
+```{r}
+block <- list()
+block[[1]]<- c(1:3)
+block
+```
+
+
+## Perform BlockForest
+
+### Simple
+
+```{r}
+set.seed(22)
+# Train the blockForest model
+blockforobj <- blockfor(x_train, as.matrix(y_train), 
+                        blocks = block, 
+                        splitrule = "extratrees", block.method = "BlockForest",
+                        importance = "impurity")
+    
+# Make predictions on the test data
+predres <- predict(blockforobj$forest, data = x_test)
+```
+
+
+
+```{r}
+if (inherits(y, "matrix")) {
+    if (ncol(y) == 2) {
+      y <- Surv(time = y[, 1], event = y[, 2])
+      model.data <- data.frame(y, X)
+    }
+  
+y = as.matrix(y_train)
+```
+
+### 5fold CV (Outer)
+
+```{r}
+# Load necessary libraries
+library(blockForest)
+library(survival)
+
+# Create a function for cross-validation
+cross_validate_blockforest <- function(X, ysurv, folds) {
+  results <- vector("list", length(folds))
+  
+  for (i in seq_along(folds)) {
+    # Split the data into training and test sets
+    test_indices <- folds[[i]]
+    train_indices <- setdiff(seq_len(nrow(X)), test_indices)
+    
+    Xtrain <- X[train_indices, ]
+    Xtest <- X[test_indices, ]
+    
+    ysurvtrain <- ysurv[train_indices, ]
+    ysurvtest <- ysurv[test_indices, ]
+    
+    # Train the blockForest model
+    blockforobj <- blockfor(Xtrain, ysurvtrain, 
+                            blocks = block,
+                            splitrule = "extratrees", block.method = "BlockForest",
+                            importance = "impurity")
+    
+    # Make predictions on the test data
+    predres <- predict(blockforobj$forest, data = Xtest)
+    
+    # Store the results for evaluation, e.g., store predicted survival functions
+    results[[i]] <- list(predictions = predres, 
+                         actual = ysurvtest, 
+                         variable_importance = blockforobj$forest$variable.importance)
+  }
+  
+  return(results)
+}
+
+# Create 5 folds for cross-validation
+set.seed(123)  # For reproducibility
+n <- nrow(X)
+folds <- split(sample(1:n), rep(1:5, length.out = n))
+
+# Run cross-validation
+cv_results <- cross_validate_blockforest(X, ysurv, folds)
+```
+
+## Performance metrics 
+
+### Integrated Brier Score 
+
+```{r}
+library(SurvMetrics)
+
+# Define time of interest
+## Option 1: Use times of actual events in test data
+IBSrange <- sort(ysurvtest[,1][ysurvtest[,2] == 1])
+
+## Option 2: Generate 100 uniformly spaced points within the time range (min, 0.9 quantile) of the test data
+IBSrange <- seq(min(y_test[,1]), quantile(y_test[,1], 0.9), length.out = 100)
+
+SurvMetrics::IBS(Surv(y_test[,1], y_test[,2]), predres$survival, IBSrange = c(1,80))
+```
+
+```{r}
+ibs_scores <- sapply(cv_results, function(res) {
+  IBS(Surv(res$actual[, 1], res$actual[, 2]), res$predictions$survival)
+})
+
+ibs_scores_1 <- sapply(cv_results, function(res) {
+  IBS(Surv(res$actual[, 1], res$actual[, 2]), res$predictions$survival)
+})
+
+# Compare two models
+out <- data.frame(fold = 1:5, ibs_scores = ibs_scores, model = "test")
+out_1 <- data.frame(fold = 1:5, ibs_scores = ibs_scores_1, model = "test_1")
+
+plot <- rbind(out, out_1)
+
+ggplot(plot, aes(x = model, y = ibs_scores, fill = model))+
+  geom_boxplot(outlier.colour = NA)+
+  coord_cartesian(ylim = c(0,0.3))+
+  theme_classic()+
+  stat_compare_means()
+```
+
+### Concordance (Uno)
+
+```{r}
+concordance(Surv(y_test[, 1], y_test[, 2]) ~ rowSums(predres$chf))
+```
+
+```{r}
+# timewt specifies 
+concordance_scores <- sapply(cv_results, function(res) {
+  out <- concordance(Surv(res$actual[, 1], res$actual[, 2]) ~ rowSums(res$predictions$chf), timewt = "n/G2")
+  return(out$concordance)
+})
+
+concordance_scores_1 <- sapply(cv_results, function(res) {
+  out <- concordance(Surv(res$actual[, 1], res$actual[, 2]) ~ rowSums(res$predictions$chf), timewt = "n/G2")
+  return(out$concordance)
+})
+
+# Compare two models
+out <- data.frame(fold = 1:5, concordance_scores = concordance_scores, model = "test")
+out_1 <- data.frame(fold = 1:5, concordance_scores = concordance_scores_1, model = "test_1")
+
+plot <- rbind(out, out_1)
+
+ggplot(plot, aes(x = model, y = concordance_scores, fill = model))+
+  geom_boxplot(outlier.colour = NA)+
+  #coord_cartesian(ylim = c(0,0.3))+
+  theme_classic()+
+  stat_compare_means()
+```
+
+
+### Kaplan-Meier and risk group definition
+
+```{r}
+library(survival)
+# Create risk groups based on cumulative hazard estimates
+risk_group <- ifelse(rowSums(predres$chf) > median(rowSums(predres$chf)), "high", "low")
+
+surv_test <- survdiff(Surv(ysurvtest[,1], ysurvtest[,2]) ~ risk_group)
+surv_test
+```
+
+```{r}
+out_df <- as.data.frame(ysurvtest) %>% rownames_to_column("sample") %>% mutate(risk_group_pred = risk_group)
+
+#Plot specific survival curves
+fit <- survfit(Surv(out_df$V1, out_df$V2) ~ risk_group_pred, data = out_df)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = "Set1",
+          conf.int = TRUE
+)
+
+```
+
+### Importance
+
+#### Feature-level
+
+```{r}
+# Train the blockForest model with importance measure
+blockforobj <- blockfor(Xtrain, ysurvtrain, num.trees = 100, replace = TRUE, blocks = block,
+                        nsets = 100, num.trees.pre = 50, splitrule = "extratrees", 
+                        block.method = "BlockForest", importance = "permutation")
+
+variable_importance <- blockforobj$forest$variable.importance
+
+# Calculate block-wise aggregated importance
+aggregate_importance <- sapply(block, function(indices) {
+  mean(variable_importance[indices])  # Mean importance of variables in each block
+})
+names(aggregate_importance) <- paste("Block", 1:length(block), sep="_")
+aggregate_importance
+```
+
+
+```{r}
+variable_importance <- sapply(cv_results, function(res) {
+  res$variable_importance
+})
+
+
+
+plot %in% block
+
+plot <- variable_importance %>% rownames_to_column("feature") %>% pivot_longer(cols = 2:ncol(.),names_to = "fold", values_to = "importance")
+
+ggplot(plot, aes(x = reorder(feature, -importance), y = importance))+
+  geom_boxplot()+
+  theme_classic()
+```
+
+#### Block-level 
+
+```{r}
+variable_importance <- lapply(cv_results, function(res) {
+  res$variable_importance
+})
+
+
+
+block_importance #calculate the mean importance values (here impurity)
+
+
+# Calculate block-wise aggregated importance
+aggregate_importance <- sapply(block, function(indices) {
+  mean(variable_importance[indices])  # Mean importance of variables in each block
+})
+names(aggregate_importance) <- paste("Block", 1:length(block), sep="_")
+aggregate_importance
+
+block
+```
+
 
