@@ -75,12 +75,20 @@ metadata_general$ISUP_simple <- metadata_other$ISUP[match(metadata_general$PID, 
 metadata_general$pT_simple <- metadata_other$pT_simple[match(metadata_general$PID, metadata_other$PID)]
 ```
 
+### Preprocessing 
 
 ```{r}
-metadata_full <- metadata_general 
+metadata_selected <- metadata_general %>% select(PID, OS_months, status_OS, age, gender, pT_combined, ISUP_combined, necrose)
+
+colnames(metadata_selected)[4:ncol(metadata_selected)] <- paste0("CLIN_",colnames(metadata_selected)[4:ncol(metadata_selected)])
+metadata_selected <- as.data.frame(metadata_selected)
 ```
 
+Save 
 
+```{r}
+write_csv(metadata_selected, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/clinical_key_features_processed.csv")
+```
 
 ## IMC data 
 
@@ -121,6 +129,7 @@ summary(is.na(tumor_selected))
 
 # Add specific prefix
 colnames(tumor_selected)[4:ncol(tumor_selected)] <- paste0("IMC_TU_",colnames(tumor_selected)[4:ncol(tumor_selected)])
+tumor_selected <- as.data.frame(tumor_selected)
 ```
 
 Save 
@@ -129,20 +138,19 @@ Save
 write_csv(tumor_selected, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/tumor_key_features_processed.csv")
 ```
 
-Add to general metadata
+Add to metadata selected
 
 ```{r}
-for (entry in colnames(tumor_selected)[2:ncol(tumor_selected)]) {
-  metadata_general[,entry] <- tumor_selected[,entry][match(metadata_general[,"PID"],tumor_selected[,"PID"])]
+for (entry in colnames(tumor_selected)[4:ncol(tumor_selected)]) {
+  metadata_selected[,entry] <- tumor_selected[,entry][match(metadata_selected[,"PID"],tumor_selected[,"PID"])]
 }
-
-
-
-
-
 ```
 
+## Save preprocessed metadata
 
+```{r}
+write_csv(metadata_selected, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/key_features_processed.csv")
+```
 
 # 2. BlockForest survival prediction
 
@@ -150,74 +158,69 @@ for (entry in colnames(tumor_selected)[2:ncol(tumor_selected)]) {
 library(blockForest)
 ```
 
-# 2A. Clinical-only
-
-## Load data
+## Load and select data
 
 ```{r}
-metadata_general <- read_csv("/mnt/central_nas_full/projects/RCC_DL/metadata_general.csv")
+metadata_selected <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/key_features_processed.csv")
 ```
 
 ```{r}
-metadata_other <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/data/Metadata_combined_RCC_onlyPT.csv")
+# Select colnames based on prefix
+selected <- colnames(metadata_selected)[str_detect(colnames(metadata_selected),"IMC")]
 
-# Add fine-grained stages and grades
-metadata_general$ISUP_simple <- metadata_other$ISUP[match(metadata_general$PID, metadata_other$PID)]
-metadata_general$pT_simple <- metadata_other$pT_simple[match(metadata_general$PID, metadata_other$PID)]
+meta <- metadata_selected %>% select(PID, status_OS, OS_months, all_of(selected)) %>% filter(complete.cases(.))
 ```
 
+## Encoding 
 
 ```{r}
-colnames(metadata_general)
+# Perform preprocessing
+meta[] <- lapply(names(meta), function(col_name) {
+  if (col_name %in% c("PID", "status_OS", "OS_months")) {
+    return(meta[[col_name]])  # Return the column as is
+  } else {
+    if (is.numeric(meta[[col_name]])) {
+      return(as.vector(scale(meta[[col_name]]))) # Scale numerical columns (Z-score)
+    } 
+    else if (is.character(meta[[col_name]])) {
+      return(as.factor(meta[[col_name]],levels = sort(unique(meta[[col_name]])))) # Convert character columns to factors
+    } else {
+      return(meta[[col_name]])
+    }
+  }
+})
 
-metadata_select <- metadata_general %>% select(PID, OS_months, status_OS, age, gender, pT_combined, ISUP_combined, necrose) %>% filter(complete.cases(.))
-
-# Encode as binary 
-metadata_select$pT_combined <- ifelse(metadata_select$pT_combined == "1/2", 0, 1)
-metadata_select$ISUP_combined <- ifelse(metadata_select$ISUP_combined == "1/2", 0, 1)
-metadata_select$necrose
-metadata_select$gender <- ifelse(metadata_select$gender == "m", 0, 1)
-metadata_select$age
-
-# Encode as categorical (factor)
-#metadata_select$pT_combined <- factor(metadata_select$pT_combined, levels = sort(unique(metadata_select$pT_combined)))
-#metadata_select$ISUP_combined <- factor(metadata_select$ISUP_combined, levels = sort(unique(metadata_select$ISUP_combined)))
-#metadata_select$necrose <- factor(metadata_select$necrose, levels = sort(unique(metadata_select$necrose)))
-#metadata_select$gender <- factor(metadata_select$gender, levels = sort(unique(metadata_select$gender)))
+meta
 ```
 
+```{r}
+# Select Y and X for blockforest
+y <- meta %>% column_to_rownames("PID") %>% select(OS_months, status_OS)
+
+x <- meta %>% column_to_rownames("PID") %>% select(-OS_months, -status_OS)
+```
+
+## Folds
 
 ```{r}
-set.seed(22)
-
 # Create train/test splits considering similar censoring rates
-folds <- createDataPartition(metadata_select$status_OS, p = 0.75, times = 5)
-
-meta_survival <- metadata_select %>% column_to_rownames("PID") %>% select(OS_months, status_OS)
-meta_info <- metadata_select %>% column_to_rownames("PID") %>% select(-OS_months, -status_OS)
-
-colnames(meta_info) <- paste0("CLIN_", colnames(meta_info))
-
-x_train <- meta_info[folds[[1]],]
-x_test <- meta_info[-folds[[1]],]
-
-y_train <- meta_survival[folds[[1]],]
-y_test <- meta_survival[-folds[[1]],]
-
-all.equal(rownames(x_train), rownames(y_train))
-all.equal(rownames(x_test), rownames(y_test))
+folds <- createDataPartition(y$status_OS, p = 0.75, times = 5)
 ```
+
+## Define blocks 
 
 ```{r}
 # Create blocks 
-## Dummy example - Define all in one block
+# Initialize empty list for blocks
 block <- list()
-block[[1]]<- c(1:ncol(x_train))
-block
+
+# Define blocks based on column names containing "CLIN" and "IMC"
+#block[[1]] <- which(grepl("CLIN", colnames(x)))
+block[[1]] <- which(grepl("IMC", colnames(x)))
+
+# Display the block list
+print(block)
 ```
-
-
-
 
 ## Perform BlockForest
 
@@ -225,11 +228,26 @@ block
 
 ```{r}
 set.seed(22)
+
+x_train <- x[folds[[1]],]
+x_test <- x[-folds[[1]],]
+
+y_train <- y[folds[[1]],]
+y_test <- y[-folds[[1]],]
+
+all.equal(rownames(x_train), rownames(y_train))
+all.equal(rownames(x_test), rownames(y_test))
+
 # Train the blockForest model
 blockforobj <- blockfor(x_train, as.matrix(y_train), 
                         blocks = block,
-                        splitrule = "extratrees", block.method = "BlockForest",
-                        always.select.block = 1, importance = "permutation")
+                        splitrule = "extratrees", 
+                        block.method = "BlockForest",
+                        num.trees = 2000,
+                        nsets = 300, 
+                        num.trees.pre = 1500,
+                        always.select.block = 1, 
+                        importance = "permutation")
     
 # Make predictions on the test data
 predres <- predict(blockforobj$forest, data = x_test, block.method = "BlockForest")
@@ -244,11 +262,9 @@ scale(blockforobj$forest$variable.importance)
 ```
 
 
-
-
-
-
 ### 5fold CV (Outer)
+
+#### Define function 
 
 ```{r}
 # Load necessary libraries
@@ -260,6 +276,8 @@ cross_validate_blockforest <- function(x, y, folds, block) {
   results <- vector("list", length(folds))
   
   for (i in seq_along(folds)) {
+    
+    print(paste("CV iteration:", i))
     
     # Split the data into training and test sets
     x_train <- x[folds[[i]],]
@@ -274,7 +292,10 @@ cross_validate_blockforest <- function(x, y, folds, block) {
                             blocks = block,
                             splitrule = "extratrees", 
                             block.method = "BlockForest",
-                            #always.select.block = 1,
+                            num.trees = 2000,
+                            nsets = 300, 
+                            num.trees.pre = 1500,
+                            always.select.block = 1,
                             importance = "permutation")
     
     # Make predictions on the test data
@@ -284,76 +305,23 @@ cross_validate_blockforest <- function(x, y, folds, block) {
     results[[i]] <- list(predictions = predres, 
                          actual_surv = y_test, 
                          variable_importance = blockforobj$forest$variable.importance)
+    
+    gc()
   }
   
   return(results)
 }
 ```
 
-```{r}
-# Create x and y 
-metadata_select <- metadata_general %>% select(PID, OS_months, status_OS, age, gender, pT_combined, ISUP_combined, necrose) %>% filter(complete.cases(.))
-
-# # Encode as binary 
-# metadata_select$pT_combined <- ifelse(metadata_select$pT_combined == "1/2", 0, 1)
-# metadata_select$ISUP_combined <- ifelse(metadata_select$ISUP_combined == "1/2", 0, 1)
-# metadata_select$necrose
-# metadata_select$gender <- ifelse(metadata_select$gender == "m", 0, 1)
-# metadata_select$age
-
-#Encode as categorical (factor)
-metadata_select$pT_combined <- factor(metadata_select$pT_combined, levels = sort(unique(metadata_select$pT_combined)))
-metadata_select$ISUP_combined <- factor(metadata_select$ISUP_combined, levels = sort(unique(metadata_select$ISUP_combined)))
-metadata_select$necrose <- factor(metadata_select$necrose, levels = sort(unique(metadata_select$necrose)))
-metadata_select$gender <- factor(metadata_select$gender, levels = sort(unique(metadata_select$gender)))
-
-y <- metadata_select %>% column_to_rownames("PID") %>% select(OS_months, status_OS)
-
-x <- metadata_select %>% column_to_rownames("PID") %>% select(-status_OS)
-colnames(x) <- paste0("CLIN_", colnames(x))
-```
-
-```{r}
-# Create train/test splits considering similar censoring rates
-folds <- createDataPartition(y$status_OS, p = 0.75, times = 5)
-```
-
-```{r}
-# Create blocks 
-## Dummy example - Define all in one block
-block <- list()
-block[[1]]<- c(1:ncol(x))
-block
-```
-
+## Run and save results
 
 ```{r}
 # Run cross-validation
 cv_results <- cross_validate_blockforest(x, y, folds, block)
-```
 
-### Save results
-
-```{r}
 # Adjust naming
-saveRDS(cv_results, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/BF_clinicalonly_combined_factors_includetime")
+saveRDS(cv_results, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/BF_IMConly_tumor_panel_zscored")
 ```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -367,6 +335,9 @@ cv_results <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_anal
 cv_results_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/BF_clinicalonly_combined_factors_includetime")
 ```
 
+```{r}
+cv_results[[1]]
+```
 
 ### Integrated Brier Score
 
