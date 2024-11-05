@@ -204,6 +204,7 @@ x <- meta %>% column_to_rownames("PID") %>% select(-OS_months, -status_OS)
 
 ```{r}
 # Create train/test splits considering similar censoring rates
+library(caret)
 folds <- createDataPartition(y$status_OS, p = 0.75, times = 5)
 ```
 
@@ -296,6 +297,7 @@ cross_validate_blockforest <- function(x, y, folds, block) {
                             nsets = 300, 
                             num.trees.pre = 1500,
                             always.select.block = 1,
+                            num.threads = 30,
                             importance = "permutation")
     
     # Make predictions on the test data
@@ -341,6 +343,8 @@ cv_results[[1]]
 
 ### Integrated Brier Score
 
+# CONTINUE HERE 
+
 TO BE UPDATED
 
 ```{r}
@@ -377,6 +381,121 @@ ggplot(plot, aes(x = model, y = ibs_scores, fill = model))+
   theme_classic()+
   stat_compare_means()
 ```
+
+
+```{r}
+# Load survival package
+library(survival)
+
+# Example survival data
+dat <- survival::lung  # Using the lung dataset from the survival package
+
+# Fit a Cox proportional hazards model
+cox_model <- coxph(Surv(time, status) ~ age + sex + ph.ecog, data = lung)
+
+library(pec)
+library(riskRegression)
+# Calculate Prediction Error Curves (PEC) with IBS
+pec_results <- pec(object = list(cox_model = cox_model),         # Model(s) to evaluate
+                   formula = Surv(time, status) ~ 1,             # Surv object
+                   data = lung,                                  # Data
+                   times = seq(0, max(lung$time), by = 100),     # Time points to evaluate
+                   exact = TRUE,                                 # Exact calculations
+                   cens.model = "marginal")                      # Censoring model
+
+# Extract the Integrated Brier Score
+ibs_cox <- crps(pec_results)
+print(ibs_cox)
+```
+
+
+```{r}
+# simulate an artificial data frame
+# with survival response and two predictors
+
+set.seed(130971)
+library(prodlim)
+library(survival)
+dat <- SimSurv(100)
+
+# fit some candidate Cox models and compute the Kaplan-Meier estimate 
+Models <- list("Cox.X1"=coxph(Surv(time,status)~X1,data=dat,x=TRUE,y=TRUE),
+              "Cox.X2"=coxph(Surv(time,status)~X2,data=dat,x=TRUE,y=TRUE),
+              "Cox.X1.X2"=coxph(Surv(time,status)~X1+X2,data=dat,x=TRUE,y=TRUE))
+
+# compute the apparent prediction error 
+PredError <- pec(object=Models,
+                  formula=Surv(time,status)~1,
+                  data=dat,
+                  exact=TRUE,
+                  cens.model="marginal",
+                  splitMethod="none",
+                  B=0,
+                  verbose=TRUE)
+
+plot(PredError)
+
+print(PredError,times=seq(5,30,5))
+summary(PredError)
+crps(PredError)
+```
+
+```{r}
+learndat <- SimSurv(50)
+testdat <- SimSurv(30)
+library(survival)
+library(rms)
+f1 <- psm(Surv(time,status)~X1+X2,data=learndat)
+f2 <- psm(Surv(time,status)~X1,data=learndat)
+pf <- pec(list(f1,f2),formula=Surv(time,status)~1,data=testdat,maxtime=200)
+plot(pf)
+summary(pf)
+crps(pf)
+```
+
+```{r}
+str(cv_results[[1]]$predictions$unique.death.times)
+
+str(cv_results[[1]]$predictions$survival)
+```
+
+
+```{r}
+# Wrapper function to extract survival probabilities for pec
+predictSurvProb_blockForest <- function(object, newdata, times) {
+  # Make predictions using blockForest on the new (test) data
+  predres <- predict(object, data = newdata, block.method = "BlockForest")
+  
+  # Extract survival probabilities at requested times
+  surv_probs <- predres$survival  # Survival probabilities from blockForest
+  
+  # Match times with the unique death times in the prediction output
+  time_indices <- sapply(times, function(t) which.min(abs(predres$unique.death.times - t)))
+  
+  # Extract the survival probabilities at the nearest available time points
+  surv_probs_at_times <- surv_probs[, time_indices, drop = FALSE]
+  return(surv_probs_at_times)
+}
+```
+
+
+```{r}
+# Define the pec evaluation with the test data and observed survival times (y_test)
+Models <- list("BlockForest" = predictSurvProb_blockForest)
+
+# Calculate Prediction Error Curves (PEC)
+PredError <- pec(object = Models,
+                 formula = Surv(time, status) ~ 1,
+                 data = data.frame(y_test, x_test),  # Combine actual test survival times with covariates
+                 times = seq(0, max(y_test$time), by = 100),  # Specify time points
+                 exact = TRUE,
+                 cens.model = "marginal",
+                 verbose = TRUE)
+
+```
+
+
+
 
 ### Concordance (Uno)
 
