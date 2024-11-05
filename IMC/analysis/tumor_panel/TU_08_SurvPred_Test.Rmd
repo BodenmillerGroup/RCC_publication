@@ -59,292 +59,131 @@ library(batchelor)
 ```
 
 
-# BlockForest survival prediction
+# 1. Prepare master table 
 
-```{r}
-library(blockForest)
-```
-
-# 1. Example data 
-
-```{r}
-# NOTE: There is no association between covariates and response for the
-# simulated data below.
-# Moreover, the input parameters of blockfor() are highly unrealistic
-# (e.g., nsets = 10 is specified much too small).
-# The purpose of the shown examples is merely to illustrate the
-# application of predict.blockForest().
-
-
-# Generate data:
-################
-
-set.seed(1234)
-
-# Covariate matrix:
-X <- cbind(matrix(nrow=40, ncol=5, data=abs(rnorm(40*5))), 
-           matrix(nrow=40, ncol=30, data=abs(rnorm(40*30, mean=1, sd=2))),
-           matrix(nrow=40, ncol=100, data=abs(rnorm(40*100, mean=2, sd=3))))
-colnames(X) <- paste("X", 1:ncol(X), sep="")
-
-# Block variable (list):
-block <- rep(1:3, times=c(5, 30, 100))
-block <- lapply(1:3, function(x) which(block==x))
-
-# Survival outcome:
-ysurv <- cbind(abs(rnorm(40)), sample(c(0,1), size=40, replace=TRUE))
-
-# Divide in training and test data:
-Xtrain <- X[1:30,]
-Xtest <- X[31:40,]
-
-ysurvtrain <- ysurv[1:30,]
-ysurvtest <- ysurv[31:40,]
-```
-
-
-## Perform BlockForest
-
-### Simple
-
-```{r}
-# Train the blockForest model
-    blockforobj <- blockfor(Xtrain, ysurvtrain, num.trees = 100, replace = TRUE, 
-                            blocks = block, nsets = 100, num.trees.pre = 50, 
-                            splitrule = "extratrees", block.method = "BlockForest",
-                            importance = "impurity")
-    
-    # Make predictions on the test data
-    predres <- predict(blockforobj$forest, data = Xtest)
-```
-
-### 5fold CV (Outer)
-
-```{r}
-# Load necessary libraries
-library(blockForest)
-library(survival)
-
-# Create a function for cross-validation
-cross_validate_blockforest <- function(X, ysurv, folds) {
-  results <- vector("list", length(folds))
-  
-  for (i in seq_along(folds)) {
-    # Split the data into training and test sets
-    test_indices <- folds[[i]]
-    train_indices <- setdiff(seq_len(nrow(X)), test_indices)
-    
-    Xtrain <- X[train_indices, ]
-    Xtest <- X[test_indices, ]
-    
-    ysurvtrain <- ysurv[train_indices, ]
-    ysurvtest <- ysurv[test_indices, ]
-    
-    # Train the blockForest model
-    blockforobj <- blockfor(Xtrain, ysurvtrain, num.trees = 100, replace = TRUE, 
-                            blocks = block, nsets = 100, num.trees.pre = 50, 
-                            splitrule = "extratrees", block.method = "BlockForest",
-                            importance = "impurity")
-    
-    # Make predictions on the test data
-    predres <- predict(blockforobj$forest, data = Xtest)
-    
-    # Store the results for evaluation, e.g., store predicted survival functions
-    results[[i]] <- list(predictions = predres, 
-                         actual = ysurvtest, 
-                         variable_importance = blockforobj$forest$variable.importance)
-  }
-  
-  return(results)
-}
-
-# Create 5 folds for cross-validation
-set.seed(123)  # For reproducibility
-n <- nrow(X)
-folds <- split(sample(1:n), rep(1:5, length.out = n))
-
-# Run cross-validation
-cv_results <- cross_validate_blockforest(X, ysurv, folds)
-```
-
-## Performance metrics 
-
-### Integrated Brier Score 
-
-```{r}
-library(SurvMetrics)
-
-# Define time of interest
-## Option 1: Use times of actual events in test data
-IBSrange <- sort(ysurvtest[,1][ysurvtest[,2] == 1])
-
-## Option 2: Generate 100 uniformly spaced points within the time range (min, 0.9 quantile) of the test data
-IBSrange <- seq(min(ysurvtest[,1]), quantile(ysurvtest[,1], 0.9), length.out = 100)
-
-SurvMetrics::IBS(Surv(ysurvtest[,1], ysurvtest[,2]), predres$survival, IBSrange = c(IBSrange))
-```
-
-```{r}
-ibs_scores <- sapply(cv_results, function(res) {
-  IBS(Surv(res$actual[, 1], res$actual[, 2]), res$predictions$survival)
-})
-
-ibs_scores_1 <- sapply(cv_results, function(res) {
-  IBS(Surv(res$actual[, 1], res$actual[, 2]), res$predictions$survival)
-})
-
-# Compare two models
-out <- data.frame(fold = 1:5, ibs_scores = ibs_scores, model = "test")
-out_1 <- data.frame(fold = 1:5, ibs_scores = ibs_scores_1, model = "test_1")
-
-plot <- rbind(out, out_1)
-
-ggplot(plot, aes(x = model, y = ibs_scores, fill = model))+
-  geom_boxplot(outlier.colour = NA)+
-  coord_cartesian(ylim = c(0,0.3))+
-  theme_classic()+
-  stat_compare_means()
-```
-
-### Concordance (Uno)
-
-```{r}
-# timewt specifies 
-concordance_scores <- sapply(cv_results, function(res) {
-  out <- concordance(Surv(res$actual[, 1], res$actual[, 2]) ~ rowSums(res$predictions$chf), timewt = "n/G2")
-  return(out$concordance)
-})
-
-concordance_scores_1 <- sapply(cv_results, function(res) {
-  out <- concordance(Surv(res$actual[, 1], res$actual[, 2]) ~ rowSums(res$predictions$chf), timewt = "n/G2")
-  return(out$concordance)
-})
-
-# Compare two models
-out <- data.frame(fold = 1:5, concordance_scores = concordance_scores, model = "test")
-out_1 <- data.frame(fold = 1:5, concordance_scores = concordance_scores_1, model = "test_1")
-
-plot <- rbind(out, out_1)
-
-ggplot(plot, aes(x = model, y = concordance_scores, fill = model))+
-  geom_boxplot(outlier.colour = NA)+
-  #coord_cartesian(ylim = c(0,0.3))+
-  theme_classic()+
-  stat_compare_means()
-```
-
-
-### Kaplan-Meier and risk group definition
-
-```{r}
-library(survival)
-# Create risk groups based on cumulative hazard estimates
-risk_group <- ifelse(rowSums(predres$chf) > median(rowSums(predres$chf)), "high", "low")
-
-surv_test <- survdiff(Surv(ysurvtest[,1], ysurvtest[,2]) ~ risk_group)
-surv_test
-```
-
-```{r}
-out_df <- as.data.frame(ysurvtest) %>% rownames_to_column("sample") %>% mutate(risk_group_pred = risk_group)
-
-#Plot specific survival curves
-fit <- survfit(Surv(out_df$V1, out_df$V2) ~ risk_group_pred, data = out_df)
-print(fit)
-
-ggsurvplot(fit,
-          pval = TRUE,
-          risk.table = TRUE, # Add risk table
-          risk.table.col = "strata", # Change risk table color by groups
-          linetype = "strata", # Change line type by groups
-          surv.median.line = "hv", # Specify median survival
-          ggtheme = theme_classic(), # Change ggplot2 theme
-          palette = "Set1",
-          conf.int = TRUE
-)
-
-```
-
-### Importance
-
-#### Feature-level
-
-```{r}
-# Train the blockForest model with importance measure
-blockforobj <- blockfor(Xtrain, ysurvtrain, num.trees = 100, replace = TRUE, blocks = block,
-                        nsets = 100, num.trees.pre = 50, splitrule = "extratrees", 
-                        block.method = "BlockForest", importance = "permutation")
-
-variable_importance <- blockforobj$forest$variable.importance
-
-# Calculate block-wise aggregated importance
-aggregate_importance <- sapply(block, function(indices) {
-  mean(variable_importance[indices])  # Mean importance of variables in each block
-})
-names(aggregate_importance) <- paste("Block", 1:length(block), sep="_")
-aggregate_importance
-```
-
-
-```{r}
-variable_importance <- sapply(cv_results, function(res) {
-  res$variable_importance
-})
-
-
-
-plot %in% block
-
-plot <- variable_importance %>% rownames_to_column("feature") %>% pivot_longer(cols = 2:ncol(.),names_to = "fold", values_to = "importance")
-
-ggplot(plot, aes(x = reorder(feature, -importance), y = importance))+
-  geom_boxplot()+
-  theme_classic()
-```
-
-#### Block-level 
-
-```{r}
-variable_importance <- lapply(cv_results, function(res) {
-  res$variable_importance
-})
-
-
-
-block_importance #calculate the mean importance values (here impurity)
-
-
-# Calculate block-wise aggregated importance
-aggregate_importance <- sapply(block, function(indices) {
-  mean(variable_importance[indices])  # Mean importance of variables in each block
-})
-names(aggregate_importance) <- paste("Block", 1:length(block), sep="_")
-aggregate_importance
-
-block
-```
-
-# 1. Clinical-only
-
-## Load clinical data
+## Clinical data
 
 ```{r}
 metadata_general <- read_csv("/mnt/central_nas_full/projects/RCC_DL/metadata_general.csv")
+```
+
+```{r}
+metadata_other <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/data/Metadata_combined_RCC_onlyPT.csv")
+
+# Add fine-grained stages and grades
+metadata_general$ISUP_simple <- metadata_other$ISUP[match(metadata_general$PID, metadata_other$PID)]
+metadata_general$pT_simple <- metadata_other$pT_simple[match(metadata_general$PID, metadata_other$PID)]
+```
+
+
+```{r}
+metadata_full <- metadata_general 
+```
+
+
+
+## IMC data 
+
+### Tumor panel 
+
+#### Preprocessing 
+
+```{r}
+tumor_key <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/tumor_key_features.csv")
+
+# Preprocessing as suggested by Boeva (Cell Reports Methods)
+# Step 1: Only keep columns with less than 10% of NA values 
+## This often removes INT values
+remove <- colnames(tumor_key)[colMeans(is.na(tumor_key)) > 0.1]
+remove <- remove[!remove %in% c("status_OS", "OS_months")]
+
+tumor_selected <- tumor_key %>% select(-remove)
+
+# Step 2: Missing numerical values can be imputed (Median across non-missing samples OR minimum for INT values)
+
+summary(is.na(tumor_selected))
+min(tumor_selected$INT_TU_HLADRhi__CD8_T_cell, na.rm = TRUE)
+
+tumor_selected[] <- lapply(colnames(tumor_selected), function(colname) {
+  if (colname %in% c("status_OS", "OS_months")) {
+    return(tumor_selected[[colname]])  
+  } else {
+    # If column has NA and is not excluded, replace NA with column minimum
+    col <- tumor_selected[[colname]]
+    if (any(is.na(col)) & str_detect(colname, "INT")) {
+      col[is.na(col)] <- min(col, na.rm = TRUE)
+    }
+    return(col)
+  }
+})
+
+summary(is.na(tumor_selected))
+
+# Add specific prefix
+colnames(tumor_selected)[4:ncol(tumor_selected)] <- paste0("IMC_TU_",colnames(tumor_selected)[4:ncol(tumor_selected)])
+```
+
+Save 
+
+```{r}
+write_csv(tumor_selected, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/tumor_key_features_processed.csv")
+```
+
+Add to general metadata
+
+```{r}
+for (entry in colnames(tumor_selected)[2:ncol(tumor_selected)]) {
+  metadata_general[,entry] <- tumor_selected[,entry][match(metadata_general[,"PID"],tumor_selected[,"PID"])]
+}
+
+
+
+
+
+```
+
+
+
+# 2. BlockForest survival prediction
+
+```{r}
+library(blockForest)
+```
+
+# 2A. Clinical-only
+
+## Load data
+
+```{r}
+metadata_general <- read_csv("/mnt/central_nas_full/projects/RCC_DL/metadata_general.csv")
+```
+
+```{r}
+metadata_other <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/data/Metadata_combined_RCC_onlyPT.csv")
+
+# Add fine-grained stages and grades
+metadata_general$ISUP_simple <- metadata_other$ISUP[match(metadata_general$PID, metadata_other$PID)]
+metadata_general$pT_simple <- metadata_other$pT_simple[match(metadata_general$PID, metadata_other$PID)]
 ```
 
 
 ```{r}
 colnames(metadata_general)
 
-metadata_select <- metadata_general %>% select(PID, OS_months, status_OS, pT_combined, ISUP_combined, necrose) %>% filter(complete.cases(.))
+metadata_select <- metadata_general %>% select(PID, OS_months, status_OS, age, gender, pT_combined, ISUP_combined, necrose) %>% filter(complete.cases(.))
 
-metadata_select$pT_combined <- factor(metadata_select$pT_combined, levels = sort(unique(metadata_select$pT_combined)))
+# Encode as binary 
+metadata_select$pT_combined <- ifelse(metadata_select$pT_combined == "1/2", 0, 1)
+metadata_select$ISUP_combined <- ifelse(metadata_select$ISUP_combined == "1/2", 0, 1)
+metadata_select$necrose
+metadata_select$gender <- ifelse(metadata_select$gender == "m", 0, 1)
+metadata_select$age
 
-metadata_select$ISUP_combined <- factor(metadata_select$ISUP_combined, levels = sort(unique(metadata_select$ISUP_combined)))
-
-metadata_select$necrose <- factor(metadata_select$necrose, levels = sort(unique(metadata_select$necrose)))
-
-metadata_select$gender <- factor(metadata_select$gender, levels = sort(unique(metadata_select$gender)))
+# Encode as categorical (factor)
+#metadata_select$pT_combined <- factor(metadata_select$pT_combined, levels = sort(unique(metadata_select$pT_combined)))
+#metadata_select$ISUP_combined <- factor(metadata_select$ISUP_combined, levels = sort(unique(metadata_select$ISUP_combined)))
+#metadata_select$necrose <- factor(metadata_select$necrose, levels = sort(unique(metadata_select$necrose)))
+#metadata_select$gender <- factor(metadata_select$gender, levels = sort(unique(metadata_select$gender)))
 ```
 
 
@@ -359,22 +198,25 @@ meta_info <- metadata_select %>% column_to_rownames("PID") %>% select(-OS_months
 
 colnames(meta_info) <- paste0("CLIN_", colnames(meta_info))
 
-x_train <- meta_info[folds[[2]],]
-x_test <- meta_info[-folds[[2]],]
+x_train <- meta_info[folds[[1]],]
+x_test <- meta_info[-folds[[1]],]
 
-y_train <- meta_survival[folds[[2]],]
-y_test <- meta_survival[-folds[[2]],]
+y_train <- meta_survival[folds[[1]],]
+y_test <- meta_survival[-folds[[1]],]
 
 all.equal(rownames(x_train), rownames(y_train))
 all.equal(rownames(x_test), rownames(y_test))
 ```
 
-
 ```{r}
+# Create blocks 
+## Dummy example - Define all in one block
 block <- list()
-block[[1]]<- c(1:3)
+block[[1]]<- c(1:ncol(x_train))
 block
 ```
+
+
 
 
 ## Perform BlockForest
@@ -385,25 +227,26 @@ block
 set.seed(22)
 # Train the blockForest model
 blockforobj <- blockfor(x_train, as.matrix(y_train), 
-                        blocks = block, 
+                        blocks = block,
                         splitrule = "extratrees", block.method = "BlockForest",
-                        importance = "impurity")
+                        always.select.block = 1, importance = "permutation")
     
 # Make predictions on the test data
-predres <- predict(blockforobj$forest, data = x_test)
+predres <- predict(blockforobj$forest, data = x_test, block.method = "BlockForest")
 ```
-
-
 
 ```{r}
-if (inherits(y, "matrix")) {
-    if (ncol(y) == 2) {
-      y <- Surv(time = y[, 1], event = y[, 2])
-      model.data <- data.frame(y, X)
-    }
-  
-y = as.matrix(y_train)
+concordance(Surv(y_test$OS_months, y_test$status_OS) ~ rowSums(predres$survival), timewt="n/G2")
 ```
+
+```{r}
+scale(blockforobj$forest$variable.importance)
+```
+
+
+
+
+
 
 ### 5fold CV (Outer)
 
@@ -412,51 +255,122 @@ y = as.matrix(y_train)
 library(blockForest)
 library(survival)
 
-# Create a function for cross-validation
-cross_validate_blockforest <- function(X, ysurv, folds) {
+# Create a function for 5 fold outer cross-validation
+cross_validate_blockforest <- function(x, y, folds, block) {
   results <- vector("list", length(folds))
   
   for (i in seq_along(folds)) {
+    
     # Split the data into training and test sets
-    test_indices <- folds[[i]]
-    train_indices <- setdiff(seq_len(nrow(X)), test_indices)
-    
-    Xtrain <- X[train_indices, ]
-    Xtest <- X[test_indices, ]
-    
-    ysurvtrain <- ysurv[train_indices, ]
-    ysurvtest <- ysurv[test_indices, ]
+    x_train <- x[folds[[i]],]
+    x_test <- x[-folds[[i]],]
+
+    y_train <- y[folds[[i]],]
+    y_test <- y[-folds[[i]],]
     
     # Train the blockForest model
-    blockforobj <- blockfor(Xtrain, ysurvtrain, 
+    blockforobj <- blockfor(X = x_train, 
+                            y = as.matrix(y_train), 
                             blocks = block,
-                            splitrule = "extratrees", block.method = "BlockForest",
-                            importance = "impurity")
+                            splitrule = "extratrees", 
+                            block.method = "BlockForest",
+                            #always.select.block = 1,
+                            importance = "permutation")
     
     # Make predictions on the test data
-    predres <- predict(blockforobj$forest, data = Xtest)
+    predres <- predict(blockforobj$forest, data = x_test)
     
     # Store the results for evaluation, e.g., store predicted survival functions
     results[[i]] <- list(predictions = predres, 
-                         actual = ysurvtest, 
+                         actual_surv = y_test, 
                          variable_importance = blockforobj$forest$variable.importance)
   }
   
   return(results)
 }
-
-# Create 5 folds for cross-validation
-set.seed(123)  # For reproducibility
-n <- nrow(X)
-folds <- split(sample(1:n), rep(1:5, length.out = n))
-
-# Run cross-validation
-cv_results <- cross_validate_blockforest(X, ysurv, folds)
 ```
 
-## Performance metrics 
+```{r}
+# Create x and y 
+metadata_select <- metadata_general %>% select(PID, OS_months, status_OS, age, gender, pT_combined, ISUP_combined, necrose) %>% filter(complete.cases(.))
 
-### Integrated Brier Score 
+# # Encode as binary 
+# metadata_select$pT_combined <- ifelse(metadata_select$pT_combined == "1/2", 0, 1)
+# metadata_select$ISUP_combined <- ifelse(metadata_select$ISUP_combined == "1/2", 0, 1)
+# metadata_select$necrose
+# metadata_select$gender <- ifelse(metadata_select$gender == "m", 0, 1)
+# metadata_select$age
+
+#Encode as categorical (factor)
+metadata_select$pT_combined <- factor(metadata_select$pT_combined, levels = sort(unique(metadata_select$pT_combined)))
+metadata_select$ISUP_combined <- factor(metadata_select$ISUP_combined, levels = sort(unique(metadata_select$ISUP_combined)))
+metadata_select$necrose <- factor(metadata_select$necrose, levels = sort(unique(metadata_select$necrose)))
+metadata_select$gender <- factor(metadata_select$gender, levels = sort(unique(metadata_select$gender)))
+
+y <- metadata_select %>% column_to_rownames("PID") %>% select(OS_months, status_OS)
+
+x <- metadata_select %>% column_to_rownames("PID") %>% select(-status_OS)
+colnames(x) <- paste0("CLIN_", colnames(x))
+```
+
+```{r}
+# Create train/test splits considering similar censoring rates
+folds <- createDataPartition(y$status_OS, p = 0.75, times = 5)
+```
+
+```{r}
+# Create blocks 
+## Dummy example - Define all in one block
+block <- list()
+block[[1]]<- c(1:ncol(x))
+block
+```
+
+
+```{r}
+# Run cross-validation
+cv_results <- cross_validate_blockforest(x, y, folds, block)
+```
+
+### Save results
+
+```{r}
+# Adjust naming
+saveRDS(cv_results, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/BF_clinicalonly_combined_factors_includetime")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# 3. Performance metrics
+
+## Read results from different models 
+
+```{r}
+cv_results <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/BF_clinicalonly_combined_factors")
+
+cv_results_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/BF_clinicalonly_combined_factors_includetime")
+```
+
+
+### Integrated Brier Score
+
+TO BE UPDATED
 
 ```{r}
 library(SurvMetrics)
@@ -476,7 +390,7 @@ ibs_scores <- sapply(cv_results, function(res) {
   IBS(Surv(res$actual[, 1], res$actual[, 2]), res$predictions$survival)
 })
 
-ibs_scores_1 <- sapply(cv_results, function(res) {
+ibs_scores_1 <- sapply(cv_results_1, function(res) {
   IBS(Surv(res$actual[, 1], res$actual[, 2]), res$predictions$survival)
 })
 
@@ -502,12 +416,12 @@ concordance(Surv(y_test[, 1], y_test[, 2]) ~ rowSums(predres$chf))
 ```{r}
 # timewt specifies 
 concordance_scores <- sapply(cv_results, function(res) {
-  out <- concordance(Surv(res$actual[, 1], res$actual[, 2]) ~ rowSums(res$predictions$chf), timewt = "n/G2")
+  out <- concordance(Surv(res$actual_surv[, 1], res$actual_surv[, 2]) ~ rowSums(res$predictions$survival), timewt = "n/G2")
   return(out$concordance)
 })
 
-concordance_scores_1 <- sapply(cv_results, function(res) {
-  out <- concordance(Surv(res$actual[, 1], res$actual[, 2]) ~ rowSums(res$predictions$chf), timewt = "n/G2")
+concordance_scores_1 <- sapply(cv_results_1, function(res) {
+  out <- concordance(Surv(res$actual_surv[, 1], res$actual_surv[, 2]) ~ rowSums(res$predictions$survival), timewt = "n/G2")
   return(out$concordance)
 })
 
@@ -526,6 +440,67 @@ ggplot(plot, aes(x = model, y = concordance_scores, fill = model))+
 
 
 ### Kaplan-Meier and risk group definition
+
+```{r}
+dataset <- cv_results
+surv_plots <- list()
+data_out <- list()
+
+for(i in seq_along(dataset)){
+  res <- dataset[[i]]
+  out <- cbind(res$actual_surv,chf = rowSums(res$predictions$chf))
+  out_df <- out %>% mutate(risk_group = ifelse(chf > median(chf), "high", "low"), fold = i) %>% rownames_to_column("PID")
+
+  #Plot specific survival curves
+  fit <- survfit(Surv(out_df$OS_months, out_df$status_OS) ~ risk_group, data = out_df)
+
+  surv_plots[[i]] <- fit
+  data_out[[i]] <- out_df
+}
+
+# Plot all curves for each CV fold
+ggsurvplot_list(surv_plots, 
+                data = data_out,
+                risk.table = TRUE, # Add risk table
+                risk.table.col = "strata", # Change risk table color by groups
+                linetype = "strata", # Change line type by groups
+                surv.median.line = "hv", # Specify median survival
+                ggtheme = theme_classic(), # Change ggplot2 theme
+                palette = "Set1",
+                conf.int = TRUE
+                )
+
+## Pick a specific fold
+ggsurvplot(surv_plots[[2]], 
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = "Set1",
+          conf.int = TRUE
+)
+
+# Display averaged chf across all folds
+data_comb <- do.call("rbind", data_out)
+
+data_comb <- data_comb %>% group_by(PID) %>% mutate(mean_chf = mean(chf)) %>% select(PID, OS_months, status_OS, mean_chf) %>% unique() %>% ungroup() %>% mutate(risk_group = ifelse(mean_chf > median(mean_chf), "high", "low"))
+
+fit <- survfit(Surv(data_comb$OS_months, data_comb$status_OS) ~ risk_group, data = data_comb)
+
+ggsurvplot(fit, 
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = "Set1",
+          conf.int = TRUE
+)
+```
+
 
 ```{r}
 library(survival)
@@ -561,11 +536,6 @@ ggsurvplot(fit,
 #### Feature-level
 
 ```{r}
-# Train the blockForest model with importance measure
-blockforobj <- blockfor(Xtrain, ysurvtrain, num.trees = 100, replace = TRUE, blocks = block,
-                        nsets = 100, num.trees.pre = 50, splitrule = "extratrees", 
-                        block.method = "BlockForest", importance = "permutation")
-
 variable_importance <- blockforobj$forest$variable.importance
 
 # Calculate block-wise aggregated importance
@@ -578,17 +548,14 @@ aggregate_importance
 
 
 ```{r}
-variable_importance <- sapply(cv_results, function(res) {
+variable_importance <- sapply(cv_results_1, function(res) {
   res$variable_importance
 })
 
+# Potentially scale / min-max normalize
+plot <- variable_importance %>% as.data.frame %>% rownames_to_column("feature") %>% pivot_longer(2:ncol(.),names_to = "fold", values_to = "importance") 
 
-
-plot %in% block
-
-plot <- variable_importance %>% rownames_to_column("feature") %>% pivot_longer(cols = 2:ncol(.),names_to = "fold", values_to = "importance")
-
-ggplot(plot, aes(x = reorder(feature, -importance), y = importance))+
+ggplot(plot, aes(x = feature, y = importance, fill = feature))+
   geom_boxplot()+
   theme_classic()
 ```
