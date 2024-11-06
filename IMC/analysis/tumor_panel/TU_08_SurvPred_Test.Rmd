@@ -87,7 +87,7 @@ metadata_selected <- as.data.frame(metadata_selected)
 Save 
 
 ```{r}
-write_csv(metadata_selected, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/clinical_key_features_processed.csv")
+write_csv(metadata_selected, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/BlockForest/clinical_key_features_processed.csv")
 ```
 
 ## IMC data 
@@ -97,7 +97,7 @@ write_csv(metadata_selected, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/da
 #### Preprocessing 
 
 ```{r}
-tumor_key <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/tumor_key_features.csv")
+tumor_key <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/BlockForest/tumor_key_features.csv")
 
 # Preprocessing as suggested by Boeva (Cell Reports Methods)
 # Step 1: Only keep columns with less than 10% of NA values 
@@ -127,6 +127,8 @@ tumor_selected[] <- lapply(colnames(tumor_selected), function(colname) {
 
 summary(is.na(tumor_selected))
 
+# Step 3: To implement - Correlation removal? >95% correlation
+
 # Add specific prefix
 colnames(tumor_selected)[4:ncol(tumor_selected)] <- paste0("IMC_TU_",colnames(tumor_selected)[4:ncol(tumor_selected)])
 tumor_selected <- as.data.frame(tumor_selected)
@@ -135,7 +137,7 @@ tumor_selected <- as.data.frame(tumor_selected)
 Save 
 
 ```{r}
-write_csv(tumor_selected, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/tumor_key_features_processed.csv")
+write_csv(tumor_selected, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/BlockForest/tumor_key_features_processed.csv")
 ```
 
 Add to metadata selected
@@ -149,7 +151,7 @@ for (entry in colnames(tumor_selected)[4:ncol(tumor_selected)]) {
 ## Save preprocessed metadata
 
 ```{r}
-write_csv(metadata_selected, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/key_features_processed.csv")
+write_csv(metadata_selected, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/BlockForest/key_features_processed.csv")
 ```
 
 # 2. BlockForest survival prediction
@@ -161,7 +163,7 @@ library(blockForest)
 ## Load and select data
 
 ```{r}
-metadata_selected <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/key_features_processed.csv")
+metadata_selected <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/BlockForest/key_features_processed.csv")
 ```
 
 ```{r}
@@ -183,7 +185,7 @@ meta[] <- lapply(names(meta), function(col_name) {
       return(as.vector(scale(meta[[col_name]]))) # Scale numerical columns (Z-score)
     } 
     else if (is.character(meta[[col_name]])) {
-      return(as.factor(meta[[col_name]],levels = sort(unique(meta[[col_name]])))) # Convert character columns to factors
+      return(as.factor(meta[[col_name]])) # Convert character columns to factors
     } else {
       return(meta[[col_name]])
     }
@@ -216,8 +218,8 @@ folds <- createDataPartition(y$status_OS, p = 0.75, times = 5)
 block <- list()
 
 # Define blocks based on column names containing "CLIN" and "IMC"
-#block[[1]] <- which(grepl("CLIN", colnames(x)))
 block[[1]] <- which(grepl("IMC", colnames(x)))
+#block[[2]] <- which(grepl("IMC", colnames(x)))
 
 # Display the block list
 print(block)
@@ -248,6 +250,7 @@ blockforobj <- blockfor(x_train, as.matrix(y_train),
                         nsets = 300, 
                         num.trees.pre = 1500,
                         always.select.block = 1, 
+                        num.threads = 30,
                         importance = "permutation")
     
 # Make predictions on the test data
@@ -304,7 +307,8 @@ cross_validate_blockforest <- function(x, y, folds, block) {
     predres <- predict(blockforobj$forest, data = x_test)
     
     # Store the results for evaluation, e.g., store predicted survival functions
-    results[[i]] <- list(predictions = predres, 
+    results[[i]] <- list(predictions = predres,
+                         actual_test = x_test,
                          actual_surv = y_test, 
                          variable_importance = blockforobj$forest$variable.importance)
     
@@ -322,7 +326,7 @@ cross_validate_blockforest <- function(x, y, folds, block) {
 cv_results <- cross_validate_blockforest(x, y, folds, block)
 
 # Adjust naming
-saveRDS(cv_results, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/BF_IMConly_tumor_panel_zscored")
+saveRDS(cv_results, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/BlockForest/BF_CLIN_IMC_tumor_panel_zscored.rds")
 ```
 
 
@@ -332,9 +336,13 @@ saveRDS(cv_results, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analys
 ## Read results from different models 
 
 ```{r}
-cv_results <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/BF_clinicalonly_combined_factors")
+cv_results <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/BlockForest/BF_clinicalonly_combined_factors.rds")
 
-cv_results_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/BF_clinicalonly_combined_factors_includetime")
+cv_results_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/BlockForest/BF_IMConly_tumor_panel_zscored.rds")
+
+cv_results_2 <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/BlockForest/BF_CLIN_IMC_tumor_panel_zscored.rds")
+
+cv_results_3 <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/BlockForest/BF_clinicalonly_combined_factors_includetime.rds")
 ```
 
 ```{r}
@@ -447,11 +455,41 @@ library(survival)
 library(rms)
 f1 <- psm(Surv(time,status)~X1+X2,data=learndat)
 f2 <- psm(Surv(time,status)~X1,data=learndat)
+
 pf <- pec(list(f1,f2),formula=Surv(time,status)~1,data=testdat,maxtime=200)
 plot(pf)
 summary(pf)
 crps(pf)
 ```
+
+```{r}
+# Survival probability matrix from blockForest predictions
+surv_probs <- predres$survival  # Rows = samples, Columns = time points in predres$unique.death.times
+time_points <- predres$unique.death.times  # Time points corresponding to each column in surv_probs
+
+# Desired time points for Brier score calculation in pec
+times <- seq(0, max(y_test$OS_months), by = 100)
+
+# Find the nearest indices for each desired time in the unique death times
+time_indices <- sapply(times, function(t) which.min(abs(time_points - t)))
+
+# Extract or approximate survival probabilities at the specified times
+aligned_surv_probs <- surv_probs[, time_indices]
+
+
+# Calculate Prediction Error Curves (PEC) using the matrix of survival probabilities
+PredError <- pec(object = list("BlockForest" = aligned_surv_probs),
+                 formula = Surv(time, status) ~ 1,
+                 data = data.frame(y_test, x_test),  # Test data with actual survival times and covariates
+                 times = times,  # Use aligned times
+                 cens.model = "marginal",
+                 exact = TRUE,
+                 verbose = TRUE)
+```
+
+
+
+
 
 ```{r}
 str(cv_results[[1]]$predictions$unique.death.times)
@@ -515,24 +553,39 @@ concordance_scores_1 <- sapply(cv_results_1, function(res) {
   return(out$concordance)
 })
 
+concordance_scores_2 <- sapply(cv_results_2, function(res) {
+  out <- concordance(Surv(res$actual_surv[, 1], res$actual_surv[, 2]) ~ rowSums(res$predictions$survival), timewt = "n/G2")
+  return(out$concordance)
+})
+
+concordance_scores_3 <- sapply(cv_results_3, function(res) {
+  out <- concordance(Surv(res$actual_surv[, 1], res$actual_surv[, 2]) ~ rowSums(res$predictions$survival), timewt = "n/G2")
+  return(out$concordance)
+})
+
 # Compare two models
-out <- data.frame(fold = 1:5, concordance_scores = concordance_scores, model = "test")
-out_1 <- data.frame(fold = 1:5, concordance_scores = concordance_scores_1, model = "test_1")
+out <- data.frame(fold = 1:5, concordance_scores = concordance_scores, model = "CLIN_only")
+out_1 <- data.frame(fold = 1:5, concordance_scores = concordance_scores_1, model = "IMC_tumor_only")
+out_2 <- data.frame(fold = 1:5, concordance_scores = concordance_scores_2, model = "CLIN_IMC_tumor")
+out_3 <- data.frame(fold = 1:5, concordance_scores = concordance_scores_3, model = "CLIN_only_withtime")
 
-plot <- rbind(out, out_1)
+plot <- rbind(out, out_1, out_2, out_3)
 
-ggplot(plot, aes(x = model, y = concordance_scores, fill = model))+
+library(ggpubr)
+ggplot(plot, aes(x = reorder(model,-concordance_scores), y = concordance_scores, fill = model))+
   geom_boxplot(outlier.colour = NA)+
-  #coord_cartesian(ylim = c(0,0.3))+
+  #coord_cartesian(ylim = c(0.5,1))+
   theme_classic()+
-  stat_compare_means()
+  stat_compare_means(ref.group = "CLIN_only", paired = FALSE, method.args = list(alternative = "two.sided", label = "p.format"))+
+  scale_fill_brewer(palette = "RdBu")+
+  xlab("Models")
 ```
 
 
 ### Kaplan-Meier and risk group definition
 
 ```{r}
-dataset <- cv_results
+dataset <- cv_results_1
 surv_plots <- list()
 data_out <- list()
 
@@ -549,6 +602,8 @@ for(i in seq_along(dataset)){
 }
 
 # Plot all curves for each CV fold
+library(survival)
+library(survminer)
 ggsurvplot_list(surv_plots, 
                 data = data_out,
                 risk.table = TRUE, # Add risk table
@@ -645,9 +700,13 @@ variable_importance <- sapply(cv_results_1, function(res) {
 # Potentially scale / min-max normalize
 plot <- variable_importance %>% as.data.frame %>% rownames_to_column("feature") %>% pivot_longer(2:ncol(.),names_to = "fold", values_to = "importance") 
 
-ggplot(plot, aes(x = feature, y = importance, fill = feature))+
+plot$scaled_importance <- as.vector(scale(plot$importance))
+
+ggplot(plot, aes(x = feature, y = scaled_importance, fill = feature))+
   geom_boxplot()+
-  theme_classic()
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  guides(fill = "none")
 ```
 
 #### Block-level 
