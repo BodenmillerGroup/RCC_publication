@@ -1,0 +1,481 @@
+---
+title: "TU_08_SurvivalPred_Test"
+author: "Lasse Meyer"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Software requirements
+
+```{r lib, message=FALSE,warning=FALSE}
+#Data containers
+library(SpatialExperiment)
+library(SingleCellExperiment)
+
+#Data processing
+library(scuttle)
+library(scater)
+library(scran)
+library(imcRtools)
+
+#Data visualization
+library(cytomapper)
+library(dittoSeq)
+library(pheatmap)
+library(cowplot)
+library(ComplexHeatmap)
+library(circlize)
+
+#Utilities
+library(tidyverse)
+library(openxlsx)
+library(stringr)
+library(patchwork)
+library(parallel)
+library(BiocParallel)
+library(BiocNeighbors)
+library(BiocSingular)
+library(tiff)
+library(ggrepel)
+library(EBImage)
+library(viridis)
+library(mclust)
+library(Rphenograph)
+library(igraph)
+library(RColorBrewer)
+library(foreach)
+library(clValid)
+library(bluster)
+library(psych)
+library(corrplot)
+library(psych)
+
+#Batch correction
+library(batchelor)
+```
+
+
+# 1. Prepare master table 
+
+## Clinical data
+
+```{r}
+metadata_general <- read_csv("/mnt/central_nas_full/projects/RCC_DL/metadata_general.csv")
+```
+
+```{r}
+metadata_other <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/data/Metadata_combined_RCC_onlyPT.csv")
+
+# Add fine-grained stages and grades
+metadata_general$ISUP_simple <- metadata_other$ISUP[match(metadata_general$PID, metadata_other$PID)]
+metadata_general$pT_simple <- metadata_other$pT_simple[match(metadata_general$PID, metadata_other$PID)]
+```
+
+### Preprocessing 
+
+```{r}
+metadata_selected <- metadata_general %>% select(PID, OS_months, status_OS, age, gender,pT_simple, ISUP_simple, necrose) #Selecting simple staging here and not combined 
+
+metadata_selected$necrose <- as.character(metadata_selected$necrose)
+
+colnames(metadata_selected)[4:ncol(metadata_selected)] <- paste0("CLIN_",colnames(metadata_selected)[4:ncol(metadata_selected)])
+metadata_selected <- as.data.frame(metadata_selected)
+```
+
+```{r}
+# Make sure stage, grade and necrose are encoded as characters
+metadata_selected$CLIN_pT_simple <- as.character(paste0("T",metadata_selected$CLIN_pT_simple))
+metadata_selected$CLIN_ISUP_simple <- as.character(paste0("G",metadata_selected$CLIN_ISUP_simple))
+metadata_selected$CLIN_necrose <- as.character(paste0("NE",metadata_selected$CLIN_necrose))
+
+metadata_selected$CLIN_necrose[metadata_selected$CLIN_necrose == "NENA"] <- NA
+metadata_selected$CLIN_ISUP_simple[metadata_selected$CLIN_ISUP_simple == "GNA"] <- NA
+metadata_selected$CLIN_pT_simple[metadata_selected$CLIN_pT_simple == "TNA"] <- NA
+```
+
+### Encoding 
+
+```{r}
+# Perform preprocessing
+metadata_selected[] <- lapply(names(metadata_selected), function(col_name) {
+  if (col_name %in% c("PID", "status_OS", "OS_months")) {
+    return(metadata_selected[[col_name]])  # Return the column as is
+  } else {
+    if (is.numeric(metadata_selected[[col_name]])) {
+      return(as.vector(scale(metadata_selected[[col_name]]))) # Scale numerical columns (Z-score)
+    } 
+    else if (is.character(metadata_selected[[col_name]])) {
+      return(as.factor(metadata_selected[[col_name]])) # Convert character columns to factors
+    } else {
+      return(metadata_selected[[col_name]])
+    }
+  }
+})
+
+str(metadata_selected)
+```
+
+### Correlation reduction 
+
+```{r, fig.width=16, fig.height=16}
+# 1. Check statistical association of numerical variables
+cor_test <- metadata_selected %>% select(where(is.numeric), -status_OS,-OS_months)
+
+if(dim(cor_test)[2] > 1) {
+  cor_matrix <- cor(cor_test, method = "pearson")
+  
+  corrplot(
+    cor_matrix,
+    method = "shade",
+    col = brewer.pal(n = 8, name = "RdBu"),
+    type = "upper",
+    order = "hclust",
+    hclust.method = "ward.D2",
+    addCoef.col = "black",
+    addCoefasPercent = F,
+    tl.col = "black",
+    tl.srt = 40,
+    diag = FALSE
+  )
+  
+  # Identify pairs with cor > 0.95
+  high_corr_pairs <-
+    which(abs(cor_matrix) > 0.95 &
+            lower.tri(cor_matrix), arr.ind = TRUE)
+  high_corr_pairs_df <- data.frame(
+    Var1 = rownames(cor_matrix)[high_corr_pairs[, 1]],
+    Var2 = colnames(cor_matrix)[high_corr_pairs[, 2]],
+    Correlation = cor_matrix[high_corr_pairs]
+  )
+}
+
+# Nothing to remove here
+```
+
+```{r}
+# 2. Check statistical association of categorical variables
+chi_test <- colnames(metadata_selected %>% select(where(is.factor), -status_OS,-OS_months))
+
+if(length(chi_test) > 1) {
+  out_p <- list()
+  
+  for (i in chi_test) {
+    for (y in chi_test) {
+      if (i != y) {
+        out <-
+          metadata_selected %>% select(PID, any_of(i), any_of(y)) %>% unique %>% select(-PID) %>% group_by(all_of(i)) %>% table() %>%
+          as.data.frame
+        cur_test <-
+          out %>% pivot_wider(
+            names_from = i,
+            id_cols = y,
+            values_from = Freq
+          ) %>% column_to_rownames(y)
+        cur_test_out <- chisq.test(cur_test)
+        out_p[paste0(i, "_", y)] <- cur_test_out$p.value
+      }
+    }
+  }
+  
+  # FDR-correct p-values
+  p_values <- unlist(out_p)
+  adjusted_p_values <- p.adjust(p_values, method = "BH")
+  out_p_adjust <- as.list(adjusted_p_values)
+  
+  # Extract direct comparison p-values
+  direct_comp <-
+    matrix(
+      NA,
+      nrow = length(chi_test),
+      ncol = length(chi_test),
+      dimnames = list(chi_test, chi_test)
+    )
+  
+  for (i in chi_test) {
+    for (j in chi_test) {
+      if (i == j) {
+        direct_comp[i, j] <- 1
+      } else {
+        comp_name <- paste(i, j, sep = "_")
+        rev_comp_name <- paste(j, i, sep = "_")
+        if (comp_name %in% names(out_p_adjust)) {
+          direct_comp[i, j] <- out_p_adjust[[comp_name]]
+        } else if (rev_comp_name %in% names(out_p_adjust)) {
+          direct_comp[i, j] <- out_p_adjust[[rev_comp_name]]
+        }
+      }
+    }
+  }
+  
+  # Print the square matrix
+  corrplot(
+    -log10(direct_comp),
+    is.corr = FALSE,
+    diag = FALSE,
+    tl.col = "black",
+    type = "upper",
+    col = COL1("Blues", 100),
+    method = "shade",
+    bg = "lightgrey",
+    addCoef.col = "black"
+  )
+  
+  
+  # Identify pairs with
+  high_corr_pairs <-
+    which(abs(direct_comp) < 0.01 &
+            lower.tri(direct_comp), arr.ind = TRUE)
+  
+  high_corr_pairs_df <- data.frame(
+    Var1 = rownames(direct_comp)[high_corr_pairs[, 1]],
+    Var2 = colnames(direct_comp)[high_corr_pairs[, 2]],
+    Correlation = direct_comp[high_corr_pairs]
+  )
+}
+
+```
+
+```{r}
+# Remove specific pair
+removed_numeric <- NULL
+removed_cat <- c("CLIN_ISUP_simple", "CLIN_necrose")
+
+metadata_selected_fil <- metadata_selected %>% select(-all_of(removed_numeric), -all_of(removed_cat))
+```
+
+### Save 
+
+```{r}
+saveRDS(metadata_selected_fil, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/BlockForest/clinical_key_features_processed.rds")
+```
+
+## IMC data 
+
+### Tumor panel 
+
+#### Preprocessing 
+
+```{r}
+tumor_key <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/BlockForest/tumor_key_features.csv")
+
+# Preprocessing as suggested by Boeva (Cell Reports Methods)
+# Step 1: Only keep columns with less than 10% of NA values 
+## This often removes INT values
+remove <- colnames(tumor_key)[colMeans(is.na(tumor_key)) > 0.1]
+remove <- remove[!remove %in% c("status_OS", "OS_months")]
+
+tumor_selected <- tumor_key %>% select(-remove)
+
+# Step 2: Missing numerical values can be imputed (Median across non-missing samples OR minimum for INT values)
+summary(is.na(tumor_selected))
+
+tumor_selected[] <- lapply(colnames(tumor_selected), function(colname) {
+  if (colname %in% c("status_OS", "OS_months")) {
+    return(tumor_selected[[colname]])  
+  } else {
+    # If column has NA and is not excluded, replace NA with column minimum
+    col <- tumor_selected[[colname]]
+    if (any(is.na(col)) & str_detect(colname, "INT")) {
+      col[is.na(col)] <- min(col, na.rm = TRUE)
+    }
+    return(col)
+  }
+})
+
+summary(is.na(tumor_selected))
+
+# Add specific prefix
+colnames(tumor_selected)[4:ncol(tumor_selected)] <- paste0("IMC_TU_",colnames(tumor_selected)[4:ncol(tumor_selected)])
+tumor_selected <- as.data.frame(tumor_selected)
+```
+
+#### Encoding 
+
+```{r}
+# Perform preprocessing
+tumor_selected[] <- lapply(names(tumor_selected), function(col_name) {
+  if (col_name %in% c("PID", "status_OS", "OS_months")) {
+    return(tumor_selected[[col_name]])  # Return the column as is
+  } else {
+    if (is.numeric(tumor_selected[[col_name]])) {
+      return(as.vector(scale(tumor_selected[[col_name]]))) # Scale numerical columns (Z-score)
+    } 
+    else if (is.character(tumor_selected[[col_name]])) {
+      return(as.factor(tumor_selected[[col_name]])) # Convert character columns to factors
+    } else {
+      return(tumor_selected[[col_name]])
+    }
+  }
+})
+
+str(tumor_selected)
+```
+
+
+#### Correlation reduction 
+
+```{r, fig.width=16, fig.height=16}
+# 1. Check statistical association of numerical variables
+cor_test <- tumor_selected %>% select(where(is.numeric), -status_OS,-OS_months)
+
+if(dim(cor_test)[2] > 1) {
+  cor_matrix <- cor(cor_test, method = "pearson")
+  
+  corrplot(
+    cor_matrix,
+    method = "shade",
+    col = brewer.pal(n = 8, name = "RdBu"),
+    type = "upper",
+    order = "hclust",
+    hclust.method = "ward.D2",
+    addCoef.col = "black",
+    addCoefasPercent = F,
+    tl.col = "black",
+    tl.srt = 40,
+    diag = FALSE
+  )
+  
+  # Identify pairs with cor > 0.95
+  high_corr_pairs <-
+    which(abs(cor_matrix) > 0.95 &
+            lower.tri(cor_matrix), arr.ind = TRUE)
+  high_corr_pairs_df <- data.frame(
+    Var1 = rownames(cor_matrix)[high_corr_pairs[, 1]],
+    Var2 = colnames(cor_matrix)[high_corr_pairs[, 2]],
+    Correlation = cor_matrix[high_corr_pairs]
+  )
+}
+
+high_corr_pairs_df
+```
+
+
+```{r}
+# 2. Check statistical association of categorical variables
+chi_test <- colnames(tumor_selected %>% select(where(is.factor), -status_OS,-OS_months))
+
+if(length(chi_test) > 1) {
+  out_p <- list()
+  
+  for (i in chi_test) {
+    for (y in chi_test) {
+      if (i != y) {
+        out <-
+          tumor_selected %>% select(PID, any_of(i), any_of(y)) %>% unique %>% select(-PID) %>% group_by(all_of(i)) %>% table() %>%
+          as.data.frame
+        cur_test <-
+          out %>% pivot_wider(
+            names_from = i,
+            id_cols = y,
+            values_from = Freq
+          ) %>% column_to_rownames(y)
+        cur_test_out <- chisq.test(cur_test)
+        out_p[paste0(i, "_", y)] <- cur_test_out$p.value
+      }
+    }
+  }
+  
+  # FDR-correct p-values
+  p_values <- unlist(out_p)
+  adjusted_p_values <- p.adjust(p_values, method = "BH")
+  out_p_adjust <- as.list(adjusted_p_values)
+  
+  # Extract direct comparison p-values
+  direct_comp <-
+    matrix(
+      NA,
+      nrow = length(chi_test),
+      ncol = length(chi_test),
+      dimnames = list(chi_test, chi_test)
+    )
+  
+  for (i in chi_test) {
+    for (j in chi_test) {
+      if (i == j) {
+        direct_comp[i, j] <- 1
+      } else {
+        comp_name <- paste(i, j, sep = "_")
+        rev_comp_name <- paste(j, i, sep = "_")
+        if (comp_name %in% names(out_p_adjust)) {
+          direct_comp[i, j] <- out_p_adjust[[comp_name]]
+        } else if (rev_comp_name %in% names(out_p_adjust)) {
+          direct_comp[i, j] <- out_p_adjust[[rev_comp_name]]
+        }
+      }
+    }
+  }
+  
+  # Print the square matrix
+  corrplot(
+    -log10(direct_comp),
+    is.corr = FALSE,
+    diag = FALSE,
+    tl.col = "black",
+    type = "upper",
+    col = COL1("Blues", 100),
+    method = "shade",
+    bg = "lightgrey",
+    addCoef.col = "black"
+  )
+  
+  
+  # Identify pairs with
+  high_corr_pairs <-
+    which(abs(direct_comp) < 0.01 &
+            lower.tri(direct_comp), arr.ind = TRUE)
+  
+  high_corr_pairs_df <- data.frame(
+    Var1 = rownames(direct_comp)[high_corr_pairs[, 1]],
+    Var2 = colnames(direct_comp)[high_corr_pairs[, 2]],
+    Correlation = direct_comp[high_corr_pairs]
+  )
+}
+
+```
+
+
+```{r}
+# Remove specific pairs 
+removed_numeric <- c("IMC_TU_D_ICAM1_dom", "IMC_TU_D_mTORhi_dom", "IMC_TU_INT_CD8_T_cell__TU_HLADRhi")
+removed_cat <- NULL
+
+tumor_selected_fil <- tumor_selected %>% select(-all_of(removed_numeric), -all_of(removed_cat))
+
+str(tumor_selected_fil)
+```
+
+
+#### Save and add
+
+```{r}
+saveRDS(tumor_selected_fil, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/BlockForest/tumor_key_features_processed.rds")
+```
+
+Add to metadata selected fil
+
+```{r}
+tumor_selected_fil <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/BlockForest/tumor_key_features_processed.rds")
+metadata_selected_fil <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/BlockForest/clinical_key_features_processed.rds")
+```
+
+```{r}
+for (entry in colnames(tumor_selected_fil)[4:ncol(tumor_selected_fil)]) {
+  metadata_selected_fil[,entry] <- tumor_selected_fil[,entry][match(metadata_selected_fil[,"PID"],tumor_selected_fil[,"PID"])]
+}
+
+str(metadata_selected_fil)
+```
+
+ 
+## Save preprocessed metadata
+
+```{r}
+# Save as RDS and csv
+saveRDS(metadata_selected_fil, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/BlockForest/key_features_processed.rds")
+write_csv(metadata_selected_fil, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/BlockForest/key_features_processed.csv")
+```
+

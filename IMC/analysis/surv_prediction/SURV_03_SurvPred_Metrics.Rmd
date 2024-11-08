@@ -1,0 +1,333 @@
+---
+title: "TU_08_SurvivalPred_Test"
+author: "Lasse Meyer"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Software requirements
+
+```{r lib, message=FALSE,warning=FALSE}
+#Data containers
+library(SpatialExperiment)
+library(SingleCellExperiment)
+
+#Data processing
+library(scuttle)
+library(scater)
+library(scran)
+library(imcRtools)
+
+#Data visualization
+library(cytomapper)
+library(dittoSeq)
+library(pheatmap)
+library(cowplot)
+library(ComplexHeatmap)
+library(circlize)
+
+#Utilities
+library(tidyverse)
+library(openxlsx)
+library(stringr)
+library(patchwork)
+library(parallel)
+library(BiocParallel)
+library(BiocNeighbors)
+library(BiocSingular)
+library(tiff)
+library(ggrepel)
+library(EBImage)
+library(viridis)
+library(mclust)
+library(Rphenograph)
+library(igraph)
+library(RColorBrewer)
+library(foreach)
+library(clValid)
+library(bluster)
+library(psych)
+library(corrplot)
+library(psych)
+
+#Batch correction
+library(batchelor)
+```
+
+
+# 3. Performance metrics
+
+## Read results from different models 
+
+```{r}
+cv_results <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/BlockForest/BF_clinicalonly_simple.rds")
+
+cv_results_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/BlockForest/BF_IMConly_tumor_panel_zscored.rds")
+
+cv_results_2 <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/BlockForest/BF_CLIN_simple_IMC_tumor_panel_zscored.rds")
+
+cv_results_3 <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/BlockForest/BF_CLIN_simple_notfavoring_IMC_tumor_panel_zscored.rds")
+
+cv_results_4 <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/BlockForest/BF_CLIN_simple_IMC_tumor_panel_zscored_includetime.rds")
+```
+
+```{r}
+# Create list from results
+# Define the cross-validation results as a list
+cv_results_list <- list(
+  "CLIN_only" = cv_results,
+  "IMC_only" = cv_results_1,
+  "CLIN_IMC" = cv_results_2,
+  "CLIN_IMC_notfav" = cv_results_3,
+  "CLIN_IMC_includetime" = cv_results_4
+)
+```
+
+### Integrated Brier Score
+
+```{r, fig.width=8.5, fig.height=4.5}
+# Initialize list to store IBS scores for each cross-validation result
+ibs_scores_list <- list()
+
+# Loop over each cross-validation result object using lapply
+ibs_scores_list <- lapply(cv_results_list, function(res_obj) {
+  # Apply function over each element in the result object (each fold in cross-validation)
+  sapply(res_obj, function(res) {
+    # Check if row counts match between actual_surv and actual_test
+    if (nrow(res$actual_surv) != nrow(res$actual_test)) {
+      stop("Row count mismatch between actual_surv and actual_test")
+    }
+    
+    # Define test data
+    test_data <- cbind(res$actual_surv, res$actual_test)
+    
+    # Time points in test data
+    times_test <- sort(unique(test_data$OS_months))
+    if(!0 %in% times_test){
+    times_test <- c(0, times_test) # Add timepoint 0 as baseline (if not included)
+    }
+    
+    # Time points in prediction
+    times_pred <- res$predictions$unique.death.times
+    
+    # Find the nearest indices for each desired time in the unique death times
+    time_indices <- sapply(times_test, function(t) which.min(abs(times_pred - t)))
+    
+    # Extract predicted survival probabilities at the specified times
+    aligned_surv_probs <- res$predictions$survival[, time_indices, drop = FALSE]
+    
+    # Calculate prediction error curve (PEC)
+    pec_obj <- pec(
+      object = list("BlockForest" = aligned_surv_probs),
+      formula = Surv(OS_months, status_OS) ~ 1,
+      cens.model = "marginal",
+      exact = TRUE,
+      data = test_data
+    )
+    
+    # Define the time range of interest for IBS
+    #IBSrange <- quantile(test_data$OS_months, 0.9)
+    IBSrange <- max(test_data$OS_months)
+    
+    # Calculate the CRPS and extract the IBS score
+    crps_val <- crps(pec_obj, start = 0, times = IBSrange)
+    ibs_score <- crps_val[2] # Adjust if necessary based on your specific data structure
+    
+    return(ibs_score)
+  })
+})
+
+# Convert scores to dataframe
+out_ibs <- data.frame(fold = 1:5, t(do.call("rbind", ibs_scores_list))) %>% pivot_longer(2:ncol(.), names_to = "model", values_to = "IBS")
+
+# Plot
+library(ggpubr)
+ggplot(out_ibs, aes(x = reorder(model,-IBS), y = IBS, fill = model))+
+  geom_boxplot()+
+  #coord_cartesian(ylim = c(0.5,1))+
+  theme_classic()+
+  stat_compare_means(ref.group = "CLIN_only", paired = FALSE, method = "t.test", method.args = list(alternative = "less", label = "p.format"))+
+  scale_fill_brewer(palette = "RdBu")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  xlab("Models")+
+  ylab("Integrated Brier Score")
+```
+
+
+
+### Concordance (Uno)
+
+
+```{r, fig.width=9, fig.height=5}
+# Initialize list to store concordance scores for each cross-validation result
+concordance_scores_list <- list()
+
+# Loop over each cross-validation result object using lapply
+concordance_scores_list <- lapply(cv_results_list, function(res_obj) {
+  # Apply function over each element in the result object (each fold in cross-validation)
+  sapply(res_obj, function(res) {
+    out <- concordance(Surv(res$actual_surv[, 1], res$actual_surv[, 2]) ~ rowSums(res$predictions$survival), timewt = "n/G2")
+    return(out$concordance)
+  })
+})
+
+out_concordance <- data.frame(fold = 1:5, t(do.call("rbind", concordance_scores_list))) %>% pivot_longer(2:ncol(.), names_to = "model", values_to = "concordance")
+
+library(ggpubr)
+ggplot(out_concordance, aes(x = reorder(model,-concordance), y = concordance, fill = model))+
+  geom_boxplot()+
+  #coord_cartesian(ylim = c(0.5,1))+
+  theme_classic()+
+  stat_compare_means(ref.group = "CLIN_only", paired = FALSE, method = "t.test", method.args = list(alternative = "greater", label = "p.format"))+
+  scale_fill_brewer(palette = "RdBu")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  xlab("Models")+
+  ylab("Concordance (Uno)")
+```
+
+### Check specific model 
+
+#### Kaplan-Meier and risk group definition
+
+```{r}
+dataset <- cv_results_1
+surv_plots <- list()
+data_out <- list()
+
+for(i in seq_along(dataset)){
+  res <- dataset[[i]]
+  out <- cbind(res$actual_surv,chf = rowSums(res$predictions$chf))
+  out_df <- out %>% mutate(risk_group = ifelse(chf > median(chf), "high", "low"), fold = i) %>% rownames_to_column("PID")
+
+  #Plot specific survival curves
+  fit <- survfit(Surv(out_df$OS_months, out_df$status_OS) ~ risk_group, data = out_df)
+
+  surv_plots[[i]] <- fit
+  data_out[[i]] <- out_df
+}
+
+# Plot all curves for each CV fold
+library(survival)
+library(survminer)
+ggsurvplot_list(surv_plots, 
+                data = data_out,
+                risk.table = TRUE, # Add risk table
+                risk.table.col = "strata", # Change risk table color by groups
+                linetype = "strata", # Change line type by groups
+                surv.median.line = "hv", # Specify median survival
+                ggtheme = theme_classic(), # Change ggplot2 theme
+                palette = "Set1",
+                conf.int = TRUE
+                )
+
+## Pick a specific fold
+ggsurvplot(surv_plots[[2]], 
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = "Set1",
+          conf.int = TRUE
+)
+
+# Display averaged chf across all folds
+data_comb <- do.call("rbind", data_out)
+
+data_comb <- data_comb %>% group_by(PID) %>% mutate(mean_chf = mean(chf)) %>% select(PID, OS_months, status_OS, mean_chf) %>% unique() %>% ungroup() %>% mutate(risk_group = ifelse(mean_chf > median(mean_chf), "high", "low"))
+
+fit <- survfit(Surv(data_comb$OS_months, data_comb$status_OS) ~ risk_group, data = data_comb)
+
+ggsurvplot(fit, 
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = "Set1",
+          conf.int = TRUE
+)
+```
+
+
+```{r}
+library(survival)
+# Create risk groups based on cumulative hazard estimates
+risk_group <- ifelse(rowSums(predres$chf) > median(rowSums(predres$chf)), "high", "low")
+
+surv_test <- survdiff(Surv(ysurvtest[,1], ysurvtest[,2]) ~ risk_group)
+surv_test
+```
+
+```{r}
+out_df <- as.data.frame(ysurvtest) %>% rownames_to_column("sample") %>% mutate(risk_group_pred = risk_group)
+
+#Plot specific survival curves
+fit <- survfit(Surv(out_df$V1, out_df$V2) ~ risk_group_pred, data = out_df)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = "Set1",
+          conf.int = TRUE
+)
+
+```
+
+#### Importance
+
+##### Feature-level
+
+```{r}
+variable_importance <- sapply(cv_results_1, function(res) {
+  res$variable_importance
+})
+
+# Potentially scale / min-max normalize
+plot <- variable_importance %>% as.data.frame %>% rownames_to_column("feature") %>% pivot_longer(2:ncol(.),names_to = "fold", values_to = "importance") 
+
+plot$scaled_importance <- as.vector(scale(plot$importance))
+
+ggplot(plot, aes(x = reorder(feature,-scaled_importance), y = scaled_importance, fill = feature))+
+  geom_boxplot()+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  guides(fill = "none")+
+  ylab("Scaled importance")+
+  xlab("Feature")
+```
+
+##### Block-level 
+
+```{r}
+variable_importance <- lapply(cv_results, function(res) {
+  res$variable_importance
+})
+
+
+
+block_importance #calculate the mean importance values (here impurity)
+
+
+# Calculate block-wise aggregated importance
+aggregate_importance <- sapply(block, function(indices) {
+  mean(variable_importance[indices])  # Mean importance of variables in each block
+})
+names(aggregate_importance) <- paste("Block", 1:length(block), sep="_")
+aggregate_importance
+
+block
+```
+
+

@@ -1,0 +1,225 @@
+---
+title: "TU_08_SurvivalPred_Test"
+author: "Lasse Meyer"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Software requirements
+
+```{r lib, message=FALSE,warning=FALSE}
+#Data containers
+library(SpatialExperiment)
+library(SingleCellExperiment)
+
+#Data processing
+library(scuttle)
+library(scater)
+library(scran)
+library(imcRtools)
+
+#Data visualization
+library(cytomapper)
+library(dittoSeq)
+library(pheatmap)
+library(cowplot)
+library(ComplexHeatmap)
+library(circlize)
+
+#Utilities
+library(tidyverse)
+library(openxlsx)
+library(stringr)
+library(patchwork)
+library(parallel)
+library(BiocParallel)
+library(BiocNeighbors)
+library(BiocSingular)
+library(tiff)
+library(ggrepel)
+library(EBImage)
+library(viridis)
+library(mclust)
+library(Rphenograph)
+library(igraph)
+library(RColorBrewer)
+library(foreach)
+library(clValid)
+library(bluster)
+library(psych)
+library(corrplot)
+library(psych)
+
+#Batch correction
+library(batchelor)
+```
+
+
+# 2. BlockForest survival prediction
+
+```{r}
+library(blockForest)
+```
+
+## Load and select data
+
+```{r}
+metadata_selected <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/BlockForest/key_features_processed.rds")
+```
+
+```{r}
+# Select colnames based on prefix
+selected <- colnames(metadata_selected)#[str_detect(colnames(metadata_selected),"IMC")]
+
+# Filter for complete cases (all data available)
+meta <- metadata_selected %>% select(PID, status_OS, OS_months, all_of(selected)) %>% filter(complete.cases(.))
+
+str(meta)
+```
+
+## Split survival and test
+
+```{r}
+# Select Y and X for blockforest
+y <- meta %>% column_to_rownames("PID") %>% select(OS_months, status_OS)
+
+x <- meta %>% column_to_rownames("PID") %>% select(-OS_months, -status_OS)
+
+# Add surv time as test 
+#x$CLIN_OS_months <- y$OS_months
+```
+
+## Folds
+
+```{r}
+# Create train/test splits considering similar censoring rates
+set.seed(22)
+library(caret)
+folds <- createDataPartition(y$status_OS, p = 0.75, times = 5)
+```
+
+## Define blocks 
+
+```{r}
+# Create blocks 
+# Initialize empty list for blocks
+block <- list()
+
+# Define blocks based on column names containing "CLIN" and "IMC"
+block[[1]] <- which(grepl("CLIN", colnames(x)))
+block[[2]] <- which(grepl("IMC", colnames(x)))
+
+# Display the block list
+print(block)
+```
+
+## Perform BlockForest
+
+### 5fold CV (Outer)
+
+#### Define function 
+
+```{r}
+# Load necessary libraries
+library(blockForest)
+library(survival)
+
+# Create a function for 5 fold outer cross-validation
+cross_validate_blockforest <- function(x, y, folds, block) {
+  results <- vector("list", length(folds))
+  
+  for (i in seq_along(folds)) {
+    
+    print(paste("CV iteration:", i))
+    
+    # Split the data into training and test sets
+    x_train <- x[folds[[i]],]
+    x_test <- x[-folds[[i]],]
+
+    y_train <- y[folds[[i]],]
+    y_test <- y[-folds[[i]],]
+    
+    # Train the blockForest model
+    blockforobj <- blockfor(X = x_train, 
+                            y = as.matrix(y_train), 
+                            blocks = block,
+                            splitrule = "extratrees", 
+                            block.method = "BlockForest",
+                            num.trees = 2000,
+                            nsets = 300, 
+                            num.trees.pre = 1500,
+                            always.select.block = 1,
+                            num.threads = 30,
+                            importance = "permutation")
+    
+    # Make predictions on the test data
+    predres <- predict(blockforobj$forest, data = x_test)
+    
+    # Store the results for evaluation, e.g., store predicted survival functions
+    results[[i]] <- list(predictions = predres,
+                         actual_test = x_test,
+                         actual_surv = y_test, 
+                         variable_importance = blockforobj$forest$variable.importance)
+    
+    gc()
+  }
+  
+  return(results)
+}
+```
+
+## Run and save results
+
+# CONTINUE HERE - Re-running models after selection 
+
+```{r}
+# Run cross-validation
+set.seed(22)
+cv_results <- cross_validate_blockforest(x, y, folds, block)
+
+# Adjust naming!
+saveRDS(cv_results, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/BlockForest/BF_IMConly_tumor_panel_zscored.rds")
+```
+
+#### Simple
+
+```{r}
+set.seed(22)
+
+x_train <- x[folds[[1]],]
+x_test <- x[-folds[[1]],]
+
+y_train <- y[folds[[1]],]
+y_test <- y[-folds[[1]],]
+
+all.equal(rownames(x_train), rownames(y_train))
+all.equal(rownames(x_test), rownames(y_test))
+
+# Train the blockForest model
+blockforobj <- blockfor(x_train, as.matrix(y_train), 
+                        blocks = block,
+                        splitrule = "extratrees", 
+                        block.method = "BlockForest",
+                        num.trees = 2000,
+                        nsets = 300, 
+                        num.trees.pre = 1500,
+                        always.select.block = 1, 
+                        num.threads = 30,
+                        importance = "permutation")
+    
+# Make predictions on the test data
+predres <- predict(blockforobj$forest, data = x_test, block.method = "BlockForest")
+```
+
+```{r}
+concordance(Surv(y_test$OS_months, y_test$status_OS) ~ rowSums(predres$survival), timewt="n/G2")
+```
+
+```{r}
+scale(blockforobj$forest$variable.importance)
+```
+

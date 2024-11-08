@@ -110,9 +110,7 @@ remove <- remove[!remove %in% c("status_OS", "OS_months")]
 tumor_selected <- tumor_key %>% select(-remove)
 
 # Step 2: Missing numerical values can be imputed (Median across non-missing samples OR minimum for INT values)
-
 summary(is.na(tumor_selected))
-min(tumor_selected$INT_TU_HLADRhi__CD8_T_cell, na.rm = TRUE)
 
 tumor_selected[] <- lapply(colnames(tumor_selected), function(colname) {
   if (colname %in% c("status_OS", "OS_months")) {
@@ -172,7 +170,7 @@ metadata_selected <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/d
 
 ```{r}
 # Select colnames based on prefix
-selected <- colnames(metadata_selected)[str_detect(colnames(metadata_selected),"IMC")]
+selected <- colnames(metadata_selected)#[str_detect(colnames(metadata_selected),"IMC")]
 
 # Select either pT/ISUP_simple or pT/ISUP_combined
 selected <- selected[!str_detect(selected, "combined")] #selects simple
@@ -208,6 +206,114 @@ meta[] <- lapply(names(meta), function(col_name) {
 
 str(meta)
 ```
+
+## Correlation reduction
+
+### Numeric
+
+```{r, fig.width=16, fig.height=16}
+# 1. Check statistical association of numerical variables
+cor_test <- meta %>% select(where(is.numeric), -status_OS,-OS_months)
+
+cor_matrix <- cor(cor_test,method = "pearson")
+
+corrplot(cor_matrix, method="shade", col=brewer.pal(n=8, name="RdBu"),  
+         type="upper", order="hclust",hclust.method = "ward.D2", 
+         addCoef.col = "black", addCoefasPercent = F,
+         tl.col="black", tl.srt=40, 
+         diag=FALSE
+)
+
+# Identify pairs with cor > 0.95
+high_corr_pairs <- which(abs(cor_matrix) > 0.95 & lower.tri(cor_matrix), arr.ind = TRUE)
+high_corr_pairs_df <- data.frame(
+  Var1 = rownames(cor_matrix)[high_corr_pairs[, 1]],
+  Var2 = colnames(cor_matrix)[high_corr_pairs[, 2]],
+  Correlation = cor_matrix[high_corr_pairs]
+)
+```
+
+```{r}
+# Remove specific pairs 
+removed_numeric <- c("IMC_TU_D_ICAM1_dom", "IMC_TU_D_mTORhi_dom", "IMC_TU_INT_CD8_T_cell__TU_HLADRhi")
+
+meta_fil <- meta %>% select(-all_of(removed_numeric))
+```
+
+### Categorical 
+
+```{r}
+# 2. Check statistical association of categorical variables
+chi_test <- colnames(meta %>% select(where(is.factor), -status_OS,-OS_months))
+
+out_p <- list()
+
+for(i in chi_test){
+  for(y in chi_test){
+    if(i != y){
+    out <- meta %>% select(PID, any_of(i), any_of(y)) %>% unique %>% select(-PID) %>% group_by(all_of(i)) %>% table() %>%
+      as.data.frame
+    cur_test <- out %>% pivot_wider(names_from = i, id_cols = y, values_from = Freq) %>% column_to_rownames(y)
+    cur_test_out <- chisq.test(cur_test)
+    out_p[paste0(i,"_",y)] <- cur_test_out$p.value
+    }
+  }
+}
+
+# FDR-correct p-values
+p_values <- unlist(out_p)
+adjusted_p_values <- p.adjust(p_values, method = "BH")
+out_p_adjust <- as.list(adjusted_p_values)
+
+# Extract direct comparison p-values
+direct_comp <- matrix(NA, nrow = length(chi_test), ncol = length(chi_test), dimnames = list(chi_test, chi_test))
+
+for (i in chi_test) {
+  for (j in chi_test) {
+    if (i == j) {
+      direct_comp[i, j] <- 1
+    } else {
+      comp_name <- paste(i, j, sep = "_")
+      rev_comp_name <- paste(j, i, sep = "_")
+      if (comp_name %in% names(out_p_adjust)) {
+        direct_comp[i, j] <- out_p_adjust[[comp_name]]
+      } else if (rev_comp_name %in% names(out_p_adjust)) {
+        direct_comp[i, j] <- out_p_adjust[[rev_comp_name]]
+      }
+    }
+  }
+}
+
+# Print the square matrix
+corrplot(-log10(direct_comp), 
+         is.corr = FALSE, 
+         diag = FALSE, 
+         tl.col = "black",
+         type="upper", 
+         col = COL1("Blues",100),
+         method = "shade",
+         bg = "lightgrey", addCoef.col = "black")
+
+
+# Identify pairs with 
+high_corr_pairs <- which(abs(direct_comp) < 0.01 & lower.tri(direct_comp), arr.ind = TRUE)
+
+high_corr_pairs_df <- data.frame(
+  Var1 = rownames(direct_comp)[high_corr_pairs[, 1]],
+  Var2 = colnames(direct_comp)[high_corr_pairs[, 2]],
+  Correlation = direct_comp[high_corr_pairs]
+)
+```
+
+```{r}
+# Remove specific pairs 
+removed_cat <- c("CLIN_ISUP_simple", "CLIN_necrose")
+
+meta_fil <- meta %>% select(-all_of(removed_cat))
+```
+
+
+## Select data
 
 ```{r}
 # Select Y and X for blockforest
@@ -377,7 +483,7 @@ cv_results_list <- list(
 
 ### Integrated Brier Score
 
-```{r}
+```{r, fig.width=8.5, fig.height=4.5}
 # Initialize list to store IBS scores for each cross-validation result
 ibs_scores_list <- list()
 
@@ -418,7 +524,8 @@ ibs_scores_list <- lapply(cv_results_list, function(res_obj) {
     )
     
     # Define the time range of interest for IBS
-    IBSrange <- quantile(test_data$OS_months, 0.9)
+    #IBSrange <- quantile(test_data$OS_months, 0.9)
+    IBSrange <- max(test_data$OS_months)
     
     # Calculate the CRPS and extract the IBS score
     crps_val <- crps(pec_obj, start = 0, times = IBSrange)
@@ -441,7 +548,7 @@ ggplot(out_ibs, aes(x = reorder(model,-IBS), y = IBS, fill = model))+
   scale_fill_brewer(palette = "RdBu")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   xlab("Models")+
-  ylab("Concordance (Uno)")
+  ylab("Integrated Brier Score")
 ```
 
 
@@ -475,16 +582,13 @@ ggplot(out_concordance, aes(x = reorder(model,-concordance), y = concordance, fi
   xlab("Models")+
   ylab("Concordance (Uno)")
 ```
-```{r}
-
-```
 
 ### Check specific model 
 
 #### Kaplan-Meier and risk group definition
 
 ```{r}
-dataset <- cv_results_4
+dataset <- cv_results_1
 surv_plots <- list()
 data_out <- list()
 
@@ -580,19 +684,7 @@ ggsurvplot(fit,
 ##### Feature-level
 
 ```{r}
-variable_importance <- blockforobj$forest$variable.importance
-
-# Calculate block-wise aggregated importance
-aggregate_importance <- sapply(block, function(indices) {
-  mean(variable_importance[indices])  # Mean importance of variables in each block
-})
-names(aggregate_importance) <- paste("Block", 1:length(block), sep="_")
-aggregate_importance
-```
-
-
-```{r}
-variable_importance <- sapply(cv_results_4, function(res) {
+variable_importance <- sapply(cv_results_1, function(res) {
   res$variable_importance
 })
 
