@@ -12,50 +12,10 @@ knitr::opts_chunk$set(echo = TRUE)
 # Software requirements
 
 ```{r lib, message=FALSE,warning=FALSE}
-#Data containers
-library(SpatialExperiment)
-library(SingleCellExperiment)
-
-#Data processing
-library(scuttle)
-library(scater)
-library(scran)
-library(imcRtools)
-
-#Data visualization
-library(cytomapper)
-library(dittoSeq)
-library(pheatmap)
-library(cowplot)
-library(ComplexHeatmap)
-library(circlize)
-
-#Utilities
+library(survival)
+library(survminer)
+library(pec)
 library(tidyverse)
-library(openxlsx)
-library(stringr)
-library(patchwork)
-library(parallel)
-library(BiocParallel)
-library(BiocNeighbors)
-library(BiocSingular)
-library(tiff)
-library(ggrepel)
-library(EBImage)
-library(viridis)
-library(mclust)
-library(Rphenograph)
-library(igraph)
-library(RColorBrewer)
-library(foreach)
-library(clValid)
-library(bluster)
-library(psych)
-library(corrplot)
-library(psych)
-
-#Batch correction
-library(batchelor)
 ```
 
 
@@ -64,26 +24,20 @@ library(batchelor)
 ## Read results from different models 
 
 ```{r}
-cv_results <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/BlockForest/BF_clinicalonly_simple.rds")
+cv_results <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_CLIN_IMC_Tumor.rds")
 
-cv_results_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/BlockForest/BF_IMConly_tumor_panel_zscored.rds")
+cv_results_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_CLIN.rds")
 
-cv_results_2 <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/BlockForest/BF_CLIN_simple_IMC_tumor_panel_zscored.rds")
-
-cv_results_3 <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/BlockForest/BF_CLIN_simple_notfavoring_IMC_tumor_panel_zscored.rds")
-
-cv_results_4 <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/BlockForest/BF_CLIN_simple_IMC_tumor_panel_zscored_includetime.rds")
+cv_results_2 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_Tumor.rds")
 ```
 
 ```{r}
 # Create list from results
 # Define the cross-validation results as a list
 cv_results_list <- list(
-  "CLIN_only" = cv_results,
-  "IMC_only" = cv_results_1,
-  "CLIN_IMC" = cv_results_2,
-  "CLIN_IMC_notfav" = cv_results_3,
-  "CLIN_IMC_includetime" = cv_results_4
+  "CLIN_IMC_tumor" = cv_results,
+  "CLIN" = cv_results_1,
+  "IMC_tumor" = cv_results_2
 )
 ```
 
@@ -150,7 +104,7 @@ ggplot(out_ibs, aes(x = reorder(model,-IBS), y = IBS, fill = model))+
   geom_boxplot()+
   #coord_cartesian(ylim = c(0.5,1))+
   theme_classic()+
-  stat_compare_means(ref.group = "CLIN_only", paired = FALSE, method = "t.test", method.args = list(alternative = "less", label = "p.format"))+
+  stat_compare_means(ref.group = "CLIN", paired = FALSE, method = "t.test", method.args = list(alternative = "less", label = "p.format"))+
   scale_fill_brewer(palette = "RdBu")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   xlab("Models")+
@@ -182,7 +136,7 @@ ggplot(out_concordance, aes(x = reorder(model,-concordance), y = concordance, fi
   geom_boxplot()+
   #coord_cartesian(ylim = c(0.5,1))+
   theme_classic()+
-  stat_compare_means(ref.group = "CLIN_only", paired = FALSE, method = "t.test", method.args = list(alternative = "greater", label = "p.format"))+
+  stat_compare_means(ref.group = "CLIN", paired = FALSE, method = "t.test", method.args = list(alternative = "greater", label = "p.format"))+
   scale_fill_brewer(palette = "RdBu")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   xlab("Models")+
@@ -194,7 +148,7 @@ ggplot(out_concordance, aes(x = reorder(model,-concordance), y = concordance, fi
 #### Kaplan-Meier and risk group definition
 
 ```{r}
-dataset <- cv_results_1
+dataset <- cv_results_2
 surv_plots <- list()
 data_out <- list()
 
@@ -255,42 +209,12 @@ ggsurvplot(fit,
 )
 ```
 
-
-```{r}
-library(survival)
-# Create risk groups based on cumulative hazard estimates
-risk_group <- ifelse(rowSums(predres$chf) > median(rowSums(predres$chf)), "high", "low")
-
-surv_test <- survdiff(Surv(ysurvtest[,1], ysurvtest[,2]) ~ risk_group)
-surv_test
-```
-
-```{r}
-out_df <- as.data.frame(ysurvtest) %>% rownames_to_column("sample") %>% mutate(risk_group_pred = risk_group)
-
-#Plot specific survival curves
-fit <- survfit(Surv(out_df$V1, out_df$V2) ~ risk_group_pred, data = out_df)
-print(fit)
-
-ggsurvplot(fit,
-          pval = TRUE,
-          risk.table = TRUE, # Add risk table
-          risk.table.col = "strata", # Change risk table color by groups
-          linetype = "strata", # Change line type by groups
-          surv.median.line = "hv", # Specify median survival
-          ggtheme = theme_classic(), # Change ggplot2 theme
-          palette = "Set1",
-          conf.int = TRUE
-)
-
-```
-
 #### Importance
 
 ##### Feature-level
 
 ```{r}
-variable_importance <- sapply(cv_results_1, function(res) {
+variable_importance <- sapply(cv_results_2, function(res) {
   res$variable_importance
 })
 
@@ -308,26 +232,6 @@ ggplot(plot, aes(x = reorder(feature,-scaled_importance), y = scaled_importance,
   xlab("Feature")
 ```
 
-##### Block-level 
-
-```{r}
-variable_importance <- lapply(cv_results, function(res) {
-  res$variable_importance
-})
-
-
-
-block_importance #calculate the mean importance values (here impurity)
-
-
-# Calculate block-wise aggregated importance
-aggregate_importance <- sapply(block, function(indices) {
-  mean(variable_importance[indices])  # Mean importance of variables in each block
-})
-names(aggregate_importance) <- paste("Block", 1:length(block), sep="_")
-aggregate_importance
-
-block
-```
+TO DO: Estimate mean block-level importance values
 
 

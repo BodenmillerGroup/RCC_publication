@@ -250,7 +250,7 @@ metadata_selected_fil <- metadata_selected %>% select(-all_of(removed_numeric), 
 ### Save 
 
 ```{r}
-saveRDS(metadata_selected_fil, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/BlockForest/clinical_key_features_processed.rds")
+saveRDS(metadata_selected_fil, "/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/clinical_key_features_processed.rds")
 ```
 
 ## IMC data 
@@ -260,7 +260,7 @@ saveRDS(metadata_selected_fil, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/
 #### Preprocessing 
 
 ```{r}
-tumor_key <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/BlockForest/tumor_key_features.csv")
+tumor_key <- read_csv("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/tumor_key_features.csv")
 
 # Preprocessing as suggested by Boeva (Cell Reports Methods)
 # Step 1: Only keep columns with less than 10% of NA values 
@@ -452,14 +452,14 @@ str(tumor_selected_fil)
 #### Save and add
 
 ```{r}
-saveRDS(tumor_selected_fil, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/BlockForest/tumor_key_features_processed.rds")
+saveRDS(tumor_selected_fil, "/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/tumor_key_features_processed.rds")
 ```
 
 Add to metadata selected fil
 
 ```{r}
-tumor_selected_fil <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/BlockForest/tumor_key_features_processed.rds")
-metadata_selected_fil <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/BlockForest/clinical_key_features_processed.rds")
+tumor_selected_fil <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/tumor_key_features_processed.rds")
+metadata_selected_fil <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/clinical_key_features_processed.rds")
 ```
 
 ```{r}
@@ -475,7 +475,7 @@ str(metadata_selected_fil)
 
 ```{r}
 # Save as RDS and csv
-saveRDS(metadata_selected_fil, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/BlockForest/key_features_processed.rds")
-write_csv(metadata_selected_fil, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/BlockForest/key_features_processed.csv")
+saveRDS(metadata_selected_fil, "/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/key_features_processed.rds")
+write_csv(metadata_selected_fil, "/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/key_features_processed.csv")
 ```
 
