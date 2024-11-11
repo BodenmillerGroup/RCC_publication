@@ -2622,7 +2622,6 @@ Heatmap(cur_surv_plot_median, border = FALSE, cluster_columns = FALSE, rect_gp =
 ```{r}
 markers_surv_relevant <- c(colnames(cur_surv_plot_median), colnames(cur_surv_plot_mean)) %>% unique()
 
-
 # Extract min_max expression values
 mean_exp_df <- assay(mean_sce, "min_max") %>% as.data.frame %>% filter(rownames(.) %in% markers_surv_relevant) %>% t() %>% as.data.frame %>% rownames_to_column("PID")
 

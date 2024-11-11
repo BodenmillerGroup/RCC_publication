@@ -967,7 +967,7 @@ out_df[,i] <- spicy_out_loop$cat[match(out_df$PID, spicy_out_loop$PID)]
 }
 
 # Filter columns with only one entry of high/low
-include <- c("PID",out_df %>% pivot_longer(2:ncol(out_df), names_to = "int", values_to = "value") %>% group_by(int) %>% count(value) %>% count(value) %>% mutate(sum = sum(n)) %>% filter(sum > 2) %>% pull("int") %>% unique())
+include <- c("PID",out_df %>% pivot_longer(2:ncol(out_df), names_to = "int", values_to = "value") %>% group_by(int) %>% dplyr::count(value) %>% dplyr::count(value) %>% mutate(sum = sum(n)) %>% filter(sum > 2) %>% pull("int") %>% unique())
 out_df <- out_df[, colnames(out_df) %in% include]
 
 ## Add survival information 
@@ -1002,7 +1002,7 @@ cur_surv_out <- foreach(x = colnames(out_df %>% select(-PID, -status_OS, -OS_mon
 cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
 
 # Create and plot heatmap 
-cur_surv_plot <- cur_surv_out %>% mutate(sign = p_adj < 0.1, direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% mutate(p_out = ifelse(sign == TRUE & direction == "high",  -log10(p_adj), ifelse(sign == TRUE & direction == "low", log10(p_adj), 0))) %>% arrange(desc(p_out)) %>% filter(p_adj < 0.1)
+cur_surv_plot <- cur_surv_out %>% mutate(sign = p < 0.01, direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% mutate(p_out = ifelse(sign == TRUE & direction == "high",  -log10(p_adj), ifelse(sign == TRUE & direction == "low", log10(p_adj), 0))) %>% arrange(desc(p_out)) %>% filter(p < 0.01)
 
 cur_surv_mean <- cur_surv_plot %>% pivot_wider(id_cols = type, names_from = group, values_from = p_out) %>% column_to_rownames("type")
 
@@ -1101,7 +1101,7 @@ out_df[,i] <- spicy_out_loop$cat[match(out_df$PID, spicy_out_loop$PID)]
 }
 
 # Filter columns with only one entry of high/low
-include <- c("PID",out_df %>% pivot_longer(2:ncol(out_df), names_to = "int", values_to = "value") %>% group_by(int) %>% count(value) %>% count(value) %>% mutate(sum = sum(n)) %>% filter(sum > 2) %>% pull("int") %>% unique())
+include <- c("PID",out_df %>% pivot_longer(2:ncol(out_df), names_to = "int", values_to = "value") %>% group_by(int) %>% dplyr::count(value) %>% dplyr::count(value) %>% mutate(sum = sum(n)) %>% filter(sum > 2) %>% pull("int") %>% unique())
 out_df <- out_df[, colnames(out_df) %in% include]
 
 ## Add survival information 
@@ -1136,7 +1136,7 @@ cur_surv_out <- foreach(x = colnames(out_df %>% select(-PID, -status_OS, -OS_mon
 cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
 
 # Create and plot heatmap 
-cur_surv_plot <- cur_surv_out %>% mutate(sign = p_adj < 0.1, direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% mutate(p_out = ifelse(sign == TRUE & direction == "high",  -log10(p_adj), ifelse(sign == TRUE & direction == "low", log10(p_adj), 0))) %>% arrange(desc(p_out)) %>% filter(p_adj < 0.1)
+cur_surv_plot <- cur_surv_out %>% mutate(sign = p < 0.01, direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% mutate(p_out = ifelse(sign == TRUE & direction == "high",  -log10(p_adj), ifelse(sign == TRUE & direction == "low", log10(p_adj), 0))) %>% arrange(desc(p_out)) %>% filter(p < 0.01)
 
 cur_surv_median <- cur_surv_plot %>% pivot_wider(id_cols = type, names_from = group, values_from = p_out) %>% column_to_rownames("type")
 
@@ -1153,7 +1153,7 @@ Heatmap(cur_surv_median, border = FALSE, cluster_columns = FALSE, rect_gp = gpar
 #### Extract survival relevant features
 
 ```{r}
-INT_surv_relevant <- c(colnames(cur_surv_mean), colnames(cur_surv_median))
+INT_surv_relevant <- unique(c(colnames(cur_surv_mean), colnames(cur_surv_median)))
 
 INT_surv_relevant_df <- spicy_out_selected_long %>% group_by(PID, pair) %>% mutate(mean_coef = mean(coef,na.rm = TRUE)) %>% select(PID,pair, mean_coef) %>% unique() %>% filter(pair %in% INT_surv_relevant) %>% pivot_wider(id_cols = "PID",names_from = "pair", values_from = "mean_coef") %>% as.data.frame
 
@@ -1167,7 +1167,7 @@ Add to tumor key features
 
 ```{r}
 # Read
-tumor_key_features <- as.data.frame(read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/tumor_key_features.csv"))
+tumor_key_features <- as.data.frame(read_csv("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/tumor_key_features.csv"))
 ```
 
 ```{r}
@@ -1178,7 +1178,7 @@ for (entry in colnames(INT_surv_relevant_df)[2:ncol(INT_surv_relevant_df)]) {
 
 ```{r}
 # Save
-write_csv(tumor_key_features, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/tumor_key_features.csv")
+write_csv(tumor_key_features, "/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/tumor_key_features.csv")
 ```
 
 

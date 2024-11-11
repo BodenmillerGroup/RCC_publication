@@ -29,6 +29,14 @@ cv_results <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest
 cv_results_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_CLIN.rds")
 
 cv_results_2 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_Tumor.rds")
+
+cv_results_3 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_TumorMyeloid.rds")
+
+cv_results_4 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_CLIN_IMC_TumorMyeloid.rds")
+
+cv_results_5 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_CLIN_not_fav_IMC_TumorMyeloid.rds")
+
+cv_results_6 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_markdown_test.rds")
 ```
 
 ```{r}
@@ -37,13 +45,17 @@ cv_results_2 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockFore
 cv_results_list <- list(
   "CLIN_IMC_tumor" = cv_results,
   "CLIN" = cv_results_1,
-  "IMC_tumor" = cv_results_2
+  "IMC_tumor" = cv_results_2,
+  "IMC_tumor_myeloid" = cv_results_3,
+  "CLIN_IMC_tumor_myeloid" = cv_results_4,
+  "CLIN_IMC_tumor_myeloid_notfav" = cv_results_5,
+  "test" = cv_results_6
 )
 ```
 
 ### Integrated Brier Score
 
-```{r, fig.width=8.5, fig.height=4.5}
+```{r}
 # Initialize list to store IBS scores for each cross-validation result
 ibs_scores_list <- list()
 
@@ -84,8 +96,8 @@ ibs_scores_list <- lapply(cv_results_list, function(res_obj) {
     )
     
     # Define the time range of interest for IBS
-    #IBSrange <- quantile(test_data$OS_months, 0.9)
-    IBSrange <- max(test_data$OS_months)
+    IBSrange <- quantile(test_data$OS_months, 0.9)
+    #IBSrange <- max(test_data$OS_months)
     
     # Calculate the CRPS and extract the IBS score
     crps_val <- crps(pec_obj, start = 0, times = IBSrange)
@@ -116,7 +128,7 @@ ggplot(out_ibs, aes(x = reorder(model,-IBS), y = IBS, fill = model))+
 ### Concordance (Uno)
 
 
-```{r, fig.width=9, fig.height=5}
+```{r}
 # Initialize list to store concordance scores for each cross-validation result
 concordance_scores_list <- list()
 
@@ -214,14 +226,14 @@ ggsurvplot(fit,
 ##### Feature-level
 
 ```{r}
-variable_importance <- sapply(cv_results_2, function(res) {
+variable_importance <- sapply(cv_results_3, function(res) {
   res$variable_importance
 })
 
-# Potentially scale / min-max normalize
-plot <- variable_importance %>% as.data.frame %>% rownames_to_column("feature") %>% pivot_longer(2:ncol(.),names_to = "fold", values_to = "importance") 
+# Scaled importance per fold
+plot <- variable_importance %>% as.data.frame %>% rownames_to_column("feature") %>% pivot_longer(2:ncol(.),names_to = "fold", values_to = "importance") %>% group_by(fold) %>% mutate(scaled_importance = scale(importance))
 
-plot$scaled_importance <- as.vector(scale(plot$importance))
+plot$scaled_importance_total <- as.vector(scale(plot$importance))
 
 ggplot(plot, aes(x = reorder(feature,-scaled_importance), y = scaled_importance, fill = feature))+
   geom_boxplot()+
@@ -230,8 +242,16 @@ ggplot(plot, aes(x = reorder(feature,-scaled_importance), y = scaled_importance,
   guides(fill = "none")+
   ylab("Scaled importance")+
   xlab("Feature")
+
+# ggplot(plot, aes(x = reorder(feature,-scaled_importance_total), y = scaled_importance_total, fill = feature))+
+#   geom_boxplot()+
+#   theme_classic()+
+#   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+#   guides(fill = "none")+
+#   ylab("Scaled importance")+
+#   xlab("Feature")
 ```
 
-TO DO: Estimate mean block-level importance values
+TO DO: Estimate mean block-level importance values or spatial/non-spatial importance
 
 

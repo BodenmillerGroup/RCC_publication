@@ -3,6 +3,12 @@ title: "TU_08_SurvivalPred_Test"
 author: "Lasse Meyer"
 date: "`r Sys.Date()`"
 output: html_document
+params: 
+  blocks_selected: !r c("CLIN", "IMC")
+  add_surv_time: FALSE 
+  favor_clinical: 0
+  run_name: BF_markdown_test.rds
+output_file: /mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/html/test.html
 ---
 
 ```{r setup, include=FALSE}
@@ -21,15 +27,22 @@ library(survminer)
 
 # 2. BlockForest survival prediction
 
-## Define script parameters 
+## Define script parameters
 
 ```{r}
-blocks_selected <- c("IMC") #Select which data types to use
-add_surv_time <- FALSE #Add survival time in training
-favor_clinical <- 1 #Favor specific block in BlockForest - 1 is CLIN (default; 0 would not favor)
+blocks_selected <- params$blocks_selected #Select which data types to use
+add_surv_time <- params$add_surv_time #Add survival time in training
+favor_clinical <- params$favor_clinical #Favor specific block in BlockForest - 1 is CLIN (default; 0 would not favor)
+run_name <- params$run_name #Name of output file
+```
 
-run_name = "BF_IMC_Tumor.rds" #Name of output file
-## Afterwards you can run all chunks directly (see default settings)
+```{r}
+# blocks_selected <- c("CLIN","IMC") #Select which data types to use
+# add_surv_time <- FALSE #Add survival time in training
+# favor_clinical <- 0 #Favor specific block in BlockForest - 1 is CLIN (default; 0 would not favor)
+# 
+# run_name = "BF_CLIN_not_fav_IMC_TumorMyeloid.rds" #Name of output file
+# ## Afterwards you can run all chunks directly (see default settings)
 ```
 
 ## Load and select data
@@ -152,10 +165,16 @@ cross_validate_blockforest <- function(x, y, folds, block, favor_clinical) {
 ## RUN and save results
 
 ```{r}
-# Run cross-validation
+# Run cross-validation and track time
 set.seed(22)
-cv_results <- cross_validate_blockforest(x, y, folds, block, favor_clinical)
+start_time <- Sys.time()
+cv_results <- cross_validate_blockforest(x, y, folds, block, favor_clinical) # MAIN FUNCTION
+end_time <- Sys.time()
 
+run_time <- paste0("Run time: ",round(as.numeric(difftime(end_time, start_time, units = "mins")), digits = 2), " min")
+print(run_time)
+      
 # Save results
 saveRDS(cv_results, paste0("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/", run_name))
+write.csv(run_time, paste0("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/runtime/", run_name, "_runtime.csv"))
 ```
