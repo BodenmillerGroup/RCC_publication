@@ -1,0 +1,1541 @@
+---
+title: "00_Tcell_FeatureExtraction"
+author: "Lasse Meyer"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Software requirements
+
+```{r lib, message=FALSE,warning=FALSE}
+#Data containers
+library(SpatialExperiment)
+library(SingleCellExperiment)
+
+#Data processing
+library(scuttle)
+library(scater)
+library(scran)
+library(imcRtools)
+
+#Data visualization
+library(cytomapper)
+library(dittoSeq)
+library(pheatmap)
+library(cowplot)
+library(ComplexHeatmap)
+library(circlize)
+
+#Utilities
+library(tidyverse)
+library(openxlsx)
+library(stringr)
+library(patchwork)
+library(parallel)
+library(BiocParallel)
+library(BiocNeighbors)
+library(BiocSingular)
+library(tiff)
+library(ggrepel)
+library(EBImage)
+library(viridis)
+library(mclust)
+library(Rphenograph)
+library(igraph)
+library(RColorBrewer)
+library(foreach)
+library(clValid)
+library(bluster)
+library(psych)
+library(corrplot)
+library(psych)
+
+#Batch correction
+library(batchelor)
+```
+
+# Extract survival relevant features
+
+```{r}
+sce <- readRDS("/mnt/central_nas_full/users/marllu/T_panel/data_analysis/sce_ccRCC_T_07.rds")
+```
+
+## Check metadata 
+
+Adjust tissue area in T cell panel to the ones used in tumor and myeloid panel 
+
+```{r}
+sce_MY <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_MY_03.rds")
+
+PID_area_MY <- colData(sce_MY) %>% as.data.frame %>% select(PID, tissue_area) %>% unique() %>% group_by(PID) %>% mutate(mean_tissue_area = mean(tissue_area))
+
+summary(unique(sce$PID) %in% unique(sce_MY$PID)) #one PID - no tissue area info - TO DO: Re-do CP pipeline for T cell panel
+
+sce$tissue_area <- PID_area_MY$mean_tissue_area[match(sce$PID, PID_area_MY$PID)] #Changes the tissue area of the original object
+```
+
+# 1. CD8+ T cells 
+
+```{r}
+sce_8 <- sce[, sce$celltype_combined_broad %in% c("CD8")]
+sce_8
+
+# CD8+ T cell cluster channel
+rownames(sce_8)[rowData(sce_8)$CD8_cluster_channel]
+```
+
+## 1A: Differential expression
+
+### Survival related 
+
+#### Mean 
+
+```{r}
+# Aggregrate across cells with the mean
+mean_sce_8 <- aggregateAcrossCells(sce_8, ids = sce_8$PID,
+                                 statistics = "mean",
+                                 use.assay.type = "min_max",
+                                 subset.row = rowData(sce_8)$CD8_cluster_channel)
+```
+
+```{r}
+mean_exp_df <- assay(mean_sce_8, "min_max") %>% t() %>% as.data.frame
+
+out_df <- data.frame(PID = unique(sce_8$PID))
+
+for(i in colnames(mean_exp_df)){
+mean_exp_new <- mean_exp_df %>% select(all_of(i)) %>% mutate(mean = mean(mean_exp_df[[i]])) %>% mutate(cat = ifelse(mean > mean_exp_df[[i]], "low", "high")) %>% rownames_to_column("PID")
+
+out_df[,i] <- mean_exp_new$cat[match(out_df$PID, mean_exp_new$PID)]
+}
+
+## Add survival information 
+out_df$status_OS <- sce_8$status_OS[match(out_df$PID, sce_8$PID)]
+out_df$OS_months <- sce_8$OS_months[match(out_df$PID, sce_8$PID)]
+```
+
+```{r}
+# Color for heatmaps 
+colours <- c("#4575B4", "white", "#D73027")
+breaks <- c(-2.5, 2.5, 0.5)
+breaks <- seq(from = breaks[1], to = breaks[2], by = breaks[3])
+pal <- grDevices::colorRampPalette(colours)(length(breaks))
+col <- colorRamp2(breaks, pal)
+```
+
+```{r}
+#Assess survival impact across categories
+library(survival)
+library(survminer)
+
+colnames(out_df) <- gsub("-", "_", colnames(out_df)) 
+colnames(out_df) <- gsub("/", "_", colnames(out_df)) 
+
+# Extract p-values from log-rank / direction of trend
+cur_surv_out <- foreach(x = colnames(out_df %>% select(-PID, -status_OS, -OS_months)), .combine = "rbind")%do%{
+  formula <- as.formula(paste("Surv(OS_months, status_OS) ~ ", x))
+  fit <- survdiff(formula, data = out_df)
+  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[1], exp_2 = fit$exp[1])
+}
+
+# Adjust p-values using BH 
+cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
+
+# Create and plot heatmap 
+cur_surv_plot <- cur_surv_out %>% mutate(sign = p_adj < 0.05, direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% mutate(p_out = ifelse(sign == TRUE & direction == "high",  -log10(p_adj), ifelse(sign == TRUE & direction == "low", log10(p_adj), 0))) %>% arrange(desc(p_out)) %>% filter(p_adj < 0.05)
+
+cur_surv_plot_mean <- cur_surv_plot %>% pivot_wider(id_cols = type, names_from = group, values_from = p_out) %>% column_to_rownames("type")
+
+Heatmap(cur_surv_plot_mean, col = col, border = FALSE, cluster_columns = FALSE, rect_gp = gpar(col = "black", lwd = 1), name = "log10(p)")
+Heatmap(cur_surv_plot_mean, border = FALSE, cluster_columns = FALSE, rect_gp = gpar(col = "black", lwd = 1), name = "log10(p)")
+```
+
+#### Median 
+
+```{r}
+mean_exp_df <- assay(mean_sce_8, "min_max") %>% t() %>% as.data.frame
+
+out_df <- data.frame(PID = unique(sce_8$PID))
+
+for(i in colnames(mean_exp_df)){
+mean_exp_new <- mean_exp_df %>% select(all_of(i)) %>% mutate(mean = median(mean_exp_df[[i]])) %>% mutate(cat = ifelse(mean > mean_exp_df[[i]], "low", "high")) %>% rownames_to_column("PID")
+
+out_df[,i] <- mean_exp_new$cat[match(out_df$PID, mean_exp_new$PID)]
+}
+
+## Add survival information 
+out_df$status_OS <- sce_8$status_OS[match(out_df$PID, sce_8$PID)]
+out_df$OS_months <- sce_8$OS_months[match(out_df$PID, sce_8$PID)]
+```
+
+```{r}
+# Color for heatmaps 
+colours <- c("#4575B4", "white", "#D73027")
+breaks <- c(-2.5, 2.5, 0.5)
+breaks <- seq(from = breaks[1], to = breaks[2], by = breaks[3])
+pal <- grDevices::colorRampPalette(colours)(length(breaks))
+col <- colorRamp2(breaks, pal)
+```
+
+```{r}
+#Assess survival impact across categories
+library(survival)
+library(survminer)
+
+colnames(out_df) <- gsub("-", "_", colnames(out_df)) 
+colnames(out_df) <- gsub("/", "_", colnames(out_df)) 
+
+# Extract p-values from log-rank / direction of trend
+cur_surv_out <- foreach(x = colnames(out_df %>% select(-PID, -status_OS, -OS_months)), .combine = "rbind")%do%{
+  formula <- as.formula(paste("Surv(OS_months, status_OS) ~ ", x))
+  fit <- survdiff(formula, data = out_df)
+  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[1], exp_2 = fit$exp[1])
+}
+
+# Adjust p-values using BH 
+cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
+
+# Create and plot heatmap 
+cur_surv_plot <- cur_surv_out %>% mutate(sign = p_adj < 0.05, direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% mutate(p_out = ifelse(sign == TRUE & direction == "high",  -log10(p_adj), ifelse(sign == TRUE & direction == "low", log10(p_adj), 0))) %>% arrange(desc(p_out)) %>% filter(p_adj < 0.05)
+
+cur_surv_plot_median <- cur_surv_plot %>% pivot_wider(id_cols = type, names_from = group, values_from = p_out) %>% column_to_rownames("type")
+
+Heatmap(cur_surv_plot_median, col = col, border = FALSE, cluster_columns = FALSE, rect_gp = gpar(col = "black", lwd = 1), name = "log10(p)")
+Heatmap(cur_surv_plot_median, border = FALSE, cluster_columns = FALSE, rect_gp = gpar(col = "black", lwd = 1), name = "log10(p)")
+```
+
+#### Extract survival relevant features
+
+```{r}
+markers_surv_relevant <- c(colnames(cur_surv_plot_median), colnames(cur_surv_plot_mean)) %>% unique()
+
+# Extract min_max expression values
+mean_exp_df <- assay(mean_sce_8, "min_max") %>% as.data.frame %>% filter(rownames(.) %in% markers_surv_relevant) %>% t() %>% as.data.frame %>% rownames_to_column("PID")
+
+## Add survival information
+CD8_key_features <- mean_exp_df
+colnames(CD8_key_features) <- paste0("EXP_",colnames(CD8_key_features))
+colnames(CD8_key_features)[1] <- "PID"
+
+CD8_key_features$status_OS <- sce_8$status_OS[match(CD8_key_features$PID, sce_8$PID)]
+
+CD8_key_features$OS_months <- sce_8$OS_months[match(CD8_key_features$PID, sce_8$PID)]
+
+CD8_key_features <- CD8_key_features %>% select(PID, status_OS, OS_months, everything())
+
+# Save
+#write_csv(CD8_key_features, "/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/CD8_key_features.csv")
+```
+
+
+## 1B: Phenotypes - Univariate Cox
+
+```{r}
+### Mean / Median 
+library(survival)
+library(survminer)
+
+PID_celltype_combined <- colData(sce_8) %>% as.data.frame() %>% select(celltype_combined,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_celltype_combined <- PID_celltype_combined %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq))
+
+### Multivariate cox proportional hazard model on multiple covariates (here proportion of phenotypes)
+PID_metagroups <- PID_celltype_combined %>% pivot_wider(id_cols = "PID",names_from = "celltype_combined",values_from = "fra") %>% column_to_rownames("PID")
+
+Cox_df <- PID_metagroups
+
+colnames(Cox_df) <- gsub("-", "_", colnames(Cox_df)) 
+colnames(Cox_df) <- gsub("/", "_", colnames(Cox_df)) 
+
+
+## Based on categories (mean or median division of cluster proportions) 
+Cox_df_mean <- foreach(i = colnames(Cox_df),.combine = "cbind")%do%{
+Cox_df %>% select(all_of(i)) %>% mutate(mean = ifelse(Cox_df[,i] > mean(Cox_df[,i]),"B","A")) %>% pull(mean)
+}
+
+colnames(Cox_df_mean) <- colnames(Cox_df)
+rownames(Cox_df_mean) <- rownames(Cox_df)
+
+Cox_df_mean <- as.data.frame(Cox_df_mean)
+
+## Add covariates 
+Cox_df_mean$status_OS <- sce_8$status_OS[match(rownames(Cox_df_mean),sce_8$PID)]
+Cox_df_mean$OS_months <- sce_8$OS_months[match(rownames(Cox_df_mean),sce_8$PID)]
+
+#Cox_df_mean$gender <- as.factor(sce_8$gender[match(rownames(Cox_df_mean),sce_8$PID)])
+#Cox_df_mean$age <- sce_8$age[match(rownames(Cox_df_mean),sce_8$PID)]
+#Cox_df_mean$ISUP <- as.factor(sce_8$ISUP_combined[match(rownames(Cox_df_mean),sce_8$PID)])
+#Cox_df_mean$pT <- as.factor(sce_8$pT_combined[match(rownames(Cox_df_mean),sce_8$PID)])
+#Cox_df_mean$necrose <- as.factor(sce_8$necrose[match(rownames(Cox_df_mean),sce_8$PID)])
+
+#Based on proportions
+covariates <- Cox_df_mean %>% select(-status_OS,-OS_months,) %>% colnames
+
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + ")))
+
+multi_model <- coxph(multi_formula, data = Cox_df_mean)
+
+multi_res <- summary(multi_model)
+
+plot_df_mean <- data.frame(group = rownames(multi_res$coefficients),
+                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],2),
+                      HR = signif(multi_res$coefficients[,"exp(coef)"],2),
+                      CI_low = signif(multi_res$conf.int[,"lower .95"],2),
+                      CI_high = signif(multi_res$conf.int[,"upper .95"],2),
+                      wald_test = signif(multi_res$waldtest["pvalue"],2))
+
+
+#Plot hazard ratios
+hr_mean <- ggplot(plot_df_mean, aes(x = reorder(group,dplyr::desc(HR)), y = HR, color = p_value < 0.05))+
+geom_point(size = 4)+
+geom_errorbar(aes(ymax = CI_high, ymin = CI_low))+
+#coord_cartesian(ylim=c(0,20))+
+geom_hline(yintercept = 1,color = "black",linetype = "dashed")+
+scale_color_brewer(palette = "Set1")+
+xlab("Immune metaclusters")+
+ylab("HR for con_mean")+
+theme_classic()+
+theme(axis.text.x = element_text(angle = 90))
+
+hr_mean
+```
+
+```{r}
+library(survival)
+library(survminer)
+
+PID_celltype_combined <- colData(sce_8) %>% as.data.frame() %>% select(celltype_combined,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_celltype_combined <- PID_celltype_combined %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq))
+
+### Multivariate cox proportional hazard model on multiple covariates (here proportion of phenotypes)
+PID_metagroups <- PID_celltype_combined %>% pivot_wider(id_cols = "PID",names_from = "celltype_combined",values_from = "fra") %>% column_to_rownames("PID")
+
+Cox_df <- PID_metagroups
+colnames(Cox_df) <- gsub("-", "_", colnames(Cox_df)) 
+colnames(Cox_df) <- gsub("/", "_", colnames(Cox_df)) 
+
+## Based on categories (median or median division of cluster proportions) 
+Cox_df_median <- foreach(i = colnames(Cox_df),.combine = "cbind")%do%{
+Cox_df %>% select(all_of(i)) %>% mutate(median = ifelse(Cox_df[,i] > median(Cox_df[,i]),"B","A")) %>% pull(median)
+}
+
+colnames(Cox_df_median) <- colnames(Cox_df)
+rownames(Cox_df_median) <- rownames(Cox_df)
+
+Cox_df_median <- as.data.frame(Cox_df_median)
+
+## Add covariates 
+Cox_df_median$status_OS <- sce_8$status_OS[match(rownames(Cox_df_median),sce_8$PID)]
+Cox_df_median$OS_months <- sce_8$OS_months[match(rownames(Cox_df_median),sce_8$PID)]
+
+#Cox_df_median$gender <- as.factor(sce_8$gender[match(rownames(Cox_df_median),sce_8$PID)])
+#Cox_df_median$age <- sce_8$age[match(rownames(Cox_df_median),sce_8$PID)]
+#Cox_df_median$ISUP <- as.factor(sce_8$ISUP_combined[match(rownames(Cox_df_median),sce_8$PID)])
+#Cox_df_median$pT <- as.factor(sce_8$pT_combined[match(rownames(Cox_df_median),sce_8$PID)])
+#Cox_df_median$necrose <- as.factor(sce_8$necrose[match(rownames(Cox_df_median),sce_8$PID)])
+
+#Based on proportions
+covariates <- Cox_df_median %>% select(-status_OS,-OS_months,) %>% colnames
+
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + ")))
+
+multi_model <- coxph(multi_formula, data = Cox_df_median)
+
+multi_res <- summary(multi_model)
+
+plot_df_median <- data.frame(group = rownames(multi_res$coefficients),
+                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],2),
+                      HR = signif(multi_res$coefficients[,"exp(coef)"],2),
+                      CI_low = signif(multi_res$conf.int[,"lower .95"],2),
+                      CI_high = signif(multi_res$conf.int[,"upper .95"],2),
+                      wald_test = signif(multi_res$waldtest["pvalue"],2))
+
+
+#Plot hazard ratios
+hr_median <- ggplot(plot_df_median, aes(x = reorder(group,dplyr::desc(HR)), y = HR, color = p_value < 0.05))+
+geom_point(size = 4)+
+geom_errorbar(aes(ymax = CI_high, ymin = CI_low))+
+#coord_cartesian(ylim=c(0,20))+
+geom_hline(yintercept = 1,color = "black",linetype = "dashed")+
+scale_color_brewer(palette = "Set1")+
+xlab("Immune metaclusters")+
+ylab("HR for con_median")+
+theme_classic()+
+theme(axis.text.x = element_text(angle = 90))
+
+hr_median
+```
+
+#### Density 
+
+##### Mean 
+
+```{r}
+library(survival)
+library(survminer)
+
+PID_celltype_combined <- colData(sce_8) %>% as.data.frame() %>% select(celltype_combined,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+
+PID_area <- colData(sce_8) %>% as.data.frame() %>% select(tissue_area,PID) %>% unique() %>% group_by(PID) %>% mutate(mean_tissue_area = mean(tissue_area))
+
+PID_celltype_combined$mean_tissue_area <- PID_area$mean_tissue_area[match(PID_celltype_combined$PID, PID_area$PID)]
+  
+PID_celltype_combined <- PID_celltype_combined %>% group_by(PID) %>% mutate(density = Freq/(mean_tissue_area/1000000))  
+
+### Multivariate cox proportional hazard model on multiple covariates (here density of phenotypes)
+PID_metagroups <- PID_celltype_combined %>% pivot_wider(id_cols = "PID",names_from = "celltype_combined",values_from = "density") %>% column_to_rownames("PID")
+
+PID_metagroups <- na.omit(PID_metagroups)
+
+## 1. Based on continuous cluster proportions
+Cox_df <- PID_metagroups
+
+colnames(Cox_df) <- gsub("-", "_", colnames(Cox_df)) 
+colnames(Cox_df) <- gsub("/", "_", colnames(Cox_df)) 
+
+#add covariates for correction
+Cox_df$status_OS <- sce_8$status_OS[match(rownames(Cox_df),sce_8$PID)]
+Cox_df$OS_months <- sce_8$OS_months[match(rownames(Cox_df),sce_8$PID)]
+
+#mean division 
+Cox_df_mean <- foreach(i = Cox_df %>% select(-status_OS,-OS_months) %>% colnames,.combine = "cbind")%do%{
+Cox_df %>% select(i) %>% mutate(mean = ifelse(Cox_df[,i] > mean(Cox_df[,i]),"B","A")) %>% pull(mean)
+}
+
+colnames(Cox_df_mean) <- Cox_df %>% select(-status_OS,-OS_months) %>% colnames
+rownames(Cox_df_mean) <- Cox_df %>% select(-status_OS,-OS_months) %>% rownames
+Cox_df_mean <- as.data.frame(Cox_df_mean)
+
+Cox_df_mean$status_OS <- sce_8$status_OS[match(rownames(Cox_df_mean),sce_8$PID)]
+Cox_df_mean$OS_months <- sce_8$OS_months[match(rownames(Cox_df_mean),sce_8$PID)]
+
+identical(rownames(Cox_df), rownames(Cox_df_mean))
+
+#run the model
+covariates <- Cox_df_mean %>% select(-status_OS,-OS_months) %>% colnames
+
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + ")))
+
+multi_model <- coxph(multi_formula, data = Cox_df_mean)
+
+multi_res <- summary(multi_model)
+
+plot_df_dens_mean <- data.frame(group = rownames(multi_res$coefficients),
+                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],3),
+                      HR = signif(multi_res$coefficients[,"exp(coef)"],3),
+                      CI_low = signif(multi_res$conf.int[,"lower .95"],3),
+                      CI_high = signif(multi_res$conf.int[,"upper .95"],3),
+                      wald_test = signif(multi_res$waldtest["pvalue"],3))
+
+multi_res$coefficients
+
+#Plot hazard ratios
+hr_dens_mean <- ggplot(plot_df_dens_mean, aes(x = reorder(group,dplyr::desc(HR)), y = HR, color = p_value < 0.05))+
+geom_point(size = 4)+
+geom_errorbar(aes(ymax = CI_high, ymin = CI_low))+
+geom_hline(yintercept = 1,color = "black",linetype = "dashed")+
+scale_color_brewer(palette = "Set1")+
+xlab("Immune celltype_combineds")+
+ylab("HR for mean_density")+
+theme_classic()+
+#coord_cartesian(ylim=c(0.01,10))+
+scale_y_continuous(trans = "log10")+
+theme(axis.text.x = element_text(angle = 90))
+
+hr_dens_mean
+```
+
+##### Median
+
+```{r}
+library(survival)
+library(survminer)
+
+PID_celltype_combined <- colData(sce_8) %>% as.data.frame() %>% select(celltype_combined,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+
+PID_area <- colData(sce_8) %>% as.data.frame() %>% select(tissue_area,PID) %>% unique() %>% group_by(PID) %>% mutate(median_tissue_area = median(tissue_area))
+
+PID_celltype_combined$median_tissue_area <- PID_area$median_tissue_area[match(PID_celltype_combined$PID, PID_area$PID)]
+  
+PID_celltype_combined <- PID_celltype_combined %>% group_by(PID) %>% mutate(density = Freq/(median_tissue_area/1000000))  
+
+### Multivariate cox proportional hazard model on multiple covariates (here density of phenotypes)
+PID_metagroups <- PID_celltype_combined %>% pivot_wider(id_cols = "PID",names_from = "celltype_combined",values_from = "density") %>% column_to_rownames("PID")
+
+PID_metagroups <- na.omit(PID_metagroups)
+
+## 1. Based on continuous cluster proportions
+Cox_df <- PID_metagroups
+
+colnames(Cox_df) <- gsub("-", "_", colnames(Cox_df)) 
+colnames(Cox_df) <- gsub("/", "_", colnames(Cox_df)) 
+
+#add covariates for correction
+Cox_df$status_OS <- sce_8$status_OS[match(rownames(Cox_df),sce_8$PID)]
+Cox_df$OS_months <- sce_8$OS_months[match(rownames(Cox_df),sce_8$PID)]
+
+#median division 
+Cox_df_median <- foreach(i = Cox_df %>% select(-status_OS,-OS_months) %>% colnames,.combine = "cbind")%do%{
+Cox_df %>% select(i) %>% mutate(median = ifelse(Cox_df[,i] > median(Cox_df[,i]),"B","A")) %>% pull(median)
+}
+
+colnames(Cox_df_median) <- Cox_df %>% select(-status_OS,-OS_months) %>% colnames
+rownames(Cox_df_median) <- Cox_df %>% select(-status_OS,-OS_months) %>% rownames
+Cox_df_median <- as.data.frame(Cox_df_median)
+
+Cox_df_median$status_OS <- sce_8$status_OS[match(rownames(Cox_df_median),sce_8$PID)]
+Cox_df_median$OS_months <- sce_8$OS_months[match(rownames(Cox_df_median),sce_8$PID)]
+
+identical(rownames(Cox_df), rownames(Cox_df_median))
+
+#run the model
+covariates <- Cox_df_median %>% select(-status_OS,-OS_months) %>% colnames
+
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + ")))
+
+multi_model <- coxph(multi_formula, data = Cox_df_median)
+
+multi_res <- summary(multi_model)
+
+plot_df_dens_median <- data.frame(group = rownames(multi_res$coefficients),
+                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],3),
+                      HR = signif(multi_res$coefficients[,"exp(coef)"],3),
+                      CI_low = signif(multi_res$conf.int[,"lower .95"],3),
+                      CI_high = signif(multi_res$conf.int[,"upper .95"],3),
+                      wald_test = signif(multi_res$waldtest["pvalue"],3))
+
+multi_res$coefficients
+
+#Plot hazard ratios
+hr_dens_median <- ggplot(plot_df_dens_median, aes(x = reorder(group,dplyr::desc(HR)), y = HR, color = p_value < 0.05))+
+geom_point(size = 4)+
+geom_errorbar(aes(ymax = CI_high, ymin = CI_low))+
+geom_hline(yintercept = 1,color = "black",linetype = "dashed")+
+scale_color_brewer(palette = "Set1")+
+xlab("Immune celltype_combineds")+
+ylab("HR for median_density")+
+theme_classic()+
+#coord_cartesian(ylim=c(0.01,10))+
+scale_y_continuous(trans = "log10")+
+theme(axis.text.x = element_text(angle = 90))
+
+hr_dens_median
+```
+
+```{r}
+(hr_mean+hr_median)/
+(hr_dens_mean+hr_dens_median)
+```
+
+#### Extract survival relevant features
+
+```{r}
+MC_surv_relevant <- c(str_remove(plot_df_dens_median %>% filter(p_value < 0.05) %>% pull(group), "B"), str_remove(plot_df_dens_mean %>% filter(p_value < 0.05) %>% pull(group), "B")) %>% unique()
+
+MC_surv_relevant_df <- PID_celltype_combined %>% filter(celltype_combined %in% MC_surv_relevant) %>% select(PID, celltype_combined, density) %>% pivot_wider(id_cols = PID, names_from = celltype_combined, values_from = density) %>% as.data.frame
+
+colnames(MC_surv_relevant_df) <- paste0("MC_",colnames(MC_surv_relevant_df))
+colnames(MC_surv_relevant_df)[1] <- "PID"
+```
+
+Add to myeloid key features 
+
+```{r}
+# Read
+myeloid_key_features <- as.data.frame(read_csv("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/myeloid_key_features.csv"))
+```
+
+```{r}
+for (entry in colnames(MC_surv_relevant_df)[2:ncol(MC_surv_relevant_df)]) {
+  myeloid_key_features[,entry] <- MC_surv_relevant_df[,entry][match(myeloid_key_features[,"PID"],MC_surv_relevant_df[,"PID"])]
+}
+```
+
+```{r}
+# Save
+write_csv(myeloid_key_features, "/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/myeloid_key_features.csv")
+```
+
+
+# 2. CD4+ T cells 
+
+```{r}
+sce_4 <- sce[, sce$celltype_combined_broad %in% c("CD4")]
+sce_4
+
+# CD4+ T cell cluster channel
+rownames(sce_4)[rowData(sce_4)$CD4_cluster_channel]
+```
+
+## 1A: Differential expression
+
+### Survival related 
+
+#### Mean 
+
+```{r}
+# Aggregrate across cells with the mean
+mean_sce_4 <- aggregateAcrossCells(sce_4, ids = sce_4$PID,
+                                 statistics = "mean",
+                                 use.assay.type = "min_max",
+                                 subset.row = rowData(sce_4)$CD4_cluster_channel)
+```
+
+```{r}
+mean_exp_df <- assay(mean_sce_4, "min_max") %>% t() %>% as.data.frame
+
+out_df <- data.frame(PID = unique(sce_4$PID))
+
+for(i in colnames(mean_exp_df)){
+mean_exp_new <- mean_exp_df %>% select(all_of(i)) %>% mutate(mean = mean(mean_exp_df[[i]])) %>% mutate(cat = ifelse(mean > mean_exp_df[[i]], "low", "high")) %>% rownames_to_column("PID")
+
+out_df[,i] <- mean_exp_new$cat[match(out_df$PID, mean_exp_new$PID)]
+}
+
+## Add survival information 
+out_df$status_OS <- sce_4$status_OS[match(out_df$PID, sce_4$PID)]
+out_df$OS_months <- sce_4$OS_months[match(out_df$PID, sce_4$PID)]
+```
+
+```{r}
+# Color for heatmaps 
+colours <- c("#4575B4", "white", "#D73027")
+breaks <- c(-2.5, 2.5, 0.5)
+breaks <- seq(from = breaks[1], to = breaks[2], by = breaks[3])
+pal <- grDevices::colorRampPalette(colours)(length(breaks))
+col <- colorRamp2(breaks, pal)
+```
+
+```{r}
+#Assess survival impact across categories
+library(survival)
+library(survminer)
+
+colnames(out_df) <- gsub("-", "_", colnames(out_df)) 
+colnames(out_df) <- gsub("/", "_", colnames(out_df)) 
+
+# Extract p-values from log-rank / direction of trend
+cur_surv_out <- foreach(x = colnames(out_df %>% select(-PID, -status_OS, -OS_months)), .combine = "rbind")%do%{
+  formula <- as.formula(paste("Surv(OS_months, status_OS) ~ ", x))
+  fit <- survdiff(formula, data = out_df)
+  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[1], exp_2 = fit$exp[1])
+}
+
+# Adjust p-values using BH 
+cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
+
+# Create and plot heatmap 
+cur_surv_plot <- cur_surv_out %>% mutate(sign = p_adj < 0.05, direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% mutate(p_out = ifelse(sign == TRUE & direction == "high",  -log10(p_adj), ifelse(sign == TRUE & direction == "low", log10(p_adj), 0))) %>% arrange(desc(p_out)) %>% filter(p_adj < 0.05)
+
+cur_surv_plot_mean <- cur_surv_plot %>% pivot_wider(id_cols = type, names_from = group, values_from = p_out) %>% column_to_rownames("type")
+
+Heatmap(cur_surv_plot_mean, col = col, border = FALSE, cluster_columns = FALSE, rect_gp = gpar(col = "black", lwd = 1), name = "log10(p)")
+Heatmap(cur_surv_plot_mean, border = FALSE, cluster_columns = FALSE, rect_gp = gpar(col = "black", lwd = 1), name = "log10(p)")
+```
+
+#### Median 
+
+```{r}
+mean_exp_df <- assay(mean_sce_4, "min_max") %>% t() %>% as.data.frame
+
+out_df <- data.frame(PID = unique(sce_4$PID))
+
+for(i in colnames(mean_exp_df)){
+mean_exp_new <- mean_exp_df %>% select(all_of(i)) %>% mutate(mean = median(mean_exp_df[[i]])) %>% mutate(cat = ifelse(mean > mean_exp_df[[i]], "low", "high")) %>% rownames_to_column("PID")
+
+out_df[,i] <- mean_exp_new$cat[match(out_df$PID, mean_exp_new$PID)]
+}
+
+## Add survival information 
+out_df$status_OS <- sce_4$status_OS[match(out_df$PID, sce_4$PID)]
+out_df$OS_months <- sce_4$OS_months[match(out_df$PID, sce_4$PID)]
+```
+
+
+```{r}
+# Color for heatmaps 
+colours <- c("#4575B4", "white", "#D73027")
+breaks <- c(-2.5, 2.5, 0.5)
+breaks <- seq(from = breaks[1], to = breaks[2], by = breaks[3])
+pal <- grDevices::colorRampPalette(colours)(length(breaks))
+col <- colorRamp2(breaks, pal)
+```
+
+```{r}
+#Assess survival impact across categories
+library(survival)
+library(survminer)
+
+colnames(out_df) <- gsub("-", "_", colnames(out_df)) 
+colnames(out_df) <- gsub("/", "_", colnames(out_df)) 
+
+# Extract p-values from log-rank / direction of trend
+cur_surv_out <- foreach(x = colnames(out_df %>% select(-PID, -status_OS, -OS_months)), .combine = "rbind")%do%{
+  formula <- as.formula(paste("Surv(OS_months, status_OS) ~ ", x))
+  fit <- survdiff(formula, data = out_df)
+  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[1], exp_2 = fit$exp[1])
+}
+
+# Adjust p-values using BH 
+cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
+
+# Create and plot heatmap 
+cur_surv_plot <- cur_surv_out %>% mutate(sign = p_adj < 0.05, direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% mutate(p_out = ifelse(sign == TRUE & direction == "high",  -log10(p_adj), ifelse(sign == TRUE & direction == "low", log10(p_adj), 0))) %>% arrange(desc(p_out)) %>% filter(p_adj < 0.05)
+
+cur_surv_plot_median <- cur_surv_plot %>% pivot_wider(id_cols = type, names_from = group, values_from = p_out) %>% column_to_rownames("type")
+
+Heatmap(cur_surv_plot_median, col = col, border = FALSE, cluster_columns = FALSE, rect_gp = gpar(col = "black", lwd = 1), name = "log10(p)")
+Heatmap(cur_surv_plot_median, border = FALSE, cluster_columns = FALSE, rect_gp = gpar(col = "black", lwd = 1), name = "log10(p)")
+```
+
+#### Extract survival relevant features
+
+```{r}
+markers_surv_relevant <- c(colnames(cur_surv_plot_median), colnames(cur_surv_plot_mean)) %>% unique()
+
+# Extract min_max expression values
+mean_exp_df <- assay(mean_sce_4, "min_max") %>% as.data.frame %>% filter(rownames(.) %in% markers_surv_relevant) %>% t() %>% as.data.frame %>% rownames_to_column("PID")
+
+## Add survival information
+CD4_key_features <- mean_exp_df
+colnames(CD4_key_features) <- paste0("EXP_",colnames(CD4_key_features))
+colnames(CD4_key_features)[1] <- "PID"
+
+CD4_key_features$status_OS <- sce_4$status_OS[match(CD4_key_features$PID, sce_4$PID)]
+
+CD4_key_features$OS_months <- sce_4$OS_months[match(CD4_key_features$PID, sce_4$PID)]
+
+CD4_key_features <- CD4_key_features %>% select(PID, status_OS, OS_months, everything())
+
+# Save
+#write_csv(CD4_key_features, "/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/CD4_key_features.csv")
+```
+
+
+## 1B: Phenotypes - Univariate Cox
+
+```{r}
+### Mean / Median 
+library(survival)
+library(survminer)
+
+PID_celltype_combined <- colData(sce_4) %>% as.data.frame() %>% select(celltype_combined,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_celltype_combined <- PID_celltype_combined %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq))
+
+### Multivariate cox proportional hazard model on multiple covariates (here proportion of phenotypes)
+PID_metagroups <- PID_celltype_combined %>% pivot_wider(id_cols = "PID",names_from = "celltype_combined",values_from = "fra") %>% column_to_rownames("PID")
+
+Cox_df <- PID_metagroups
+
+colnames(Cox_df) <- gsub("-", "_", colnames(Cox_df)) 
+colnames(Cox_df) <- gsub("/", "_", colnames(Cox_df)) 
+
+
+## Based on categories (mean or median division of cluster proportions) 
+Cox_df_mean <- foreach(i = colnames(Cox_df),.combine = "cbind")%do%{
+Cox_df %>% select(all_of(i)) %>% mutate(mean = ifelse(Cox_df[,i] > mean(Cox_df[,i]),"B","A")) %>% pull(mean)
+}
+
+colnames(Cox_df_mean) <- colnames(Cox_df)
+rownames(Cox_df_mean) <- rownames(Cox_df)
+
+Cox_df_mean <- as.data.frame(Cox_df_mean)
+
+## Add covariates 
+Cox_df_mean$status_OS <- sce_4$status_OS[match(rownames(Cox_df_mean),sce_4$PID)]
+Cox_df_mean$OS_months <- sce_4$OS_months[match(rownames(Cox_df_mean),sce_4$PID)]
+
+#Cox_df_mean$gender <- as.factor(sce_4$gender[match(rownames(Cox_df_mean),sce_4$PID)])
+#Cox_df_mean$age <- sce_4$age[match(rownames(Cox_df_mean),sce_4$PID)]
+#Cox_df_mean$ISUP <- as.factor(sce_4$ISUP_combined[match(rownames(Cox_df_mean),sce_4$PID)])
+#Cox_df_mean$pT <- as.factor(sce_4$pT_combined[match(rownames(Cox_df_mean),sce_4$PID)])
+#Cox_df_mean$necrose <- as.factor(sce_4$necrose[match(rownames(Cox_df_mean),sce_4$PID)])
+
+#Based on proportions
+covariates <- Cox_df_mean %>% select(-status_OS,-OS_months,) %>% colnames
+
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + ")))
+
+multi_model <- coxph(multi_formula, data = Cox_df_mean)
+
+multi_res <- summary(multi_model)
+
+plot_df_mean <- data.frame(group = rownames(multi_res$coefficients),
+                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],2),
+                      HR = signif(multi_res$coefficients[,"exp(coef)"],2),
+                      CI_low = signif(multi_res$conf.int[,"lower .95"],2),
+                      CI_high = signif(multi_res$conf.int[,"upper .95"],2),
+                      wald_test = signif(multi_res$waldtest["pvalue"],2))
+
+
+#Plot hazard ratios
+hr_mean <- ggplot(plot_df_mean, aes(x = reorder(group,dplyr::desc(HR)), y = HR, color = p_value < 0.05))+
+geom_point(size = 4)+
+geom_errorbar(aes(ymax = CI_high, ymin = CI_low))+
+#coord_cartesian(ylim=c(0,20))+
+geom_hline(yintercept = 1,color = "black",linetype = "dashed")+
+scale_color_brewer(palette = "Set1")+
+xlab("Immune metaclusters")+
+ylab("HR for con_mean")+
+theme_classic()+
+theme(axis.text.x = element_text(angle = 90))
+
+hr_mean
+```
+
+```{r}
+library(survival)
+library(survminer)
+
+PID_celltype_combined <- colData(sce_4) %>% as.data.frame() %>% select(celltype_combined,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_celltype_combined <- PID_celltype_combined %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq))
+
+### Multivariate cox proportional hazard model on multiple covariates (here proportion of phenotypes)
+PID_metagroups <- PID_celltype_combined %>% pivot_wider(id_cols = "PID",names_from = "celltype_combined",values_from = "fra") %>% column_to_rownames("PID")
+
+Cox_df <- PID_metagroups
+colnames(Cox_df) <- gsub("-", "_", colnames(Cox_df)) 
+colnames(Cox_df) <- gsub("/", "_", colnames(Cox_df)) 
+
+## Based on categories (median or median division of cluster proportions) 
+Cox_df_median <- foreach(i = colnames(Cox_df),.combine = "cbind")%do%{
+Cox_df %>% select(all_of(i)) %>% mutate(median = ifelse(Cox_df[,i] > median(Cox_df[,i]),"B","A")) %>% pull(median)
+}
+
+colnames(Cox_df_median) <- colnames(Cox_df)
+rownames(Cox_df_median) <- rownames(Cox_df)
+
+Cox_df_median <- as.data.frame(Cox_df_median)
+
+## Add covariates 
+Cox_df_median$status_OS <- sce_4$status_OS[match(rownames(Cox_df_median),sce_4$PID)]
+Cox_df_median$OS_months <- sce_4$OS_months[match(rownames(Cox_df_median),sce_4$PID)]
+
+#Cox_df_median$gender <- as.factor(sce_4$gender[match(rownames(Cox_df_median),sce_4$PID)])
+#Cox_df_median$age <- sce_4$age[match(rownames(Cox_df_median),sce_4$PID)]
+#Cox_df_median$ISUP <- as.factor(sce_4$ISUP_combined[match(rownames(Cox_df_median),sce_4$PID)])
+#Cox_df_median$pT <- as.factor(sce_4$pT_combined[match(rownames(Cox_df_median),sce_4$PID)])
+#Cox_df_median$necrose <- as.factor(sce_4$necrose[match(rownames(Cox_df_median),sce_4$PID)])
+
+#Based on proportions
+covariates <- Cox_df_median %>% select(-status_OS,-OS_months,) %>% colnames
+
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + ")))
+
+multi_model <- coxph(multi_formula, data = Cox_df_median)
+
+multi_res <- summary(multi_model)
+
+plot_df_median <- data.frame(group = rownames(multi_res$coefficients),
+                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],2),
+                      HR = signif(multi_res$coefficients[,"exp(coef)"],2),
+                      CI_low = signif(multi_res$conf.int[,"lower .95"],2),
+                      CI_high = signif(multi_res$conf.int[,"upper .95"],2),
+                      wald_test = signif(multi_res$waldtest["pvalue"],2))
+
+
+#Plot hazard ratios
+hr_median <- ggplot(plot_df_median, aes(x = reorder(group,dplyr::desc(HR)), y = HR, color = p_value < 0.05))+
+geom_point(size = 4)+
+geom_errorbar(aes(ymax = CI_high, ymin = CI_low))+
+#coord_cartesian(ylim=c(0,20))+
+geom_hline(yintercept = 1,color = "black",linetype = "dashed")+
+scale_color_brewer(palette = "Set1")+
+xlab("Immune metaclusters")+
+ylab("HR for con_median")+
+theme_classic()+
+theme(axis.text.x = element_text(angle = 90))
+
+hr_median
+```
+
+
+#### Density 
+
+##### Mean 
+
+```{r}
+library(survival)
+library(survminer)
+
+PID_celltype_combined <- colData(sce_4) %>% as.data.frame() %>% select(celltype_combined,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+
+PID_area <- colData(sce_4) %>% as.data.frame() %>% select(tissue_area,PID) %>% unique() %>% group_by(PID) %>% mutate(mean_tissue_area = mean(tissue_area))
+
+PID_celltype_combined$mean_tissue_area <- PID_area$mean_tissue_area[match(PID_celltype_combined$PID, PID_area$PID)]
+  
+PID_celltype_combined <- PID_celltype_combined %>% group_by(PID) %>% mutate(density = Freq/(mean_tissue_area/1000000))  
+
+### Multivariate cox proportional hazard model on multiple covariates (here density of phenotypes)
+PID_metagroups <- PID_celltype_combined %>% pivot_wider(id_cols = "PID",names_from = "celltype_combined",values_from = "density") %>% column_to_rownames("PID")
+
+PID_metagroups <- na.omit(PID_metagroups)
+
+## 1. Based on continuous cluster proportions
+Cox_df <- PID_metagroups
+
+colnames(Cox_df) <- gsub("-", "_", colnames(Cox_df)) 
+colnames(Cox_df) <- gsub("/", "_", colnames(Cox_df)) 
+
+#add covariates for correction
+Cox_df$status_OS <- sce_4$status_OS[match(rownames(Cox_df),sce_4$PID)]
+Cox_df$OS_months <- sce_4$OS_months[match(rownames(Cox_df),sce_4$PID)]
+
+#mean division 
+Cox_df_mean <- foreach(i = Cox_df %>% select(-status_OS,-OS_months) %>% colnames,.combine = "cbind")%do%{
+Cox_df %>% select(i) %>% mutate(mean = ifelse(Cox_df[,i] > mean(Cox_df[,i]),"B","A")) %>% pull(mean)
+}
+
+colnames(Cox_df_mean) <- Cox_df %>% select(-status_OS,-OS_months) %>% colnames
+rownames(Cox_df_mean) <- Cox_df %>% select(-status_OS,-OS_months) %>% rownames
+Cox_df_mean <- as.data.frame(Cox_df_mean)
+
+Cox_df_mean$status_OS <- sce_4$status_OS[match(rownames(Cox_df_mean),sce_4$PID)]
+Cox_df_mean$OS_months <- sce_4$OS_months[match(rownames(Cox_df_mean),sce_4$PID)]
+
+identical(rownames(Cox_df), rownames(Cox_df_mean))
+
+#run the model
+covariates <- Cox_df_mean %>% select(-status_OS,-OS_months) %>% colnames
+
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + ")))
+
+multi_model <- coxph(multi_formula, data = Cox_df_mean)
+
+multi_res <- summary(multi_model)
+
+plot_df_dens_mean <- data.frame(group = rownames(multi_res$coefficients),
+                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],3),
+                      HR = signif(multi_res$coefficients[,"exp(coef)"],3),
+                      CI_low = signif(multi_res$conf.int[,"lower .95"],3),
+                      CI_high = signif(multi_res$conf.int[,"upper .95"],3),
+                      wald_test = signif(multi_res$waldtest["pvalue"],3))
+
+multi_res$coefficients
+
+#Plot hazard ratios
+hr_dens_mean <- ggplot(plot_df_dens_mean, aes(x = reorder(group,dplyr::desc(HR)), y = HR, color = p_value < 0.05))+
+geom_point(size = 4)+
+geom_errorbar(aes(ymax = CI_high, ymin = CI_low))+
+geom_hline(yintercept = 1,color = "black",linetype = "dashed")+
+scale_color_brewer(palette = "Set1")+
+xlab("Immune celltype_combineds")+
+ylab("HR for mean_density")+
+theme_classic()+
+#coord_cartesian(ylim=c(0.01,10))+
+scale_y_continuous(trans = "log10")+
+theme(axis.text.x = element_text(angle = 90))
+
+hr_dens_mean
+```
+
+##### Median
+
+```{r}
+library(survival)
+library(survminer)
+
+PID_celltype_combined <- colData(sce_4) %>% as.data.frame() %>% select(celltype_combined,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+
+PID_area <- colData(sce_4) %>% as.data.frame() %>% select(tissue_area,PID) %>% unique() %>% group_by(PID) %>% mutate(median_tissue_area = median(tissue_area))
+
+PID_celltype_combined$median_tissue_area <- PID_area$median_tissue_area[match(PID_celltype_combined$PID, PID_area$PID)]
+  
+PID_celltype_combined <- PID_celltype_combined %>% group_by(PID) %>% mutate(density = Freq/(median_tissue_area/1000000))  
+
+### Multivariate cox proportional hazard model on multiple covariates (here density of phenotypes)
+PID_metagroups <- PID_celltype_combined %>% pivot_wider(id_cols = "PID",names_from = "celltype_combined",values_from = "density") %>% column_to_rownames("PID")
+
+PID_metagroups <- na.omit(PID_metagroups)
+
+## 1. Based on continuous cluster proportions
+Cox_df <- PID_metagroups
+
+colnames(Cox_df) <- gsub("-", "_", colnames(Cox_df)) 
+colnames(Cox_df) <- gsub("/", "_", colnames(Cox_df)) 
+
+#add covariates for correction
+Cox_df$status_OS <- sce_4$status_OS[match(rownames(Cox_df),sce_4$PID)]
+Cox_df$OS_months <- sce_4$OS_months[match(rownames(Cox_df),sce_4$PID)]
+
+#median division 
+Cox_df_median <- foreach(i = Cox_df %>% select(-status_OS,-OS_months) %>% colnames,.combine = "cbind")%do%{
+Cox_df %>% select(i) %>% mutate(median = ifelse(Cox_df[,i] > median(Cox_df[,i]),"B","A")) %>% pull(median)
+}
+
+colnames(Cox_df_median) <- Cox_df %>% select(-status_OS,-OS_months) %>% colnames
+rownames(Cox_df_median) <- Cox_df %>% select(-status_OS,-OS_months) %>% rownames
+Cox_df_median <- as.data.frame(Cox_df_median)
+
+Cox_df_median$status_OS <- sce_4$status_OS[match(rownames(Cox_df_median),sce_4$PID)]
+Cox_df_median$OS_months <- sce_4$OS_months[match(rownames(Cox_df_median),sce_4$PID)]
+
+identical(rownames(Cox_df), rownames(Cox_df_median))
+
+#run the model
+covariates <- Cox_df_median %>% select(-status_OS,-OS_months) %>% colnames
+
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + ")))
+
+multi_model <- coxph(multi_formula, data = Cox_df_median)
+
+multi_res <- summary(multi_model)
+
+plot_df_dens_median <- data.frame(group = rownames(multi_res$coefficients),
+                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],3),
+                      HR = signif(multi_res$coefficients[,"exp(coef)"],3),
+                      CI_low = signif(multi_res$conf.int[,"lower .95"],3),
+                      CI_high = signif(multi_res$conf.int[,"upper .95"],3),
+                      wald_test = signif(multi_res$waldtest["pvalue"],3))
+
+multi_res$coefficients
+
+#Plot hazard ratios
+hr_dens_median <- ggplot(plot_df_dens_median, aes(x = reorder(group,dplyr::desc(HR)), y = HR, color = p_value < 0.05))+
+geom_point(size = 4)+
+geom_errorbar(aes(ymax = CI_high, ymin = CI_low))+
+geom_hline(yintercept = 1,color = "black",linetype = "dashed")+
+scale_color_brewer(palette = "Set1")+
+xlab("Immune celltype_combineds")+
+ylab("HR for median_density")+
+theme_classic()+
+#coord_cartesian(ylim=c(0.01,10))+
+scale_y_continuous(trans = "log10")+
+theme(axis.text.x = element_text(angle = 90))
+
+hr_dens_median
+```
+
+```{r}
+(hr_mean+hr_median)/
+(hr_dens_mean+hr_dens_median)
+```
+
+#### Extract survival relevant features
+
+```{r}
+MC_surv_relevant <- c(str_remove(plot_df_dens_median %>% filter(p_value < 0.05) %>% pull(group), "B"), str_remove(plot_df_dens_mean %>% filter(p_value < 0.05) %>% pull(group), "B")) %>% unique()
+
+MC_surv_relevant_df <- PID_celltype_combined %>% filter(celltype_combined %in% MC_surv_relevant) %>% select(PID, celltype_combined, density) %>% pivot_wider(id_cols = PID, names_from = celltype_combined, values_from = density) %>% as.data.frame
+
+colnames(MC_surv_relevant_df) <- paste0("MC_",colnames(MC_surv_relevant_df))
+colnames(MC_surv_relevant_df)[1] <- "PID"
+```
+
+Add to myeloid key features 
+
+```{r}
+# Read
+myeloid_key_features <- as.data.frame(read_csv("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/myeloid_key_features.csv"))
+```
+
+```{r}
+for (entry in colnames(MC_surv_relevant_df)[2:ncol(MC_surv_relevant_df)]) {
+  myeloid_key_features[,entry] <- MC_surv_relevant_df[,entry][match(myeloid_key_features[,"PID"],MC_surv_relevant_df[,"PID"])]
+}
+```
+
+```{r}
+# Save
+write_csv(myeloid_key_features, "/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/myeloid_key_features.csv")
+```
+
+# 3. Districs
+
+```{r}
+sce_T <- sce[, sce$celltype_combined_broad %in% c("CD8", "CD4")]
+sce_T
+```
+
+```{r}
+### Mean / Median 
+library(survival)
+library(survminer)
+
+PID_Tcell_district_names <- colData(sce_T) %>% as.data.frame() %>% select(Tcell_district_names,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_Tcell_district_names <- PID_Tcell_district_names %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq))
+
+### Multivariate cox proportional hazard model on multiple covariates (here proportion of phenotypes)
+PID_metagroups <- PID_Tcell_district_names %>% pivot_wider(id_cols = "PID",names_from = "Tcell_district_names",values_from = "fra") %>% column_to_rownames("PID")
+
+PID_metagroups <- na.omit(PID_metagroups)
+
+Cox_df <- PID_metagroups
+
+colnames(Cox_df) <- gsub("-", "_", colnames(Cox_df)) 
+colnames(Cox_df) <- gsub("/", "_", colnames(Cox_df)) 
+
+
+## Based on categories (mean or median division of cluster proportions) 
+Cox_df_mean <- foreach(i = colnames(Cox_df),.combine = "cbind")%do%{
+Cox_df %>% select(all_of(i)) %>% mutate(mean = ifelse(Cox_df[,i] > mean(Cox_df[,i]),"B","A")) %>% pull(mean)
+}
+
+colnames(Cox_df_mean) <- colnames(Cox_df)
+rownames(Cox_df_mean) <- rownames(Cox_df)
+
+Cox_df_mean <- as.data.frame(Cox_df_mean)
+
+## Add covariates 
+Cox_df_mean$status_OS <- sce_T$status_OS[match(rownames(Cox_df_mean),sce_T$PID)]
+Cox_df_mean$OS_months <- sce_T$OS_months[match(rownames(Cox_df_mean),sce_T$PID)]
+
+#Cox_df_mean$gender <- as.factor(sce_T$gender[match(rownames(Cox_df_mean),sce_T$PID)])
+#Cox_df_mean$age <- sce_T$age[match(rownames(Cox_df_mean),sce_T$PID)]
+#Cox_df_mean$ISUP <- as.factor(sce_T$ISUP_combined[match(rownames(Cox_df_mean),sce_T$PID)])
+#Cox_df_mean$pT <- as.factor(sce_T$pT_combined[match(rownames(Cox_df_mean),sce_T$PID)])
+#Cox_df_mean$necrose <- as.factor(sce_T$necrose[match(rownames(Cox_df_mean),sce_T$PID)])
+
+#Based on proportions
+covariates <- Cox_df_mean %>% select(-status_OS,-OS_months,) %>% colnames
+
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + ")))
+
+multi_model <- coxph(multi_formula, data = Cox_df_mean)
+
+multi_res <- summary(multi_model)
+
+plot_df_mean <- data.frame(group = rownames(multi_res$coefficients),
+                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],2),
+                      HR = signif(multi_res$coefficients[,"exp(coef)"],2),
+                      CI_low = signif(multi_res$conf.int[,"lower .95"],2),
+                      CI_high = signif(multi_res$conf.int[,"upper .95"],2),
+                      wald_test = signif(multi_res$waldtest["pvalue"],2))
+
+
+#Plot hazard ratios
+hr_mean <- ggplot(plot_df_mean, aes(x = reorder(group,dplyr::desc(HR)), y = HR, color = p_value < 0.05))+
+geom_point(size = 4)+
+geom_errorbar(aes(ymax = CI_high, ymin = CI_low))+
+#coord_cartesian(ylim=c(0,20))+
+geom_hline(yintercept = 1,color = "black",linetype = "dashed")+
+scale_color_brewer(palette = "Set1")+
+xlab("Immune metaclusters")+
+ylab("HR for con_mean")+
+theme_classic()+
+theme(axis.text.x = element_text(angle = 90))
+
+hr_mean
+```
+
+```{r}
+library(survival)
+library(survminer)
+
+PID_Tcell_district_names <- colData(sce_T) %>% as.data.frame() %>% select(Tcell_district_names,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_Tcell_district_names <- PID_Tcell_district_names %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq))
+
+### Multivariate cox proportional hazard model on multiple covariates (here proportion of phenotypes)
+PID_metagroups <- PID_Tcell_district_names %>% pivot_wider(id_cols = "PID",names_from = "Tcell_district_names",values_from = "fra") %>% column_to_rownames("PID")
+
+PID_metagroups <- na.omit(PID_metagroups)
+
+Cox_df <- PID_metagroups
+colnames(Cox_df) <- gsub("-", "_", colnames(Cox_df)) 
+colnames(Cox_df) <- gsub("/", "_", colnames(Cox_df)) 
+
+## Based on categories (median or median division of cluster proportions) 
+Cox_df_median <- foreach(i = colnames(Cox_df),.combine = "cbind")%do%{
+Cox_df %>% select(all_of(i)) %>% mutate(median = ifelse(Cox_df[,i] > median(Cox_df[,i]),"B","A")) %>% pull(median)
+}
+
+colnames(Cox_df_median) <- colnames(Cox_df)
+rownames(Cox_df_median) <- rownames(Cox_df)
+
+Cox_df_median <- as.data.frame(Cox_df_median)
+
+## Add covariates 
+Cox_df_median$status_OS <- sce_T$status_OS[match(rownames(Cox_df_median),sce_T$PID)]
+Cox_df_median$OS_months <- sce_T$OS_months[match(rownames(Cox_df_median),sce_T$PID)]
+
+#Cox_df_median$gender <- as.factor(sce_T$gender[match(rownames(Cox_df_median),sce_T$PID)])
+#Cox_df_median$age <- sce_T$age[match(rownames(Cox_df_median),sce_T$PID)]
+#Cox_df_median$ISUP <- as.factor(sce_T$ISUP_combined[match(rownames(Cox_df_median),sce_T$PID)])
+#Cox_df_median$pT <- as.factor(sce_T$pT_combined[match(rownames(Cox_df_median),sce_T$PID)])
+#Cox_df_median$necrose <- as.factor(sce_T$necrose[match(rownames(Cox_df_median),sce_T$PID)])
+
+#Based on proportions
+covariates <- Cox_df_median %>% select(-status_OS,-OS_months,) %>% colnames
+
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + ")))
+
+multi_model <- coxph(multi_formula, data = Cox_df_median)
+
+multi_res <- summary(multi_model)
+
+plot_df_median <- data.frame(group = rownames(multi_res$coefficients),
+                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],2),
+                      HR = signif(multi_res$coefficients[,"exp(coef)"],2),
+                      CI_low = signif(multi_res$conf.int[,"lower .95"],2),
+                      CI_high = signif(multi_res$conf.int[,"upper .95"],2),
+                      wald_test = signif(multi_res$waldtest["pvalue"],2))
+
+
+#Plot hazard ratios
+hr_median <- ggplot(plot_df_median, aes(x = reorder(group,dplyr::desc(HR)), y = HR, color = p_value < 0.05))+
+geom_point(size = 4)+
+geom_errorbar(aes(ymax = CI_high, ymin = CI_low))+
+#coord_cartesian(ylim=c(0,20))+
+geom_hline(yintercept = 1,color = "black",linetype = "dashed")+
+scale_color_brewer(palette = "Set1")+
+xlab("Immune metaclusters")+
+ylab("HR for con_median")+
+theme_classic()+
+theme(axis.text.x = element_text(angle = 90))
+
+hr_median
+```
+
+#### Density 
+
+##### Mean 
+
+```{r}
+library(survival)
+library(survminer)
+
+PID_Tcell_district_names <- colData(sce_T) %>% as.data.frame() %>% select(Tcell_district_names,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+
+PID_area <- colData(sce_T) %>% as.data.frame() %>% select(tissue_area,PID) %>% unique() %>% group_by(PID) %>% mutate(mean_tissue_area = mean(tissue_area))
+
+PID_Tcell_district_names$mean_tissue_area <- PID_area$mean_tissue_area[match(PID_Tcell_district_names$PID, PID_area$PID)]
+  
+PID_Tcell_district_names <- PID_Tcell_district_names %>% group_by(PID) %>% mutate(density = Freq/(mean_tissue_area/1000000))  
+
+### Multivariate cox proportional hazard model on multiple covariates (here density of phenotypes)
+PID_metagroups <- PID_Tcell_district_names %>% pivot_wider(id_cols = "PID",names_from = "Tcell_district_names",values_from = "density") %>% column_to_rownames("PID")
+
+PID_metagroups <- na.omit(PID_metagroups)
+
+## 1. Based on continuous cluster proportions
+Cox_df <- PID_metagroups
+
+colnames(Cox_df) <- gsub("-", "_", colnames(Cox_df)) 
+colnames(Cox_df) <- gsub("/", "_", colnames(Cox_df)) 
+
+#add covariates for correction
+Cox_df$status_OS <- sce_T$status_OS[match(rownames(Cox_df),sce_T$PID)]
+Cox_df$OS_months <- sce_T$OS_months[match(rownames(Cox_df),sce_T$PID)]
+
+#mean division 
+Cox_df_mean <- foreach(i = Cox_df %>% select(-status_OS,-OS_months) %>% colnames,.combine = "cbind")%do%{
+Cox_df %>% select(i) %>% mutate(mean = ifelse(Cox_df[,i] > mean(Cox_df[,i]),"B","A")) %>% pull(mean)
+}
+
+colnames(Cox_df_mean) <- Cox_df %>% select(-status_OS,-OS_months) %>% colnames
+rownames(Cox_df_mean) <- Cox_df %>% select(-status_OS,-OS_months) %>% rownames
+Cox_df_mean <- as.data.frame(Cox_df_mean)
+
+Cox_df_mean$status_OS <- sce_T$status_OS[match(rownames(Cox_df_mean),sce_T$PID)]
+Cox_df_mean$OS_months <- sce_T$OS_months[match(rownames(Cox_df_mean),sce_T$PID)]
+
+identical(rownames(Cox_df), rownames(Cox_df_mean))
+
+#run the model
+covariates <- Cox_df_mean %>% select(-status_OS,-OS_months) %>% colnames
+
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + ")))
+
+multi_model <- coxph(multi_formula, data = Cox_df_mean)
+
+multi_res <- summary(multi_model)
+
+plot_df_dens_mean <- data.frame(group = rownames(multi_res$coefficients),
+                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],3),
+                      HR = signif(multi_res$coefficients[,"exp(coef)"],3),
+                      CI_low = signif(multi_res$conf.int[,"lower .95"],3),
+                      CI_high = signif(multi_res$conf.int[,"upper .95"],3),
+                      wald_test = signif(multi_res$waldtest["pvalue"],3))
+
+multi_res$coefficients
+
+#Plot hazard ratios
+hr_dens_mean <- ggplot(plot_df_dens_mean, aes(x = reorder(group,dplyr::desc(HR)), y = HR, color = p_value < 0.05))+
+geom_point(size = 4)+
+geom_errorbar(aes(ymax = CI_high, ymin = CI_low))+
+geom_hline(yintercept = 1,color = "black",linetype = "dashed")+
+scale_color_brewer(palette = "Set1")+
+xlab("Immune Tcell_district_namess")+
+ylab("HR for mean_density")+
+theme_classic()+
+#coord_cartesian(ylim=c(0.01,10))+
+scale_y_continuous(trans = "log10")+
+theme(axis.text.x = element_text(angle = 90))
+
+hr_dens_mean
+```
+
+##### Median
+
+```{r}
+library(survival)
+library(survminer)
+
+PID_Tcell_district_names <- colData(sce_T) %>% as.data.frame() %>% select(Tcell_district_names,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+
+PID_area <- colData(sce_T) %>% as.data.frame() %>% select(tissue_area,PID) %>% unique() %>% group_by(PID) %>% mutate(median_tissue_area = median(tissue_area))
+
+PID_Tcell_district_names$median_tissue_area <- PID_area$median_tissue_area[match(PID_Tcell_district_names$PID, PID_area$PID)]
+  
+PID_Tcell_district_names <- PID_Tcell_district_names %>% group_by(PID) %>% mutate(density = Freq/(median_tissue_area/1000000))  
+
+### Multivariate cox proportional hazard model on multiple covariates (here density of phenotypes)
+PID_metagroups <- PID_Tcell_district_names %>% pivot_wider(id_cols = "PID",names_from = "Tcell_district_names",values_from = "density") %>% column_to_rownames("PID")
+
+PID_metagroups <- na.omit(PID_metagroups)
+
+## 1. Based on continuous cluster proportions
+Cox_df <- PID_metagroups
+
+colnames(Cox_df) <- gsub("-", "_", colnames(Cox_df)) 
+colnames(Cox_df) <- gsub("/", "_", colnames(Cox_df)) 
+
+#add covariates for correction
+Cox_df$status_OS <- sce_T$status_OS[match(rownames(Cox_df),sce_T$PID)]
+Cox_df$OS_months <- sce_T$OS_months[match(rownames(Cox_df),sce_T$PID)]
+
+#median division 
+Cox_df_median <- foreach(i = Cox_df %>% select(-status_OS,-OS_months) %>% colnames,.combine = "cbind")%do%{
+Cox_df %>% select(i) %>% mutate(median = ifelse(Cox_df[,i] > median(Cox_df[,i]),"B","A")) %>% pull(median)
+}
+
+colnames(Cox_df_median) <- Cox_df %>% select(-status_OS,-OS_months) %>% colnames
+rownames(Cox_df_median) <- Cox_df %>% select(-status_OS,-OS_months) %>% rownames
+Cox_df_median <- as.data.frame(Cox_df_median)
+
+Cox_df_median$status_OS <- sce_T$status_OS[match(rownames(Cox_df_median),sce_T$PID)]
+Cox_df_median$OS_months <- sce_T$OS_months[match(rownames(Cox_df_median),sce_T$PID)]
+
+identical(rownames(Cox_df), rownames(Cox_df_median))
+
+#run the model
+covariates <- Cox_df_median %>% select(-status_OS,-OS_months) %>% colnames
+
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + ")))
+
+multi_model <- coxph(multi_formula, data = Cox_df_median)
+
+multi_res <- summary(multi_model)
+
+plot_df_dens_median <- data.frame(group = rownames(multi_res$coefficients),
+                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],3),
+                      HR = signif(multi_res$coefficients[,"exp(coef)"],3),
+                      CI_low = signif(multi_res$conf.int[,"lower .95"],3),
+                      CI_high = signif(multi_res$conf.int[,"upper .95"],3),
+                      wald_test = signif(multi_res$waldtest["pvalue"],3))
+
+multi_res$coefficients
+
+#Plot hazard ratios
+hr_dens_median <- ggplot(plot_df_dens_median, aes(x = reorder(group,dplyr::desc(HR)), y = HR, color = p_value < 0.05))+
+geom_point(size = 4)+
+geom_errorbar(aes(ymax = CI_high, ymin = CI_low))+
+geom_hline(yintercept = 1,color = "black",linetype = "dashed")+
+scale_color_brewer(palette = "Set1")+
+xlab("Immune Tcell_district_namess")+
+ylab("HR for median_density")+
+theme_classic()+
+#coord_cartesian(ylim=c(0.01,10))+
+scale_y_continuous(trans = "log10")+
+theme(axis.text.x = element_text(angle = 90))
+
+hr_dens_median
+```
+
+```{r}
+(hr_mean+hr_median)/
+(hr_dens_mean+hr_dens_median)
+```
+
+# 4. Interactions
+
+## Differential interaction analysis
+
+```{r}
+### General phenotype interaction difference
+library(spicyR)
+library(lisaClust)
+
+## ISUP 
+
+set.seed(22)
+
+# Generate segmentedCells object 
+cur_sce <- sce
+
+cells <- data.frame(row.names = colnames(cur_sce))
+cells$x <- cur_sce$Pos_X
+cells$y <- cur_sce$Pos_Y
+cells$imageID <- cur_sce$sample_id
+cells$imageCellID <- cur_sce$ObjectNumber
+cells$cellType <- cur_sce$celltype_combined # adjust
+
+cells_sc <- SegmentedCells(cells, cellProfiler = TRUE)
+
+# Add condition and patient id
+unique(cur_sce$ISUP_combined)
+
+cat <- relevel(x=factor(cur_sce$ISUP_combined), ref = "1/2")
+
+imagePheno(cells_sc) <- DataFrame(imageID = cur_sce$sample_id, # analogous to colData
+          PID = cur_sce$PID,
+          ISUP = cat
+          )
+
+cells_sc
+
+# Run differential interaction analysis 
+spicyTest <- spicy(cells_sc, 
+      condition = "ISUP", 
+      subject = "PID", 
+      BPPARAM = BiocParallel::MulticoreParam())
+
+saveRDS(spicyTest, "/mnt/central_nas_full/users/lasmey/rcc_volume/RCC/IMC/T_panel/data_analysis/spicyTest_Tcell_ISUP_LM_combined.rds")
+
+topPairs(spicyTest, cutoff = 0.05, n=40)
+
+out_ISUP <- signifPlot(spicyTest,
+                       fdr = TRUE,
+                       marksToPlot = unique(sce$celltype_combined)) # adjust
+
+out_ISUP
+````
+
+#### Survival testing 
+
+##### Mean 
+```{r}
+# Extract spicy output from L function (mean difference across specific radi)
+## This is the same for all different comparisons 
+spicy_out <- spicyTest$df 
+
+spicy_out <- as.data.frame(do.call("cbind",spicyTest$pairwiseAssoc))
+rownames(spicy_out) <- spicyTest$imageIDs
+
+## Different options for selecting interactions
+# A: Only select interactions FROM tumor cells
+#selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "TU") & str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "TU")
+# B: Only select interactions FROM tumor cells TO non-tumor cells
+# selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "TU") &
+#   (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "TU")) & 
+#   (!str_detect(colnames(spicy_out), "Unknown"))
+
+selected_pairs <- (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD8") |
+  (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD8"))) & (!str_detect(colnames(spicy_out), "Unknown"))
+  # (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "CD4") |
+  # (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "CD8"))) &
+  # (!str_detect(colnames(spicy_out), "Unknown"))
+
+spicy_out_selected <- spicy_out[,selected_pairs]
+
+spicy_out_selected <- spicy_out_selected %>% rownames_to_column("sample_id")
+spicy_out_selected$PID <- sce$PID[match(spicy_out_selected$sample_id, sce$sample_id)]
+
+spicy_out_selected_long <- spicy_out_selected %>% pivot_longer(cols = 2:(ncol(spicy_out_selected)-1), names_to = "pair", values_to = "coef")
+
+# Perform mean interaction score split for all categories 
+out_df <- data.frame(PID = unique(sce$PID))
+
+for(i in unique(spicy_out_selected_long$pair)){
+spicy_out_loop <- spicy_out_selected_long %>% filter(pair == i) %>% group_by(PID) %>% mutate(mean_coef = mean(coef,na.rm = TRUE)) %>% select(PID, mean_coef) %>% unique()
+
+spicy_out_loop <- spicy_out_loop %>% mutate(cat = ifelse(mean_coef < median(spicy_out_loop$mean_coef, na.rm = TRUE), "low", "high"))
+
+out_df[,i] <- spicy_out_loop$cat[match(out_df$PID, spicy_out_loop$PID)]
+}
+
+# Filter columns with only one entry of high/low
+include <- c("PID",out_df %>% pivot_longer(2:ncol(out_df), names_to = "int", values_to = "value") %>% group_by(int) %>% dplyr::count(value) %>% dplyr::count(value) %>% mutate(sum = sum(n)) %>% filter(sum > 2) %>% pull("int") %>% unique())
+out_df <- out_df[, colnames(out_df) %in% include]
+
+## Add survival information 
+out_df$status_OS <- sce$status_OS[match(out_df$PID, sce$PID)]
+out_df$OS_months <- sce$OS_months[match(out_df$PID, sce$PID)]
+
+colnames(out_df) <- gsub("-", "_", colnames(out_df)) 
+colnames(out_df) <- gsub("/", "_", colnames(out_df)) 
+
+```
+
+
+
+```{r}
+# Color for heatmaps 
+colours <- c("#4575B4", "white", "#D73027")
+breaks <- c(-2, 2, 0.5)
+breaks <- seq(from = breaks[1], to = breaks[2], by = breaks[3])
+pal <- grDevices::colorRampPalette(colours)(length(breaks))
+col <- colorRamp2(breaks, pal)
+```
+
+```{r}
+#Assess survival impact across categories
+library(survival)
+library(survminer)
+
+# Extract p-values from log-rank / direction of trend
+cur_surv_out <- foreach(x = colnames(out_df %>% select(-PID, -status_OS, -OS_months)), .combine = "rbind")%do%{
+  formula <- as.formula(paste("Surv(OS_months, status_OS) ~ ", x))
+  fit <- survdiff(formula, data = out_df)
+  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[1], exp_2 = fit$exp[1])
+}
+
+# Adjust p-values using BH 
+cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
+
+# Create and plot heatmap 
+cur_surv_plot <- cur_surv_out %>% 
+  mutate(sign = ifelse(p_adj < 0.1, "sign", ifelse(p < 0.05, "sign_trend", "not_sig")), 
+                        direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% 
+  mutate(p_out = ifelse(sign %in% c("sign", "sign_trend") & direction == "high",  -log10(p_adj), 
+                        ifelse(sign %in% c("sign", "sign_trend") & direction == "low", log10(p_adj), 0))) %>% 
+  arrange(desc(p_out)) %>% filter(sign %in% c("sign", "sign_trend"))
+
+cur_surv_plot <- cur_surv_out %>% mutate(direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% filter(p < 0.05)
+
+cur_surv_plot$result <- ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p_adj < 0.1, "UP",
+                             ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p < 0.05, "UP_trend", 
+                                    ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p_adj < 0.1, "DOWN", 
+                                           ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p < 0.05, "DOWN_trend",NA))))
+
+
+# Add info on hetero or homotypic interaction
+cur_surv_plot$int_type <- ifelse(str_count(cur_surv_plot$group, "CD8") > 1, "homotypic", "heterotypic")
+
+library(ggnewscale)
+ggplot(cur_surv_plot, aes(x=group, y = type, col = result, size = -log10(p), shape = int_type))+
+  geom_point()+
+  theme_classic()+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+  scale_size(range = c(2,10))+
+  scale_shape_manual(values = c(18, 16))+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+```{r}
+colnames(cur_surv_mean)
+
+cur_surv <- colData(sce_T) %>% as.data.frame() %>% select(PID, OS_months, status_OS) %>% unique() 
+
+cur_surv$test<- out_df$Inhibitory_like_CD8__B_cell[match(cur_surv$PID, out_df$PID)]
+
+#Plot specific survival curves
+fit <- survfit(Surv(OS_months, status_OS) ~ test, data = cur_surv)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = "Set1",
+          conf.int = TRUE
+)
+```
+
+
