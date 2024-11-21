@@ -24,32 +24,31 @@ library(tidyverse)
 ## Read results from different models 
 
 ```{r}
-cv_results <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_CLIN_IMC_Tumor.rds")
+cv_results <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_CLIN_fav.rds")
 
-cv_results_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_CLIN.rds")
+cv_results_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC.rds")
 
-cv_results_2 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_Tumor.rds")
+cv_results_2 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_TU.rds")
 
-cv_results_3 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_TumorMyeloid.rds")
+cv_results_3 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_MY.rds")
 
-cv_results_4 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_CLIN_IMC_TumorMyeloid.rds")
+cv_results_4 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_Tcell.rds")
 
-cv_results_5 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_CLIN_not_fav_IMC_TumorMyeloid.rds")
+cv_results_5 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_CLIN_fav_IMC.rds")
 
-cv_results_6 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_markdown_test.rds")
+cv_results_6 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_CLIN_IMC_fav.rds")
 ```
 
 ```{r}
 # Create list from results
 # Define the cross-validation results as a list
 cv_results_list <- list(
-  "CLIN_IMC_tumor" = cv_results,
-  "CLIN" = cv_results_1,
-  "IMC_tumor" = cv_results_2,
-  "IMC_tumor_myeloid" = cv_results_3,
-  "CLIN_IMC_tumor_myeloid" = cv_results_4,
-  "CLIN_IMC_tumor_myeloid_notfav" = cv_results_5,
-  "test" = cv_results_6
+  "CLIN_fav" = cv_results,
+  "IMC" = cv_results_1,
+  "IMC_TU" = cv_results_2,
+  "IMC_MY" = cv_results_3,
+  "IMC_Tcell" = cv_results_4,
+  "IMC_CLIN_fav_IMC" = cv_results_5
 )
 ```
 
@@ -97,6 +96,7 @@ ibs_scores_list <- lapply(cv_results_list, function(res_obj) {
     
     # Define the time range of interest for IBS
     IBSrange <- quantile(test_data$OS_months, 0.9)
+    #IBSrange <- median(test_data$OS_months)
     #IBSrange <- max(test_data$OS_months)
     
     # Calculate the CRPS and extract the IBS score
@@ -108,7 +108,7 @@ ibs_scores_list <- lapply(cv_results_list, function(res_obj) {
 })
 
 # Convert scores to dataframe
-out_ibs <- data.frame(fold = 1:5, t(do.call("rbind", ibs_scores_list))) %>% pivot_longer(2:ncol(.), names_to = "model", values_to = "IBS")
+out_ibs <- data.frame(fold = 1:10, t(do.call("rbind", ibs_scores_list))[1:10,]) %>% pivot_longer(2:ncol(.), names_to = "model", values_to = "IBS")
 
 # Plot
 library(ggpubr)
@@ -116,7 +116,8 @@ ggplot(out_ibs, aes(x = reorder(model,-IBS), y = IBS, fill = model))+
   geom_boxplot()+
   #coord_cartesian(ylim = c(0.5,1))+
   theme_classic()+
-  stat_compare_means(ref.group = "CLIN", paired = FALSE, method = "t.test", method.args = list(alternative = "less", label = "p.format"))+
+  stat_compare_means(ref.group = "CLIN_fav", paired = FALSE, method = "t.test", method.args = list(alternative = "less", label = "p.format"))+
+  #stat_compare_means(vjust = 1, method = "anova")+
   scale_fill_brewer(palette = "RdBu")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   xlab("Models")+
@@ -141,14 +142,15 @@ concordance_scores_list <- lapply(cv_results_list, function(res_obj) {
   })
 })
 
-out_concordance <- data.frame(fold = 1:5, t(do.call("rbind", concordance_scores_list))) %>% pivot_longer(2:ncol(.), names_to = "model", values_to = "concordance")
+out_concordance <- data.frame(fold = 1:10, t(do.call("rbind", concordance_scores_list))[1:10,]) %>% pivot_longer(2:ncol(.), names_to = "model", values_to = "concordance")
 
 library(ggpubr)
 ggplot(out_concordance, aes(x = reorder(model,-concordance), y = concordance, fill = model))+
   geom_boxplot()+
   #coord_cartesian(ylim = c(0.5,1))+
   theme_classic()+
-  stat_compare_means(ref.group = "CLIN", paired = FALSE, method = "t.test", method.args = list(alternative = "greater", label = "p.format"))+
+  stat_compare_means(ref.group = "CLIN_fav", paired = FALSE, method = "t.test", method.args = list(alternative = "greater", label = "p.format"))+
+  #stat_compare_means(vjust = 1, method = "anova")+
   scale_fill_brewer(palette = "RdBu")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   xlab("Models")+
@@ -226,7 +228,7 @@ ggsurvplot(fit,
 ##### Feature-level
 
 ```{r}
-variable_importance <- sapply(cv_results_3, function(res) {
+variable_importance <- sapply(cv_results_1, function(res) {
   res$variable_importance
 })
 
@@ -235,23 +237,244 @@ plot <- variable_importance %>% as.data.frame %>% rownames_to_column("feature") 
 
 plot$scaled_importance_total <- as.vector(scale(plot$importance))
 
-ggplot(plot, aes(x = reorder(feature,-scaled_importance), y = scaled_importance, fill = feature))+
+## FOR IMC-only models
+# Add feature information
+plot$feature_origin <- ifelse(str_detect(plot$feature, "_TU"), "TU", 
+                            ifelse(str_detect(plot$feature, "_MY"), "MY", 
+                                   ifelse(str_detect(plot$feature, "_T_"), "T", NA)))
+
+plot$feature_type <- ifelse(str_detect(plot$feature, "_EXP"), "EXP", 
+                            ifelse(str_detect(plot$feature, "_MC"), "MC", 
+                                   ifelse(str_detect(plot$feature, "_D"), "D", 
+                                          ifelse(str_detect(plot$feature, "_INT"), "INT", NA)))) 
+
+plot$feature_spatial <- ifelse(plot$feature_type %in% c("EXP", "MC"), "non_spatial", "spatial")
+
+# Define colors 
+col_origin <- setNames(c("lightblue", "blueviolet", "orchid1"),c("TU", "MY", "T"))
+
+col_type <- setNames(c("#1F78B4","#A6CEE3", "#B2DF8A", "#33A02C"),c("EXP", "MC", "INT", "D"))
+
+col_spatial <- setNames(c("#377EB8","#4DAF4A"),c("non_spatial", "spatial"))
+```
+
+
+```{r}
+ggplot(plot, aes(x = reorder(feature,-scaled_importance), y = scaled_importance, fill = feature_origin))+
   geom_boxplot()+
   theme_classic()+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   guides(fill = "none")+
+  scale_fill_manual(values = col_origin)+
   ylab("Scaled importance")+
   xlab("Feature")
 
-# ggplot(plot, aes(x = reorder(feature,-scaled_importance_total), y = scaled_importance_total, fill = feature))+
-#   geom_boxplot()+
-#   theme_classic()+
-#   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
-#   guides(fill = "none")+
-#   ylab("Scaled importance")+
-#   xlab("Feature")
+ggplot(plot, aes(x = reorder(feature,-scaled_importance_total), y = scaled_importance_total, fill = feature_origin))+
+  geom_boxplot()+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  guides(fill = "none")+
+  scale_fill_manual(values = col_origin)+
+  ylab("Scaled importance")+
+  xlab("Feature")
+
+ggplot(plot, aes(x = reorder(feature_type,-scaled_importance), y = scaled_importance, fill = feature_type))+
+  geom_jitter(color = "darkgrey", position=position_jitter(w=0.1,h=0.1))+
+  geom_boxplot(outlier.colour = NA)+
+  theme_classic()+
+  facet_grid(~feature_origin, scales = "free")+
+  scale_fill_manual(values = col_type)+
+  #stat_compare_means(method = "anova")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  #guides(fill = "none")+
+  ylab("Scaled importance")+
+  xlab("Feature")
+
+ggplot(plot, aes(x = reorder(feature_spatial,-scaled_importance), y = scaled_importance, fill = feature_spatial))+
+  facet_grid(~feature_origin, scales = "free")+
+  geom_jitter(color = "darkgrey", position=position_jitter(w=0.1,h=0.1))+
+  geom_boxplot(outlier.colour = NA)+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  scale_fill_manual(values = col_spatial)+
+  #stat_compare_means(method = "t.test")+
+  #guides(fill = "none")+
+  ylab("Scaled importance")+
+  xlab("Feature")
+```
+```{r}
+# Order features by median importance
+ordered_features <- plot %>% group_by(feature) %>% summarize(median = median(scaled_importance)) %>% arrange(desc(median))
+
+ggplot(ordered_features, aes(x = reorder(feature,-median), y = median))+
+  geom_point(color = "black")+
+  #geom_hline(yintercept = 0, linetype = "dashed", color = "grey25")+
+  geom_hline(yintercept = 1.5, linetype = "dashed", color = "lightgrey")+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
 ```
 
-TO DO: Estimate mean block-level importance values or spatial/non-spatial importance
+```{r}
+heatmap <- plot %>% ungroup %>% select(feature, fold, scaled_importance) %>% pivot_wider(id_cols = "fold", names_from = "feature", values_from = "scaled_importance") %>% column_to_rownames("fold")
+
+heatmap <- heatmap[,match(ordered_features$feature, colnames(heatmap))]
+
+anno <- plot %>% ungroup %>% select(feature, feature_origin, feature_type, feature_spatial) %>% unique()
+anno <- anno[match(colnames(heatmap), anno$feature),]
+
+
+HeatmapAnnotation(
+  boxplot = anno_boxplot(heatmap, 
+                         gp = gpar(fill = "darkgrey"), box_width = 0.75,
+                         height = unit(6,"cm"),
+                         show_row_names = FALSE), 
+  origin = anno$feature_origin, 
+  type = anno$feature_type, 
+  spatial = anno$feature_spatial,
+  col = list(origin = col_origin,
+             type = col_type,
+             spatial = col_spatial),
+  text = anno_text(colnames(heatmap)),
+  gap = unit(1,"mm"),
+  border = TRUE
+)%v%NULL
+```
+
+
+##### Extract most-relevant features
+
+```{r}
+# Extract features with median importance > 0
+ordered_features_out <- ordered_features %>% filter(median > 0) %>% pull(feature)      
+top_features <- ordered_features_out
+```
+
+
+### Cluster patients
+
+```{r}
+metadata_selected <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/key_features_processed_complete.rds")
+```
+
+```{r}
+key_out <- metadata_selected %>% select(PID, all_of(top_features)) %>% column_to_rownames("PID")
+
+library(ComplexHeatmap)
+Heatmap(key_out)
+```
+
+```{r}
+library(clValid)
+#Internal measures
+set.seed(22)
+testCL<- clValid(key_out,nClust = 2:10,clMethods = c("kmeans"),validation="internal",metric="euclidean", method = "ward")
+summary(testCL)
+plot(testCL, legend = FALSE)
+
+#Stability measures 
+#testCL_1<- clValid(key_out,nClust = 3:15,clMethods = c("hierarchical","agnes","kmeans"),validation="stability",metric="euclidean", method = "ward")
+#summary(testCL_1)
+#plot(testCL_1, legend = FALSE)
+```
+
+```{r}
+set.seed(22)
+h_select <- Heatmap(key_out, 
+        row_km = 4, #or3
+        row_km_repeats = 5000)
+
+h_select <- draw(h_select)
+
+## Selection 
+row_order_h_ag <- row_order(h_select)
+
+anno <- key_out %>% rownames_to_column("PID") %>% select(PID)
+anno$PID_group <- NA
+
+library(foreach)
+foreach(i = seq_along(row_order_h_ag))%do%{
+anno$PID_group <- as.factor((ifelse(rownames(anno) %in% row_order_h_ag[[i]], i, anno$PID_group)))
+}
+
+## Add to sce
+metadata_selected$PID_group_test <- anno$PID_group[match(metadata_selected$PID, anno$PID)]
+```
+
+#### Survival testing
+
+```{r}
+surv_out <- metadata_selected %>% select(PID, OS_months, status_OS, PID_group_test) %>% unique()
+
+fit <- survfit(Surv(OS_months, status_OS) ~ PID_group_test, data = surv_out)
+
+ggsurvplot(fit, 
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = c("#0571B0", "#F4A582", "#92C5DE","#CA0020"),
+          conf.int = FALSE
+)
+```
+
+```{r}
+library(survival)
+library(survminer)
+
+cur_surv <- metadata_selected %>% select(PID, OS_months, status_OS, CLIN_age, CLIN_gender, CLIN_pT_simple, PID_group_test) %>% unique()
+
+covariates_null <- cur_surv %>% select(-PID, -OS_months, -status_OS, -PID_group_test) %>% colnames
+multi_formula_null <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates_null, collapse = " + ")))
+multi_model_null <- coxph(multi_formula_null, data = cur_surv)
+
+covariates_full <- cur_surv %>% select(-PID, -OS_months, -status_OS) %>% colnames
+multi_formula_full <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates_full, collapse = " + ")))
+multi_model_full <- coxph(multi_formula_full, data = cur_surv)
+
+#cur_surv is.na(cur_surv$PID_metagroups)
+
+# Log-likelihood ratio test
+anova(multi_model_null, multi_model_full)
+```
+
+
+```{r}
+key_aggregated <- metadata_selected %>% select(PID_group_test, all_of(top_features)) %>% pivot_longer(cols = 2:ncol(.),names_to = "feature", values_to = "score") %>% group_by(PID_group_test, feature) %>% summarize(mean = mean(score)) %>% pivot_wider(id_cols = 1, names_from = "feature", values_from = "mean") %>% column_to_rownames("PID_group_test")
+
+other_IMC_features <- unique(plot$feature)[!unique(plot$feature) %in% top_features]
+
+other_aggregated <- metadata_selected %>% select(PID_group_test, all_of(other_IMC_features)) %>% pivot_longer(cols = 2:ncol(.),names_to = "feature", values_to = "score") %>% group_by(PID_group_test, feature) %>% summarize(mean = mean(score)) %>% pivot_wider(id_cols = 1, names_from = "feature", values_from = "mean") %>% column_to_rownames("PID_group_test")
+
+
+# Add rowAnno
+row_anno <- plot %>% ungroup %>% filter(feature %in% top_features) %>% select(feature, feature_origin, feature_type, feature_spatial) %>% unique()
+
+row_anno <- row_anno[match(colnames(key_aggregated), row_anno$feature),]
+
+ha_types <- HeatmapAnnotation(
+    origin = row_anno$feature_origin,
+    type = row_anno$feature_type,
+    spatial = row_anno$feature_spatial, 
+    col = list(origin = col_origin,
+             type = col_type,
+             spatial = col_spatial),
+    border = TRUE,
+    which = "row")
+
+
+col_group <- setNames(c("#0571B0", "#F4A582", "#92C5DE","#CA0020"),c("1","2","3","4"))
+
+# Add colAnno
+col_anno <- key_aggregated %>% rownames_to_column("PID_group") %>% select(PID_group)
+ca <- columnAnnotation(PID_group = anno_simple(col_anno, col = col_group))
+
+Heatmap(t(key_aggregated), 
+        bottom_annotation = ca)+
+  ha_types+
+  rowAnnotation(text = anno_text(row_anno$feature))
+```
+
 
 

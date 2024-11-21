@@ -8,7 +8,7 @@ params:
   add_surv_time: FALSE 
   favor_clinical: 0
   run_name: BF_markdown_test.rds
-output_file: /mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/html/test.html
+output_file: "/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/html/last_run.html"
 ---
 
 ```{r setup, include=FALSE}
@@ -48,7 +48,7 @@ run_name <- params$run_name #Name of output file
 ## Load and select data
 
 ```{r}
-metadata_selected <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/key_features_processed.rds")
+metadata_selected <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/key_features_processed_complete.rds")
 ```
 
 ```{r}
@@ -85,8 +85,8 @@ if(add_surv_time){
 
 ```{r}
 # Create train/test splits considering similar censoring rates
-set.seed(22)
-folds <- createDataPartition(y$status_OS, p = 0.75, times = 5)
+set.seed(2201)
+folds <- createDataPartition(y$status_OS, p = 0.75, times = 10)
 ```
 
 ## Define blocks 
@@ -118,7 +118,7 @@ print(block)
 #### Define function 
 
 ```{r}
-# Create a function for 5 fold outer cross-validation
+# Create a function for 5/10 fold outer cross-validation
 cross_validate_blockforest <- function(x, y, folds, block, favor_clinical) {
   results <- vector("list", length(folds))
   
@@ -166,7 +166,7 @@ cross_validate_blockforest <- function(x, y, folds, block, favor_clinical) {
 
 ```{r}
 # Run cross-validation and track time
-set.seed(22)
+set.seed(2201)
 start_time <- Sys.time()
 cv_results <- cross_validate_blockforest(x, y, folds, block, favor_clinical) # MAIN FUNCTION
 end_time <- Sys.time()
