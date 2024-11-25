@@ -52,6 +52,13 @@ cv_results_list <- list(
 )
 ```
 
+```{r}
+# Define colors 
+col_cv <- setNames(c("grey","#1F78B4", "lightblue", "blueviolet", "orchid1", "darkblue"),
+c("CLIN_fav", "IMC", "IMC_TU", "IMC_MY", "IMC_Tcell", "IMC_CLIN_fav_IMC"))
+
+```
+
 ### Integrated Brier Score
 
 ```{r}
@@ -118,7 +125,7 @@ ggplot(out_ibs, aes(x = reorder(model,-IBS), y = IBS, fill = model))+
   theme_classic()+
   stat_compare_means(ref.group = "CLIN_fav", paired = FALSE, method = "t.test", method.args = list(alternative = "less", label = "p.format"))+
   #stat_compare_means(vjust = 1, method = "anova")+
-  scale_fill_brewer(palette = "RdBu")+
+  scale_fill_manual(values = col_cv)+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   xlab("Models")+
   ylab("Integrated Brier Score")
@@ -145,13 +152,13 @@ concordance_scores_list <- lapply(cv_results_list, function(res_obj) {
 out_concordance <- data.frame(fold = 1:10, t(do.call("rbind", concordance_scores_list))[1:10,]) %>% pivot_longer(2:ncol(.), names_to = "model", values_to = "concordance")
 
 library(ggpubr)
-ggplot(out_concordance, aes(x = reorder(model,-concordance), y = concordance, fill = model))+
+ggplot(out_concordance, aes(x = reorder(model,concordance), y = concordance, fill = model))+
   geom_boxplot()+
   #coord_cartesian(ylim = c(0.5,1))+
   theme_classic()+
   stat_compare_means(ref.group = "CLIN_fav", paired = FALSE, method = "t.test", method.args = list(alternative = "greater", label = "p.format"))+
   #stat_compare_means(vjust = 1, method = "anova")+
-  scale_fill_brewer(palette = "RdBu")+
+  scale_fill_manual(values = col_cv)+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   xlab("Models")+
   ylab("Concordance (Uno)")
@@ -414,7 +421,7 @@ ggsurvplot(fit,
           linetype = "strata", # Change line type by groups
           surv.median.line = "hv", # Specify median survival
           ggtheme = theme_classic(), # Change ggplot2 theme
-          palette = c("#0571B0", "#F4A582", "#92C5DE","#CA0020"),
+          palette = c("#92C5DE", "#F4A582", "#CA0020","#0571B0"),
           conf.int = FALSE
 )
 ```
@@ -464,7 +471,7 @@ ha_types <- HeatmapAnnotation(
     which = "row")
 
 
-col_group <- setNames(c("#0571B0", "#F4A582", "#92C5DE","#CA0020"),c("1","2","3","4"))
+col_group <- setNames(c("#92C5DE", "#F4A582", "#CA0020","#0571B0"),c("1","2","3","4"))
 
 # Add colAnno
 col_anno <- key_aggregated %>% rownames_to_column("PID_group") %>% select(PID_group)

@@ -427,10 +427,10 @@ str(tumor_selected_fil)
 ```
 
 ```{r}
-paste0("Number of EXP features before preprocessing: ", sum(str_count(colnames(tumor_selected_fil), "_EXP_")))
-paste0("Number of MC features before preprocessing: ", sum(str_count(colnames(tumor_selected_fil), "_MC_")))
-paste0("Number of D features before preprocessing: ", sum(str_count(colnames(tumor_selected_fil), "_D_")))
-paste0("Number of INT features before preprocessing: ", sum(str_count(colnames(tumor_selected_fil), "_INT_")))
+paste0("Number of EXP features after preprocessing: ", sum(str_count(colnames(tumor_selected_fil), "_EXP_")))
+paste0("Number of MC features after preprocessing: ", sum(str_count(colnames(tumor_selected_fil), "_MC_")))
+paste0("Number of D features after preprocessing: ", sum(str_count(colnames(tumor_selected_fil), "_D_")))
+paste0("Number of INT features after preprocessing: ", sum(str_count(colnames(tumor_selected_fil), "_INT_")))
 ```
 
 #### Save and add
