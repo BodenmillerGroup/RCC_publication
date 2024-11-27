@@ -245,7 +245,7 @@ ggsurvplot(fit,
           risk.table.col = "strata", # Change risk table color by groups
           linetype = "strata", # Change line type by groups
           surv.median.line = "hv", # Specify median survival
-          ggtheme = theme_classic(), # Change ggplot2 theme
+          ggtheme = theme_classic(), palette = "Set1"
           #palette = c("grey", "#ABCFE5", "#3787C0", "#08306B")
           #log.rank.weights = "n"
           )
@@ -271,6 +271,8 @@ metadata_general$PID_in_all <- metadata_general$PID_in_tumor & metadata_general$
 
 ```{r}
 write_csv(metadata_general, "/Volumes/G_DQBM_BB_Central$/projects/RCC_DL/metadata_general.csv")
+
+#metadata_general <- read_csv("/mnt/central_nas_full/projects/RCC_DL/metadata_general.csv")
 ```
 
 
