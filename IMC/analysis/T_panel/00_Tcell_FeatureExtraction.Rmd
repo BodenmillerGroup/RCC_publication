@@ -340,6 +340,15 @@ write_csv(Tcell_key_features, "/mnt/central_nas/rcc_volume/RCC/survival_pred/Blo
 ## 1B: Phenotypes - Univariate Cox
 
 ```{r}
+unique(sce_8$celltype_combined)
+
+# Add inhibtory and activated-like to Unknown/Other
+#sce_8$celltype_combined <- ifelse(sce_8$celltype_combined %in% c("Inhibitory_like_CD8", "Activated_like_CD8"), "Unknown_Other_CD8", sce_8$celltype_combined)
+
+#sce_8
+```
+
+```{r}
 ### Mean / Median 
 library(survival)
 library(survminer)
@@ -468,7 +477,7 @@ theme(axis.text.x = element_text(angle = 90))
 hr_median
 ```
 
-#### Density 
+#### Cox - Density 
 
 ##### Mean 
 
@@ -608,7 +617,7 @@ geom_point(size = 4)+
 geom_errorbar(aes(ymax = CI_high, ymin = CI_low))+
 geom_hline(yintercept = 1,color = "black",linetype = "dashed")+
 scale_color_brewer(palette = "Set1")+
-xlab("Immune celltype_combineds")+
+xlab("Immune celltype_combined")+
 ylab("HR for median_density")+
 theme_classic()+
 #coord_cartesian(ylim=c(0.01,10))+
@@ -622,11 +631,116 @@ hr_dens_median
 #(hr_mean+hr_median)/
 (hr_dens_mean+hr_dens_median)
 ```
+```{r}
+# Combined visualization in dot plot
+cox_median <- plot_df_dens_median %>% mutate(sign = p_value < 0.05, result = ifelse(plot_df_dens_median$HR > 1 & plot_df_dens_median$p_value < 0.05, "UP",ifelse(plot_df_dens_median$HR < 1 & plot_df_dens_median$p_value < 0.05, "DOWN", "NOTSIG"))) %>% mutate(category = "median") %>% arrange(desc(HR))
+cox_median$group <- factor(cox_median$group, levels = cox_median$group)
+
+cox_mean <- plot_df_dens_mean %>% mutate(sign = p_value < 0.05, result = ifelse(plot_df_dens_mean$HR > 1 & plot_df_dens_mean$p_value < 0.05, "UP",ifelse(plot_df_dens_mean$HR < 1 & plot_df_dens_mean$p_value < 0.05, "DOWN", "NOTSIG"))) %>% mutate(category = "mean") %>% arrange(desc(HR))
+cox_mean$group <- factor(cox_mean$group, levels = cox_mean$group)
+
+plot_cox_combined <- rbind(cox_mean, cox_median)
+
+
+library(ggnewscale)
+
+ggplot(plot_cox_combined, aes(x=group, y = category,col = HR, size= -log10(p_value)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = plot_cox_combined,shape = 1,aes(size = -log10(p_value), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("Cox model")
+```
+
+#### Differential abundance testing 
+
+```{r}
+### Differential abundance analysis based on edgeR
+library(edgeR)
+
+DA <- lapply(c("ISUP_combined", "pT_combined","necrose","PDL1_score"), function(x){
+
+abundances <- table(unfactor(factor(sce_8$celltype_combined)), sce_8$PID)
+abundances <- unclass(abundances) 
+
+#relevant patient metadata (Re-level for baseline)
+meta <- colData(sce_8)[match(colnames(abundances), sce_8$PID),]
+
+if(x %in% c("necrose","PDL1_score")){
+  meta[,x] <- relevel(x=factor(meta[,x]), ref = "0")
+}else{
+  meta[,x] <- relevel(x=factor(meta[,x]), ref = "1/2")
+}
+
+#filter
+meta <- meta[!is.na(meta[,x]),]
+abundances <- abundances[,colnames(abundances) %in% meta$PID]
+
+#create DGEList - based on edgeR package
+y.ab <- DGEList(abundances, samples=meta, group = meta[,x])
+
+#Design matrix
+design <- model.matrix(~group, data = y.ab$samples)
+
+#Visualize
+# logCPM of abundances per cluster
+cur_mat <- edgeR::cpm(abundances,prior.count = 1,log = TRUE)
+
+# Estimate NB and QL dispersion 
+y.ab <- estimateDisp(y.ab, design, trend="none")
+
+fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
+
+# Test for differential abundance of clusters between tumor stages
+res <- glmQLFTest(fit.ab, coef=ncol(design))
+
+DA <- res$table
+
+DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
+
+DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.05, result = ifelse(DA$logFC > 0 & DA$FDR < 0.05, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.05, "DOWN", "NOTSIG"))) %>% 
+  arrange(desc(logFC))
+
+DA$cluster <- factor(DA$cluster, levels = DA$cluster)
+DA$category <- x
+
+return(DA)
+})
+
+DA_out <- do.call(rbind, DA)
+```
+
+
+```{r}
+library(ggnewscale)
+DA_out$category <- factor(DA_out$category,levels = c("PDL1_score", "necrose","pT_combined","ISUP_combined"))
+#DA_out <- DA_out %>% filter(category %in% c("pT_combined","ISUP_combined"))
+
+ggplot(DA_out, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8")+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = DA_out,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+```{r}
+# Filter metaclusters that are differential abundant across at least 2 categories
+MC_diff_abun <- DA_out %>% filter(sign == TRUE) %>% group_by(cluster, result) %>% dplyr::count() %>% filter(n >= 2) %>% pull(cluster) %>% unique() %>% unfactor()
+```
+
 
 #### Extract survival relevant features
 
 ```{r}
-MC_surv_relevant <- c(str_remove(plot_df_dens_median %>% filter(p_value < 0.05) %>% pull(group), "B"), str_remove(plot_df_dens_mean %>% filter(p_value < 0.05) %>% pull(group), "B")) %>% unique()
+MC_surv_relevant <- c(str_remove(plot_df_dens_median %>% filter(p_value < 0.05) %>% pull(group), "B"), str_remove(plot_df_dens_mean %>% filter(p_value < 0.05) %>% pull(group), "B"), MC_diff_abun) %>% unique()
 
 MC_surv_relevant_df <- PID_celltype_combined %>% filter(celltype_combined %in% MC_surv_relevant) %>% select(PID, celltype_combined, density) %>% pivot_wider(id_cols = PID, names_from = celltype_combined, values_from = density) %>% as.data.frame
 
@@ -1058,7 +1172,7 @@ hr_median
 ```
 
 
-#### Density 
+#### Cox - Density 
 
 ##### Mean 
 
@@ -1219,10 +1333,115 @@ hr_dens_median
 (hr_dens_mean+hr_dens_median)
 ```
 
+```{r}
+# Combined visualization in dot plot
+cox_median <- plot_df_dens_median %>% mutate(sign = p_value < 0.05, result = ifelse(plot_df_dens_median$HR > 1 & plot_df_dens_median$p_value < 0.05, "UP",ifelse(plot_df_dens_median$HR < 1 & plot_df_dens_median$p_value < 0.05, "DOWN", "NOTSIG"))) %>% mutate(category = "median") %>% arrange(desc(HR))
+cox_median$group <- factor(cox_median$group, levels = cox_median$group)
+
+cox_mean <- plot_df_dens_mean %>% mutate(sign = p_value < 0.05, result = ifelse(plot_df_dens_mean$HR > 1 & plot_df_dens_mean$p_value < 0.05, "UP",ifelse(plot_df_dens_mean$HR < 1 & plot_df_dens_mean$p_value < 0.05, "DOWN", "NOTSIG"))) %>% mutate(category = "mean") %>% arrange(desc(HR))
+cox_mean$group <- factor(cox_mean$group, levels = cox_mean$group)
+
+plot_cox_combined <- rbind(cox_mean, cox_median)
+
+
+library(ggnewscale)
+
+ggplot(plot_cox_combined, aes(x=group, y = category,col = HR, size= -log10(p_value)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = plot_cox_combined,shape = 1,aes(size = -log10(p_value), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("Cox model")
+```
+
+#### Differential abundance testing 
+
+```{r}
+### Differential abundance analysis based on edgeR
+library(edgeR)
+
+DA <- lapply(c("ISUP_combined", "pT_combined","necrose","PDL1_score"), function(x){
+
+abundances <- table(unfactor(factor(sce_4$celltype_combined)), sce_4$PID)
+abundances <- unclass(abundances) 
+
+#relevant patient metadata (Re-level for baseline)
+meta <- colData(sce_4)[match(colnames(abundances), sce_4$PID),]
+
+if(x %in% c("necrose","PDL1_score")){
+  meta[,x] <- relevel(x=factor(meta[,x]), ref = "0")
+}else{
+  meta[,x] <- relevel(x=factor(meta[,x]), ref = "1/2")
+}
+
+#filter
+meta <- meta[!is.na(meta[,x]),]
+abundances <- abundances[,colnames(abundances) %in% meta$PID]
+
+#create DGEList - based on edgeR package
+y.ab <- DGEList(abundances, samples=meta, group = meta[,x])
+
+#Design matrix
+design <- model.matrix(~group, data = y.ab$samples)
+
+#Visualize
+# logCPM of abundances per cluster
+cur_mat <- edgeR::cpm(abundances,prior.count = 1,log = TRUE)
+
+# Estimate NB and QL dispersion 
+y.ab <- estimateDisp(y.ab, design, trend="none")
+
+fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
+
+# Test for differential abundance of clusters between tumor stages
+res <- glmQLFTest(fit.ab, coef=ncol(design))
+
+DA <- res$table
+
+DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
+
+DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.05, result = ifelse(DA$logFC > 0 & DA$FDR < 0.05, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.05, "DOWN", "NOTSIG"))) %>% 
+  arrange(desc(logFC))
+
+DA$cluster <- factor(DA$cluster, levels = DA$cluster)
+DA$category <- x
+
+return(DA)
+})
+
+DA_out <- do.call(rbind, DA)
+```
+
+
+```{r}
+library(ggnewscale)
+DA_out$category <- factor(DA_out$category,levels = c("PDL1_score", "necrose","pT_combined","ISUP_combined"))
+#DA_out <- DA_out %>% filter(category %in% c("pT_combined","ISUP_combined"))
+
+ggplot(DA_out, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8")+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = DA_out,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+```{r}
+# Filter metaclusters that are differential abundant across at least 2 categories
+MC_diff_abun <- DA_out %>% filter(sign == TRUE) %>% group_by(cluster, result) %>% dplyr::count() %>% filter(n >= 2) %>% pull(cluster) %>% unique() %>% unfactor()
+```
+
 #### Extract survival relevant features
 
 ```{r}
-MC_surv_relevant <- c(str_remove(plot_df_dens_median %>% filter(p_value < 0.05) %>% pull(group), "B"), str_remove(plot_df_dens_mean %>% filter(p_value < 0.05) %>% pull(group), "B")) %>% unique()
+MC_surv_relevant <- c(str_remove(plot_df_dens_median %>% filter(p_value < 0.05) %>% pull(group), "B"), str_remove(plot_df_dens_mean %>% filter(p_value < 0.05) %>% pull(group), "B"), MC_diff_abun) %>% unique()
 
 MC_surv_relevant_df <- PID_celltype_combined %>% filter(celltype_combined %in% MC_surv_relevant) %>% select(PID, celltype_combined, density) %>% pivot_wider(id_cols = PID, names_from = celltype_combined, values_from = density) %>% as.data.frame
 
