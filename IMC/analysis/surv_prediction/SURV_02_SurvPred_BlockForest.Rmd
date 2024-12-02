@@ -6,6 +6,7 @@ output: html_document
 params: 
   blocks_selected: !r c("CLIN", "IMC")
   add_surv_time: FALSE 
+  add_PL_level: FALSE
   favor_clinical: 0
   run_name: BF_markdown_test.rds
 output_file: "/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/html/last_run.html"
@@ -32,6 +33,7 @@ library(survminer)
 ```{r}
 blocks_selected <- params$blocks_selected #Select which data types to use
 add_surv_time <- params$add_surv_time #Add survival time in training
+add_PL_level <- params$add_PL_level #Add survival time in training
 favor_clinical <- params$favor_clinical #Favor specific block in BlockForest - 1 is CLIN (default; 0 would not favor)
 run_name <- params$run_name #Name of output file
 ```
@@ -65,6 +67,19 @@ selected <- unname(unlist(selected))
 meta <- metadata_selected %>% select(PID, status_OS, OS_months, all_of(selected)) %>% filter(complete.cases(.))
 
 str(meta)
+```
+
+```{r}
+# Remove or add Patient-level groupings 
+if(isFALSE(add_PL_level)){
+  meta <- meta[,!str_detect(colnames(meta), "_PL_")]
+}
+```
+
+```{r}
+# Adjust naming
+colnames(meta) <- gsub("-", "_", colnames(meta)) 
+colnames(meta) <- gsub("/", "_", colnames(meta)) 
 ```
 
 ## Split survival and test
@@ -113,7 +128,7 @@ print(block)
 
 ## Perform BlockForest
 
-### 5fold CV (Outer)
+### 10fold CV (Outer)
 
 #### Define function 
 

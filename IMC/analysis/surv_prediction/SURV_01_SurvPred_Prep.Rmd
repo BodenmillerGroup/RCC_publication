@@ -714,13 +714,14 @@ paste0("Number of EXP features before preprocessing: ", sum(str_count(colnames(T
 paste0("Number of MC features before preprocessing: ", sum(str_count(colnames(Tcell_key), "MC_")))
 paste0("Number of D features before preprocessing: ", sum(str_count(colnames(Tcell_key), "D_")))
 paste0("Number of INT features before preprocessing: ", sum(str_count(colnames(Tcell_key), "INT_")))
+paste0("Number of PL features before preprocessing: ", sum(str_count(colnames(Tcell_key), "PL_")))
 ```
 
 ```{r}
 # Preprocessing as suggested by Boeva (Cell Reports Methods)
-# Step 1: Only keep columns with less than 10% of NA values 
-## This often removes INT values
-remove <- colnames(Tcell_key)[colMeans(is.na(Tcell_key)) > 0.2]
+# Step 1: Only keep columns with less than 30% of NA values 
+## This mostly removes INT values
+remove <- colnames(Tcell_key)[colMeans(is.na(Tcell_key)) > 0.3]
 remove <- remove[!remove %in% c("status_OS", "OS_months")]
 
 Tcell_selected <- Tcell_key %>% select(-remove)
@@ -915,6 +916,7 @@ paste0("Number of EXP features after preprocessing: ", sum(str_count(colnames(Tc
 paste0("Number of MC features after preprocessing: ", sum(str_count(colnames(Tcell_selected_fil), "_MC_")))
 paste0("Number of D features after preprocessing: ", sum(str_count(colnames(Tcell_selected_fil), "_D_")))
 paste0("Number of INT features after preprocessing: ", sum(str_count(colnames(Tcell_selected_fil), "_INT_")))
+paste0("Number of INT features after preprocessing: ", sum(str_count(colnames(Tcell_selected_fil), "_PL_")))
 ```
 
 #### Save and add

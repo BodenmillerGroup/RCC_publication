@@ -311,6 +311,31 @@ theme(axis.text.x = element_text(angle = 90))
 hr_median
 ```
 
+```{r}
+# Combined visualization in dot plot
+cox_median <- plot_df_median %>% mutate(sign = p_value < 0.05, result = ifelse(plot_df_median$HR > 1 & plot_df_median$p_value < 0.05, "UP",ifelse(plot_df_median$HR < 1 & plot_df_median$p_value < 0.05, "DOWN", "NOTSIG"))) %>% mutate(category = "median") %>% arrange(desc(HR))
+cox_median$group <- factor(cox_median$group, levels = cox_median$group)
+
+cox_mean <- plot_df_mean %>% mutate(sign = p_value < 0.05, result = ifelse(plot_df_mean$HR > 1 & plot_df_mean$p_value < 0.05, "UP",ifelse(plot_df_mean$HR < 1 & plot_df_mean$p_value < 0.05, "DOWN", "NOTSIG"))) %>% mutate(category = "mean") %>% arrange(desc(HR))
+cox_mean$group <- factor(cox_mean$group, levels = cox_mean$group)
+
+plot_cox_combined <- rbind(cox_mean, cox_median)
+
+
+library(ggnewscale)
+
+ggplot(plot_cox_combined, aes(x=group, y = category,col = HR, size= -log10(p_value)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = plot_cox_combined,shape = 1,aes(size = -log10(p_value), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("Cox model")
+```
+
 #### Extract survival relevant features
 
 ```{r}
@@ -336,6 +361,24 @@ Tcell_key_features <- CD8_key_features
 write_csv(Tcell_key_features, "/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/Tcell_key_features.csv")
 ```
 
+#### Extract all features
+
+```{r}
+## Save ALL features without pre-selection
+Tcell_all_features <- assay(mean_sce_8, "min_max") %>% as.data.frame %>% t() %>% as.data.frame %>% rownames_to_column("PID")
+
+## Add survival information
+colnames(Tcell_all_features) <- paste0("EXP_CD8_",colnames(Tcell_all_features))
+colnames(Tcell_all_features)[1] <- "PID"
+
+Tcell_all_features$status_OS <- sce_8$status_OS[match(Tcell_all_features$PID, sce_8$PID)]
+Tcell_all_features$OS_months <- sce_8$OS_months[match(Tcell_all_features$PID, sce_8$PID)]
+
+Tcell_all_features <- Tcell_all_features %>% select(PID, status_OS, OS_months, everything())
+
+# Save
+write_csv(Tcell_all_features, "/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/Tcell_all_features.csv")
+```
 
 ## 1B: Phenotypes - Univariate Cox
 
@@ -766,6 +809,35 @@ for (entry in colnames(MC_surv_relevant_df)[2:ncol(MC_surv_relevant_df)]) {
 write_csv(Tcell_key_features, "/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/Tcell_key_features.csv")
 ```
 
+#### Extract all features
+
+```{r}
+MC_all_df <- PID_celltype_combined %>% select(PID, celltype_combined, density) %>% pivot_wider(id_cols = PID, names_from = celltype_combined, values_from = density) %>% as.data.frame
+
+## Add survival information
+colnames(MC_all_df) <- paste0("MC_CD8_",colnames(MC_all_df))
+colnames(MC_all_df)[1] <- "PID"
+```
+
+Add to all features 
+
+```{r}
+# Read
+Tcell_all_features <- as.data.frame(read_csv("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/Tcell_all_features.csv"))
+```
+
+```{r}
+for (entry in colnames(MC_all_df)[2:ncol(MC_all_df)]) {
+  Tcell_all_features [,entry] <- MC_all_df[,entry][match(Tcell_all_features [,"PID"],MC_all_df[,"PID"])]
+}
+```
+
+```{r}
+# Save
+write_csv(Tcell_all_features, "/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/Tcell_all_features.csv")
+```
+
+
 
 # 2. CD4+ T cells 
 
@@ -784,7 +856,7 @@ rownames(sce_4)[rowData(sce_4)$CD4_cluster_channel]
 #### Mean 
 
 ```{r}
-# Aggregrate across cells with the mean
+# Aggregate across cells with the mean
 mean_sce_4 <- aggregateAcrossCells(sce_4, ids = sce_4$PID,
                                  statistics = "mean",
                                  use.assay.type = "min_max",
@@ -999,6 +1071,31 @@ ggplot(cur_surv_plot, aes(x=reorder(group,-log10(p)), y = type, col = result, si
 median_exp_results <- cur_surv_plot
 ```
 
+```{r}
+# Combined visualization in dot plot
+cox_median <- plot_df_median %>% mutate(sign = p_value < 0.05, result = ifelse(plot_df_median$HR > 1 & plot_df_median$p_value < 0.05, "UP",ifelse(plot_df_median$HR < 1 & plot_df_median$p_value < 0.05, "DOWN", "NOTSIG"))) %>% mutate(category = "median") %>% arrange(desc(HR))
+cox_median$group <- factor(cox_median$group, levels = cox_median$group)
+
+cox_mean <- plot_df_mean %>% mutate(sign = p_value < 0.05, result = ifelse(plot_df_mean$HR > 1 & plot_df_mean$p_value < 0.05, "UP",ifelse(plot_df_mean$HR < 1 & plot_df_mean$p_value < 0.05, "DOWN", "NOTSIG"))) %>% mutate(category = "mean") %>% arrange(desc(HR))
+cox_mean$group <- factor(cox_mean$group, levels = cox_mean$group)
+
+plot_cox_combined <- rbind(cox_mean, cox_median)
+
+
+library(ggnewscale)
+
+ggplot(plot_cox_combined, aes(x=group, y = category,col = HR, size= -log10(p_value)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = plot_cox_combined,shape = 1,aes(size = -log10(p_value), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("Cox model")
+```
+
 #### Extract survival relevant features
 
 ```{r}
@@ -1030,6 +1127,35 @@ for (entry in colnames(CD4_key_features)[2:ncol(CD4_key_features)]) {
 ```{r}
 # Save
 write_csv(Tcell_key_features, "/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/Tcell_key_features.csv")
+```
+
+#### Extract all features
+
+```{r}
+## Save ALL features without pre-selection
+CD4_all_features <- assay(mean_sce_4, "min_max") %>% as.data.frame %>% t() %>% as.data.frame %>% rownames_to_column("PID")
+
+## Add survival information
+colnames(CD4_all_features) <- paste0("EXP_CD4_",colnames(CD4_all_features))
+colnames(CD4_all_features)[1] <- "PID"
+```
+
+Add to all features 
+
+```{r}
+# Read
+Tcell_all_features <- as.data.frame(read_csv("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/Tcell_all_features.csv"))
+```
+
+```{r}
+for (entry in colnames(CD4_all_features)[2:ncol(CD4_all_features)]) {
+  Tcell_all_features [,entry] <- CD4_all_features[,entry][match(Tcell_all_features [,"PID"],CD4_all_features[,"PID"])]
+}
+```
+
+```{r}
+# Save
+write_csv(Tcell_all_features, "/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/Tcell_all_features.csv")
 ```
 
 
@@ -1329,7 +1455,7 @@ hr_dens_median
 ```
 
 ```{r}
-(hr_mean+hr_median)/
+#(hr_mean+hr_median)/
 (hr_dens_mean+hr_dens_median)
 ```
 
@@ -1465,6 +1591,34 @@ for (entry in colnames(MC_surv_relevant_df)[2:ncol(MC_surv_relevant_df)]) {
 ```{r}
 # Save
 write_csv(Tcell_key_features, "/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/Tcell_key_features.csv")
+```
+
+#### Extract all features
+
+```{r}
+MC_all_df <- PID_celltype_combined %>% select(PID, celltype_combined, density) %>% pivot_wider(id_cols = PID, names_from = celltype_combined, values_from = density) %>% as.data.frame
+
+## Add survival information
+colnames(MC_all_df) <- paste0("MC_CD4_",colnames(MC_all_df))
+colnames(MC_all_df)[1] <- "PID"
+```
+
+Add to all features 
+
+```{r}
+# Read
+Tcell_all_features <- as.data.frame(read_csv("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/Tcell_all_features.csv"))
+```
+
+```{r}
+for (entry in colnames(MC_all_df)[2:ncol(MC_all_df)]) {
+  Tcell_all_features [,entry] <- MC_all_df[,entry][match(Tcell_all_features [,"PID"],MC_all_df[,"PID"])]
+}
+```
+
+```{r}
+# Save
+write_csv(Tcell_all_features, "/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/Tcell_all_features.csv")
 ```
 
 # 3. Districs
@@ -1774,11 +1928,116 @@ hr_dens_median
 (hr_dens_mean+hr_dens_median)
 ```
 
+```{r}
+# Combined visualization in dot plot
+cox_median <- plot_df_dens_median %>% mutate(sign = p_value < 0.05, result = ifelse(plot_df_dens_median$HR > 1 & plot_df_dens_median$p_value < 0.05, "UP",ifelse(plot_df_dens_median$HR < 1 & plot_df_dens_median$p_value < 0.05, "DOWN", "NOTSIG"))) %>% mutate(category = "median") %>% arrange(desc(HR))
+cox_median$group <- factor(cox_median$group, levels = cox_median$group)
+
+cox_mean <- plot_df_dens_mean %>% mutate(sign = p_value < 0.05, result = ifelse(plot_df_dens_mean$HR > 1 & plot_df_dens_mean$p_value < 0.05, "UP",ifelse(plot_df_dens_mean$HR < 1 & plot_df_dens_mean$p_value < 0.05, "DOWN", "NOTSIG"))) %>% mutate(category = "mean") %>% arrange(desc(HR))
+cox_mean$group <- factor(cox_mean$group, levels = cox_mean$group)
+
+plot_cox_combined <- rbind(cox_mean, cox_median)
+
+
+library(ggnewscale)
+
+ggplot(plot_cox_combined, aes(x=group, y = category,col = HR, size= -log10(p_value)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = plot_cox_combined,shape = 1,aes(size = -log10(p_value), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("Cox model")
+```
+
+#### Differential abundance testing 
+
+```{r}
+### Differential abundance analysis based on edgeR
+library(edgeR)
+
+DA <- lapply(c("ISUP_combined", "pT_combined","necrose","PDL1_score"), function(x){
+
+abundances <- table(unfactor(factor(sce_T$Tcell_district_names)), sce_T$PID)
+abundances <- unclass(abundances) 
+abundances <- abundances[,colnames(abundances) %in% names(colSums(abundances))[colSums(abundances) != 0]]
+
+#relevant patient metadata (Re-level for baseline)
+meta <- colData(sce_T)[match(colnames(abundances), sce_T$PID),]
+
+if(x %in% c("necrose","PDL1_score")){
+  meta[,x] <- relevel(x=factor(meta[,x]), ref = "0")
+}else{
+  meta[,x] <- relevel(x=factor(meta[,x]), ref = "1/2")
+}
+
+#filter
+meta <- meta[!is.na(meta[,x]),]
+abundances <- abundances[,colnames(abundances) %in% meta$PID]
+
+#create DGEList - based on edgeR package
+y.ab <- DGEList(abundances, samples=meta, group = meta[,x])
+
+#Design matrix
+design <- model.matrix(~group, data = y.ab$samples)
+
+#Visualize
+# logCPM of abundances per cluster
+cur_mat <- edgeR::cpm(abundances,prior.count = 1,log = TRUE)
+
+# Estimate NB and QL dispersion 
+y.ab <- estimateDisp(y.ab, design, trend="none")
+
+fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
+
+# Test for differential abundance of clusters between tumor stages
+res <- glmQLFTest(fit.ab, coef=ncol(design))
+
+DA <- res$table
+
+DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
+
+DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.05, result = ifelse(DA$logFC > 0 & DA$FDR < 0.05, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.05, "DOWN", "NOTSIG"))) %>% 
+  arrange(desc(logFC))
+
+DA$cluster <- factor(DA$cluster, levels = DA$cluster)
+DA$category <- x
+
+return(DA)
+})
+
+DA_out <- do.call(rbind, DA)
+```
+
+
+```{r}
+library(ggnewscale)
+DA_out$category <- factor(DA_out$category,levels = c("PDL1_score", "necrose","pT_combined","ISUP_combined"))
+#DA_out <- DA_out %>% filter(category %in% c("pT_combined","ISUP_combined"))
+
+ggplot(DA_out, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8")+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = DA_out,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+```{r}
+# Filter metaclusters that are differential abundant across at least 2 categories
+D_diff_abun <- DA_out %>% filter(sign == TRUE) %>% group_by(cluster, result) %>% dplyr::count() %>% filter(n >= 2) %>% pull(cluster) %>% unique() %>% unfactor()
+```
 
 #### Extract survival relevant features
 
 ```{r}
-D_surv_relevant <- c(str_remove(plot_df_dens_median %>% filter(p_value < 0.05) %>% pull(group), "B"), str_remove(plot_df_dens_mean %>% filter(p_value < 0.05) %>% pull(group), "B")) %>% unique()
+D_surv_relevant <- c(str_remove(plot_df_dens_median %>% filter(p_value < 0.05) %>% pull(group), "B"), str_remove(plot_df_dens_mean %>% filter(p_value < 0.05) %>% pull(group), "B"), D_diff_abun) %>% unique()
 
 D_surv_relevant_df <- PID_Tcell_district_names %>% filter(Tcell_district_names %in% D_surv_relevant) %>% select(PID, Tcell_district_names, density) %>% pivot_wider(id_cols = PID, names_from = Tcell_district_names, values_from = density) %>% as.data.frame
 
@@ -1804,58 +2063,88 @@ for (entry in colnames(D_surv_relevant_df)[2:ncol(D_surv_relevant_df)]) {
 write_csv(Tcell_key_features, "/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/Tcell_key_features.csv")
 ```
 
+
+#### Extract all features
+
+```{r}
+D_all_df <- PID_Tcell_district_names %>% select(PID, Tcell_district_names, density) %>% pivot_wider(id_cols = PID, names_from = Tcell_district_names, values_from = density) %>% as.data.frame
+
+## Add survival information
+colnames(D_all_df) <- paste0("D_",colnames(D_all_df))
+colnames(D_all_df)[1] <- "PID"
+```
+
+Add to all features 
+
+```{r}
+# Read
+Tcell_all_features <- as.data.frame(read_csv("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/Tcell_all_features.csv"))
+```
+
+```{r}
+for (entry in colnames(D_all_df)[2:ncol(D_all_df)]) {
+  Tcell_all_features[,entry] <- D_all_df[,entry][match(Tcell_all_features[,"PID"],D_all_df[,"PID"])]
+}
+```
+
+```{r}
+# Save
+write_csv(Tcell_all_features, "/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/Tcell_all_features.csv")
+```
+
+
 # 4. Interactions
 
 ## Differential interaction analysis
 
 ```{r}
-### General phenotype interaction difference
-library(spicyR)
-library(lisaClust)
-
-## ISUP 
-
-set.seed(22)
-
-# Generate segmentedCells object 
-cur_sce <- sce
-
-cells <- data.frame(row.names = colnames(cur_sce))
-cells$x <- cur_sce$Pos_X
-cells$y <- cur_sce$Pos_Y
-cells$imageID <- cur_sce$sample_id
-cells$imageCellID <- cur_sce$ObjectNumber
-cells$cellType <- cur_sce$celltype_combined # adjust
-
-cells_sc <- SegmentedCells(cells, cellProfiler = TRUE)
-
-# Add condition and patient id
-unique(cur_sce$ISUP_combined)
-
-cat <- relevel(x=factor(cur_sce$ISUP_combined), ref = "1/2")
-
-imagePheno(cells_sc) <- DataFrame(imageID = cur_sce$sample_id, # analogous to colData
-          PID = cur_sce$PID,
-          ISUP = cat
-          )
-
-cells_sc
-
-# Run differential interaction analysis 
-spicyTest <- spicy(cells_sc, 
-      condition = "ISUP", 
-      subject = "PID", 
-      BPPARAM = BiocParallel::MulticoreParam())
-
-saveRDS(spicyTest, "/mnt/central_nas_full/users/lasmey/rcc_volume/RCC/IMC/T_panel/data_analysis/spicyTest_Tcell_ISUP_LM_combined.rds")
-
-topPairs(spicyTest, cutoff = 0.05, n=40)
-
-out_ISUP <- signifPlot(spicyTest,
-                       fdr = TRUE,
-                       marksToPlot = unique(sce$celltype_combined)) # adjust
-
-out_ISUP
+# ### General phenotype interaction difference
+# library(spicyR)
+# library(lisaClust)
+# 
+# ## ISUP 
+# 
+# set.seed(22)
+# 
+# # Generate segmentedCells object 
+# cur_sce <- sce
+# 
+# cells <- data.frame(row.names = colnames(cur_sce))
+# cells$x <- cur_sce$Pos_X
+# cells$y <- cur_sce$Pos_Y
+# cells$imageID <- cur_sce$sample_id
+# cells$imageCellID <- cur_sce$ObjectNumber
+# cells$cellType <- cur_sce$celltype_combined # adjust
+# 
+# cells_sc <- SegmentedCells(cells, cellProfiler = TRUE)
+# 
+# # Add condition and patient id
+# unique(cur_sce$ISUP_combined)
+# 
+# cat <- relevel(x=factor(cur_sce$ISUP_combined), ref = "1/2")
+# 
+# imagePheno(cells_sc) <- DataFrame(imageID = cur_sce$sample_id, # analogous to colData
+#           PID = cur_sce$PID,
+#           ISUP = cat
+#           )
+# 
+# cells_sc
+# 
+# # Run differential interaction analysis 
+# spicyTest <- spicy(cells_sc, 
+#       condition = "ISUP", 
+#       subject = "PID", 
+#       BPPARAM = BiocParallel::MulticoreParam())
+# 
+# saveRDS(spicyTest, "/mnt/central_nas_full/users/lasmey/rcc_volume/RCC/IMC/T_panel/data_analysis/spicyTest_Tcell_ISUP_LM_combined.rds")
+# 
+# topPairs(spicyTest, cutoff = 0.05, n=40)
+# 
+# out_ISUP <- signifPlot(spicyTest,
+#                        fdr = TRUE,
+#                        marksToPlot = unique(sce$celltype_combined)) # adjust
+# 
+# out_ISUP
 ```
 
 ### CD8 
@@ -2087,6 +2376,7 @@ colnames(INT_surv_relevant_df)[1] <- "PID"
 
 INT_surv_relevant_df
 ```
+
 Add to Tcell key features 
 
 ```{r}
@@ -2105,6 +2395,33 @@ for (entry in colnames(INT_surv_relevant_df)[2:ncol(INT_surv_relevant_df)]) {
 write_csv(Tcell_key_features, "/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/Tcell_key_features.csv")
 ```
 
+
+#### Extract all features
+
+```{r}
+INT_all_df <- spicy_out_selected_long %>% group_by(PID, pair) %>% mutate(mean_coef = mean(coef,na.rm = TRUE)) %>% select(PID,pair, mean_coef) %>% unique() %>% pivot_wider(id_cols = "PID",names_from = "pair", values_from = "mean_coef") %>% as.data.frame
+
+colnames(INT_all_df) <- paste0("INT_CD8_",colnames(INT_all_df))
+colnames(INT_all_df)[1] <- "PID"
+```
+
+Add to all features 
+
+```{r}
+# Read
+Tcell_all_features <- as.data.frame(read_csv("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/Tcell_all_features.csv"))
+```
+
+```{r}
+for (entry in colnames(INT_all_df)[2:ncol(INT_all_df)]) {
+  Tcell_all_features[,entry] <- INT_all_df[,entry][match(Tcell_all_features[,"PID"],INT_all_df[,"PID"])]
+}
+```
+
+```{r}
+# Save
+write_csv(Tcell_all_features, "/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/Tcell_all_features.csv")
+```
 
 ### CD4
 
@@ -2191,7 +2508,7 @@ cur_surv_plot$result <- ifelse(cur_surv_plot$direction == "high" & cur_surv_plot
 
 
 # Add info on hetero or homotypic interaction
-cur_surv_plot$int_type <- ifelse(str_count(cur_surv_plot$group, "CD8") > 1, "homotypic", "heterotypic")
+cur_surv_plot$int_type <- ifelse(str_count(cur_surv_plot$group, "CD4") > 1, "homotypic", "heterotypic")
 
 library(ggnewscale)
 ggplot(cur_surv_plot, aes(x=reorder(group,-log10(p)), y = type, col = result, size = -log10(p), shape = int_type))+
@@ -2284,7 +2601,7 @@ cur_surv_plot$result <- ifelse(cur_surv_plot$direction == "high" & cur_surv_plot
 
 
 # Add info on hetero or homotypic interaction
-cur_surv_plot$int_type <- ifelse(str_count(cur_surv_plot$group, "CD8") > 1, "homotypic", "heterotypic")
+cur_surv_plot$int_type <- ifelse(str_count(cur_surv_plot$group, "CD4") > 1, "homotypic", "heterotypic")
 
 library(ggnewscale)
 ggplot(cur_surv_plot, aes(x=reorder(group,-log10(p)), y = type, col = result, size = -log10(p), shape = int_type))+
@@ -2332,3 +2649,76 @@ for (entry in colnames(INT_surv_relevant_df)[2:ncol(INT_surv_relevant_df)]) {
 write_csv(Tcell_key_features, "/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/Tcell_key_features.csv")
 ```
 
+#### Extract all features
+
+```{r}
+INT_all_df <- spicy_out_selected_long %>% group_by(PID, pair) %>% mutate(mean_coef = mean(coef,na.rm = TRUE)) %>% select(PID,pair, mean_coef) %>% unique() %>% pivot_wider(id_cols = "PID",names_from = "pair", values_from = "mean_coef") %>% as.data.frame
+
+colnames(INT_all_df) <- paste0("INT_CD4_",colnames(INT_all_df))
+colnames(INT_all_df)[1] <- "PID"
+```
+
+Add to all features 
+
+```{r}
+# Read
+Tcell_all_features <- as.data.frame(read_csv("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/Tcell_all_features.csv"))
+```
+
+```{r}
+for (entry in colnames(INT_all_df)[2:ncol(INT_all_df)]) {
+  Tcell_all_features[,entry] <- INT_all_df[,entry][match(Tcell_all_features[,"PID"],INT_all_df[,"PID"])]
+}
+```
+
+```{r}
+# Save
+write_csv(Tcell_all_features, "/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/Tcell_all_features.csv")
+```
+
+
+# 5. Patient-level groups 
+
+## Spatial groups 
+
+```{r}
+# Spatial groups
+PID_level_df <- colData(sce) %>% as.data.frame %>% select(PID, spatial_CD8_pheno) %>% unique()
+colnames(PID_level_df)[2] <- paste0("PL_", colnames(PID_level_df)[2])
+```
+
+Add to Tcell key features 
+
+```{r}
+# Read
+Tcell_key_features <- as.data.frame(read_csv("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/Tcell_key_features.csv"))
+```
+
+```{r}
+for (entry in colnames(PID_level_df)[2:ncol(PID_level_df)]) {
+  Tcell_key_features[,entry] <- PID_level_df[,entry][match(Tcell_key_features[,"PID"],PID_level_df[,"PID"])]
+}
+```
+
+```{r}
+# Save
+write_csv(Tcell_key_features, "/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/Tcell_key_features.csv")
+```
+
+Add to all features
+
+```{r}
+# Read
+Tcell_all_features <- as.data.frame(read_csv("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/Tcell_all_features.csv"))
+```
+
+```{r}
+for (entry in colnames(PID_level_df)[2:ncol(PID_level_df)]) {
+  Tcell_all_features[,entry] <- PID_level_df[,entry][match(Tcell_all_features[,"PID"],PID_level_df[,"PID"])]
+}
+```
+
+```{r}
+# Save
+write_csv(Tcell_all_features, "/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/Tcell_all_features.csv")
+```
