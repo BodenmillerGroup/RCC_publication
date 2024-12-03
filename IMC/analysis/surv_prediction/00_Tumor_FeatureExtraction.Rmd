@@ -1416,6 +1416,51 @@ write_csv(tumor_all_features, "/mnt/central_nas/rcc_volume/RCC/survival_pred/Blo
 
 # 5. Patient-level groups 
 
-# CONTINUE HERE 
+```{r}
+sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_05.rds")
+```
+ 
+## ICAM1-mTOR groups
 
-## ICAM1-VHL groups
+```{r}
+# ICAM1-mTOR groups
+PID_level_df <- colData(sce) %>% as.data.frame %>% select(PID, PID_ICAM_mTOR_group) %>% unique()
+colnames(PID_level_df)[2] <- paste0("PL_", colnames(PID_level_df)[2])
+```
+
+Add to tumor key features 
+
+```{r}
+# Read
+tumor_key_features <- as.data.frame(read_csv("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/tumor_key_features.csv"))
+```
+
+```{r}
+for (entry in colnames(PID_level_df)[2:ncol(PID_level_df)]) {
+  tumor_key_features[,entry] <- PID_level_df[,entry][match(tumor_key_features[,"PID"],PID_level_df[,"PID"])]
+}
+```
+
+```{r}
+# Save
+write_csv(tumor_key_features, "/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/tumor_key_features.csv")
+```
+
+Add to all features
+
+```{r}
+# Read
+tumor_all_features <- as.data.frame(read_csv("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/tumor_all_features.csv"))
+```
+
+```{r}
+for (entry in colnames(PID_level_df)[2:ncol(PID_level_df)]) {
+  tumor_all_features[,entry] <- PID_level_df[,entry][match(tumor_all_features[,"PID"],PID_level_df[,"PID"])]
+}
+```
+
+```{r}
+# Save
+write_csv(tumor_all_features, "/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/tumor_all_features.csv")
+```
+
