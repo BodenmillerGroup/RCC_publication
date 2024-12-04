@@ -323,7 +323,7 @@ myeloid_key_features$OS_months <- sce$OS_months[match(myeloid_key_features$PID, 
 myeloid_key_features <- myeloid_key_features %>% select(PID, status_OS, OS_months, everything())
 
 # Save
-write_csv(myeloid_key_features, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/myeloid_key_features.csv")
+write_csv(myeloid_key_features, "/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/myeloid_key_features.csv")
 ```
 
 ### Extract all features
@@ -747,7 +747,7 @@ Add to myeloid key features
 
 ```{r}
 # Read
-myeloid_key_features <- as.data.frame(read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/myeloid_key_features.csv"))
+myeloid_key_features <- as.data.frame(read_csv("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/myeloid_key_features.csv"))
 ```
 
 ```{r}
@@ -759,7 +759,7 @@ for (entry in colnames(MC_surv_relevant_df)[2:ncol(MC_surv_relevant_df)]) {
 
 ```{r}
 # Save
-write_csv(myeloid_key_features, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/myeloid_key_features.csv")
+write_csv(myeloid_key_features, "/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/myeloid_key_features.csv")
 ```
 
 
@@ -777,7 +777,7 @@ Add to all features
 
 ```{r}
 # Read
-myeloid_all_features <- read_csv("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/myeloid_all_features.csv")
+myeloid_all_features <- as.data.frame(read_csv("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/myeloid_all_features.csv"))
 ```
 
 ```{r}
@@ -1065,7 +1065,7 @@ Add to myeloid key features
 
 ```{r}
 # Read
-myeloid_key_features <- as.data.frame(read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/myeloid_key_features.csv"))
+myeloid_key_features <- as.data.frame(read_csv("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/myeloid_key_features.csv"))
 ```
 
 ```{r}
@@ -1077,7 +1077,7 @@ for (entry in colnames(D_surv_relevant_df)[2:ncol(D_surv_relevant_df)]) {
 
 ```{r}
 # Save
-write_csv(myeloid_key_features, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/myeloid_key_features.csv")
+write_csv(myeloid_key_features, "/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/myeloid_key_features.csv")
 ```
 
 
@@ -1227,7 +1227,7 @@ ggsurvplot(fit,
           conf.int = TRUE
 )
 ```
-##### Median 
+### Median 
 
 ```{r}
 # Extract spicy output from L function (median difference across specific radi)
@@ -1384,14 +1384,12 @@ write_csv(myeloid_all_features, "/mnt/central_nas/rcc_volume/RCC/survival_pred/B
 sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_06.rds")
 ```
 
-# CONTINUE HERE 
 
-
-## ICAM1-mTOR groups
+## Myeloid HLADR expression based
 
 ```{r}
 # ICAM1-mTOR groups
-PID_level_df <- colData(sce) %>% as.data.frame %>% select(PID, PID_ICAM_mTOR_group) %>% unique()
+PID_level_df <- colData(sce) %>% as.data.frame %>% select(PID, my_HLADR_group_names) %>% unique()
 colnames(PID_level_df)[2] <- paste0("PL_", colnames(PID_level_df)[2])
 ```
 

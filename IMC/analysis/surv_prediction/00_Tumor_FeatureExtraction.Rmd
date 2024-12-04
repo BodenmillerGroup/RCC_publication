@@ -323,7 +323,7 @@ tumor_key_features$OS_months <- sce$OS_months[match(tumor_key_features$PID, sce$
 tumor_key_features <- tumor_key_features %>% select(PID, status_OS, OS_months, everything())
 
 # Save
-write_csv(tumor_key_features, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/tumor_key_features.csv")
+write_csv(tumor_key_features, "/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/tumor_key_features.csv")
 ```
 
 ### Extract all features
@@ -747,7 +747,7 @@ Add to tumor key features
 
 ```{r}
 # Read
-tumor_key_features <- as.data.frame(read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/tumor_key_features.csv"))
+tumor_key_features <- as.data.frame(read_csv("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/tumor_key_features.csv"))
 ```
 
 ```{r}
@@ -759,7 +759,7 @@ for (entry in colnames(MC_surv_relevant_df)[2:ncol(MC_surv_relevant_df)]) {
 
 ```{r}
 # Save
-write_csv(tumor_key_features, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/tumor_key_features.csv")
+write_csv(tumor_key_features, "/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/tumor_key_features.csv")
 ```
 
 
@@ -777,7 +777,7 @@ Add to all features
 
 ```{r}
 # Read
-tumor_all_features <- read_csv("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/tumor_all_features.csv")
+tumor_all_features <- as.data.frame(read_csv("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/tumor_all_features.csv"))
 ```
 
 ```{r}
@@ -1065,7 +1065,7 @@ Add to tumor key features
 
 ```{r}
 # Read
-tumor_key_features <- as.data.frame(read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/tumor_key_features.csv"))
+tumor_key_features <- as.data.frame(read_csv("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/tumor_key_features.csv"))
 ```
 
 ```{r}
@@ -1077,7 +1077,7 @@ for (entry in colnames(D_surv_relevant_df)[2:ncol(D_surv_relevant_df)]) {
 
 ```{r}
 # Save
-write_csv(tumor_key_features, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/tumor_key_features.csv")
+write_csv(tumor_key_features, "/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/tumor_key_features.csv")
 ```
 
 

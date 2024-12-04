@@ -220,7 +220,7 @@ saveRDS(metadata_selected_fil, "/mnt/central_nas/rcc_volume/RCC/survival_pred/Bl
 
 Here we preprocess all features without pre-selection.
 
-### Tumor panel - TO DO
+### Tumor panel
 
 ```{r}
 tumor_all <- read_csv("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/tumor_all_features.csv")
@@ -231,6 +231,7 @@ paste0("Number of EXP features before preprocessing: ", sum(str_count(colnames(t
 paste0("Number of MC features before preprocessing: ", sum(str_count(colnames(tumor_all), "MC_")))
 paste0("Number of D features before preprocessing: ", sum(str_count(colnames(tumor_all), "D_")))
 paste0("Number of INT features before preprocessing: ", sum(str_count(colnames(tumor_all), "INT_")))
+paste0("Number of PL features before preprocessing: ", sum(str_count(colnames(tumor_all), "PL_")))
 ```
 
 #### Preprocessing 
@@ -239,13 +240,13 @@ paste0("Number of INT features before preprocessing: ", sum(str_count(colnames(t
 # Preprocessing as suggested by Boeva (Cell Reports Methods)
 # Step 1: Only keep columns with less than 20% of NA values 
 ## This often removes INT values
-remove <- colnames(tumor_all)[colMeans(is.na(tumor_all)) > 0.2]
+remove <- colnames(tumor_all)[colMeans(is.na(tumor_all)) > 0.3]
 remove <- remove[!remove %in% c("status_OS", "OS_months")]
 
 tumor_selected <- tumor_all %>% select(-remove)
 
 # Step 2: Missing numerical values can be imputed (Median across non-missing samples OR minimum for INT values)
-summary(is.na(tumor_selected))
+#summary(is.na(tumor_selected))
 
 tumor_selected[] <- lapply(colnames(tumor_selected), function(colname) {
   if (colname %in% c("status_OS", "OS_months")) {
@@ -260,7 +261,7 @@ tumor_selected[] <- lapply(colnames(tumor_selected), function(colname) {
   }
 })
 
-summary(is.na(tumor_selected))
+#summary(is.na(tumor_selected))
 
 # Add specific prefix
 colnames(tumor_selected)[4:ncol(tumor_selected)] <- paste0("IMC_TU_",colnames(tumor_selected)[4:ncol(tumor_selected)])
@@ -329,7 +330,7 @@ high_corr_pairs_df
 
 ```{r}
 # Remove specific pairs 
-removed_numeric <- c("IMC_TU_D_ICAM1_dom", "IMC_TU_D_mTORhi_dom", "IMC_TU_INT_Endothelial__TU_MYCmed", "IMC_TU_INT_CD8_T_cell__TU_HLADRhi", "IMC_TU_INT_TU_MYCmed_mTORlow_PKM2hi__Endothelial", "IMC_TU_INT_TU_HLADRhi__TU_MYCmed_mTORlow_PKM2hi")
+removed_numeric <- high_corr_pairs_df$Var1
 
 tumor_selected_fil <- tumor_selected %>% select(-all_of(removed_numeric))
 
@@ -460,7 +461,7 @@ str(metadata_selected_fil)
 saveRDS(metadata_selected_fil, "/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/all_features_processed.rds")
 ```
 
-### Myeloid panel - TO DO
+### Myeloid panel
 
 ```{r}
 myeloid_all <- read_csv("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/myeloid_all_features.csv")
@@ -479,13 +480,13 @@ paste0("Number of INT features before preprocessing: ", sum(str_count(colnames(m
 # Preprocessing as suggested by Boeva (Cell Reports Methods)
 # Step 1: Only keep columns with less than 10% of NA values 
 ## This often removes INT values
-remove <- colnames(myeloid_all)[colMeans(is.na(myeloid_all)) > 0.2]
+remove <- colnames(myeloid_all)[colMeans(is.na(myeloid_all)) > 0.3]
 remove <- remove[!remove %in% c("status_OS", "OS_months")]
 
 myeloid_selected <- myeloid_all %>% select(-remove)
 
 # Step 2: Missing numerical values can be imputed (Median across non-missing samples OR minimum for INT values)
-summary(is.na(myeloid_selected))
+#summary(is.na(myeloid_selected))
 
 myeloid_selected[] <- lapply(colnames(myeloid_selected), function(colname) {
   if (colname %in% c("status_OS", "OS_months")) {
@@ -500,7 +501,7 @@ myeloid_selected[] <- lapply(colnames(myeloid_selected), function(colname) {
   }
 })
 
-summary(is.na(myeloid_selected))
+#summary(is.na(myeloid_selected))
 
 # Add specific prefix
 colnames(myeloid_selected)[4:ncol(myeloid_selected)] <- paste0("IMC_MY_",colnames(myeloid_selected)[4:ncol(myeloid_selected)])
@@ -569,7 +570,7 @@ high_corr_pairs_df
 
 ```{r}
 # Remove specific pairs 
-removed_numeric <- c("IMC_MY_INT_CD8_T_cell__MY_M2_like","IMC_MY_INT_MY_Neutro_MDSC__MY_M2_like","IMC_MY_INT_MY_C_M__MY_M2_like", "IMC_MY_INT_tumor__MY_M1_like", "IMC_MY_INT_MY_M1_like__MY_Ag_M", "IMC_MY_INT_tumor__MY_Ag_M", "IMC_MY_INT_MY_C_M__MY_Neutro_MDSC", "IMC_MY_INT_Endothelial__MY_C_M")
+removed_numeric <- high_corr_pairs_df$Var2
 
 myeloid_selected_fil <- myeloid_selected %>% select(-all_of(removed_numeric))
 
@@ -667,7 +668,7 @@ removed_cat <- NULL
 
 myeloid_selected_fil <- myeloid_selected_fil %>% select(-all_of(removed_cat))
 
-str(myeloid_selected_fil)
+#str(myeloid_selected_fil)
 ```
 
 ```{r}

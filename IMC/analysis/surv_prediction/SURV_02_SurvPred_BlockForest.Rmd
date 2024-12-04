@@ -5,6 +5,7 @@ date: "`r Sys.Date()`"
 output: html_document
 params: 
   blocks_selected: !r c("CLIN", "IMC")
+  add_all_features: FALSE
   add_surv_time: FALSE 
   add_PL_level: FALSE
   favor_clinical: 0
@@ -32,6 +33,7 @@ library(survminer)
 
 ```{r}
 blocks_selected <- params$blocks_selected #Select which data types to use
+add_all_features <- params$add_all_features # Add all features or just selection
 add_surv_time <- params$add_surv_time #Add survival time in training
 add_PL_level <- params$add_PL_level #Add survival time in training
 favor_clinical <- params$favor_clinical #Favor specific block in BlockForest - 1 is CLIN (default; 0 would not favor)
@@ -50,7 +52,11 @@ run_name <- params$run_name #Name of output file
 ## Load and select data
 
 ```{r}
-metadata_selected <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/key_features_processed_complete.rds")
+if(add_all_features){
+  metadata_selected <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/all_features_processed_complete.rds")
+}else{
+ metadata_selected <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/key_features_processed_complete.rds")
+}
 ```
 
 ```{r}

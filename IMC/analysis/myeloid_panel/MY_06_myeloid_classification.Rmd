@@ -4901,18 +4901,37 @@ NOTE: Analysis of tumor expression changes per category and B cell scores in scr
 ## HLADR GMM on myeloid cells 
 
 ```{r}
+#sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_06.rds")
+
+GMM_marker <- Mclust(assay(sce, "exprs")["HLADR",], G = 2)
+  
+GMM_df <- data.frame(class_marker = ifelse(GMM_marker$classification == 2 & GMM_marker$uncertainty < 0.01, "HLADR_pos", "HLADR_neg"), 
+                     marker_exprs = assay(sce, "exprs")["HLADR",],
+                     uncertainty = GMM_marker$uncertainty)
+
+ggplot(GMM_df, aes(x = marker_exprs))+
+  geom_density(aes(fill = class_marker))+
+  geom_rug(aes(color = class_marker))+
+  theme_classic()+
+  scale_fill_brewer(palette = "Set1")+
+  scale_color_brewer(palette = "Set1")
+
+sce$HLADR_GMM_2 <- GMM_df$class_marker[match(colnames(sce), rownames(GMM_df))]
+```
+
+```{r}
 set.seed(22)
 
 ## Define patient groups 
-plot_score_PID <- colData(sce) %>% as.data.frame %>% group_by(PID,HLADR_GMM) %>% count() %>% group_by(PID) %>% mutate(fra = n/sum(n))
+plot_score_PID <- colData(sce) %>% as.data.frame %>% group_by(PID,HLADR_GMM_2) %>% count() %>% group_by(PID) %>% mutate(fra = n/sum(n))
 
-ggplot(plot_score_PID, aes(x=PID, y=fra, fill = HLADR_GMM))+
+ggplot(plot_score_PID, aes(x=PID, y=fra, fill = HLADR_GMM_2))+
   geom_tile(position = "fill")
 
-plot_heat_PID <- plot_score_PID %>% pivot_wider(id_cols = PID, values_from = fra, names_from = HLADR_GMM) %>% column_to_rownames("PID")
+plot_heat_PID <- plot_score_PID %>% pivot_wider(id_cols = PID, values_from = fra, names_from = HLADR_GMM_2) %>% column_to_rownames("PID")
 plot_heat_PID[is.na(plot_heat_PID)] <- 0
 
-testCL<- clValid(plot_heat_PID,nClust = 2:20,clMethods = c("hierarchical","agnes","kmeans"),validation="internal",metric="euclidean", method = "ward")
+testCL<- clValid(plot_heat_PID,nClust = 2:10,clMethods = c("hierarchical","agnes","kmeans"),validation="internal",metric="euclidean", method = "ward")
 plot(testCL, legend = FALSE)
 
 set.seed(22)
@@ -4921,13 +4940,14 @@ avg_dend_obj_MCP <- as.dendrogram(agnes(plot_heat_PID,metric = "euclidean",metho
 avg_col_dend_MCP <- color_branches(avg_dend_obj_MCP, k = 3)
 plot(avg_col_dend_MCP)
 
+set.seed(22)
 h <- Heatmap(plot_heat_PID,
              name = "Proportion",
              col = viridis(100), 
-             #row_km = 3, 
-             #row_km_repeats = 100,
-             cluster_rows = avg_col_dend_MCP,
-             row_split=3,
+             row_km = 4, 
+             row_km_repeats = 1000,
+             #cluster_rows = avg_col_dend_MCP,
+             #row_split=3,
              show_row_names = FALSE)
 
 h <- draw(h)
@@ -4942,13 +4962,29 @@ anno$my_HLADR_group <- as.factor(ifelse(anno$PID %in% rownames(plot_heat_PID)[ro
 }
 
 sce$my_HLADR_group <- anno$my_HLADR_group[match(sce$PID, anno$PID)]
+sce$my_HLADR_group_fil <- ifelse(sce$my_HLADR_group %in% c("2", "3"),"2_3", sce$my_HLADR_group)
 ```
 
 ```{r}
-cur_surv <- colData(sce) %>% as.data.frame() %>% select(PID, my_HLADR_group,my_AgM_group, OS_months, status_OS) %>% unique() #%>% filter(my_AgM_group %in% c("2","3"))
+cur_surv <- colData(sce) %>% as.data.frame() %>% select(PID, my_HLADR_group,my_AgM_group, OS_months, status_OS) %>% unique() %>% mutate(my_HLADR_group_fil = ifelse(my_HLADR_group %in% c("2","3"), "mixed", my_HLADR_group))
 
 #Plot survival curves
-fit <- survfit(Surv(OS_months, status_OS) ~ my_AgM_group, data = cur_surv)
+fit <- survfit(Surv(OS_months, status_OS) ~ my_HLADR_group, data = cur_surv)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = "Set1",
+          conf.int = TRUE
+)
+
+#Plot survival curves
+fit <- survfit(Surv(OS_months, status_OS) ~ my_HLADR_group_fil, data = cur_surv)
 print(fit)
 
 ggsurvplot(fit,
@@ -4962,6 +4998,29 @@ ggsurvplot(fit,
           conf.int = TRUE
 )
 ```
+
+```{r}
+library(survival)
+library(survminer)
+
+cur_surv <- colData(sce) %>% as.data.frame() %>%
+  select(PID, age, gender, pT_simple, my_HLADR_group_fil, OS_months, status_OS) %>% 
+  unique()
+
+covariates_null <- cur_surv %>% select(-PID, -OS_months, -status_OS, -my_HLADR_group_fil) %>% colnames
+multi_formula_null <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates_null, collapse = " + ")))
+multi_model_null <- coxph(multi_formula_null, data = cur_surv)
+
+covariates_full <- cur_surv %>% select(-PID, -OS_months, -status_OS) %>% colnames
+multi_formula_full <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates_full, collapse = " + ")))
+multi_model_full <- coxph(multi_formula_full, data = cur_surv)
+
+#cur_surv is.na(cur_surv$PID_metagroups)
+
+# Log-likelihood ratio test
+anova(multi_model_null, multi_model_full)
+```
+
 
 ```{r}
 library(survival)
@@ -5018,6 +5077,95 @@ theme_classic()+
 #scale_y_continuous(trans = "log10")
 theme(axis.text.x = element_text(angle = 90))
 ```
+
+
+```{r}
+## Genomic subtypes
+sce$myeloid_presenting <- ifelse(sce$my_HLADR_group_fil == "1", "1", "0")
+sce$myeloid_mixed <- ifelse(sce$my_HLADR_group_fil == "2_3", "1", "0")
+sce$myeloid_notpresenting <- ifelse(sce$my_HLADR_group_fil == "4", "1", "0")
+```
+
+```{r}
+### Differential abundance analysis based on edgeR
+library(edgeR)
+
+GOI <- c("myeloid_presenting", "myeloid_mixed", "myeloid_notpresenting")
+  
+DA <- lapply(GOI, function(x){
+
+abundances <- table(sce$myeloid_district_names, sce$PID)
+abundances <- unclass(abundances) 
+abundances <- abundances[,colnames(abundances) %in% names(colSums(abundances))[colSums(abundances) != 0]]
+
+#relevant patient metadata (Re-level for baseline)
+meta <- colData(sce)[match(colnames(abundances), sce$PID),]
+
+meta[,x] <- relevel(x=factor(meta[,x]), ref = "0")
+
+#filter
+meta <- meta[!is.na(meta[,x]),]
+abundances <- abundances[,colnames(abundances) %in% meta$PID]
+
+#create DGEList - based on edgeR package
+y.ab <- DGEList(abundances, samples=meta, group = meta[,x])
+
+#Design matrix
+design <- model.matrix(~group, data = y.ab$samples)
+
+#Visualize
+# logCPM of abundances per cluster
+cur_mat <- edgeR::cpm(abundances,prior.count = 1,log = TRUE)
+
+# Estimate NB and QL dispersion 
+y.ab <- estimateDisp(y.ab, design, trend="none")
+
+fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
+
+# Test for differential abundance of clusters between tumor stages
+res <- glmQLFTest(fit.ab, coef=ncol(design))
+
+DA <- res$table
+
+DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
+
+DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.05, result = ifelse(DA$logFC > 0 & DA$FDR < 0.05, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.05, "DOWN", "NOTSIG"))) %>% 
+  arrange(desc(logFC))
+
+DA$cluster <- factor(DA$cluster, levels = DA$cluster)
+DA$category <- x
+
+return(DA)
+})
+
+DA_out <- do.call(rbind, DA)
+```
+
+```{r}
+# FDR at 0.1 with trends
+#DA_out$result <- ifelse(DA_out$logFC > 0 & DA_out$FDR < 0.1, "UP",
+#                             ifelse(DA_out$logFC > 0 & DA_out$PValue < 0.05, "UP_trend", 
+#                                    ifelse(DA_out$logFC < 0 & DA_out$FDR < 0.1, "DOWN", 
+#                                           ifelse(DA_out$logFC < 0 & DA_out$PValue < 0.05, "DOWN_trend","NOTSIG"))))
+
+
+ggplot(DA_out, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8")+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = DA_out,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+
+```{r}
+# Give names
+sce$my_HLADR_group_names <- ifelse(sce$my_HLADR_group_fil == "1", "myeloid_presenting", ifelse(sce$my_HLADR_group_fil == "2_3", "myeloid_mixed", "myeloid_notpresenting"))
+```
+
 
 ### Check on images 
 
