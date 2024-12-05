@@ -24,35 +24,35 @@ library(tidyverse)
 ## Read results from different models 
 
 ```{r}
-cv_results <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_CLIN.rds")
+cv_results <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_Tcell.rds")
 
-cv_results_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC.rds")
+cv_results_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_Tcell_expanded.rds")
 
-cv_results_2 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_TU.rds")
+cv_results_2 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_Tcell_expanded_PL.rds")
 
-cv_results_3 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_MY.rds")
+cv_results_3 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_Tcell_expanded_ALL.rds")
 
-cv_results_4 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_Tcell.rds")
-
-cv_results_5 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_CLIN_fav_IMC.rds")
-
-cv_results_6 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_CLIN_IMC_fav.rds")
-
-cv_results_7 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_CLIN_fav.rds")
+# cv_results_4 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_Tcell.rds")
+# 
+# cv_results_5 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_CLIN_fav_IMC.rds")
+# 
+# cv_results_6 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_CLIN_IMC_fav.rds")
+# 
+# cv_results_7 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_CLIN_fav.rds")
 ```
 
 ```{r}
 # Create list from results
 # Define the cross-validation results as a list
 cv_results_list <- list(
-  "CLIN" = cv_results,
-  "IMC" = cv_results_1,
-  "IMC_TU" = cv_results_2,
-  "IMC_MY" = cv_results_3,
-  "IMC_Tcell" = cv_results_4,
-  "IMC_CLIN_fav_IMC" = cv_results_5,
-  "IMC_CLIN_IMC_fav" = cv_results_6,
-  "CLIN_fav" = cv_results_7
+  "IMC_Tcell" = cv_results,
+  "IMC_Tcell_exp" = cv_results_1,
+  "IMC_Tcell_exp_PL" = cv_results_2,
+  "IMC_Tcell_exp_ALL" = cv_results_3#,
+  #"IMC_Tcell" = cv_results_4,
+  #"IMC_CLIN_fav_IMC" = cv_results_5,
+  #"IMC_CLIN_IMC_fav" = cv_results_6,
+  #"CLIN_fav" = cv_results_7
 )
 ```
 
@@ -127,7 +127,7 @@ ggplot(out_ibs, aes(x = reorder(model,-IBS), y = IBS, fill = model))+
   geom_boxplot()+
   #coord_cartesian(ylim = c(0.5,1))+
   theme_classic()+
-  stat_compare_means(ref.group = "CLIN", paired = FALSE, method = "t.test", method.args = list(alternative = "less", label = "p.format"))+
+  stat_compare_means(ref.group = "IMC_TU_exp_ALL", paired = FALSE, method = "t.test", method.args = list(alternative = "less", label = "p.format"))+
   #stat_compare_means(vjust = 1, method = "anova")+
   #scale_fill_manual(values = col_cv)+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
@@ -154,14 +154,14 @@ concordance_scores_list <- lapply(cv_results_list, function(res_obj) {
 
 out_concordance <- data.frame(fold = 1:10, t(do.call("rbind", concordance_scores_list))[1:10,]) %>% pivot_longer(2:ncol(.), names_to = "model", values_to = "concordance")
 
-out_concordance <- rbind(out_concordance, fit_cox_out)
+#out_concordance <- rbind(out_concordance, fit_cox_out)
 
 library(ggpubr)
 ggplot(out_concordance, aes(x = reorder(model,concordance), y = concordance, fill = model))+
   geom_boxplot()+
   #coord_cartesian(ylim = c(0.5,1))+
   theme_classic()+
-  stat_compare_means(ref.group = "CLIN", paired = FALSE, method = "t.test", method.args = list(alternative = "greater", label = "p.format"))+
+  stat_compare_means(ref.group = "IMC_TU_exp_ALL", paired = FALSE, method = "t.test", method.args = list(alternative = "greater", label = "p.format"))+
   #stat_compare_means(vjust = 1, method = "anova")+
   #scale_fill_manual(values = col_cv)+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
@@ -240,7 +240,7 @@ ggsurvplot(fit,
 ##### Feature-level
 
 ```{r}
-variable_importance <- sapply(cv_results_2, function(res) {
+variable_importance <- sapply(cv_results_1, function(res) {
   res$variable_importance
 })
 
@@ -314,6 +314,8 @@ ggplot(plot, aes(x = reorder(feature_spatial,-scaled_importance), y = scaled_imp
   ylab("Scaled importance")+
   xlab("Feature")
 ```
+
+
 ```{r}
 # Order features by median importance
 ordered_features <- plot %>% group_by(feature) %>% summarize(median = median(scaled_importance)) %>% arrange(desc(median))
