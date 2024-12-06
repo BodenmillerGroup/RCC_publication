@@ -24,20 +24,20 @@ library(tidyverse)
 ## Read results from different models 
 
 ```{r}
-cv_results <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_Tcell.rds")
+cv_results <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_exp.rds")
 
 cv_results_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_Tcell_expanded.rds")
 
-cv_results_2 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_Tcell_expanded_PL.rds")
+cv_results_2 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_MY_expanded.rds")
 
-cv_results_3 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_Tcell_expanded_ALL.rds")
+cv_results_3 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_TU_expanded.rds")
 
-# cv_results_4 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_Tcell.rds")
-# 
-# cv_results_5 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_CLIN_fav_IMC.rds")
-# 
-# cv_results_6 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_CLIN_IMC_fav.rds")
-# 
+cv_results_4 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_CLIN_fav.rds")
+
+cv_results_5 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_CLIN_fav_IMC_exp.rds")
+
+cv_results_6 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_CLIN_IMC_exp_fav.rds")
+ 
 # cv_results_7 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_CLIN_fav.rds")
 ```
 
@@ -45,13 +45,13 @@ cv_results_3 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockFore
 # Create list from results
 # Define the cross-validation results as a list
 cv_results_list <- list(
-  "IMC_Tcell" = cv_results,
-  "IMC_Tcell_exp" = cv_results_1,
-  "IMC_Tcell_exp_PL" = cv_results_2,
-  "IMC_Tcell_exp_ALL" = cv_results_3#,
-  #"IMC_Tcell" = cv_results_4,
-  #"IMC_CLIN_fav_IMC" = cv_results_5,
-  #"IMC_CLIN_IMC_fav" = cv_results_6,
+  "IMC" = cv_results,
+  "IMC_Tcell" = cv_results_1,
+  "IMC_MY" = cv_results_2,
+  "IMC_TU" = cv_results_3,
+  "CLIN_fav" = cv_results_4,
+  "CLIN_fav_IMC" = cv_results_5,
+  "CLIN_IMC_fav" = cv_results_6#,
   #"CLIN_fav" = cv_results_7
 )
 ```
@@ -124,10 +124,10 @@ out_ibs <- data.frame(fold = 1:10, t(do.call("rbind", ibs_scores_list))[1:10,]) 
 # Plot
 library(ggpubr)
 ggplot(out_ibs, aes(x = reorder(model,-IBS), y = IBS, fill = model))+
-  geom_boxplot()+
+  geom_boxplot(outlier.colour = NA)+
   #coord_cartesian(ylim = c(0.5,1))+
   theme_classic()+
-  stat_compare_means(ref.group = "IMC_TU_exp_ALL", paired = FALSE, method = "t.test", method.args = list(alternative = "less", label = "p.format"))+
+  stat_compare_means(ref.group = "CLIN", paired = FALSE, method = "t.test", method.args = list(alternative = "less", label = "p.format"))+
   #stat_compare_means(vjust = 1, method = "anova")+
   #scale_fill_manual(values = col_cv)+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
@@ -161,7 +161,7 @@ ggplot(out_concordance, aes(x = reorder(model,concordance), y = concordance, fil
   geom_boxplot()+
   #coord_cartesian(ylim = c(0.5,1))+
   theme_classic()+
-  stat_compare_means(ref.group = "IMC_TU_exp_ALL", paired = FALSE, method = "t.test", method.args = list(alternative = "greater", label = "p.format"))+
+  stat_compare_means(ref.group = "CLIN_fav", paired = FALSE, method = "t.test", method.args = list(alternative = "greater", label = "p.format"))+
   #stat_compare_means(vjust = 1, method = "anova")+
   #scale_fill_manual(values = col_cv)+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
@@ -240,7 +240,7 @@ ggsurvplot(fit,
 ##### Feature-level
 
 ```{r}
-variable_importance <- sapply(cv_results_1, function(res) {
+variable_importance <- sapply(cv_results, function(res) {
   res$variable_importance
 })
 
@@ -296,7 +296,7 @@ ggplot(plot, aes(x = reorder(feature_type,-scaled_importance), y = scaled_import
   theme_classic()+
   facet_grid(~feature_origin, scales = "free")+
   scale_fill_manual(values = col_type)+
-  #stat_compare_means(method = "anova")+
+  stat_compare_means(method = "anova")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   #guides(fill = "none")+
   ylab("Scaled importance")+
@@ -309,7 +309,7 @@ ggplot(plot, aes(x = reorder(feature_spatial,-scaled_importance), y = scaled_imp
   theme_classic()+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   scale_fill_manual(values = col_spatial)+
-  #stat_compare_means(method = "t.test")+
+  stat_compare_means(method = "t.test")+
   #guides(fill = "none")+
   ylab("Scaled importance")+
   xlab("Feature")
@@ -359,7 +359,7 @@ HeatmapAnnotation(
 
 ```{r}
 # Extract features with median importance > 0
-ordered_features_out <- ordered_features %>% filter(median > 0) %>% pull(feature)      
+ordered_features_out <- ordered_features %>% filter(median > 0.4) %>% pull(feature)      
 top_features <- ordered_features_out
 ```
 
@@ -380,7 +380,7 @@ Heatmap(key_out)
 ```{r}
 library(clValid)
 #Internal measures
-set.seed(22)
+set.seed(2201)
 testCL<- clValid(key_out,nClust = 2:10,clMethods = c("kmeans"),validation="internal",metric="euclidean", method = "ward")
 summary(testCL)
 plot(testCL, legend = FALSE)
@@ -394,8 +394,10 @@ plot(testCL, legend = FALSE)
 ```{r}
 set.seed(22)
 h_select <- Heatmap(key_out, 
-        row_km = 4, #or3
-        row_km_repeats = 5000)
+        row_km = 3, #or3
+        clustering_method_rows = "ward.D2",
+        clustering_method_columns = "ward.D2",
+        row_km_repeats = 10000)
 
 h_select <- draw(h_select)
 
@@ -428,7 +430,7 @@ ggsurvplot(fit,
           linetype = "strata", # Change line type by groups
           surv.median.line = "hv", # Specify median survival
           ggtheme = theme_classic(), # Change ggplot2 theme
-          palette = c("#92C5DE", "#F4A582", "#CA0020","#0571B0"),
+          palette = c("#0571B0", "black", "#CA0020","#0571B0","grey"),
           conf.int = FALSE
 )
 ```
@@ -490,5 +492,331 @@ Heatmap(t(key_aggregated),
   rowAnnotation(text = anno_text(row_anno$feature))
 ```
 
+```{r, fig.height=20, fig.width=10}
+all_features <- unique(plot$feature)
 
+key_aggregated <- metadata_selected %>% select(PID_group_test, all_of(all_features)) %>% pivot_longer(cols = 2:ncol(.),names_to = "feature", values_to = "score") %>% group_by(PID_group_test, feature) %>% summarize(mean = mean(score)) %>% pivot_wider(id_cols = 1, names_from = "feature", values_from = "mean") %>% column_to_rownames("PID_group_test")
+
+# Add rowAnno
+row_anno <- plot %>% ungroup %>% filter(feature %in% all_features) %>% select(feature, feature_origin, feature_type, feature_spatial) %>% unique()
+
+row_anno <- row_anno[match(colnames(key_aggregated), row_anno$feature),]
+row_anno$feature_top <- row_anno$feature %in% top_features
+col_top <- setNames(c("black", "grey"),c("TRUE", "FALSE"))
+
+ha_types <- HeatmapAnnotation(
+    top = row_anno$feature_top,
+    origin = row_anno$feature_origin,
+    type = row_anno$feature_type,
+    spatial = row_anno$feature_spatial, 
+    col = list(top = col_top, 
+             origin = col_origin,
+             type = col_type,
+             spatial = col_spatial),
+    border = TRUE,
+    which = "row")
+
+
+col_group <- setNames(c("#92C5DE", "#F4A582", "#CA0020","#0571B0"),c("1","2","3","4"))
+
+# Add colAnno
+col_anno <- key_aggregated %>% rownames_to_column("PID_group") %>% select(PID_group)
+ca <- columnAnnotation(PID_group = anno_simple(col_anno, col = col_group))
+
+Heatmap(t(key_aggregated), 
+        row_split = data.frame(row_anno$feature_origin, row_anno$feature_type),
+        bottom_annotation = ca)+
+  ha_types+
+  rowAnnotation(text = anno_text(row_anno$feature))
+```
+
+
+TO CHECK: Association with PL groups 
+
+```{r}
+PL_group_asso <- metadata_selected %>% select(PID_group_test, all_of(colnames(metadata_selected)[str_detect(colnames(metadata_selected), "_PL_")]))
+
+table(PL_group_asso$PID_group_test, PL_group_asso$IMC_TU_PL_PID_ICAM_mTOR_group)
+
+PL_group_asso %>% group_by(PID_group_test, IMC_TU_PL_PID_ICAM_mTOR_group) %>% dplyr::count() %>% ungroup() %>% group_by(PID_group_test) %>% mutate(fra = n/sum(n))
+PL_group_asso %>% group_by(PID_group_test, IMC_T_PL_spatial_CD8_pheno) %>% dplyr::count() %>% ungroup() %>% group_by(PID_group_test) %>% mutate(fra = n/sum(n))
+PL_group_asso %>% group_by(PID_group_test, IMC_MY_PL_my_HLADR_group_names) %>% dplyr::count() %>% ungroup() %>% group_by(PID_group_test) %>% mutate(fra = n/sum(n))
+
+```
+
+
+
+```{r}
+# Load the caret package
+library(caret)
+
+# One-hot encoding of variables
+# PID group
+dummy_model <- dummyVars(~ PID_group_test, data = metadata_selected, fullRank = FALSE)
+encoded <- as.data.frame(predict(dummy_model, newdata = metadata_selected))
+colnames(encoded) <- c("immune_activated", "immune_silent", "immune_suppressed")
+metadata_selected <- cbind(metadata_selected, encoded)
+
+# Tumor groups
+dummy_model <- dummyVars(~ IMC_TU_PL_PID_ICAM_mTOR_group, data = metadata_selected, fullRank = FALSE)
+encoded <- as.data.frame(predict(dummy_model, newdata = metadata_selected))
+colnames(encoded) <- str_split(colnames(encoded), "\\.", simplify = TRUE)[,2]
+metadata_selected <- cbind(metadata_selected, encoded)
+
+# Myeloid groups
+dummy_model <- dummyVars(~ IMC_MY_PL_my_HLADR_group_names, data = metadata_selected, fullRank = FALSE)
+encoded <- as.data.frame(predict(dummy_model, newdata = metadata_selected))
+colnames(encoded) <- str_split(colnames(encoded), "\\.", simplify = TRUE)[,2]
+metadata_selected <- cbind(metadata_selected, encoded)
+
+# T cell groups
+dummy_model <- dummyVars(~ IMC_T_PL_spatial_CD8_pheno, data = metadata_selected, fullRank = FALSE)
+encoded <- as.data.frame(predict(dummy_model, newdata = metadata_selected))
+colnames(encoded) <- str_split(colnames(encoded), "\\.", simplify = TRUE)[,2]
+metadata_selected <- cbind(metadata_selected, encoded)
+```
+
+
+
+
+
+
+```{r}
+# Patient group info 
+cur_groups <- metadata_selected %>% select(PID, immune_activated, immune_silent, immune_suppressed) %>% unique()
+
+# Other groups
+## Here GOI all 
+cur_test <- metadata_selected %>% select(PID, ICAM1_driven_adhesion, mTOR_driven_growth,    Not_ICAM_mTOR_driven_neutral) %>% unique() %>% remove_rownames %>% column_to_rownames("PID") %>% t()
+
+# Function to perform Fisher exact test for each gene
+perform_fisher_test <- function(gene_row, group1_cols, group2_cols) {
+    contingency_table <- matrix(0, nrow = 2, ncol = 2)
+    contingency_table[1, 1] <- sum(gene_row[group1_cols] == 1)
+    contingency_table[1, 2] <- sum(gene_row[group2_cols] == 1)
+    contingency_table[2, 1] <- sum(gene_row[group1_cols] == 0)
+    contingency_table[2, 2] <- sum(gene_row[group2_cols] == 0)
+    test_result <- fisher.test(contingency_table)
+    return(c(odds_ratio = test_result$estimate, p_value = test_result$p.value))
+  }
+  
+fisher_full <- foreach(i = c("immune_activated", "immune_silent", "immune_suppressed"), .combine = "rbind")%do%{
+
+  PID_high <- unique(cur_groups[cur_groups[, i] == "1",]$PID)
+  PID_low <- unique(cur_groups[cur_groups[, i] == "0",]$PID)
+  
+  PID_high <- PID_high[!is.na(PID_high)]
+  PID_low <- PID_low[!is.na(PID_low)]
+  
+  fisher_results <- apply(cur_test, 1, perform_fisher_test, group1_cols = PID_high, group2_cols = PID_low)
+  
+  fisher_results <- as.data.frame(fisher_results)
+  fisher_results <- as.data.frame(t(fisher_results)) %>% rownames_to_column("gene")
+  fisher_results$p_adj <- p.adjust(fisher_results$p_value, method = "BH")
+  fisher_results$category <- i
+  
+  return(fisher_results)
+  }
+
+isGreater <- fisher_full$odds_ratio > 1
+pVal <- log10(fisher_full$p_value)
+pVal[isGreater] <- abs(pVal[isGreater])
+fisher_full$p_out <- pVal
+colnames(fisher_full) <- c("gene", "odds_ratio", "p_value", "p_adj", "category", "p_out")
+```
+
+```{r}
+# FDR at 0.1 with trends
+fisher_full$result <- ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_adj < 0.05, "UP",
+                             ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_value < 0.05, "UP_trend", 
+                                    ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_adj < 0.05, "DOWN", 
+                                           ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_value < 0.05, "DOWN_trend","NOTSIG"))))
+
+## hierarchical clustering on odds_ratio
+cur_df <- fisher_full %>% select(gene, category, odds_ratio) %>% pivot_wider(values_from = odds_ratio, names_from = gene)
+
+# rows 
+dd <- dist(cur_df[2:ncol(cur_df)], method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+row_sorted <- hc$order
+fisher_full$category <- factor(fisher_full$category, levels = cur_df[row_sorted,]$category)
+
+# columns 
+dd <- dist(t(cur_df[2:ncol(cur_df)]), method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+column_sorted <- hc$order
+fisher_full$gene <- factor(fisher_full$gene, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
+
+
+ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_adj)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = fisher_full,shape = 1,aes(size = -log10(p_adj), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+```{r}
+# Patient group info 
+cur_groups <- metadata_selected %>% select(PID, immune_activated, immune_silent, immune_suppressed) %>% unique()
+
+# Other groups
+## Here GOI all 
+cur_test <- metadata_selected %>% select(PID, myeloid_mixed, myeloid_notpresenting, myeloid_presenting) %>% unique() %>% remove_rownames %>% column_to_rownames("PID") %>% t()
+
+# Function to perform Fisher exact test for each gene
+perform_fisher_test <- function(gene_row, group1_cols, group2_cols) {
+    contingency_table <- matrix(0, nrow = 2, ncol = 2)
+    contingency_table[1, 1] <- sum(gene_row[group1_cols] == 1)
+    contingency_table[1, 2] <- sum(gene_row[group2_cols] == 1)
+    contingency_table[2, 1] <- sum(gene_row[group1_cols] == 0)
+    contingency_table[2, 2] <- sum(gene_row[group2_cols] == 0)
+    test_result <- fisher.test(contingency_table)
+    return(c(odds_ratio = test_result$estimate, p_value = test_result$p.value))
+  }
+  
+fisher_full <- foreach(i = c("immune_activated", "immune_silent", "immune_suppressed"), .combine = "rbind")%do%{
+
+  PID_high <- unique(cur_groups[cur_groups[, i] == "1",]$PID)
+  PID_low <- unique(cur_groups[cur_groups[, i] == "0",]$PID)
+  
+  PID_high <- PID_high[!is.na(PID_high)]
+  PID_low <- PID_low[!is.na(PID_low)]
+  
+  fisher_results <- apply(cur_test, 1, perform_fisher_test, group1_cols = PID_high, group2_cols = PID_low)
+  
+  fisher_results <- as.data.frame(fisher_results)
+  fisher_results <- as.data.frame(t(fisher_results)) %>% rownames_to_column("gene")
+  fisher_results$p_adj <- p.adjust(fisher_results$p_value, method = "BH")
+  fisher_results$category <- i
+  
+  return(fisher_results)
+  }
+
+isGreater <- fisher_full$odds_ratio > 1
+pVal <- log10(fisher_full$p_value)
+pVal[isGreater] <- abs(pVal[isGreater])
+fisher_full$p_out <- pVal
+colnames(fisher_full) <- c("gene", "odds_ratio", "p_value", "p_adj", "category", "p_out")
+```
+
+```{r}
+# FDR at 0.1 with trends
+fisher_full$result <- ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_adj < 0.05, "UP",
+                             ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_value < 0.05, "UP_trend", 
+                                    ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_adj < 0.05, "DOWN", 
+                                           ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_value < 0.05, "DOWN_trend","NOTSIG"))))
+
+## hierarchical clustering on odds_ratio
+cur_df <- fisher_full %>% select(gene, category, odds_ratio) %>% pivot_wider(values_from = odds_ratio, names_from = gene)
+
+# rows 
+dd <- dist(cur_df[2:ncol(cur_df)], method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+row_sorted <- hc$order
+fisher_full$category <- factor(fisher_full$category, levels = cur_df[row_sorted,]$category)
+
+# columns 
+dd <- dist(t(cur_df[2:ncol(cur_df)]), method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+column_sorted <- hc$order
+fisher_full$gene <- factor(fisher_full$gene, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
+
+
+ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_adj)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = fisher_full,shape = 1,aes(size = -log10(p_adj), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+```{r}
+# Patient group info 
+cur_groups <- metadata_selected %>% select(PID, immune_activated, immune_silent, immune_suppressed) %>% unique()
+
+# Other groups
+## Here GOI all 
+cur_test <- metadata_selected %>% select(PID, inflamed, excluded, cold) %>% unique() %>% remove_rownames %>% column_to_rownames("PID") %>% t()
+
+# Function to perform Fisher exact test for each gene
+perform_fisher_test <- function(gene_row, group1_cols, group2_cols) {
+    contingency_table <- matrix(0, nrow = 2, ncol = 2)
+    contingency_table[1, 1] <- sum(gene_row[group1_cols] == 1)
+    contingency_table[1, 2] <- sum(gene_row[group2_cols] == 1)
+    contingency_table[2, 1] <- sum(gene_row[group1_cols] == 0)
+    contingency_table[2, 2] <- sum(gene_row[group2_cols] == 0)
+    test_result <- fisher.test(contingency_table)
+    return(c(odds_ratio = test_result$estimate, p_value = test_result$p.value))
+  }
+  
+fisher_full <- foreach(i = c("immune_activated", "immune_silent", "immune_suppressed"), .combine = "rbind")%do%{
+
+  PID_high <- unique(cur_groups[cur_groups[, i] == "1",]$PID)
+  PID_low <- unique(cur_groups[cur_groups[, i] == "0",]$PID)
+  
+  PID_high <- PID_high[!is.na(PID_high)]
+  PID_low <- PID_low[!is.na(PID_low)]
+  
+  fisher_results <- apply(cur_test, 1, perform_fisher_test, group1_cols = PID_high, group2_cols = PID_low)
+  
+  fisher_results <- as.data.frame(fisher_results)
+  fisher_results <- as.data.frame(t(fisher_results)) %>% rownames_to_column("gene")
+  fisher_results$p_adj <- p.adjust(fisher_results$p_value, method = "BH")
+  fisher_results$category <- i
+  
+  return(fisher_results)
+  }
+
+isGreater <- fisher_full$odds_ratio > 1
+pVal <- log10(fisher_full$p_value)
+pVal[isGreater] <- abs(pVal[isGreater])
+fisher_full$p_out <- pVal
+colnames(fisher_full) <- c("gene", "odds_ratio", "p_value", "p_adj", "category", "p_out")
+```
+
+```{r}
+# FDR at 0.1 with trends
+fisher_full$result <- ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_adj < 0.05, "UP",
+                             ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_value < 0.05, "UP_trend", 
+                                    ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_adj < 0.05, "DOWN", 
+                                           ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_value < 0.05, "DOWN_trend","NOTSIG"))))
+
+## hierarchical clustering on odds_ratio
+cur_df <- fisher_full %>% select(gene, category, odds_ratio) %>% pivot_wider(values_from = odds_ratio, names_from = gene)
+
+# rows 
+dd <- dist(cur_df[2:ncol(cur_df)], method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+row_sorted <- hc$order
+fisher_full$category <- factor(fisher_full$category, levels = cur_df[row_sorted,]$category)
+
+# columns 
+dd <- dist(t(cur_df[2:ncol(cur_df)]), method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+column_sorted <- hc$order
+fisher_full$gene <- factor(fisher_full$gene, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
+
+
+ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_adj)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = fisher_full,shape = 1,aes(size = -log10(p_adj), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
 
