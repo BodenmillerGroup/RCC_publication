@@ -5,44 +5,44 @@
 rmarkdown::render("~/GitHub/RCC/IMC/analysis/surv_prediction/SURV_02_SurvPred_BlockForest.Rmd",
                   params = list(
                     blocks_selected = c("IMC"), 
-                    add_all_features = FALSE, # Add all features or selection
+                    add_all_features = TRUE, # Add all features or selection
                     add_surv_time = FALSE, # Add survival time in training
                     add_PL_level = FALSE, # Add PL-info
                     favor_clinical = 0, #Favor specific block in BlockForest - 1 is CLIN (default; 0 would not favor)
-                    run_name = "BF_IMC_exp.rds"),
+                    run_name = "BF_IMC_exp_ALL.rds"),
                   output_file = paste0("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/html/", run_name, ".html")
 )
 
 
-# COMBINED
-rmarkdown::render("~/GitHub/RCC/IMC/analysis/surv_prediction/SURV_02_SurvPred_BlockForest.Rmd",
-                  params = list(
-                    blocks_selected = c("CLIN", "IMC"), #Select which data types to use
-                    add_all_features = FALSE, 
-                    add_surv_time = FALSE,
-                    add_PL_level = FALSE, 
-                    favor_clinical = 1, #Favor specific block in BlockForest - 1 is CLIN (default; 0 would not favor)
-                    run_name = "BF_CLIN_fav_IMC_exp.rds"),
-                  output_file = paste0("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/html/", run_name, ".html")
-)
-
-# COMBINED
-rmarkdown::render("~/GitHub/RCC/IMC/analysis/surv_prediction/SURV_02_SurvPred_BlockForest.Rmd",
-                  params = list(
-                    blocks_selected = c("CLIN", "IMC"), #Select which data types to use
-                    add_all_features = FALSE, 
-                    add_surv_time = FALSE,
-                    add_PL_level = FALSE,
-                    favor_clinical = 2, #Favor specific block in BlockForest - 1 is CLIN (default; 0 would not favor)
-                    run_name = "BF_CLIN_IMC_exp_fav.rds"),
-                  output_file = paste0("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/html/", run_name, ".html")
-)
-
-
-
-
-
-# # T cell
+# # COMBINED
+# rmarkdown::render("~/GitHub/RCC/IMC/analysis/surv_prediction/SURV_02_SurvPred_BlockForest.Rmd",
+#                   params = list(
+#                     blocks_selected = c("CLIN", "IMC"), #Select which data types to use
+#                     add_all_features = FALSE, 
+#                     add_surv_time = FALSE,
+#                     add_PL_level = FALSE, 
+#                     favor_clinical = 1, #Favor specific block in BlockForest - 1 is CLIN (default; 0 would not favor)
+#                     run_name = "BF_CLIN_fav_IMC_exp.rds"),
+#                   output_file = paste0("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/html/", run_name, ".html")
+# )
+# 
+# # COMBINED
+# rmarkdown::render("~/GitHub/RCC/IMC/analysis/surv_prediction/SURV_02_SurvPred_BlockForest.Rmd",
+#                   params = list(
+#                     blocks_selected = c("CLIN", "IMC"), #Select which data types to use
+#                     add_all_features = FALSE, 
+#                     add_surv_time = FALSE,
+#                     add_PL_level = FALSE,
+#                     favor_clinical = 2, #Favor specific block in BlockForest - 1 is CLIN (default; 0 would not favor)
+#                     run_name = "BF_CLIN_IMC_exp_fav.rds"),
+#                   output_file = paste0("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/html/", run_name, ".html")
+# )
+# 
+# 
+# 
+# 
+# 
+# # # T cell
 # ## ALL
 # rmarkdown::render("~/GitHub/RCC/IMC/analysis/surv_prediction/SURV_02_SurvPred_BlockForest.Rmd",
 #                   params = list(
