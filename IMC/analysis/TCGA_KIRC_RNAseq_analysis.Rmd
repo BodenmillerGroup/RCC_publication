@@ -100,7 +100,7 @@ colData(kirc.clean) <- DataFrame(colData(kirc.clean) %>% as.data.frame %>% selec
 
 # Add from UCSC Xena 
 ## Clinical
-clinical_xena <- as.data.frame(read_delim("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/IMC/tumor_panel/data_analysis/data/TCGAKIRC_clinical.txt"))
+clinical_xena <- as.data.frame(read_delim("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/data/TCGAKIRC_clinical.txt"))
 clinical_xena$PID <- clinical_xena$bcr_patient_barcode
 
 ## Add relevant data based on PID
@@ -109,7 +109,7 @@ for (entry in colnames(clinical_xena)[colnames(clinical_xena) %in% c("neoplasm_h
 }
 
 ## Survival
-survival_xena <- as.data.frame(read_delim("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/IMC/tumor_panel/data_analysis/data/TCGAKIRC_survival.txt"))
+survival_xena <- as.data.frame(read_delim("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/data/TCGAKIRC_survival.txt"))
 survival_xena$PID <- survival_xena$`_PATIENT`
 
 survival_xena$status_OS <- survival_xena$OS
@@ -121,14 +121,14 @@ for (entry in colnames(survival_xena)[colnames(survival_xena) %in% c("status_OS"
 
 
 ## Mutation
-mutation_xena <- as.data.frame(read_delim("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/IMC/tumor_panel/data_analysis/data/TCGAKIRC_mutation.txt"))
+mutation_xena <- as.data.frame(read_delim("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/data/TCGAKIRC_mutation.txt"))
 mutation_xena <- mutation_xena %>% pivot_longer(cols = 2:ncol(mutation_xena), names_to = "sample_id", values_to = "mutation")
 mutation_xena$gene <- mutation_xena$sample
 mutation_xena$sample <- NULL
 mutation_xena$PID <- str_split(mutation_xena$sample_id, "-0",simplify = TRUE)[,1]
 
 ## Filter for genes of interest
-GOI_IntOGen <- read_tsv("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/genome/data_analysis/data/IntOGen_DriverGenes_CCRCC.tsv")
+GOI_IntOGen <- read_tsv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/data/IntOGen_DriverGenes_CCRCC.tsv")
 GOI <- GOI_IntOGen$Symbol
 
 mutation_xena <- mutation_xena %>% filter(gene %in% GOI) %>% pivot_wider(names_from = "gene", values_from = "mutation") %>% select(-TGFBR2, -ARHGEF10L, -PTPRK, -RAP1GDS1)
@@ -161,7 +161,7 @@ unique(kirc.clean$ISUP_combined)
 ### Add colors 
 
 ```{r}
-sce <- readRDS("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_immune_05.rds")
+sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_immune_05.rds")
 
 # Add colors to kirc.clean
 metadata(kirc.clean)$colors$ISUP_combined <- metadata(sce)$colors$ISUP_combined
@@ -173,7 +173,7 @@ metadata(kirc.clean)$colors$pT_combined <- metadata(sce)$colors$pT_combined
 Optional: One could also use the median counts per gene 
 
 ```{r}
-PID_select <- colData(kirc.clean) %>% as.data.frame %>% group_by(PID) %>% count() %>% filter(n > 1) %>% pull(PID)
+PID_select <- colData(kirc.clean) %>% as.data.frame %>% group_by(PID) %>% dplyr::count() %>% filter(n > 1) %>% pull(PID)
 # n = 4
 
 kirc.clean <- kirc.clean[,!kirc.clean$PID %in% PID_select]
@@ -184,7 +184,6 @@ kirc.clean <- kirc.clean[,!kirc.clean$PID %in% PID_select]
 library(SummarizedExperiment)
 library(matrixStats)
 
-# Assuming `kirc.clean` is your SummarizedExperiment object
 # Extract patient identifiers
 patient_ids <- colData(kirc.clean)[, "PID"]
 
@@ -268,7 +267,7 @@ ggsurvplot(fit_1,
 ## Save
 
 ```{r}
-saveRDS(kirc.clean,"/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_cleaned.rds")
+saveRDS(kirc.clean,"/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_cleaned.rds")
 ```
 
 
@@ -300,13 +299,13 @@ mat <- assay(vsd)
 ### Save
 
 ```{r}
-saveRDS(res, "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_nodesign.rds") 
-saveRDS(vsd, "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_vsd_nodesign.rds") 
-saveRDS(kirc.clean,"/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_cleaned.rds")
+saveRDS(res, "/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_nodesign.rds") 
+saveRDS(vsd, "/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_vsd_nodesign.rds") 
+saveRDS(kirc.clean,"/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_cleaned.rds")
 
-res <- readRDS("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_nodesign.rds") 
-vsd <- readRDS("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_vsd_nodesign.rds") 
-kirc.clean <- readRDS("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_cleaned.rds")
+res <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_nodesign.rds") 
+vsd <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_vsd_nodesign.rds") 
+kirc.clean <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_cleaned.rds")
 ```
 
 ## ICAM1 and mTOR signature 
@@ -394,7 +393,7 @@ GOI <- c("ICAM1", "MTOR")
 
 GOI_rel <- GOI[GOI %in% rownames(vsd)]
 
-#c("CA9", "KRT19", "GPX4", "HLA-DRA", "NFKB1", "CCND1", "HIF1A", "TP53", "MYC", "ICAM1", "PDK4", "NT5E", "SMARCA4", "PKM", "CD274", "MME", "IDH2", "EPAS1", "AURKA", "HAVCR2", "EGFR", "RPS6", "FLT1", "VHL", "RB1", "MTOR", "SLC2A1", "FH", "GLUD1", "CD44", "VIM")
+#c("CA9", "KRT19", "GPX4", "HLA-DRA", "NFKB1", "CCND1", "HIF1A", "TP53", "MYC", "ICAM1", "PDK4", "NT5E", "SMARCA4", "PKM", "CD274", "MME", "IDH2", "EPAS1", "AURKA", "HAVCR2", "EGFR", "RPS6", "FLT1", "MTOR", "RB1", "MTOR", "SLC2A1", "FH", "GLUD1", "CD44", "VIM")
 
 # Define heatmap based on normalized counts 
 ## Option 1: size-factor normalized counts 
@@ -411,7 +410,7 @@ mat <- df %>% pivot_longer(cols = 2:(ncol(df)-1), names_to = "gene", values_to =
 ht <- mat %>% pivot_wider(names_from = "gene", values_from = "mean") %>% column_to_rownames("PID_group_test")
 
 ## Create row annotation 
-anno <- df %>% select(PID_group_test) %>% group_by(PID_group_test) %>% count()
+anno <- df %>% select(PID_group_test) %>% group_by(PID_group_test) %>% dplyr::count()
 anno <- anno[match(anno$PID_group_test, rownames(ht)),]
 
 ## Print heatmap 
@@ -429,14 +428,14 @@ unique(vsd$PID_group_test)
 
 ## vsd object 
 vsd$PID_ICAM_mTOR_group <- unfactor(vsd$PID_group_test)
-vsd$PID_ICAM_mTOR_group[vsd$PID_ICAM_mTOR_group == "1"] <- "mTOR_driven"
+vsd$PID_ICAM_mTOR_group[vsd$PID_ICAM_mTOR_group == "1"] <- "MTOR_driven"
 vsd$PID_ICAM_mTOR_group[vsd$PID_ICAM_mTOR_group == "2"] <- "Not_ICAM_mTOR_driven"
 vsd$PID_ICAM_mTOR_group[vsd$PID_ICAM_mTOR_group == "3"] <- "ICAM1_driven"
 vsd$PID_ICAM_mTOR_group <- factor(vsd$PID_ICAM_mTOR_group)
 
 ## kirc.clean object 
 kirc.clean$PID_ICAM_mTOR_group <- unfactor(kirc.clean$PID_group_test)
-kirc.clean$PID_ICAM_mTOR_group[kirc.clean$PID_ICAM_mTOR_group == "1"] <- "mTOR_driven"
+kirc.clean$PID_ICAM_mTOR_group[kirc.clean$PID_ICAM_mTOR_group == "1"] <- "MTOR_driven"
 kirc.clean$PID_ICAM_mTOR_group[kirc.clean$PID_ICAM_mTOR_group == "2"] <- "Not_ICAM_mTOR_driven"
 kirc.clean$PID_ICAM_mTOR_group[kirc.clean$PID_ICAM_mTOR_group == "3"] <- "ICAM1_driven"
 kirc.clean$PID_ICAM_mTOR_group <- factor(kirc.clean$PID_ICAM_mTOR_group)
@@ -592,13 +591,14 @@ dittoBarPlot(vsd, var = "ISUP_combined", group.by = "PID_ICAM_mTOR_group",retain
   scale_fill_manual(values = metadata(vsd)$colors$ISUP_combined)+
   ggtitle("")
 
-dittoBarPlot(vsd, var = "BAP1", group.by = "PID_ICAM_mTOR_group",retain.factor.levels = FALSE)+
+dittoBarPlot(vsd[,!is.na(vsd$BAP1)], var = "BAP1", group.by = "PID_ICAM_mTOR_group",retain.factor.levels = FALSE)+
   ggtitle("")
-dittoBarPlot(vsd, var = "PBRM1", group.by = "PID_ICAM_mTOR_group",retain.factor.levels = FALSE)+
+dittoBarPlot(vsd[,!is.na(vsd$PBRM1)], var = "PBRM1", group.by = "PID_ICAM_mTOR_group",retain.factor.levels = FALSE)+
   ggtitle("")
-dittoBarPlot(vsd, var = "SETD2", group.by = "PID_ICAM_mTOR_group",retain.factor.levels = FALSE)+
+
+dittoBarPlot(vsd[,!is.na(vsd$SETD2)], var = "SETD2", group.by = "PID_ICAM_mTOR_group",retain.factor.levels = FALSE)+
   ggtitle("")
-dittoBarPlot(vsd, var = "VHL", group.by = "PID_ICAM_mTOR_group",retain.factor.levels = FALSE)+
+dittoBarPlot(vsd[,!is.na(vsd$VHL)], var = "VHL", group.by = "PID_ICAM_mTOR_group",retain.factor.levels = FALSE)+
   ggtitle("")
 ```
 
@@ -629,7 +629,7 @@ mat <- df %>% pivot_longer(cols = 2:(ncol(df)-1), names_to = "gene", values_to =
 ht <- mat %>% pivot_wider(names_from = "gene", values_from = "mean") %>% column_to_rownames("PID_ICAM_mTOR_group")
 
 ## Create row annotation 
-anno <- df %>% select(PID_ICAM_mTOR_group) %>% group_by(PID_ICAM_mTOR_group) %>% count()
+anno <- df %>% select(PID_ICAM_mTOR_group) %>% group_by(PID_ICAM_mTOR_group) %>% dplyr::count()
 anno <- anno[match(anno$PID_ICAM_mTOR_group, rownames(ht)),]
 
 ## Print heatmap 
@@ -666,7 +666,7 @@ mat <- df %>% pivot_longer(cols = 2:(ncol(df)-1), names_to = "gene", values_to =
 ht <- mat %>% pivot_wider(names_from = "gene", values_from = "mean") %>% column_to_rownames("PID_ICAM_mTOR_group")
 
 ## Create row annotation 
-anno <- df %>% select(PID_ICAM_mTOR_group) %>% group_by(PID_ICAM_mTOR_group) %>% count()
+anno <- df %>% select(PID_ICAM_mTOR_group) %>% group_by(PID_ICAM_mTOR_group) %>% dplyr::count()
 anno <- anno[match(anno$PID_ICAM_mTOR_group, rownames(ht)),]
 
 ## Print heatmap 
@@ -703,7 +703,7 @@ mat <- df %>% pivot_longer(cols = 2:(ncol(df)-1), names_to = "gene", values_to =
 ht <- mat %>% pivot_wider(names_from = "gene", values_from = "mean") %>% column_to_rownames("PID_ICAM_mTOR_group")
 
 ## Create row annotation 
-anno <- df %>% select(PID_ICAM_mTOR_group) %>% group_by(PID_ICAM_mTOR_group) %>% count()
+anno <- df %>% select(PID_ICAM_mTOR_group) %>% group_by(PID_ICAM_mTOR_group) %>% dplyr::count()
 anno <- anno[match(anno$PID_ICAM_mTOR_group, rownames(ht)),]
 
 ## Print heatmap 
@@ -740,7 +740,7 @@ mat <- df %>% pivot_longer(cols = 2:(ncol(df)-1), names_to = "gene", values_to =
 ht <- mat %>% pivot_wider(names_from = "gene", values_from = "mean") %>% column_to_rownames("PID_ICAM_mTOR_group")
 
 ## Create row annotation 
-anno <- df %>% select(PID_ICAM_mTOR_group) %>% group_by(PID_ICAM_mTOR_group) %>% count()
+anno <- df %>% select(PID_ICAM_mTOR_group) %>% group_by(PID_ICAM_mTOR_group) %>% dplyr::count()
 anno <- anno[match(anno$PID_ICAM_mTOR_group, rownames(ht)),]
 
 ## Print heatmap 
@@ -756,7 +756,7 @@ Heatmap(scale(ht), name = "Scaled mean Z-scores")+
 
 ```{r}
 library(readxl)
-HU_SIG <- read_excel("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/IMC/tumor_panel/data_analysis/data/DCCD_SubTables_NatureGenetics.xlsx",sheet = 8, col_names = TRUE)
+HU_SIG <- read_excel("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/data/DCCD_SubTables_NatureGenetics.xlsx",sheet = 8, col_names = TRUE)
 
 # Extract unique signatures genes for each immune subtype
 IM4 <- HU_SIG %>% filter(Immune_subtype == "IM4") %>% pull(Symbol) #De-clear differentiated ccRCC
@@ -910,9 +910,9 @@ Heatmap(ht, name = "Mean signature Z-scores")
 
 ```{r}
 library(readxl)
-rhab_sig <- read_excel("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/IMC/tumor_panel/data_analysis/data/Rhaboid_Sarcomatoid_CancerCell23.xlsx",sheet = 5, col_names = TRUE) %>% pull(gene) %>% unique()
+rhab_sig <- read_excel("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/data/Rhaboid_Sarcomatoid_CancerCell23.xlsx",sheet = 5, col_names = TRUE) %>% pull(gene) %>% unique()
 
-sarc_sig <- read_excel("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/IMC/tumor_panel/data_analysis/data/Rhaboid_Sarcomatoid_CancerCell23.xlsx",sheet = 4, col_names = TRUE) %>% pull(gene) %>% unique()
+sarc_sig <- read_excel("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/data/Rhaboid_Sarcomatoid_CancerCell23.xlsx",sheet = 4, col_names = TRUE) %>% pull(gene) %>% unique()
 ```
 
 Rhabdoid signature 
@@ -988,13 +988,13 @@ Heatmap(ht, name = "Mean signature Z-scores")
 ### Save
 
 ```{r}
-saveRDS(res, "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_nodesign.rds") 
-saveRDS(vsd, "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_vsd_nodesign.rds") 
-saveRDS(kirc.clean,"/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_cleaned.rds")
+saveRDS(res, "/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_nodesign.rds") 
+saveRDS(vsd, "/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_vsd_nodesign.rds") 
+saveRDS(kirc.clean,"/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_cleaned.rds")
 
-# res <- readRDS("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_nodesign.rds") 
-# vsd <- readRDS("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_vsd_nodesign.rds") 
-# kirc.clean <- readRDS("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_cleaned.rds")
+# res <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_nodesign.rds") 
+# vsd <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_vsd_nodesign.rds") 
+# kirc.clean <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_cleaned.rds")
 ```
 
 ## DEA - Combined
@@ -1002,7 +1002,7 @@ saveRDS(kirc.clean,"/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/vali
 ### ICAM1_driven vs. mTOR_driven 
 
 ```{r}
-kirc.clean <- readRDS("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_cleaned.rds")
+kirc.clean <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_cleaned.rds")
 ```
 
 ```{r}
@@ -1035,8 +1035,8 @@ vsd <- DESeq2::vst(dds)
 
 ```{r}
 #Save objects 
-saveRDS(res, "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_ICAM1mTORgroups.rds") 
-saveRDS(vsd, "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_vsd_ICAM1mTORgroups.rds") 
+saveRDS(res, "/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_ICAM1mTORgroups.rds") 
+saveRDS(vsd, "/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_vsd_ICAM1mTORgroups.rds") 
 
 
 # ## Add colors 
@@ -1146,8 +1146,8 @@ rownames(TPM_mat) <- rowData(kirc.clean)$gene_name
 ### MCP-counter 
 
 ```{r}
-#res_MCP <- readRDS("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_MCP.rds") 
-res_MCP <- immunedeconv::deconvolute(TPM_mat, method = "mcp_counter")
+res_MCP <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_MCP.rds") 
+#res_MCP <- immunedeconv::deconvolute(TPM_mat, method = "mcp_counter")
 ```
 
 ```{r}
@@ -1181,14 +1181,14 @@ Heatmap(ht_MCP, name = "mean MCP-Z-score")
 ```
 
 ```{r}
-saveRDS(res_MCP, "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_MCP.rds") 
+saveRDS(res_MCP, "/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_MCP.rds") 
 ```
 
 ### Quanti-Seq 
 
 ```{r}
-#res_quanti <- readRDS("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_quantiseq.rds") 
-res_quanti <- immunedeconv::deconvolute(TPM_mat, method = "quantiseq")
+res_quanti <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_quantiseq.rds") 
+#res_quanti <- immunedeconv::deconvolute(TPM_mat, method = "quantiseq")
 ```
 
 ```{r}
@@ -1223,7 +1223,7 @@ Heatmap(ht_quanti, name = "mean quanti-Z-score")
 ```
 
 ```{r}
-saveRDS(res_quanti, "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_quantiseq.rds") 
+saveRDS(res_quanti, "/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_quantiseq.rds") 
 ```
 
 
@@ -1249,7 +1249,7 @@ ht_mut <- draw(ht_mut)
 col_order_ht <- column_order(ht_mut)
 driver_mat_ordered <- driver_mat[col_order_ht,]
 
-write_csv(driver_mat_ordered, "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_genomic_subtype_anno.csv")
+write_csv(driver_mat_ordered, "/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_genomic_subtype_anno.csv")
 ```
 
 ### Visualization
@@ -1257,7 +1257,7 @@ write_csv(driver_mat_ordered, "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volu
 ```{r}
 # Depends on previous code chunk 
 # Read in after manual genomic subtype annotation based on TracerX criteria
-driver_mat_anno_out <- read_csv("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_genomic_subtype_anno_new.csv")
+driver_mat_anno_out <- read_csv("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_genomic_subtype_anno_new.csv")
 
 # Annotate original dataframe
 driver_mat_anno <- driver_mat
@@ -1295,7 +1295,7 @@ ht_mut_anno <- draw(ht_mut_anno)
 
 ```{r}
 # Save object 
-write_csv(driver_mat_anno, "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_genomic_subtype_final.csv")
+write_csv(driver_mat_anno, "/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_genomic_subtype_final.csv")
 ```
 
 ### Survival testing 
@@ -1339,7 +1339,114 @@ ggsurvplot(fit,
 )
 ```
 
+```{r}
+library(caret)
 
+# Groups
+vsd$ICAM1_driven <- ifelse(vsd$PID_ICAM_mTOR_group == "ICAM1_driven", "1", "0")
+vsd$MTOR_driven <- ifelse(vsd$PID_ICAM_mTOR_group == "MTOR_driven", "1", "0")
+vsd$Not_ICAM_mTOR_driven <- ifelse(vsd$PID_ICAM_mTOR_group == "Not_ICAM_mTOR_driven", "1", "0")
+
+# Genomic subtype
+vsd$VHL_wildtype <- ifelse(vsd$genomic_subtype == "VHL_wildtype", "1", "0")
+vsd$PBRM1_driven <- ifelse(vsd$genomic_subtype == "PBRM1_driven", "1", "0")
+vsd$BAP1_driven <- ifelse(vsd$genomic_subtype == "BAP1_driven", "1", "0")
+vsd$VHL_monodriver <- ifelse(vsd$genomic_subtype == "VHL_monodriver", "1", "0")
+vsd$multiple_drivers <- ifelse(vsd$genomic_subtype == "multiple_drivers", "1", "0")
+```
+
+```{r}
+vsd$genomic_subtype <- driver_mat_anno$genomic_subtype[match(vsd$PID, driver_mat_anno$PID)]
+
+dittoBarPlot(vsd[,!is.na(vsd$genomic_subtype)], var = "genomic_subtype", group.by = "PID_ICAM_mTOR_group",retain.factor.levels = FALSE)+
+  ggtitle("")
+```
+
+
+
+```{r}
+# Patient group info 
+cur_groups <- colData(vsd) %>% as.data.frame%>% select(PID, ICAM1_driven, MTOR_driven, 
+Not_ICAM_mTOR_driven) %>% unique()
+
+# Binary mutation matrix
+## Here GOI clonal 
+cur_mut_clonal <- colData(vsd) %>% as.data.frame %>% select(PID, VHL_wildtype, VHL_monodriver, BAP1_driven, PBRM1_driven, multiple_drivers) %>% unique() %>% remove_rownames %>% column_to_rownames("PID") %>% t()
+
+# Function to perform Fisher exact test for each gene
+perform_fisher_test <- function(gene_row, group1_cols, group2_cols) {
+    contingency_table <- matrix(0, nrow = 2, ncol = 2)
+    contingency_table[1, 1] <- sum(gene_row[group1_cols] == 1)
+    contingency_table[1, 2] <- sum(gene_row[group2_cols] == 1)
+    contingency_table[2, 1] <- sum(gene_row[group1_cols] == 0)
+    contingency_table[2, 2] <- sum(gene_row[group2_cols] == 0)
+    test_result <- fisher.test(contingency_table)
+    return(c(odds_ratio = test_result$estimate, p_value = test_result$p.value))
+  }
+  
+fisher_full <- foreach(i = c("ICAM1_driven", "MTOR_driven", 
+"Not_ICAM_mTOR_driven"), .combine = "rbind")%do%{
+  PID_high <- unique(cur_groups[cur_groups[, i] == "1",]$PID)
+  PID_low <- unique(cur_groups[cur_groups[, i] == "0",]$PID)
+  
+  PID_high <- PID_high[!is.na(PID_high)]
+  PID_low <- PID_low[!is.na(PID_low)]
+  
+  fisher_results <- apply(cur_mut_clonal, 1, perform_fisher_test, group1_cols = PID_high, group2_cols = PID_low)
+  
+  fisher_results <- as.data.frame(fisher_results)
+  fisher_results <- as.data.frame(t(fisher_results)) %>% rownames_to_column("gene")
+  fisher_results$p_adj <- p.adjust(fisher_results$p_value, method = "BH")
+  fisher_results$category <- i
+  
+  return(fisher_results)
+  }
+
+isGreater <- fisher_full$odds_ratio > 1
+pVal <- log10(fisher_full$p_value)
+pVal[isGreater] <- abs(pVal[isGreater])
+fisher_full$p_out <- pVal
+colnames(fisher_full) <- c("gene", "odds_ratio", "p_value", "p_adj", "category", "p_out")
+```
+
+```{r}
+# FDR at 0.1 with trends
+fisher_full$result <- ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_adj < 0.1, "UP",
+                             ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_value < 0.1, "UP_trend", 
+                                    ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_adj < 0.1, "DOWN", 
+                                           ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_value < 0.1, "DOWN_trend","NOTSIG"))))
+
+# Replace INF values with max
+fisher_full$odds_ratio[fisher_full$odds_ratio == Inf] <- max(fisher_full$odds_ratio[!fisher_full$odds_ratio == Inf])
+
+## hierarchical clustering on odds_ratio
+cur_df <- fisher_full %>% select(gene, category, odds_ratio) %>% pivot_wider(values_from = odds_ratio, names_from = gene)
+
+# rows 
+dd <- dist(cur_df[2:ncol(cur_df)], method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+row_sorted <- hc$order
+fisher_full$category <- factor(fisher_full$category, levels = cur_df[row_sorted,]$category)
+
+# columns 
+dd <- dist(t(cur_df[2:ncol(cur_df)]), method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+column_sorted <- hc$order
+fisher_full$gene <- factor(fisher_full$gene, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
+
+
+ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_adj)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = fisher_full,shape = 1,aes(size = -log10(p_adj), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
 
 
 
@@ -2084,7 +2191,7 @@ mat <- df %>% pivot_longer(cols = 2:(ncol(df)-1), names_to = "gene", values_to =
 ht <- mat %>% pivot_wider(names_from = "gene", values_from = "mean") %>% column_to_rownames("KRT5_7_score")
 
 ## Create row annotation 
-anno <- df %>% select(KRT5_7_score) %>% group_by(KRT5_7_score) %>% count()
+anno <- df %>% select(KRT5_7_score) %>% group_by(KRT5_7_score) %>% dplyr::count()
 anno <- anno[match(anno$KRT5_7_score, rownames(ht)),]
 
 ## Print heatmap 
@@ -2118,7 +2225,7 @@ mat <- df %>% pivot_longer(cols = 2:(ncol(df)-1), names_to = "gene", values_to =
 ht <- mat %>% pivot_wider(names_from = "gene", values_from = "mean") %>% column_to_rownames("KRT5_7_score")
 
 ## Create row annotation 
-anno <- df %>% select(KRT5_7_score) %>% group_by(KRT5_7_score) %>% count()
+anno <- df %>% select(KRT5_7_score) %>% group_by(KRT5_7_score) %>% dplyr::count()
 anno <- anno[match(anno$KRT5_7_score, rownames(ht)),]
 
 ## Print heatmap 
@@ -2934,9 +3041,9 @@ ggplot(plot_go_BP, aes(x = reorder(Term,-P.DE), y = -log10(P.DE)))+
 ## 12. Clustering for PID groups
 
 ```{r}
-res <- readRDS("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/TNBC/data_analysis/TCGA_kirc_DESeq_PAM50_res.rds") 
-vsd <- readRDS("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/TNBC/data_analysis/TCGA_kirc_DESeq_VST_full_Combined_VST.rds")
-kirc.clean <- readRDS("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/TNBC/data_analysis/TCGA_kirc_cleaned_full.rds")
+res <- readRDS("/mnt/central_nas/rcc_volume/TNBC/data_analysis/TCGA_kirc_DESeq_PAM50_res.rds") 
+vsd <- readRDS("/mnt/central_nas/rcc_volume/TNBC/data_analysis/TCGA_kirc_DESeq_VST_full_Combined_VST.rds")
+kirc.clean <- readRDS("/mnt/central_nas/rcc_volume/TNBC/data_analysis/TCGA_kirc_cleaned_full.rds")
 #res <- readRDS("/mnt/central_nas/rcc_volume/TNBC/data_analysis/TCGA_kirc_DESeq_PAM50_res.rds") 
 #vsd <- readRDS("/mnt/central_nas/rcc_volume/TNBC/data_analysis/TCGA_kirc_DESeq_VST_full_Combined_VST.rds")
 #kirc.clean <- readRDS("/mnt/central_nas/rcc_volume/TNBC/data_analysis/TCGA_kirc_cleaned_full.rds")
