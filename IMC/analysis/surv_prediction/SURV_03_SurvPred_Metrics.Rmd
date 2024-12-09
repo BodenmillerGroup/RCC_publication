@@ -26,17 +26,17 @@ library(tidyverse)
 ```{r}
 cv_results <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_exp.rds")
 
-cv_results_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_Tcell_expanded.rds")
+cv_results_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC.rds")
 
-cv_results_2 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_MY_expanded.rds")
+cv_results_2 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_exp_ALL.rds")
 
-cv_results_3 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_TU_expanded.rds")
-
-cv_results_4 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_CLIN_fav.rds")
-
-cv_results_5 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_CLIN_fav_IMC_exp.rds")
-
-cv_results_6 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_CLIN_IMC_exp_fav.rds")
+# cv_results_3 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_TU_expanded.rds")
+# 
+# cv_results_4 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_CLIN_fav.rds")
+# 
+# cv_results_5 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_CLIN_fav_IMC_exp.rds")
+# 
+# cv_results_6 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_CLIN_IMC_exp_fav.rds")
  
 # cv_results_7 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_CLIN_fav.rds")
 ```
@@ -45,13 +45,13 @@ cv_results_6 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockFore
 # Create list from results
 # Define the cross-validation results as a list
 cv_results_list <- list(
-  "IMC" = cv_results,
-  "IMC_Tcell" = cv_results_1,
-  "IMC_MY" = cv_results_2,
-  "IMC_TU" = cv_results_3,
-  "CLIN_fav" = cv_results_4,
-  "CLIN_fav_IMC" = cv_results_5,
-  "CLIN_IMC_fav" = cv_results_6#,
+  "IMC_exp" = cv_results,
+  "IMC" = cv_results_1,
+  "IMC_exp_ALL" = cv_results_2#,
+  #"IMC_TU" = cv_results_3,
+  #"CLIN_fav" = cv_results_4,
+  #"CLIN_fav_IMC" = cv_results_5,
+  #"CLIN_IMC_fav" = cv_results_6#,
   #"CLIN_fav" = cv_results_7
 )
 ```
@@ -127,7 +127,7 @@ ggplot(out_ibs, aes(x = reorder(model,-IBS), y = IBS, fill = model))+
   geom_boxplot(outlier.colour = NA)+
   #coord_cartesian(ylim = c(0.5,1))+
   theme_classic()+
-  stat_compare_means(ref.group = "CLIN", paired = FALSE, method = "t.test", method.args = list(alternative = "less", label = "p.format"))+
+  stat_compare_means(ref.group = "IMC_exp_ALL", paired = FALSE, method = "t.test", method.args = list(alternative = "less", label = "p.format"))+
   #stat_compare_means(vjust = 1, method = "anova")+
   #scale_fill_manual(values = col_cv)+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
@@ -161,7 +161,7 @@ ggplot(out_concordance, aes(x = reorder(model,concordance), y = concordance, fil
   geom_boxplot()+
   #coord_cartesian(ylim = c(0.5,1))+
   theme_classic()+
-  stat_compare_means(ref.group = "CLIN_fav", paired = FALSE, method = "t.test", method.args = list(alternative = "greater", label = "p.format"))+
+  stat_compare_means(ref.group = "IMC_exp_ALL", paired = FALSE, method = "t.test", method.args = list(alternative = "greater", label = "p.format"))+
   #stat_compare_means(vjust = 1, method = "anova")+
   #scale_fill_manual(values = col_cv)+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
@@ -359,7 +359,7 @@ HeatmapAnnotation(
 
 ```{r}
 # Extract features with median importance > 0
-ordered_features_out <- ordered_features %>% filter(median > 0.4) %>% pull(feature)      
+ordered_features_out <- ordered_features %>% filter(median > 0.2) %>% pull(feature)      
 top_features <- ordered_features_out
 ```
 
@@ -380,7 +380,7 @@ Heatmap(key_out)
 ```{r}
 library(clValid)
 #Internal measures
-set.seed(2201)
+set.seed(22)
 testCL<- clValid(key_out,nClust = 2:10,clMethods = c("kmeans"),validation="internal",metric="euclidean", method = "ward")
 summary(testCL)
 plot(testCL, legend = FALSE)
@@ -391,13 +391,30 @@ plot(testCL, legend = FALSE)
 #plot(testCL_1, legend = FALSE)
 ```
 
+
+```{r}
+# Perform PCA 
+results_PCA <- prcomp(t(key_out))
+
+PCA_df <- as.data.frame(results_PCA$rotation)
+
+variance_explained <- results_PCA$sdev^2 / sum(results_PCA$sdev^2)
+
+
+ggplot(PCA_df, aes(x = PC1, y = PC2))+
+  geom_point()
+```
+
+
+
+
 ```{r}
 set.seed(22)
 h_select <- Heatmap(key_out, 
-        row_km = 3, #or3
+        row_km = 4, #or3
         clustering_method_rows = "ward.D2",
         clustering_method_columns = "ward.D2",
-        row_km_repeats = 10000)
+        row_km_repeats = 5000)
 
 h_select <- draw(h_select)
 
@@ -419,6 +436,10 @@ metadata_selected$PID_group_test <- anno$PID_group[match(metadata_selected$PID, 
 #### Survival testing
 
 ```{r}
+#metadata_selected$PID_group_test_merg <- ifelse(metadata_selected$PID_group_test %in% c("4", "5"), "4_5", metadata_selected$PID_group_test)
+                             
+#metadata_selected$PID_group_test <- metadata_selected$PID_group_test_merg
+
 surv_out <- metadata_selected %>% select(PID, OS_months, status_OS, PID_group_test) %>% unique()
 
 fit <- survfit(Surv(OS_months, status_OS) ~ PID_group_test, data = surv_out)
@@ -430,7 +451,7 @@ ggsurvplot(fit,
           linetype = "strata", # Change line type by groups
           surv.median.line = "hv", # Specify median survival
           ggtheme = theme_classic(), # Change ggplot2 theme
-          palette = c("#0571B0", "black", "#CA0020","#0571B0","grey"),
+          #palette = c("#0571B0", "black", "#CA0020","#0571B0","grey"),
           conf.int = FALSE
 )
 ```
@@ -554,7 +575,7 @@ library(caret)
 # PID group
 dummy_model <- dummyVars(~ PID_group_test, data = metadata_selected, fullRank = FALSE)
 encoded <- as.data.frame(predict(dummy_model, newdata = metadata_selected))
-colnames(encoded) <- c("immune_activated", "immune_silent", "immune_suppressed")
+colnames(encoded) <- c("immune_suppressed", "immune_presenting","immune_silent", "immune_activated")
 metadata_selected <- cbind(metadata_selected, encoded)
 
 # Tumor groups
@@ -583,7 +604,7 @@ metadata_selected <- cbind(metadata_selected, encoded)
 
 ```{r}
 # Patient group info 
-cur_groups <- metadata_selected %>% select(PID, immune_activated, immune_silent, immune_suppressed) %>% unique()
+cur_groups <- metadata_selected %>% select(PID, immune_activated, immune_presenting, immune_silent, immune_suppressed) %>% unique()
 
 # Other groups
 ## Here GOI all 
@@ -600,7 +621,7 @@ perform_fisher_test <- function(gene_row, group1_cols, group2_cols) {
     return(c(odds_ratio = test_result$estimate, p_value = test_result$p.value))
   }
   
-fisher_full <- foreach(i = c("immune_activated", "immune_silent", "immune_suppressed"), .combine = "rbind")%do%{
+fisher_full <- foreach(i = c("immune_activated", "immune_silent", "immune_suppressed", "immune_presenting"), .combine = "rbind")%do%{
 
   PID_high <- unique(cur_groups[cur_groups[, i] == "1",]$PID)
   PID_low <- unique(cur_groups[cur_groups[, i] == "0",]$PID)
@@ -662,7 +683,7 @@ ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_a
 ```
 ```{r}
 # Patient group info 
-cur_groups <- metadata_selected %>% select(PID, immune_activated, immune_silent, immune_suppressed) %>% unique()
+cur_groups <- metadata_selected %>% select(PID, immune_activated, immune_presenting, immune_silent, immune_suppressed) %>% unique()
 
 # Other groups
 ## Here GOI all 
@@ -679,7 +700,7 @@ perform_fisher_test <- function(gene_row, group1_cols, group2_cols) {
     return(c(odds_ratio = test_result$estimate, p_value = test_result$p.value))
   }
   
-fisher_full <- foreach(i = c("immune_activated", "immune_silent", "immune_suppressed"), .combine = "rbind")%do%{
+fisher_full <- foreach(i = c("immune_activated", "immune_presenting","immune_silent", "immune_suppressed"), .combine = "rbind")%do%{
 
   PID_high <- unique(cur_groups[cur_groups[, i] == "1",]$PID)
   PID_low <- unique(cur_groups[cur_groups[, i] == "0",]$PID)
@@ -742,7 +763,7 @@ ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_a
 
 ```{r}
 # Patient group info 
-cur_groups <- metadata_selected %>% select(PID, immune_activated, immune_silent, immune_suppressed) %>% unique()
+cur_groups <- metadata_selected %>% select(PID, immune_activated, immune_presenting, immune_silent, immune_suppressed) %>% unique()
 
 # Other groups
 ## Here GOI all 
@@ -759,7 +780,7 @@ perform_fisher_test <- function(gene_row, group1_cols, group2_cols) {
     return(c(odds_ratio = test_result$estimate, p_value = test_result$p.value))
   }
   
-fisher_full <- foreach(i = c("immune_activated", "immune_silent", "immune_suppressed"), .combine = "rbind")%do%{
+fisher_full <- foreach(i = c("immune_activated", "immune_presenting","immune_silent", "immune_suppressed"), .combine = "rbind")%do%{
 
   PID_high <- unique(cur_groups[cur_groups[, i] == "1",]$PID)
   PID_low <- unique(cur_groups[cur_groups[, i] == "0",]$PID)
@@ -848,7 +869,7 @@ ggsurvplot(fit,
           linetype = "strata", # Change line type by groups
           surv.median.line = "hv", # Specify median survival
           ggtheme = theme_classic(), # Change ggplot2 theme
-          palette = c("#0571B0", "black", "#CA0020","#0571B0","grey"),
+          #palette = c("#0571B0", "black", "#CA0020","#0571B0","grey"),
           conf.int = FALSE
 )
 ```
@@ -886,7 +907,7 @@ GOI_clonal <- GOI_clonal[!GOI_clonal %in% c("SF3B1_clonal","ELOC_clonal","STAG2_
 
 ```{r}
 # Patient group info 
-cur_groups <- metadata_genome %>% select(PID, immune_activated, immune_silent, immune_suppressed) %>% unique()
+cur_groups <- metadata_genome %>% select(PID, immune_activated, immune_presenting, immune_silent, immune_suppressed) %>% unique()
 
 # Binary mutation matrix
 ## Here GOI clonal 
@@ -903,7 +924,7 @@ perform_fisher_test <- function(gene_row, group1_cols, group2_cols) {
     return(c(odds_ratio = test_result$estimate, p_value = test_result$p.value))
   }
   
-fisher_full <- foreach(i = c("immune_activated", "immune_silent", "immune_suppressed"), .combine = "rbind")%do%{
+fisher_full <- foreach(i = c("immune_activated", "immune_silent", "immune_presenting","immune_suppressed"), .combine = "rbind")%do%{
 
   PID_high <- unique(cur_groups[cur_groups[, i] == "1",]$PID)
   PID_low <- unique(cur_groups[cur_groups[, i] == "0",]$PID)
@@ -980,7 +1001,7 @@ metadata_genome$multiple_drivers <- ifelse(metadata_genome$genomic_subtype == "m
 
 ```{r}
 # Patient group info 
-cur_groups <- metadata_genome %>% select(PID, immune_activated, immune_silent, immune_suppressed) %>% unique()
+cur_groups <- metadata_genome %>% select(PID, immune_activated, immune_presenting, immune_silent, immune_suppressed) %>% unique()
 
 # Binary mutation matrix
 ## Here GOI clonal 
@@ -997,7 +1018,7 @@ perform_fisher_test <- function(gene_row, group1_cols, group2_cols) {
     return(c(odds_ratio = test_result$estimate, p_value = test_result$p.value))
   }
   
-fisher_full <- foreach(i = c("immune_activated", "immune_silent", "immune_suppressed"), .combine = "rbind")%do%{
+fisher_full <- foreach(i = c("immune_activated", "immune_presenting","immune_silent", "immune_suppressed"), .combine = "rbind")%do%{
 
   PID_high <- unique(cur_groups[cur_groups[, i] == "1",]$PID)
   PID_low <- unique(cur_groups[cur_groups[, i] == "0",]$PID)
@@ -1090,7 +1111,7 @@ metadata_metabolome <- cbind(metadata_metabolome, encoded)
 
 ```{r}
 # Patient group info 
-cur_groups <- metadata_metabolome %>% select(PID, immune_activated, immune_silent, immune_suppressed) %>% unique()
+cur_groups <- metadata_metabolome %>% select(PID, immune_activated, immune_presenting, immune_silent, immune_suppressed) %>% unique()
 
 # Binary mutation matrix
 ## Here GOI clonal 
@@ -1107,7 +1128,7 @@ perform_fisher_test <- function(gene_row, group1_cols, group2_cols) {
     return(c(odds_ratio = test_result$estimate, p_value = test_result$p.value))
   }
   
-fisher_full <- foreach(i = c("immune_activated", "immune_silent", "immune_suppressed"), .combine = "rbind")%do%{
+fisher_full <- foreach(i = c("immune_activated", "immune_presenting", "immune_silent", "immune_suppressed"), .combine = "rbind")%do%{
 
   PID_high <- unique(cur_groups[cur_groups[, i] == "1",]$PID)
   PID_low <- unique(cur_groups[cur_groups[, i] == "0",]$PID)
@@ -1170,3 +1191,9 @@ ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_a
   scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))
 ```
+
+
+```{r}
+metadata_selected %>% select(PID, IMC_TU_EXP_VHL, IMC_TU_EXP_ICAM1)
+```
+

@@ -2732,6 +2732,115 @@ tumor_key_features <- tumor_key_features %>% select(PID, status_OS, OS_months, e
 write_csv(tumor_key_features, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/tumor_key_features.csv")
 ```
 
+## Patient categories 
+
+```{r}
+# Add patient categories 
+sce$immune_activated <- metadata_selected$immune_activated[match(sce$PID, metadata_selected$PID)]
+sce$immune_suppressed <- metadata_selected$immune_suppressed[match(sce$PID, metadata_selected$PID)]
+sce$immune_silent <- metadata_selected$immune_silent[match(sce$PID, metadata_selected$PID)]
+sce$immune_presenting <- metadata_selected$immune_presenting[match(sce$PID, metadata_selected$PID)]
+```
+
+
+
+```{r}
+type_markers <- rownames(sce)[rowData(sce)$tumor_cluster]
+type_markers <- c(type_markers, "CA9", "panCK")
+
+DE <- lapply(c("immune_activated", "immune_suppressed", "immune_silent", "immune_presenting"), function(x){
+  
+# 1. Aggregate expression per PID and category 
+df_select <- DataFrame(sce$PID, colData(sce)[,x])
+colnames(df_select) <- c("sce.PID", paste0("sce.",x))
+
+mean_sce <- aggregateAcrossCells(sce,
+                                 ids = df_select,
+                                 statistics = "mean",
+                                 use.assay.type = "min_max")
+# 2. Calculate log2FC 
+## Aggregate per category 
+mean_sce_1 <- aggregateAcrossCells(mean_sce, 
+                     ids = colData(mean_sce)[,paste0("sce.",x)], 
+                     statistics = "mean",
+                     use.assay.type = "min_max")
+
+logFC <- log2(assay(mean_sce_1, "min_max")[,colData(mean_sce_1)[,paste0("sce.",x)] == "1"]/assay(mean_sce_1, "min_max")[,colData(mean_sce_1)[,paste0("sce.",x)] == "0"])
+
+# 3. Calculate p-value (based on t-test)
+exprs <- as.data.frame(t(assay(mean_sce)))
+
+exprs$cat <- colData(mean_sce)[,x]
+
+p_value <- c()
+
+for (i in 1:(length(colnames(exprs))-1)) {
+  t <- t.test(exprs[exprs$cat == "1",i], exprs[exprs$cat == "0",i])
+  p_value[i] <- t$p.value
+}
+
+## Adjust p.value 
+FDR <- p.adjust(p_value, method = "BH")
+names(FDR) <- colnames(exprs)[1:44]
+
+# 4. Plotting df
+data <- as.data.frame(cbind(logFC, FDR))
+data <- data[which(rownames(data) %in% type_markers),]
+data$cat <- x
+
+data <- data %>% rownames_to_column("marker") %>% mutate(result = ifelse(data$logFC > 0.25 & data$FDR < 0.05, "UP",ifelse(data$logFC < -0.25 & data$FDR < 0.05, "DOWN", "NOTSIG"))) %>% 
+  arrange(desc(logFC))
+
+return(data)
+})
+
+data_out <- do.call("rbind", DE)
+
+#data_out$cat <- factor(data_out$cat,levels = c("PDL1_score", "necrose","pT_combined","ISUP_combined"))
+
+## hierarchical markering on logFC
+cur_df <- data_out %>% select(marker, cat, logFC) %>% pivot_wider(values_from = logFC, names_from = marker)
+
+# rows 
+dd <- dist(cur_df[2:ncol(cur_df)], method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+row_sorted <- hc$order
+data_out$cat <- factor(data_out$cat, levels = cur_df[row_sorted,]$cat)
+
+# columns 
+dd <- dist(t(cur_df[2:ncol(cur_df)]), method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+column_sorted <- hc$order
+data_out$marker <- factor(data_out$marker, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
+
+library(ggnewscale)
+ggplot(data_out, aes(x=marker, y = cat,col = logFC, size= -log10(FDR)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8")+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = data_out,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+
+#Volcano plot  
+ggplot(data_out, aes(x = logFC, y = -log10(FDR)))+
+  geom_point(aes(col=marker, size = -log10(FDR)))+
+  geom_label_repel(data = data_out %>% filter(result != "NOTSIG"), aes(label = marker))+
+  facet_wrap(~cat)+
+  #scale_color_manual(values = metadata(sce)$colors$metacluster)+
+  xlab("logFC (pN: 0 vs 1/2/3)")+
+  ylab("-log10(FDR)")+
+  theme_classic()+
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed")+
+  geom_vline(xintercept = 0, linetype = "dashed")+
+  labs(color = "cluster")
+```
+
 ## Progression categories 
 
 ```{r}
