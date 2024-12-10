@@ -194,6 +194,52 @@ stromal_endo_df_scaled <- as.data.frame(scale(stromal_endo_df))
 Heatmap(stromal_endo_df_scaled)
 ```
 ```{r}
-
+library(clValid)
+#Internal measures
+set.seed(22)
+testCL<- clValid(stromal_endo_df_scaled,nClust = 2:10,clMethods = c("kmeans"),validation="internal",metric="euclidean", method = "ward")
+summary(testCL)
+plot(testCL, legend = FALSE)
 ```
+
+```{r}
+set.seed(22)
+h_select <- Heatmap(stromal_endo_df_scaled, 
+        row_km = 5, #or3
+        clustering_method_rows = "ward.D2",
+        clustering_method_columns = "ward.D2",
+        row_km_repeats = 5000)
+
+h_select <- draw(h_select)
+
+## Selection 
+row_order_h_ag <- row_order(h_select)
+
+anno <- stromal_endo_df_scaled %>% rownames_to_column("PID") %>% select(PID)
+anno$PID_group <- NA
+
+library(foreach)
+foreach(i = seq_along(row_order_h_ag))%do%{
+anno$PID_group <- as.factor((ifelse(rownames(anno) %in% row_order_h_ag[[i]], i, anno$PID_group)))
+}
+
+anno$status_OS <- sce_Tcell$status_OS[match(anno$PID, sce_Tcell$PID)]
+anno$OS_months <- sce_Tcell$OS_months[match(anno$PID, sce_Tcell$PID)]
+```
+
+```{r}
+fit <- survfit(Surv(OS_months, status_OS) ~ PID_group, data = anno)
+
+ggsurvplot(fit, 
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          #palette = c("#0571B0", "black", "#CA0020","#0571B0","grey"),
+          conf.int = FALSE
+)
+```
+
 
