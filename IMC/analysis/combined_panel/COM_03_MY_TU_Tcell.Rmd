@@ -1,0 +1,199 @@
+---
+title: "COM_01_Compare"
+author: "Lasse Meyer"
+date: "`r Sys.Date()`"
+output: html_document
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Software requirements
+
+```{r lib, message=FALSE,warning=FALSE}
+#Data containers
+library(SpatialExperiment)
+library(SingleCellExperiment)
+
+#Data processing
+library(scuttle)
+library(scater)
+library(scran)
+library(imcRtools)
+
+#Data visualization
+library(cytomapper)
+library(dittoSeq)
+library(pheatmap)
+library(cowplot)
+library(ComplexHeatmap)
+library(circlize)
+
+#Utilities
+library(tidyverse)
+library(openxlsx)
+library(stringr)
+library(patchwork)
+library(parallel)
+library(BiocParallel)
+library(BiocNeighbors)
+library(BiocSingular)
+library(tiff)
+library(ggrepel)
+library(EBImage)
+library(viridis)
+library(mclust)
+library(Rphenograph)
+library(igraph)
+library(RColorBrewer)
+library(foreach)
+library(clValid)
+library(bluster)
+library(psych)
+library(corrplot)
+library(psych)
+
+#Batch correction
+library(batchelor)
+```
+
+
+# Combined myeloid, Tumor and T cell panel analysis 
+
+## Read in data 
+
+```{r}
+sce_Tcell <- readRDS("/mnt/central_nas_full/users/marllu/T_panel/data_analysis/sce_ccRCC_T_07.rds")
+sce_myeloid <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_07.rds")
+sce_tumor <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_07.rds")
+```
+
+```{r}
+## Panel-specific preprocessing 
+
+# A) T cell panel
+# Adjust naming
+sce_Tcell$celltype_combined <- gsub("-", "_", sce_Tcell$celltype_combined) 
+sce_Tcell$celltype_combined <- gsub("/", "_", sce_Tcell$celltype_combined)
+
+# Adjust tissue area
+PID_area_MY <- colData(sce_myeloid) %>% as.data.frame %>% select(PID, tissue_area) %>% unique() %>% group_by(PID) %>% mutate(mean_tissue_area = mean(tissue_area))
+
+summary(unique(sce_Tcell$PID) %in% unique(sce_myeloid$PID)) #one PID - no tissue area info - TO DO: Re-do CP pipeline for T cell panel
+
+sce_Tcell$tissue_area <- PID_area_MY$mean_tissue_area[match(sce_Tcell$PID, PID_area_MY$PID)]
+```
+
+
+## Mean general phenotypic densities across panels
+
+
+```{r}
+# T cell panel
+PID_celltype_combined <- colData(sce_Tcell) %>% as.data.frame() %>% select(celltype_combined_broad,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+
+PID_area <- colData(sce_Tcell) %>% as.data.frame() %>% select(tissue_area,PID) %>% unique() %>% group_by(PID) %>% mutate(mean_tissue_area = mean(tissue_area))
+
+PID_celltype_combined$mean_tissue_area <- PID_area$mean_tissue_area[match(PID_celltype_combined$PID, PID_area$PID)]
+  
+PID_celltype_combined <- PID_celltype_combined %>% group_by(PID) %>% mutate(density = Freq/(mean_tissue_area/1000000))  
+
+general_dens_Tcell <- PID_celltype_combined
+
+general_dens_Tcell <- general_dens_Tcell %>% pivot_wider(id_cols = "PID",names_from = "celltype_combined_broad",values_from = "density") %>% column_to_rownames("PID")
+
+colnames(general_dens_Tcell) <- paste0("Tcell_", colnames(general_dens_Tcell))
+```
+
+
+```{r}
+sce_tumor$celltype_combined_broad <- ifelse(str_detect(sce_tumor$celltype_combined, "TU"), "tumor", sce_tumor$celltype_combined)
+```
+
+```{r}
+# Tumor panel
+PID_celltype_combined <- colData(sce_tumor) %>% as.data.frame() %>% select(celltype_combined_broad,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+
+PID_area <- colData(sce_tumor) %>% as.data.frame() %>% select(tissue_area,PID) %>% unique() %>% group_by(PID) %>% mutate(mean_tissue_area = mean(tissue_area))
+
+PID_celltype_combined$mean_tissue_area <- PID_area$mean_tissue_area[match(PID_celltype_combined$PID, PID_area$PID)]
+  
+PID_celltype_combined <- PID_celltype_combined %>% group_by(PID) %>% mutate(density = Freq/(mean_tissue_area/1000000))  
+
+general_dens_tumor <- PID_celltype_combined
+
+general_dens_tumor <- general_dens_tumor %>% pivot_wider(id_cols = "PID",names_from = "celltype_combined_broad",values_from = "density") %>% column_to_rownames("PID")
+
+colnames(general_dens_tumor) <- paste0("TU_", colnames(general_dens_tumor))
+
+```
+
+```{r}
+sce_myeloid_old <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_immune_05.rds")
+
+sce_myeloid$celltype_combined_broad <- unfactor(sce_myeloid_old$immune_metacluster[match(sce_myeloid$cell_id, sce_myeloid_old$cell_id)])
+sce_myeloid$celltype_combined_broad[is.na(sce_myeloid$celltype_combined_broad)] <- "tumor"
+sce_myeloid$celltype_combined_broad <- factor(sce_myeloid$celltype_combined_broad)
+```
+
+```{r}
+# myeloid panel
+PID_celltype_combined <- colData(sce_myeloid) %>% as.data.frame() %>% select(celltype_combined_broad,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+
+PID_area <- colData(sce_myeloid) %>% as.data.frame() %>% select(tissue_area,PID) %>% unique() %>% group_by(PID) %>% mutate(mean_tissue_area = mean(tissue_area))
+
+PID_celltype_combined$mean_tissue_area <- PID_area$mean_tissue_area[match(PID_celltype_combined$PID, PID_area$PID)]
+  
+PID_celltype_combined <- PID_celltype_combined %>% group_by(PID) %>% mutate(density = Freq/(mean_tissue_area/1000000))  
+
+general_dens_myeloid <- PID_celltype_combined
+
+general_dens_myeloid <- general_dens_myeloid %>% pivot_wider(id_cols = "PID",names_from = "celltype_combined_broad",values_from = "density") %>% column_to_rownames("PID")
+
+colnames(general_dens_myeloid) <- paste0("MY_", colnames(general_dens_myeloid))
+```
+
+
+```{r}
+dens_df <- data.frame(PID = c(unique(sce_tumor$PID), unique(sce_Tcell$PID), unique(sce_myeloid$PID)) %>% unique())
+
+
+for (entry in colnames(general_dens_myeloid)) {
+  dens_df[,entry] <- general_dens_myeloid[,entry][match(dens_df$PID,rownames(general_dens_myeloid))]
+}
+
+for (entry in colnames(general_dens_tumor)) {
+  dens_df[,entry] <- general_dens_tumor[,entry][match(dens_df$PID,rownames(general_dens_tumor))]
+}
+
+for (entry in colnames(general_dens_Tcell)) {
+  dens_df[,entry] <- general_dens_Tcell[,entry][match(dens_df$PID,rownames(general_dens_Tcell))]
+}
+```
+
+```{r}
+stromal_cols <- colnames(dens_df)[str_detect(colnames(dens_df), "Stromal")]
+stromal_df <- dens_df %>% select(PID, all_of(stromal_cols))
+stromal_df$Stromal <- rowMeans(stromal_df[2:ncol(stromal_df)], na.rm = TRUE)
+
+endothelial_cols <- colnames(dens_df)[str_detect(colnames(dens_df), "Endothelial")]
+endothelial_df <- dens_df %>% select(PID, all_of(endothelial_cols))
+endothelial_df$Endothelial <- rowMeans(endothelial_df[2:ncol(endothelial_df)], na.rm = TRUE)
+
+
+stromal_endo_df <- stromal_df %>% select(PID, Stromal)
+stromal_endo_df$Endothelial <- endothelial_df$Endothelial[match(stromal_endo_df$PID, stromal_df$PID)]
+
+stromal_endo_df <- stromal_endo_df %>% column_to_rownames("PID")
+
+stromal_endo_df_scaled <- as.data.frame(scale(stromal_endo_df))
+
+Heatmap(stromal_endo_df_scaled)
+```
+```{r}
+
+```
+
