@@ -218,6 +218,246 @@ saveRDS(metadata_selected_fil, "/mnt/central_nas/rcc_volume/RCC/survival_pred/Bl
 
 ## IMC data 
 
+### General - Across panel 
+
+```{r}
+general_key <- read_csv("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/general_key_features.csv")
+```
+
+```{r}
+paste0("Number of EXP features before preprocessing: ", sum(str_count(colnames(general_key), "EXP_")))
+paste0("Number of MC features before preprocessing: ", sum(str_count(colnames(general_key), "MC_")))
+paste0("Number of D features before preprocessing: ", sum(str_count(colnames(general_key), "D_")))
+paste0("Number of INT features before preprocessing: ", sum(str_count(colnames(general_key), "INT_")))
+```
+
+#### Preprocessing 
+
+```{r}
+# Preprocessing as suggested by Boeva (Cell Reports Methods)
+# Step 1: Only keep columns with less than 20% of NA values 
+## This often removes INT values
+remove <- colnames(general_key)[colMeans(is.na(general_key)) > 0.3]
+remove <- remove[!remove %in% c("status_OS", "OS_months")]
+
+general_selected <- general_key %>% select(-remove)
+
+# Step 2: Missing numerical values can be imputed (Median across non-missing samples OR minimum for INT values)
+summary(is.na(general_selected))
+
+general_selected[] <- lapply(colnames(general_selected), function(colname) {
+  if (colname %in% c("status_OS", "OS_months")) {
+    return(general_selected[[colname]])  
+  } else {
+    # If column has NA and is not excluded, replace NA with column minimum
+    col <- general_selected[[colname]]
+    if (any(is.na(col)) & str_detect(colname, "INT")) {
+      col[is.na(col)] <- min(col, na.rm = TRUE)
+    }
+    return(col)
+  }
+})
+
+summary(is.na(general_selected))
+
+# Add specific prefix
+colnames(general_selected)[4:ncol(general_selected)] <- paste0("IMC_GEN_",colnames(general_selected)[4:ncol(general_selected)])
+general_selected <- as.data.frame(general_selected)
+```
+
+#### Encoding 
+
+```{r}
+# Perform preprocessing
+general_selected[] <- lapply(names(general_selected), function(col_name) {
+  if (col_name %in% c("PID", "status_OS", "OS_months")) {
+    return(general_selected[[col_name]])  # Return the column as is
+  } else {
+    if (is.numeric(general_selected[[col_name]])) {
+      return(as.vector(scale(general_selected[[col_name]]))) # Scale numerical columns (Z-score)
+    } 
+    else if (is.character(general_selected[[col_name]])) {
+      return(as.factor(general_selected[[col_name]])) # Convert character columns to factors
+    } else {
+      return(general_selected[[col_name]])
+    }
+  }
+})
+
+str(general_selected)
+```
+
+
+#### Correlation reduction 
+
+```{r, fig.width=20, fig.height=20}
+# 1. Check statistical association of numerical variables
+cor_test <- general_selected %>% select(where(is.numeric), -status_OS,-OS_months)
+
+if(dim(cor_test)[2] > 1) {
+  cor_matrix <- cor(cor_test, method = "pearson")
+  
+  corrplot(
+    cor_matrix,
+    method = "shade",
+    col = brewer.pal(n = 8, name = "RdBu"),
+    type = "upper",
+    order = "hclust",
+    hclust.method = "ward.D2",
+    addCoef.col = "black",
+    addCoefasPercent = F,
+    tl.col = "black",
+    tl.srt = 40,
+    diag = FALSE
+  )
+  
+  # Identify pairs with cor > 0.9
+  high_corr_pairs <-
+    which(abs(cor_matrix) > 0.9 &
+            lower.tri(cor_matrix), arr.ind = TRUE)
+  high_corr_pairs_df <- data.frame(
+    Var1 = rownames(cor_matrix)[high_corr_pairs[, 1]],
+    Var2 = colnames(cor_matrix)[high_corr_pairs[, 2]],
+    Correlation = cor_matrix[high_corr_pairs]
+  )
+}
+
+high_corr_pairs_df
+```
+
+```{r}
+# Remove specific pairs 
+removed_numeric <- NULL
+
+general_selected_fil <- general_selected %>% select(-all_of(removed_numeric))
+
+str(general_selected_fil)
+```
+
+```{r}
+# 2. Check statistical association of categorical variables
+chi_test <- colnames(general_selected %>% select(where(is.factor), -status_OS,-OS_months))
+
+if(length(chi_test) > 1) {
+  out_p <- list()
+  
+  for (i in chi_test) {
+    for (y in chi_test) {
+      if (i != y) {
+        out <-
+          general_selected %>% select(PID, any_of(i), any_of(y)) %>% unique %>% select(-PID) %>% group_by(all_of(i)) %>% table() %>%
+          as.data.frame
+        cur_test <-
+          out %>% pivot_wider(
+            names_from = i,
+            id_cols = y,
+            values_from = Freq
+          ) %>% column_to_rownames(y)
+        cur_test_out <- chisq.test(cur_test)
+        out_p[paste0(i, "_", y)] <- cur_test_out$p.value
+      }
+    }
+  }
+  
+  # FDR-correct p-values
+  p_values <- unlist(out_p)
+  adjusted_p_values <- p.adjust(p_values, method = "BH")
+  out_p_adjust <- as.list(adjusted_p_values)
+  
+  # Extract direct comparison p-values
+  direct_comp <-
+    matrix(
+      NA,
+      nrow = length(chi_test),
+      ncol = length(chi_test),
+      dimnames = list(chi_test, chi_test)
+    )
+  
+  for (i in chi_test) {
+    for (j in chi_test) {
+      if (i == j) {
+        direct_comp[i, j] <- 1
+      } else {
+        comp_name <- paste(i, j, sep = "_")
+        rev_comp_name <- paste(j, i, sep = "_")
+        if (comp_name %in% names(out_p_adjust)) {
+          direct_comp[i, j] <- out_p_adjust[[comp_name]]
+        } else if (rev_comp_name %in% names(out_p_adjust)) {
+          direct_comp[i, j] <- out_p_adjust[[rev_comp_name]]
+        }
+      }
+    }
+  }
+  
+  # Print the square matrix
+  corrplot(
+    -log10(direct_comp),
+    is.corr = FALSE,
+    diag = FALSE,
+    tl.col = "black",
+    type = "upper",
+    col = COL1("Blues", 100),
+    method = "shade",
+    bg = "lightgrey",
+    addCoef.col = "black"
+  )
+  
+  
+  # Identify pairs with
+  high_corr_pairs <-
+    which(abs(direct_comp) < 0.01 &
+            lower.tri(direct_comp), arr.ind = TRUE)
+  
+  high_corr_pairs_df <- data.frame(
+    Var1 = rownames(direct_comp)[high_corr_pairs[, 1]],
+    Var2 = colnames(direct_comp)[high_corr_pairs[, 2]],
+    Correlation = direct_comp[high_corr_pairs]
+  )
+}
+
+```
+
+```{r}
+# Remove specific pairs 
+removed_cat <- NULL
+
+general_selected_fil <- general_selected_fil %>% select(-all_of(removed_cat))
+
+str(general_selected_fil)
+```
+
+```{r}
+paste0("Number of EXP features after preprocessing: ", sum(str_count(colnames(general_selected_fil), "_EXP_")))
+paste0("Number of MC features after preprocessing: ", sum(str_count(colnames(general_selected_fil), "_MC_")))
+paste0("Number of D features after preprocessing: ", sum(str_count(colnames(general_selected_fil), "_D_")))
+paste0("Number of INT features after preprocessing: ", sum(str_count(colnames(general_selected_fil), "_INT_")))
+```
+
+#### Save and add
+
+```{r}
+saveRDS(general_selected_fil, "/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/general_key_features_processed.rds")
+```
+
+Add to metadata selected fil
+
+```{r}
+general_selected_fil <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/general_key_features_processed.rds")
+metadata_selected_fil <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/key_features_processed.rds")
+```
+
+```{r}
+for (entry in colnames(general_selected_fil)[4:ncol(general_selected_fil)]) {
+  metadata_selected_fil[,entry] <- general_selected_fil[,entry][match(metadata_selected_fil[,"PID"],general_selected_fil[,"PID"])]
+}
+
+str(metadata_selected_fil)
+```
+
+```{r}
+saveRDS(metadata_selected_fil, "/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/key_features_processed.rds")
+```
+
 ### Tumor panel 
 
 ```{r}
@@ -969,6 +1209,7 @@ paste0("Number of patients after preprocessing: ", length(rownames(metadata_sele
 paste0("Number of CLIN features after preprocessing: ", sum(str_count(colnames(metadata_selected_fil_cc), "CLIN_")))
 paste0("Number of IMC features after preprocessing: ", sum(str_count(colnames(metadata_selected_fil_cc), "IMC_")))
 
+paste0("Number of IMC (General) features after preprocessing: ", sum(str_count(colnames(metadata_selected_fil_cc), "IMC_GEN_")))
 paste0("Number of IMC (Tumor) features after preprocessing: ", sum(str_count(colnames(metadata_selected_fil_cc), "IMC_TU")))
 paste0("Number of IMC (Myeloid) features after preprocessing: ", sum(str_count(colnames(metadata_selected_fil_cc), "IMC_MY")))
 paste0("Number of IMC (T cell) features after preprocessing: ", sum(str_count(colnames(metadata_selected_fil_cc), "IMC_T_")))

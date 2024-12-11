@@ -56,7 +56,7 @@ CNV_QC$sample_type <- str_split(CNV_QC$sample, "_", simplify = TRUE)[,3]
 CNV_QC$PID <- ID_match$PID[match(CNV_QC$PID_old,ID_match$Label)]
 
 # Filter out patients, where one/both tumor samples may have cross-contamination
-QC_out <- CNV_QC %>% filter(sample_type != "NO" & cross_contamination == "maybe") %>% count(PID) %>% filter(n > 1) %>% pull(PID)
+QC_out <- CNV_QC %>% filter(sample_type != "NO" & cross_contamination == "maybe") %>% dplyr::count(PID) %>% filter(n > 1) %>% pull(PID)
 QC_out_fine <- CNV_QC %>% filter(sample_type != "NO" & cross_contamination == "maybe") %>% pull(PID)
 
 ### NOTE: These patients do not seem to have concerning patterns and will be retained
@@ -115,12 +115,12 @@ GOI <- c(GOI, "ELOC")
 ```{r}
 CNV_genes_sig <- CNV_genes %>% filter(type %in% c("AMPLIFICATION","DELETION"))
 
-CNV_genes_count <- CNV_genes_sig %>% group_by(gene.symbol) %>% count() %>% arrange(desc(n))
+CNV_genes_count <- CNV_genes_sig %>% group_by(gene.symbol) %>% dplyr::count() %>% arrange(desc(n))
 
 # Filter for GOI
 CNV_GOI <- CNV_genes_sig %>% filter(gene.symbol %in% GOI)
 
-CNV_GOI_count <- CNV_GOI %>% group_by(gene.symbol) %>% count() %>% arrange(desc(n))
+CNV_genes_count <- CNV_GOI %>% group_by(gene.symbol) %>% dplyr::count() %>% arrange(desc(n))
 ```
 
 
@@ -204,21 +204,43 @@ CNV_arm_sum$PID <- CNV_arm_full$PID[match(CNV_arm_sum$Sampleid, CNV_arm_full$Sam
 ```{r}
 # Clonality annotation per PID
 ### If event is found in both samples - "Clonal" - Otherwise "Subclonal"
+library(dplyr)
 CNV_arm_sum_out <- CNV_arm_sum %>%
   group_by(PID, chr_arm) %>%
   summarise(
-    type_summarized = if(n_distinct(chr_arm_type) == 1) first(chr_arm_type) else paste(unique(chr_arm_type)[order(unique(chr_arm_type))], collapse = "_"),
+    type_summarized = if(n_distinct(chr_arm_type) == 1) dplyr::first(chr_arm_type) else paste(unique(chr_arm_type)[order(unique(chr_arm_type))], collapse = "_"),
     clonality = if(n_distinct(chr_arm_type) == 1) "clonal" else "subclonal"
   ) %>%
   ungroup()
 
-# count types
-CNV_arm_sum_out %>% group_by(type_summarized) %>% count()
+# dplyr::count types
+
+CNV_arm_sum_out %>% group_by(type_summarized) %>% dplyr::count()
 ```
 
 ### Add metadata 
 
 ```{r}
+# Re-group subtypes 
+patient_meta$subtype_combined <- ifelse(patient_meta$subtype %in% c("clear_cell_RCC", "papillary_RCC", "chromophobe_RCC"), patient_meta$subtype, "other")
+patient_meta$subtype_combined[patient_meta$subtype_combined == "clear_cell_RCC"] <- "ccRCC"
+patient_meta$subtype_combined[patient_meta$subtype_combined == "papillary_RCC"] <- "pRCC"
+patient_meta$subtype_combined[patient_meta$subtype_combined == "chromophobe_RCC"] <- "chrRCC"
+
+## Update survival censoring
+patient_meta$status_OS <- ifelse(patient_meta$censor_dead_0_alive_1 == 1, 0, 
+       ifelse(patient_meta$censor_dead_0_alive_1 == 0, 1, patient_meta$censor_dead_0_alive_1))
+
+patient_meta$OS_months <- patient_meta$survival_months
+
+## Combine relevant disease progression categories and set colors
+### Tumor stage
+patient_meta$pT_combined <- ifelse(patient_meta$pT_simple %in% c("1","2"),"1/2", ifelse(patient_meta$pT_simple %in% c("3","4"), "3/4", patient_meta$pT_simple))
+
+### ISUP grade 
+patient_meta$ISUP_combined <- ifelse(patient_meta$ISUP %in% c("1","2"),"1/2", ifelse(patient_meta$ISUP %in% c("3","4"), "3/4", patient_meta$ISUP))
+patient_meta$lymphocytes_combined <- ifelse(patient_meta$lymphocytes %in% c("1","2"),"1/2", patient_meta$lymphocytes)
+
 # Add relevant metadata to CNV_arm_sum_out
 meta_add <- colnames(patient_meta)[colnames(patient_meta) %in% c("TMA","subtype_combined", "gender", "age", "age_bin", "necrose", "lymphocytes", "BAP1_IHC", "PBRM1_IHC", "H3K36me_IHC", "status_OS", "OS_months", "tar_sequencing_data", "pT_combined", "ISUP_combined")]
 
@@ -232,6 +254,12 @@ for (entry in meta_add) {
 CNV_arm_sum_out$necrose <- as.character(CNV_arm_sum_out$necrose)
 ```
 
+```{r}
+# From IMC analysis: PDL1 score plus color assignments 
+sce <- readRDS("/mnt/central_nas_full/users/marllu/T_panel/data_analysis/sce_04_ccRCC.rds")
+
+CNV_arm_sum_out$PDL1_score <- sce$PDL1_score[match(CNV_arm_sum_out$PID, sce$PID)]
+```
 
 ```{r}
 # Select ccRCC cases
@@ -250,21 +278,55 @@ write_csv(CNV_arm_sum_out, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis
 #CNV_arm_sum_out <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/CNV_armlevel_combined_consensus.csv")
 ```
 
+### Arms of interest 
+
+Subset CLONAL arm-level events of interest based on TracerX renal events and frequent events.
+
+```{r}
+#write_csv(CNV_arm_sum_out, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/CNV_armlevel_combined_consensus.csv")
+CNV_arm_sum_out <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/CNV_armlevel_combined_consensus.csv")
+```
+
+Adding arm frequent arm events not considered in TracerX:
+gain: 5p, 7p
+loss: 9q, 13q, 18q
+
+```{r}
+CNV_arm_sum_out_sub <- CNV_arm_sum_out %>%   filter(
+    (chr_arm %in% c("chr1_q", "chr2_q", "chr5_q", "chr7_q", "chr8_q", "chr12_p", "chr20_q", "chr5_p", "chr7_p") &
+     type_summarized %in% c("gain", "gain_neutral")) |
+    (chr_arm %in% c("chr1_p", "chr3_p", "chr4_q", "chr6_q", "chr8_p", "chr9_p", "chr14_q", "chr9_q", "chr13_q", "chr18_q") &
+     type_summarized %in% c("loss", "loss_neutral"))
+  )
+```
+
+### Save 
+
+```{r}
+# Save
+write_csv(CNV_arm_sum_out_sub,"/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/CNV_key_armlevel_combined_consensus.csv")
+```
+
 
 ### Visualization 
+
+```{r}
+# Here AOI
+CNV_arm_sum_out <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/CNV_key_armlevel_combined_consensus.csv")
+```
 
 #### General 
 
 Clonal events 
 
 ```{r}
-n_PID <- length(unique(CNV_arm_sum_out$PID))
+n_PID <- length(unique(CNV_QC$PID))
 
 # Loss
-loss_total <- CNV_arm_sum_out %>% filter(type_summarized == "loss") %>% group_by(chr_arm) %>% count() %>% arrange(desc(n)) %>% mutate(fra = n/n_PID, cat = "loss")
+loss_total <- CNV_arm_sum_out %>% filter(type_summarized == "loss") %>% group_by(chr_arm) %>% dplyr::count() %>% arrange(desc(n)) %>% mutate(fra = n/n_PID, cat = "loss")
 
 # Gain
-gain_total <- CNV_arm_sum_out %>% filter(type_summarized == "gain") %>% group_by(chr_arm) %>% count() %>% arrange(desc(n)) %>% mutate(fra = n/n_PID, cat = "gain")
+gain_total <- CNV_arm_sum_out %>% filter(type_summarized == "gain") %>% group_by(chr_arm) %>% dplyr::count() %>% arrange(desc(n)) %>% mutate(fra = n/n_PID, cat = "gain")
 
 
 ggplot(loss_total, aes(x=reorder(chr_arm,-fra), y=fra, fill = cat))+
@@ -299,12 +361,12 @@ All events
 n_PID <- length(unique(CNV_arm_sum_out$PID))
 
 # Loss
-loss_total <- CNV_arm_sum_out %>% filter(type_summarized %in% c("loss", "loss_neutral")) %>% group_by(type_summarized, chr_arm) %>% count() %>% arrange(desc(n)) %>% mutate(fra = n/n_PID, cat = "loss")
+loss_total <- CNV_arm_sum_out %>% filter(type_summarized %in% c("loss", "loss_neutral")) %>% group_by(type_summarized, chr_arm) %>% dplyr::count() %>% arrange(desc(n)) %>% mutate(fra = n/n_PID, cat = "loss")
 c("loss", "loss_neutral")
 loss_total$type_summarized <- factor(loss_total$type_summarized, levels = c("loss_neutral", "loss"))
 
 # Gain
-gain_total <- CNV_arm_sum_out %>% filter(type_summarized %in% c("gain", "gain_neutral")) %>% group_by(type_summarized, chr_arm) %>% count() %>% arrange(desc(n)) %>% mutate(fra = n/n_PID, cat = "gain")
+gain_total <- CNV_arm_sum_out %>% filter(type_summarized %in% c("gain", "gain_neutral")) %>% group_by(type_summarized, chr_arm) %>% dplyr::count() %>% arrange(desc(n)) %>% mutate(fra = n/n_PID, cat = "gain")
 gain_total$type_summarized <- factor(gain_total$type_summarized, levels = c("gain_neutral", "gain"))
 
 
@@ -328,6 +390,7 @@ ggplot(gain_total, aes(x=reorder(chr_arm,-fra), y=fra, fill = type_summarized))+
 
 ```{r}
 out_heat <- CNV_arm_sum_out %>% pivot_wider(id_cols = PID, values_from = type_summarized, names_from = chr_arm) %>% column_to_rownames("PID")
+out_heat[is.na(out_heat)] <- "neutral"
 
 out_heat_bin <- ifelse(out_heat == "gain", 1, ifelse(out_heat == "loss", -1, 0))
 out_heat_bin_minor <- ifelse(out_heat == "gain", 1, ifelse(out_heat == "loss", -1, ifelse(out_heat == "gain_neutral", 0.5, ifelse(out_heat == "loss_neutral", -0.5,0))))
@@ -639,9 +702,6 @@ draw(ht_all)
 ```
 
 
-
-
-
 ## 4. Utility code
 
 ```{r}
@@ -660,9 +720,4 @@ library(rtracklayer)
 
 cytoband <- getTable(ucscTableQuery(session, table = "cytoBand"))
 ```
-
-
-## TO DO: 
-
-- Add 02_CNV_General_Compare and 02_CNV_Myeloid_Compare - For general and myeloid-specific comparisons of arm-level events across categories 
 

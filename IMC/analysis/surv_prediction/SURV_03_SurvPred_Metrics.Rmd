@@ -24,20 +24,22 @@ library(tidyverse)
 ## Read results from different models 
 
 ```{r}
-cv_results <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_exp.rds")
+cv_results <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_GEN_exp_ALL.rds")
 
-cv_results_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC.rds")
+cv_results_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_exp.rds")
 
-cv_results_2 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_exp_ALL.rds")
+cv_results_2 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_exp_gen.rds")
 
-# cv_results_3 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_TU_expanded.rds")
-# 
-# cv_results_4 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_CLIN_fav.rds")
-# 
-# cv_results_5 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_CLIN_fav_IMC_exp.rds")
-# 
-# cv_results_6 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_CLIN_IMC_exp_fav.rds")
- 
+cv_results_3 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_TU_expanded.rds")
+
+cv_results_4 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_MY_expanded.rds")
+
+cv_results_5 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_Tcell_expanded.rds")
+
+cv_results_6 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_GEN_exp.rds")
+
+cv_results_7 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_exp_ALL.rds")
+
 # cv_results_7 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_CLIN_fav.rds")
 ```
 
@@ -45,14 +47,14 @@ cv_results_2 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockFore
 # Create list from results
 # Define the cross-validation results as a list
 cv_results_list <- list(
-  "IMC_exp" = cv_results,
-  "IMC" = cv_results_1,
-  "IMC_exp_ALL" = cv_results_2#,
-  #"IMC_TU" = cv_results_3,
-  #"CLIN_fav" = cv_results_4,
-  #"CLIN_fav_IMC" = cv_results_5,
-  #"CLIN_IMC_fav" = cv_results_6#,
-  #"CLIN_fav" = cv_results_7
+  "IMC_ALL_gen" = cv_results,
+  "IMC_exp" = cv_results_1,
+  "IMC_exp_gen" = cv_results_2,
+  "IMC_TU" = cv_results_3,
+  "IMC_MY" = cv_results_4,
+  "IMC_Tcell" = cv_results_5,
+  "IMC_Gen" = cv_results_6,
+  "IMC_ALL" = cv_results_7
 )
 ```
 
@@ -127,7 +129,7 @@ ggplot(out_ibs, aes(x = reorder(model,-IBS), y = IBS, fill = model))+
   geom_boxplot(outlier.colour = NA)+
   #coord_cartesian(ylim = c(0.5,1))+
   theme_classic()+
-  stat_compare_means(ref.group = "IMC_exp_ALL", paired = FALSE, method = "t.test", method.args = list(alternative = "less", label = "p.format"))+
+  stat_compare_means(ref.group = "IMC_ALL", paired = FALSE, method = "t.test", method.args = list(alternative = "less", label = "p.format"))+
   #stat_compare_means(vjust = 1, method = "anova")+
   #scale_fill_manual(values = col_cv)+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
@@ -161,7 +163,7 @@ ggplot(out_concordance, aes(x = reorder(model,concordance), y = concordance, fil
   geom_boxplot()+
   #coord_cartesian(ylim = c(0.5,1))+
   theme_classic()+
-  stat_compare_means(ref.group = "IMC_exp_ALL", paired = FALSE, method = "t.test", method.args = list(alternative = "greater", label = "p.format"))+
+  stat_compare_means(ref.group = "IMC_ALL", paired = FALSE, method = "t.test", method.args = list(alternative = "greater", label = "p.format"))+
   #stat_compare_means(vjust = 1, method = "anova")+
   #scale_fill_manual(values = col_cv)+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
@@ -240,7 +242,7 @@ ggsurvplot(fit,
 ##### Feature-level
 
 ```{r}
-variable_importance <- sapply(cv_results, function(res) {
+variable_importance <- sapply(cv_results_1, function(res) {
   res$variable_importance
 })
 
@@ -361,6 +363,8 @@ HeatmapAnnotation(
 # Extract features with median importance > 0
 ordered_features_out <- ordered_features %>% filter(median > 0.2) %>% pull(feature)      
 top_features <- ordered_features_out
+
+# > 0.2 for IMC_exp
 ```
 
 
@@ -391,23 +395,6 @@ plot(testCL, legend = FALSE)
 #plot(testCL_1, legend = FALSE)
 ```
 
-
-```{r}
-# Perform PCA 
-results_PCA <- prcomp(t(key_out))
-
-PCA_df <- as.data.frame(results_PCA$rotation)
-
-variance_explained <- results_PCA$sdev^2 / sum(results_PCA$sdev^2)
-
-
-ggplot(PCA_df, aes(x = PC1, y = PC2))+
-  geom_point()
-```
-
-
-
-
 ```{r}
 set.seed(22)
 h_select <- Heatmap(key_out, 
@@ -415,6 +402,8 @@ h_select <- Heatmap(key_out,
         clustering_method_rows = "ward.D2",
         clustering_method_columns = "ward.D2",
         row_km_repeats = 5000)
+
+#IMC_exp: 22, 4, 5000
 
 h_select <- draw(h_select)
 
@@ -849,7 +838,139 @@ mut_per_PID <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/mu
   
 ## 1B: Genomic subtypes 
 genomic_sub <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/genomic_subtype_anno_final.csv")
+
+## 1C: CNV Arm-level events
+CNV_arm_sum_out <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/CNV_key_armlevel_combined_consensus.csv")
+CNV_arm_sum_out$chr_arm_type <- paste0(CNV_arm_sum_out$chr_arm, "_", CNV_arm_sum_out$type_summarized)
+
+CNV_per_PID <- CNV_arm_sum_out %>% mutate(binary = ifelse(type_summarized %in% c("gain", "loss"), 1, 0)) %>% filter(clonality == "clonal") %>% pivot_wider(id_cols = PID, names_from = chr_arm_type, values_from = binary)
+CNV_per_PID[is.na(CNV_per_PID)] <- 0
 ```
+
+
+```{r}
+# Subset for PID for which we have genomics data
+metadata_CNV <- metadata_selected[metadata_selected$PID %in% CNV_per_PID$PID,]
+```
+
+```{r}
+surv_out <- metadata_CNV %>% select(PID, OS_months, status_OS, PID_group_test) %>% unique()
+
+fit <- survfit(Surv(OS_months, status_OS) ~ PID_group_test, data = surv_out)
+
+ggsurvplot(fit, 
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          #palette = c("#0571B0", "black", "#CA0020","#0571B0","grey"),
+          conf.int = FALSE
+)
+```
+
+```{r}
+# Add relevant metadata to sce 
+CNV_per_PID <- as.data.frame(CNV_per_PID)
+
+# Mutation encoding 
+## Only clonal 
+CNV_per_PID_clonal <- CNV_per_PID
+CNV_per_PID_clonal[2:ncol(CNV_per_PID_clonal)] <- ifelse(CNV_per_PID_clonal[2:ncol(CNV_per_PID_clonal)] >= 1, 1,0)
+colnames(CNV_per_PID_clonal)[2:ncol(CNV_per_PID_clonal)] <- paste0(colnames(CNV_per_PID_clonal)[2:ncol(CNV_per_PID_clonal)], "_clonal")
+GOI_clonal <- colnames(CNV_per_PID_clonal %>% select(-PID))
+
+for (entry in GOI_clonal) {
+  metadata_CNV[,entry] <- CNV_per_PID_clonal[,entry][match(metadata_CNV[,"PID"],CNV_per_PID_clonal[,"PID"])]
+}
+```
+
+
+```{r}
+# Patient group info 
+cur_groups <- metadata_CNV %>% select(PID, immune_activated, immune_presenting, immune_silent, immune_suppressed) %>% unique()
+
+# Binary mutation matrix
+## Here GOI clonal 
+cur_mut_clonal <- metadata_CNV %>% as.data.frame %>% select(PID, GOI_clonal) %>% unique() %>% remove_rownames %>% column_to_rownames("PID") %>% t()
+
+# Function to perform Fisher exact test for each gene
+perform_fisher_test <- function(gene_row, group1_cols, group2_cols) {
+    contingency_table <- matrix(0, nrow = 2, ncol = 2)
+    contingency_table[1, 1] <- sum(gene_row[group1_cols] == 1)
+    contingency_table[1, 2] <- sum(gene_row[group2_cols] == 1)
+    contingency_table[2, 1] <- sum(gene_row[group1_cols] == 0)
+    contingency_table[2, 2] <- sum(gene_row[group2_cols] == 0)
+    test_result <- fisher.test(contingency_table)
+    return(c(odds_ratio = test_result$estimate, p_value = test_result$p.value))
+  }
+  
+fisher_full <- foreach(i = c("immune_activated", "immune_silent", "immune_presenting","immune_suppressed"), .combine = "rbind")%do%{
+
+  PID_high <- unique(cur_groups[cur_groups[, i] == "1",]$PID)
+  PID_low <- unique(cur_groups[cur_groups[, i] == "0",]$PID)
+  
+  PID_high <- PID_high[!is.na(PID_high)]
+  PID_low <- PID_low[!is.na(PID_low)]
+  
+  fisher_results <- apply(cur_mut_clonal, 1, perform_fisher_test, group1_cols = PID_high, group2_cols = PID_low)
+  
+  fisher_results <- as.data.frame(fisher_results)
+  fisher_results <- as.data.frame(t(fisher_results)) %>% rownames_to_column("gene")
+  fisher_results$p_adj <- p.adjust(fisher_results$p_value, method = "BH")
+  fisher_results$category <- i
+  
+  return(fisher_results)
+  }
+
+isGreater <- fisher_full$odds_ratio > 1
+pVal <- log10(fisher_full$p_value)
+pVal[isGreater] <- abs(pVal[isGreater])
+fisher_full$p_out <- pVal
+colnames(fisher_full) <- c("gene", "odds_ratio", "p_value", "p_adj", "category", "p_out")
+```
+
+```{r}
+# FDR at 0.1 with trends
+fisher_full$result <- ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_adj < 0.1, "UP",
+                             ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_value < 0.1, "UP_trend", 
+                                    ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_adj < 0.1, "DOWN", 
+                                           ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_value < 0.1, "DOWN_trend","NOTSIG"))))
+
+# Replace INF values with max
+fisher_full$odds_ratio[fisher_full$odds_ratio == Inf] <- max(fisher_full$odds_ratio[!fisher_full$odds_ratio == Inf])
+
+## hierarchical clustering on odds_ratio
+cur_df <- fisher_full %>% select(gene, category, odds_ratio) %>% pivot_wider(values_from = odds_ratio, names_from = gene)
+
+# rows 
+dd <- dist(cur_df[2:ncol(cur_df)], method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+row_sorted <- hc$order
+fisher_full$category <- factor(fisher_full$category, levels = cur_df[row_sorted,]$category)
+
+# columns 
+dd <- dist(t(cur_df[2:ncol(cur_df)]), method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+column_sorted <- hc$order
+fisher_full$gene <- factor(fisher_full$gene, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
+
+
+ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_adj)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = fisher_full,shape = 1,aes(size = -log10(p_adj), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+
 
 
 ```{r}
