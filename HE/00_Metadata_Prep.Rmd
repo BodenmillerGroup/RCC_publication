@@ -1,0 +1,146 @@
+---
+title: "00_CLAMtest_orga"
+author: "Lasse Meyer"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Software requirements 
+
+```{r lib, message=FALSE,warning=FALSE}
+library(tidyverse)
+library(SingleCellExperiment)
+```
+
+# Prepare data for CLAM preprocessing
+
+## Full metadata processing
+
+```{r}
+metadata_all <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/data/Metadata_combined_RCC_onlyPT.csv")
+```
+
+```{r}
+# Add TMA ID
+metadata_all$TMA_id <- str_replace(paste0(metadata_all$grid,"x",metadata_all$x,"y",metadata_all$y),"NA","")
+metadata_all$TMA_id <- str_replace(metadata_all$TMA_id, "x","X")
+metadata_all$TMA_id <- str_replace(metadata_all$TMA_id, "y","Y")
+metadata_all[is.na(metadata_all$x),]$TMA_id <- "CX7Y8" #was missing in data
+```
+
+```{r}
+metadata_all$subtype_combined <- ifelse(metadata_all$subtype %in% c("clear_cell_RCC", "papillary_RCC", "chromophobe_RCC"), metadata_all$subtype, "other")
+metadata_all$subtype_combined[metadata_all$subtype_combined == "clear_cell_RCC"] <- "ccRCC"
+metadata_all$subtype_combined[metadata_all$subtype_combined == "papillary_RCC"] <- "pRCC"
+metadata_all$subtype_combined[metadata_all$subtype_combined == "chromophobe_RCC"] <- "chrRCC"
+```
+
+```{r}
+## Update survival censoring
+metadata_all$status_OS <- ifelse(metadata_all$censor_dead_0_alive_1 == 1, 0, 
+       ifelse(metadata_all$censor_dead_0_alive_1 == 0, 1, metadata_all$censor_dead_0_alive_1))
+
+metadata_all$OS_months <- metadata_all$survival_months
+
+## Combine relevant disease progression categories
+metadata_all$pT_combined <- ifelse(metadata_all$pT_simple %in% c("1","2"),"1/2", ifelse(metadata_all$pT_simple %in% c("3","4"), "3/4", metadata_all$pT_simple))
+
+metadata_all$ISUP_simple <- metadata_all$ISUP
+metadata_all$ISUP_combined <- ifelse(metadata_all$ISUP %in% c("1","2"),"1/2", ifelse(metadata_all$ISUP %in% c("3","4"), "3/4", metadata_all$ISUP))
+metadata_all$lymphocytes_combined <- ifelse(metadata_all$lymphocytes %in% c("1","2"),"1/2", metadata_all$lymphocytes)
+```
+
+
+```{r}
+# Make sure stage, grade and necrose are encoded as characters
+metadata_all$pT_simple <- as.character(paste0("T",metadata_all$pT_simple))
+metadata_all$pT_combined <- as.character(paste0("T",metadata_all$pT_combined))
+
+metadata_all$ISUP_simple <- as.character(paste0("G",metadata_all$ISUP_simple))
+metadata_all$ISUP_combined <- as.character(paste0("G",metadata_all$ISUP_combined))
+
+metadata_all$necrose <- as.character(paste0("NE",metadata_all$necrose))
+
+# Revert NAs
+metadata_all$necrose[metadata_all$necrose == "NENA"] <- NA
+
+metadata_all$ISUP_simple[metadata_all$ISUP_simple == "GNA"] <- NA
+metadata_all$ISUP_combined[metadata_all$ISUP_combined == "GNA"] <- NA
+
+metadata_all$pT_simple[metadata_all$pT_simple == "TNA"] <- NA
+metadata_all$pT_combined[metadata_all$pT_combined == "TNA"] <- NA
+```
+
+```{r}
+metadata_selected <- metadata_all %>% select(PID, TMA_id, subtype_combined, gender, age, age_bin, type, status_OS, OS_months, pT_simple, pT_combined, ISUP_simple, ISUP_combined, necrose) %>% as.data.frame
+```
+
+### Add ccRCC specific information
+
+```{r}
+## Add PDL1 score 
+### Combined positive score (> 1%) calculated on all cells in next script 
+#### Possible to add here later on
+sce_PDL1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_04.rds")
+
+metadata_selected$PDL1_score <- sce_PDL1$PDL1_score[match(metadata_selected$PID, sce_PDL1$PID)]
+
+metadata_selected$PDL1_score <- as.character(paste0("PD",metadata_selected$PDL1_score))
+metadata_selected$PDL1_score[metadata_selected$PDL1_score == "PDNA"] <- NA
+```
+
+
+```{r}
+## Patient groupings
+metadata_PL <- as.data.frame(read_csv("/mnt/central_nas/rcc_volume/RCC/HE/data_analysis/metadata_key_HE.csv"))
+
+## Add other relevant metadata based on PID
+for (entry in colnames(metadata_PL)[colnames(metadata_PL) %in% c("IMC_TU_PL_PID_ICAM_mTOR_group", "IMC_MY_PL_my_HLADR_group_names", "IMC_T_PL_spatial_CD8_pheno", "BF_PL_TME_archetypes")]) {
+  metadata_selected[,entry] <- metadata_PL[,entry][match(metadata_selected[,"PID"],metadata_PL[,"PID"])]
+}
+```
+
+## Load HE image information 
+
+```{r}
+images <- data.frame(slide_id = list.files("/mnt/central_nas/rcc_volume/RCC/HE/images/"),
+           TMA_id = str_split(str_split(list.files("/mnt/central_nas/rcc_volume/RCC/HE/images/"), "_", simplify = TRUE)[,2], ".tif", simplify = TRUE)[,1])
+
+
+for (entry in colnames(metadata_selected)[!colnames(metadata_selected) %in% c("TMA_id")]) {
+  images[,entry] <- metadata_selected[,entry][match(images[,"TMA_id"],metadata_selected[,"TMA_id"])]
+}
+
+images$case_id <- images$PID
+```
+
+### Select test cases
+
+```{r}
+# Select 50 cases from each histological subtype
+PID_test <- images %>% select(PID, subtype_combined) %>% unique() %>% group_by(subtype_combined) %>% filter(subtype_combined != "other") %>% slice_sample(n = 50) %>% ungroup() %>% pull(PID)
+
+images_test <- images %>% filter(PID %in% PID_test)
+```
+
+```{r}
+# Move test files
+from_test <- paste0("/mnt/central_nas/rcc_volume/RCC/HE/images/", images_test$slide_id)
+
+to_test <- "/mnt/central_nas/rcc_volume/RCC/HE/CLAM_test/raw/"
+
+file.copy(from = from_test, to = to_test)
+```
+
+
+## Save 
+
+```{r}
+images
+images_test 
+```
+
