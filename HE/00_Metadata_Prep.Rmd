@@ -136,11 +136,21 @@ to_test <- "/mnt/central_nas/rcc_volume/RCC/HE/CLAM_test/raw/"
 file.copy(from = from_test, to = to_test)
 ```
 
+```{r}
+# Prepare images_test 
+images_test_out <- images_test
+
+images_test_out$slide_id <- str_split(images_test_out$slide_id, ".tif", simplify = TRUE)[,1]
+images_test_out$label <- images_test_out$subtype_combined
+
+images_test_out <- images_test_out %>% select(case_id, slide_id, label)
+
+write_csv(images_test_out, "/mnt/central_nas/rcc_volume/RCC/HE/CLAM/subtyping_test/metadata_subtyping_test.csv")
+```
 
 ## Save 
 
 ```{r}
-images
-images_test 
+write.csv(images, "/mnt/central_nas/rcc_volume/RCC/HE/data_analysis/metadata_images.csv")
 ```
 
