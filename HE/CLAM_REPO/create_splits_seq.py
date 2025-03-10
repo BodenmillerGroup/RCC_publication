@@ -15,7 +15,7 @@ parser.add_argument('--k', type=int, default=10,
 parser.add_argument('--split_dir', default='./splits', help='splits directory (default: ./splits)')
 
 ## Update below for new datasets
-parser.add_argument('--task', type=str, choices=['task_1_tumor_vs_normal', 'task_2_tumor_subtyping', 'task_LM_subtyping_test'])
+parser.add_argument('--task', type=str, choices=['task_1_tumor_vs_normal', 'task_2_tumor_subtyping', 'task_LM_subtyping_test', 'task_LM_TME_archetypes'])
 
 parser.add_argument('--val_frac', type=float, default= 0.1,
                     help='fraction of labels for validation (default: 0.1)')
@@ -56,6 +56,17 @@ elif args.task == 'task_LM_subtyping_test':
                             patient_voting='maj',
                             ignore=[])
 
+elif args.task == 'task_LM_TME_archetypes':
+    args.n_classes=3
+    dataset = Generic_WSI_Classification_Dataset(csv_path = 'dataset_csv/metadata_TME_archetypes.csv',
+                            shuffle = False, 
+                            seed = args.seed, 
+                            print_info = True,
+                            label_dict = {'TME_suppressed':0,'TME_activated':1,'TME_silent':2},
+                            patient_strat= True,
+                            patient_voting='maj',
+                            ignore=[])
+    
 else:
     raise NotImplementedError
 

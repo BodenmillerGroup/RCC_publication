@@ -148,6 +148,32 @@ images_test_out <- images_test_out %>% select(case_id, slide_id, label)
 write_csv(images_test_out, "/mnt/central_nas/rcc_volume/RCC/HE/CLAM/subtyping_test/metadata_subtyping_test.csv")
 ```
 
+### Select main cases
+
+#### TME archetypes 
+
+```{r}
+PID_test_out <- images %>% filter(!is.na(BF_PL_TME_archetypes))
+```
+
+```{r}
+# Move test files
+from_test <- paste0("/mnt/central_nas/rcc_volume/RCC/HE/images/", PID_test_out$slide_id)
+
+to_test <- "/mnt/central_nas/rcc_volume/RCC/HE/CLAM/TME_archetypes/raw/"
+
+file.copy(from = from_test, to = to_test)
+```
+
+```{r}
+PID_test_out$slide_id <- str_split(PID_test_out$slide_id, ".tif", simplify = TRUE)[,1]
+PID_test_out$label <- PID_test_out$BF_PL_TME_archetypes
+
+PID_test_out <- PID_test_out %>% select(case_id, slide_id, label)
+
+write_csv(PID_test_out, "/mnt/central_nas/rcc_volume/RCC/HE/CLAM/TME_archetypes/metadata_TME_archetypes.csv")
+```
+
 ## Save 
 
 ```{r}

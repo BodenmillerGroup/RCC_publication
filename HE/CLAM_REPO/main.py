@@ -100,7 +100,7 @@ parser.add_argument('--weighted_sample', action='store_true', default=False, hel
 parser.add_argument('--model_size', type=str, choices=['small', 'big'], default='small', help='size of model, does not affect mil')
 
 ## Update below for new datasets
-parser.add_argument('--task', type=str, choices=['task_1_tumor_vs_normal',  'task_2_tumor_subtyping', 'task_LM_subtyping_test'])
+parser.add_argument('--task', type=str, choices=['task_1_tumor_vs_normal',  'task_2_tumor_subtyping', 'task_LM_subtyping_test', 'task_LM_TME_archetypes'])
 
 ### CLAM specific options
 parser.add_argument('--no_inst_cluster', action='store_true', default=False,
@@ -185,6 +185,17 @@ elif args.task == 'task_LM_subtyping_test':
                             seed = args.seed, 
                             print_info = True,
                             label_dict = {'ccRCC':0, 'pRCC':1, 'chrRCC':2},
+                            patient_strat= False,
+                            ignore=[])
+    
+elif args.task == 'task_LM_TME_archetypes':
+    args.n_classes=3
+    dataset = Generic_MIL_Dataset(csv_path = 'dataset_csv/metadata_TME_archetypes.csv',
+                            data_dir= os.path.join(args.data_root_dir, 'features'),
+                            shuffle = False, 
+                            seed = args.seed, 
+                            print_info = True,
+                            label_dict = {'TME_suppressed':0,'TME_activated':1,'TME_silent':2},
                             patient_strat= False,
                             ignore=[])
 
