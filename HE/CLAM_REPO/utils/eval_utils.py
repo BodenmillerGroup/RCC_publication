@@ -41,7 +41,8 @@ def initiate_model(args, ckpt_path, device='cuda'):
         ckpt_clean.update({key.replace('.module', ''):ckpt[key]})
     model.load_state_dict(ckpt_clean, strict=True)
 
-    _ = model.to(device)
+    #_ = model.to(device)
+    _ = model.to('cpu')
     _ = model.eval()
     return model
 
