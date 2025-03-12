@@ -48,7 +48,7 @@ class Accuracy_Logger(object):
 
 class EarlyStopping:
     """Early stops the training if validation loss doesn't improve after a given patience."""
-    def __init__(self, patience=10, stop_epoch=20, verbose=False): # changed this from patience=20; stop_epoch=50
+    def __init__(self, patience=20, stop_epoch=50, verbose=False): # changed this from patience=20; stop_epoch=50 (default) to p=10, epoch=30
         """
         Args:
             patience (int): How long to wait after last time validation loss improved.
