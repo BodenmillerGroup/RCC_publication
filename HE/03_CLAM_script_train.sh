@@ -14,7 +14,7 @@ CUDA_VISIBLE_DEVICES=0 python main.py \
     --data_root_dir /mnt/central_nas/rcc_volume/RCC/HE/CLAM/TME_archetypes/ \
     --results_dir /mnt/central_nas/rcc_volume/RCC/HE/CLAM/TME_archetypes/results/ \
     --split_dir /mnt/central_nas/rcc_volume/RCC/HE/CLAM/TME_archetypes/splits/ \
-    --exp_code train_b4_lr1low \
+    --exp_code train_b8_lr2low_svm \
     --seed 1 \
     --k 10 \
     --label_frac 1 \
@@ -22,10 +22,10 @@ CUDA_VISIBLE_DEVICES=0 python main.py \
     --early_stopping \
     --opt adam \
     --drop_out 0.25 \
-    --lr 1e-5 \
+    --lr 2e-5 \
     --weighted_sample \
-    --B 4 \
-    --bag_loss ce \
+    --B 8 \
+    --bag_loss svm \
     --inst_loss svm \
     --model_type clam_sb \
     --subtyping \
