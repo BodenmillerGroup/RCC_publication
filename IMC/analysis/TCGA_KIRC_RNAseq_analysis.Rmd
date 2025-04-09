@@ -268,8 +268,14 @@ ggsurvplot(fit_1,
 
 ```{r}
 saveRDS(kirc.clean,"/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_cleaned.rds")
+kirc.clean <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_cleaned.rds")
 ```
 
+```{r}
+colData_clean <- colData(kirc.clean) %>% as.data.frame
+
+write_csv(colData_clean, "/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_metadata_cleaned.csv")
+```
 
 
 ## DESeq2 processing
