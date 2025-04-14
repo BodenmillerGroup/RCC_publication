@@ -39,14 +39,15 @@ parser.add_argument('--fold', type=int, default=-1, help='single fold to evaluat
 parser.add_argument('--micro_average', action='store_true', default=False, 
                     help='use micro_average instead of macro_avearge for multiclass AUC')
 parser.add_argument('--split', type=str, choices=['train', 'val', 'test', 'all'], default='test')
-parser.add_argument('--task', type=str, choices=['task_1_tumor_vs_normal',  'task_2_tumor_subtyping'])
+parser.add_argument('--task', type=str, choices=['task_1_tumor_vs_normal',  'task_2_tumor_subtyping', 'task_3_TCGA_archetypes'])
 parser.add_argument('--drop_out', type=float, default=0.25, help='dropout')
 parser.add_argument('--embed_dim', type=int, default=1024)
 args = parser.parse_args()
 
 device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-args.save_dir = os.path.join('./eval_results', 'EVAL_' + str(args.save_exp_code))
+#args.save_dir = os.path.join('./eval_results', 'EVAL_' + str(args.save_exp_code))
+args.save_dir = os.path.join(args.data_root_dir, 'eval_results', str(args.save_exp_code))
 args.models_dir = os.path.join(args.results_dir, str(args.models_exp_code))
 
 os.makedirs(args.save_dir, exist_ok=True)
@@ -65,7 +66,8 @@ settings = {'task': args.task,
             'drop_out': args.drop_out,
             'model_size': args.model_size}
 
-with open(args.save_dir + '/eval_experiment_{}.txt'.format(args.save_exp_code), 'w') as f:
+settings_path = os.path.join(args.save_dir, f'eval_experiment_{args.save_exp_code}.txt')
+with open(settings_path, 'w') as f:
     print(settings, file=f)
 f.close()
 
@@ -87,6 +89,16 @@ elif args.task == 'task_2_tumor_subtyping':
                             shuffle = False, 
                             print_info = True,
                             label_dict = {'subtype_1':0, 'subtype_2':1, 'subtype_3':2},
+                            patient_strat= False,
+                            ignore=[])
+
+elif args.task == 'task_3_TCGA_archetypes':
+    args.n_classes=3
+    dataset = Generic_MIL_Dataset(csv_path = 'dataset_csv/metadata_TCGA_archetypes.csv',
+                            data_dir= os.path.join(args.data_root_dir, 'features'),
+                            shuffle = False, 
+                            print_info = True,
+                            label_dict = {'TME_suppressed':0,'TME_activated':1,'TME_silent':2},
                             patient_strat= False,
                             ignore=[])
 
