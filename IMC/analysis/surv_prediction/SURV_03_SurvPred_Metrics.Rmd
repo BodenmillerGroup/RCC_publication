@@ -442,7 +442,7 @@ ggsurvplot(fit,
           surv.median.line = "hv", # Specify median survival
           ggtheme = theme_classic(), # Change ggplot2 theme
           palette = c("#0571B0", "gold3", "#CA0020"),#c("#F21A00", "#3B9AB2", "gold")
-          conf.int = TRUE
+          conf.int = FALSE
 )
 ```
 

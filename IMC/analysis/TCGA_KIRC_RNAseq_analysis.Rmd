@@ -4,7 +4,7 @@ author: "Lasse Meyer"
 date: "`r Sys.Date()`"
 output: html_document
 editor_options: 
-  chunk_output_type: console
+  chunk_output_type: inline
 ---
 
 ```{r setup, include=FALSE}
@@ -305,9 +305,9 @@ mat <- assay(vsd)
 ### Save
 
 ```{r}
-saveRDS(res, "/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_nodesign.rds") 
-saveRDS(vsd, "/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_vsd_nodesign.rds") 
-saveRDS(kirc.clean,"/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_cleaned.rds")
+#saveRDS(res, "/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_nodesign.rds") 
+#saveRDS(vsd, "/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_vsd_nodesign.rds") 
+#saveRDS(kirc.clean,"/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_cleaned.rds")
 
 res <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_nodesign.rds") 
 vsd <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_vsd_nodesign.rds") 
@@ -1003,6 +1003,497 @@ saveRDS(kirc.clean,"/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KI
 # kirc.clean <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_cleaned.rds")
 ```
 
+
+## TME archetypes 
+
+### Read in group information
+
+```{r}
+results_combined <- read_csv("/mnt/central_nas/rcc_volume/RCC/HE/CLAM/TCGA_KIRC/TCGA_KIRC_eval_out.csv")
+```
+
+```{r}
+vsd$TME_archetype <- results_combined$TME_archetype_selected[match(vsd$PID, results_combined$PID)]
+kirc.clean$TME_archetype <- results_combined$TME_archetype_selected[match(kirc.clean$PID, results_combined$PID)]
+```
+
+### Survival impact 
+
+```{r}
+#Assess survival impact 
+library(survival)
+library(survminer)
+
+cur_surv <- colData(kirc.clean) %>% as.data.frame() %>% dplyr::select(PID, OS_days, status_OS, TME_archetype) %>% 
+  #mutate(TME_archetype = ifelse(TME_archetype %in% c("2","3"), "2/3", TME_archetype)) %>% 
+  unique()
+
+#Plot survival curves
+fit <- survfit(Surv(OS_days, status_OS) ~ TME_archetype, data = cur_surv)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          #palette = unname(metadata(kirc.clean)$colors$ISUP_combined),
+          ggtheme = theme_classic())
+```
+
+### Cox models
+
+Univariate
+
+```{r}
+## 1. Disease-free interval 
+### Multivariate cox proportional hazard model on multiple covariates (here TME_archetype)
+PID_metagroups <- colData(vsd) %>% as.data.frame() %>% 
+  dplyr::select(TME_archetype, PID) %>% 
+  group_by(PID) %>% table() %>% as.data.frame
+
+PID_metagroups <- PID_metagroups %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq))
+
+PID_metagroups <- PID_metagroups %>% pivot_wider(id_cols = "PID",names_from = "TME_archetype",values_from = "fra") %>% column_to_rownames("PID")
+
+Cox_df <- PID_metagroups
+
+#add covariates for correction
+Cox_df$status_OS <- vsd$status_OS[match(rownames(Cox_df),vsd$PID)]
+Cox_df$OS_days <- vsd$OS_days[match(rownames(Cox_df),vsd$PID)]
+
+#Based on proportions
+covariates <- Cox_df %>% dplyr::select(-status_OS,-OS_days, -TME_silent) %>% colnames
+
+multi_formula <- as.formula(paste("Surv(OS_days, status_OS) ~ ", paste(covariates, collapse = " + "), "+ TME_silent"))
+
+multi_model <- coxph(multi_formula, data = Cox_df)
+
+multi_res <- summary(multi_model)
+
+plot_df_prop <- data.frame(group = rownames(multi_res$coefficients),
+                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],3),
+                      HR = signif(multi_res$coefficients[,"exp(coef)"],3),
+                      CI_low = signif(multi_res$conf.int[,"lower .95"],3),
+                      CI_high = signif(multi_res$conf.int[,"upper .95"],3),
+                      wald_test = signif(multi_res$waldtest["pvalue"],3))
+
+#write.csv(plot_df_prop, "/mnt/central_nas/rcc_volume/TNBC/data_analysis/01_figures/supp_tables/TCGA_Cox_Multi_PIDgroups.csv")
+
+#Plot hazard ratios
+hr_prop <- ggplot(plot_df_prop, aes(x = reorder(group,dplyr::desc(HR)), y = HR, color = p_value < 0.05))+
+geom_point(size = 4)+
+geom_errorbar(aes(ymax = CI_high, ymin = CI_low))+
+geom_hline(yintercept = 1,color = "black",linetype = "dashed")+
+scale_color_brewer(palette = "Set1")+
+#scale_color_manual(values = c("#377EB8"))+
+xlab("Covariates")+
+ylab("HR for PID groups")+
+theme_classic()+
+scale_y_log10()+
+theme(axis.text.x = element_text(angle = 90))
+
+hr_prop
+```
+
+Multivariate 
+
+```{r}
+## 1. Disease-free interval 
+### Multivariate cox proportional hazard model on multiple covariates (here TME_archetype)
+PID_metagroups <- colData(vsd) %>% as.data.frame() %>% 
+  dplyr::select(TME_archetype, PID) %>% 
+  group_by(PID) %>% table() %>% as.data.frame
+
+PID_metagroups <- PID_metagroups %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq))
+
+PID_metagroups <- PID_metagroups %>% pivot_wider(id_cols = "PID",names_from = "TME_archetype",values_from = "fra") %>% column_to_rownames("PID")
+
+Cox_df <- PID_metagroups
+
+#add covariates for correction
+Cox_df$status_OS <- vsd$status_OS[match(rownames(Cox_df),vsd$PID)]
+Cox_df$OS_days <- vsd$OS_days[match(rownames(Cox_df),vsd$PID)]
+
+Cox_df$gender <- vsd$gender[match(rownames(Cox_df),vsd$PID)]
+Cox_df$pT_simple <- as.factor(vsd$pT_combined[match(rownames(Cox_df),vsd$PID)])
+Cox_df$ISUP_simple <- as.factor(vsd$ISUP_combined[match(rownames(Cox_df),vsd$PID)])
+
+#Based on proportions
+covariates <- Cox_df %>% dplyr::select(-status_OS,-OS_days, -gender, -pT_simple, -ISUP_simple, -TME_silent) %>% colnames
+
+multi_formula <- as.formula(paste("Surv(OS_days, status_OS) ~ gender + pT_simple + ISUP_simple +", paste(covariates, collapse = " + "), "+ TME_silent"))
+
+multi_model <- coxph(multi_formula, data = Cox_df)
+
+multi_res <- summary(multi_model)
+
+plot_df_prop <- data.frame(group = rownames(multi_res$coefficients),
+                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],3),
+                      HR = signif(multi_res$coefficients[,"exp(coef)"],3),
+                      CI_low = signif(multi_res$conf.int[,"lower .95"],3),
+                      CI_high = signif(multi_res$conf.int[,"upper .95"],3),
+                      wald_test = signif(multi_res$waldtest["pvalue"],3))
+
+#write.csv(plot_df_prop, "/mnt/central_nas/rcc_volume/TNBC/data_analysis/01_figures/supp_tables/TCGA_Cox_Multi_PIDgroups.csv")
+
+#Plot hazard ratios
+hr_prop <- ggplot(plot_df_prop, aes(x = reorder(group,dplyr::desc(HR)), y = HR, color = p_value < 0.05))+
+geom_point(size = 4)+
+geom_errorbar(aes(ymax = CI_high, ymin = CI_low))+
+#coord_cartesian(ylim=c(0,20))+
+geom_hline(yintercept = 1,color = "black",linetype = "dashed")+
+scale_color_brewer(palette = "Set1")+
+xlab("Covariates")+
+ylab("HR for PID groups")+
+theme_classic()+
+scale_y_log10()+
+theme(axis.text.x = element_text(angle = 90))
+
+hr_prop
+```
+
+
+### Barplot visualization 
+
+```{r}
+dittoBarPlot(vsd, var = "pT_combined", group.by = "TME_archetype",retain.factor.levels = FALSE)+
+  scale_fill_manual(values = metadata(vsd)$colors$pT_combined)+
+  ggtitle("")+
+
+dittoBarPlot(vsd, var = "ISUP_combined", group.by = "TME_archetype",retain.factor.levels = FALSE)+
+  scale_fill_manual(values = metadata(vsd)$colors$ISUP_combined)+
+  ggtitle("")
+
+dittoBarPlot(vsd[,!is.na(vsd$BAP1)], var = "BAP1", group.by = "TME_archetype",retain.factor.levels = FALSE)+
+  ggtitle("")
+dittoBarPlot(vsd[,!is.na(vsd$PBRM1)], var = "PBRM1", group.by = "TME_archetype",retain.factor.levels = FALSE)+
+  ggtitle("")
+
+dittoBarPlot(vsd[,!is.na(vsd$SETD2)], var = "SETD2", group.by = "TME_archetype",retain.factor.levels = FALSE)+
+  ggtitle("")
+dittoBarPlot(vsd[,!is.na(vsd$VHL)], var = "VHL", group.by = "TME_archetype",retain.factor.levels = FALSE)+
+  ggtitle("")
+```
+
+### Marker expression comparison for PID groups 
+
+#### ICAM1/mTOR
+
+```{r}
+# Define GOI of interest
+GOI <- c("ICAM1", "MTOR")
+
+GOI_rel <- GOI[GOI %in% rownames(vsd)]
+
+#c("CA9", "KRT19", "GPX4", "HLA-DRA", "NFKB1", "CCND1", "HIF1A", "TP53", "MYC", "ICAM1", "PDK4", "NT5E", "SMARCA4", "PKM", "CD274", "MME", "IDH2", "EPAS1", "AURKA", "HAVCR2", "EGFR", "RPS6", "FLT1", "MTOR", "RB1", "MTOR", "SLC2A1", "FH", "GLUD1", "CD44", "VIM")
+
+# Define heatmap based on normalized counts 
+## Option 1: size-factor normalized counts 
+#df <- t(counts(dds, normalized = TRUE)[GOI,]) %>% as.data.frame %>% rownames_to_column("PID")
+## Option 2: vst counts
+df <- t(assay(vsd)[GOI,]) %>% as.data.frame 
+df <- df %>% rownames_to_column("PID")
+
+## Create heatmap body 
+df$TME_archetype <- vsd$TME_archetype[match(df$PID, colnames(vsd))]
+
+mat <- df %>% pivot_longer(cols = 2:(ncol(df)-1), names_to = "gene", values_to = "exprs") %>% group_by(TME_archetype, gene) %>% summarize(mean = mean(exprs)) %>% na.omit()
+                                                                                                                                  
+ht <- mat %>% pivot_wider(names_from = "gene", values_from = "mean") %>% column_to_rownames("TME_archetype")
+
+## Create row annotation 
+anno <- df %>% select(TME_archetype) %>% group_by(TME_archetype) %>% dplyr::count() %>% na.omit()
+anno <- anno[match(anno$TME_archetype, rownames(ht)),]
+
+## Print heatmap 
+Heatmap(ht, name = "Mean Z-scores")
+
+Heatmap(scale(ht), name = "Scaled mean Z-scores")+
+  rowAnnotation(n = anno_barplot(anno$n, gp = gpar(fill = "#440154FF")))+
+  rowAnnotation(anno = anno_text(anno$TME_archetype))
+```
+
+#### IMC markers 
+
+```{r}
+# Define GOI of interest
+GOI <- c("CA9", "GPX4", "HLA-DRA", "NFKB1", "CCND1", "HIF1A", "TP53", "MYC", "ICAM1", "PDK4", "NT5E", "SMARCA4", "PKM", "CD274", "MME", "IDH2", "EPAS1", "AURKA", "HAVCR2", "EGFR", "RPS6", "FLT1", "VHL", "RB1", "MTOR", "SLC2A1", "FH", "GLUD1", "CD44", "VIM")
+
+GOI_rel <- GOI[GOI %in% rownames(vsd)]
+
+#c("CA9", "KRT19", "GPX4", "HLA-DRA", "NFKB1", "CCND1", "HIF1A", "TP53", "MYC", "ICAM1", "PDK4", "NT5E", "SMARCA4", "PKM", "CD274", "MME", "IDH2", "EPAS1", "AURKA", "HAVCR2", "EGFR", "RPS6", "FLT1", "VHL", "RB1", "MTOR", "SLC2A1", "FH", "GLUD1", "CD44", "VIM")
+
+# Define heatmap based on normalized counts 
+## Option 1: size-factor normalized counts 
+#df <- t(counts(dds, normalized = TRUE)[GOI,]) %>% as.data.frame %>% rownames_to_column("PID")
+## Option 2: vst counts
+df <- t(assay(vsd)[GOI_rel,]) %>% as.data.frame 
+df <- df %>% rownames_to_column("PID")
+
+## Create heatmap body 
+df$TME_archetype <- vsd$TME_archetype[match(df$PID, colnames(vsd))]
+
+mat <- df %>% pivot_longer(cols = 2:(ncol(df)-1), names_to = "gene", values_to = "exprs") %>% group_by(TME_archetype, gene) %>% summarize(mean = mean(exprs)) %>% na.omit()
+
+ht <- mat %>% pivot_wider(names_from = "gene", values_from = "mean") %>% column_to_rownames("TME_archetype")
+
+## Create row annotation 
+anno <- df %>% select(TME_archetype) %>% group_by(TME_archetype) %>% dplyr::count() %>% na.omit()
+anno <- anno[match(anno$TME_archetype, rownames(ht)),]
+
+## Print heatmap 
+Heatmap(ht, name = "Mean Z-scores")
+
+Heatmap(scale(ht), name = "Scaled mean Z-scores")+
+  rowAnnotation(n = anno_barplot(anno$n, gp = gpar(fill = "#440154FF")))+
+  rowAnnotation(anno = anno_text(anno$TME_archetype))
+```
+
+
+#### Literature markers
+
+```{r}
+# Define GOI of interest
+GOI <- c("UCHL1", "KIF2A", "GPNMB", "HYOU1") #Cancer Cell study 2023 (Li et al.)
+
+GOI_rel <- GOI[GOI %in% rownames(vsd)]
+
+#c("CA9", "KRT19", "GPX4", "HLA-DRA", "NFKB1", "CCND1", "HIF1A", "TP53", "MYC", "ICAM1", "PDK4", "NT5E", "SMARCA4", "PKM", "CD274", "MME", "IDH2", "EPAS1", "AURKA", "HAVCR2", "EGFR", "RPS6", "FLT1", "VHL", "RB1", "MTOR", "SLC2A1", "FH", "GLUD1", "CD44", "VIM")
+
+# Define heatmap based on normalized counts 
+## Option 1: size-factor normalized counts 
+#df <- t(counts(dds, normalized = TRUE)[GOI,]) %>% as.data.frame %>% rownames_to_column("PID")
+## Option 2: vst counts
+df <- t(assay(vsd)[GOI_rel,]) %>% as.data.frame 
+df <- df %>% rownames_to_column("PID")
+
+## Create heatmap body 
+df$TME_archetype <- vsd$TME_archetype[match(df$PID, colnames(vsd))]
+
+mat <- df %>% pivot_longer(cols = 2:(ncol(df)-1), names_to = "gene", values_to = "exprs") %>% group_by(TME_archetype, gene) %>% summarize(mean = mean(exprs)) %>% na.omit()
+
+ht <- mat %>% pivot_wider(names_from = "gene", values_from = "mean") %>% column_to_rownames("TME_archetype")
+
+## Create row annotation 
+anno <- df %>% select(TME_archetype) %>% group_by(TME_archetype) %>% dplyr::count() %>% na.omit()
+anno <- anno[match(anno$TME_archetype, rownames(ht)),]
+
+## Print heatmap 
+Heatmap(ht, name = "Mean Z-scores")
+
+Heatmap(scale(ht), name = "Scaled mean Z-scores")+
+  rowAnnotation(n = anno_barplot(anno$n, gp = gpar(fill = "#440154FF")))+
+  rowAnnotation(anno = anno_text(anno$TME_archetype))
+```
+
+#### Stem markers
+
+```{r}
+# Define GOI of interest
+
+GOI <- c("PROM1", "CD24", "CD44", "CXCR4","ALDH1A3", "ENG", "DNAJB8", "NT5E", "SOX9", "IL32") #Cancer Cell study 2023 (Li et al.)
+
+GOI_rel <- GOI[GOI %in% rownames(vsd)]
+
+#c("CA9", "KRT19", "GPX4", "HLA-DRA", "NFKB1", "CCND1", "HIF1A", "TP53", "MYC", "ICAM1", "PDK4", "NT5E", "SMARCA4", "PKM", "CD274", "MME", "IDH2", "EPAS1", "AURKA", "HAVCR2", "EGFR", "RPS6", "FLT1", "VHL", "RB1", "MTOR", "SLC2A1", "FH", "GLUD1", "CD44", "VIM")
+
+# Define heatmap based on normalized counts 
+## Option 1: size-factor normalized counts 
+#df <- t(counts(dds, normalized = TRUE)[GOI,]) %>% as.data.frame %>% rownames_to_column("PID")
+## Option 2: vst counts
+df <- t(assay(vsd)[GOI_rel,]) %>% as.data.frame 
+df <- df %>% rownames_to_column("PID")
+
+## Create heatmap body 
+df$TME_archetype <- vsd$TME_archetype[match(df$PID, colnames(vsd))]
+
+mat <- df %>% pivot_longer(cols = 2:(ncol(df)-1), names_to = "gene", values_to = "exprs") %>% group_by(TME_archetype, gene) %>% summarize(mean = mean(exprs)) %>% na.omit()
+
+ht <- mat %>% pivot_wider(names_from = "gene", values_from = "mean") %>% column_to_rownames("TME_archetype")
+
+## Create row annotation 
+anno <- df %>% select(TME_archetype) %>% group_by(TME_archetype) %>% dplyr::count() %>% na.omit()
+anno <- anno[match(anno$TME_archetype, rownames(ht)),]
+
+## Print heatmap 
+Heatmap(ht, col = viridis(100), name = "Mean Z-scores")
+
+Heatmap(scale(ht), name = "Scaled mean Z-scores")+
+  rowAnnotation(n = anno_barplot(anno$n, gp = gpar(fill = "#440154FF")))+
+  rowAnnotation(anno = anno_text(anno$TME_archetype))
+```
+
+#### Metastatic markers
+
+```{r}
+# Define GOI of interest
+
+GOI <- c("SAA1", "SAA2", "APOL1", "MET") #Nature Communications study 2022 (Alchachin et al.)
+
+GOI_rel <- GOI[GOI %in% rownames(vsd)]
+
+#c("CA9", "KRT19", "GPX4", "HLA-DRA", "NFKB1", "CCND1", "HIF1A", "TP53", "MYC", "ICAM1", "PDK4", "NT5E", "SMARCA4", "PKM", "CD274", "MME", "IDH2", "EPAS1", "AURKA", "HAVCR2", "EGFR", "RPS6", "FLT1", "VHL", "RB1", "MTOR", "SLC2A1", "FH", "GLUD1", "CD44", "VIM")
+
+# Define heatmap based on normalized counts 
+## Option 1: size-factor normalized counts 
+#df <- t(counts(dds, normalized = TRUE)[GOI,]) %>% as.data.frame %>% rownames_to_column("PID")
+## Option 2: vst counts
+df <- t(assay(vsd)[GOI_rel,]) %>% as.data.frame 
+df <- df %>% rownames_to_column("PID")
+
+## Create heatmap body 
+df$TME_archetype <- vsd$TME_archetype[match(df$PID, colnames(vsd))]
+
+mat <- df %>% pivot_longer(cols = 2:(ncol(df)-1), names_to = "gene", values_to = "exprs") %>% group_by(TME_archetype, gene) %>% summarize(mean = mean(exprs)) %>% na.omit()
+
+ht <- mat %>% pivot_wider(names_from = "gene", values_from = "mean") %>% column_to_rownames("TME_archetype")
+
+## Create row annotation 
+anno <- df %>% select(TME_archetype) %>% group_by(TME_archetype) %>% dplyr::count() %>% na.omit()
+anno <- anno[match(anno$TME_archetype, rownames(ht)),]
+
+## Print heatmap 
+Heatmap(ht, col = viridis(100), name = "Mean Z-scores")
+
+Heatmap(scale(ht), name = "Scaled mean Z-scores")+
+  rowAnnotation(n = anno_barplot(anno$n, gp = gpar(fill = "#440154FF")))+
+  rowAnnotation(anno = anno_text(anno$TME_archetype))
+```
+
+
+### DCCD signature - Hu et al (Nature Genetics)
+
+```{r}
+library(readxl)
+HU_SIG <- read_excel("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/data/DCCD_SubTables_NatureGenetics.xlsx",sheet = 8, col_names = TRUE)
+
+# Extract unique signatures genes for each immune subtype
+IM4 <- HU_SIG %>% filter(Immune_subtype == "IM4") %>% pull(Symbol) #De-clear differentiated ccRCC
+IM3 <- HU_SIG %>% filter(Immune_subtype == "IM3") %>% pull(Symbol)
+IM2 <- HU_SIG %>% filter(Immune_subtype == "IM2") %>% pull(Symbol) #Good prognosis
+IM1 <- HU_SIG %>% filter(Immune_subtype == "IM1") %>% pull(Symbol)
+```
+
+IM4 
+
+```{r}
+## 1. pan AV signature per PID group 
+IM4_rel <- IM4[IM4 %in% rownames(assay(vsd))]
+# Filter for available genes
+#TNBC_PID <- colnames(vsd[,vsd$TNBC == "TNBC"])
+#vsd_TNBC <- vsd[, colnames(vsd) %in% TNBC_PID]
+#df <- t(assay(vsd_TNBC)[IM4_rel ,]) %>% as.data.frame
+df <- t(assay(vsd)[IM4_rel ,]) %>% as.data.frame
+
+# Z-score gene expression 
+df <- as.data.frame(scale(df))
+
+df$signature_sum <- rowSums(df,na.rm = TRUE)
+df$TME_archetype <- vsd$TME_archetype[match(rownames(df), colnames(vsd))]
+
+compare_means(signature_sum ~ TME_archetype,df) #pairwise comparisons
+compare_means(signature_sum ~ TME_archetype,df, method = "kruskal.test") #global comparison
+
+ggplot(df, aes(x = TME_archetype, y = signature_sum))+
+  geom_jitter(aes(color = TME_archetype), size = 3, position=position_jitter(w=0.1,h=0.1))+
+  geom_boxplot(outlier.color = NA)+
+  scale_color_brewer(palette = "Paired")+
+  theme_classic()+
+  ylab("IM4 signature (Hu et al.)")+
+  stat_compare_means()
+
+mat <- df %>% pivot_longer(cols = 1:(ncol(df)-2), names_to = "gene", values_to = "exprs") %>% group_by(TME_archetype, gene) %>% summarize(mean = mean(exprs)) %>% na.omit()
+mat <- mat %>% filter(!is.na(mean))
+ht <- mat %>% pivot_wider(names_from = "gene", values_from = "mean") %>% column_to_rownames("TME_archetype")
+
+Heatmap(ht, name = "Mean signature Z-scores")
+```
+
+
+### Rhabdoid / Sarcomatoid signature - Li et al. (Cancer Cell)
+
+```{r}
+library(readxl)
+rhab_sig <- read_excel("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/data/Rhaboid_Sarcomatoid_CancerCell23.xlsx",sheet = 5, col_names = TRUE) %>% pull(gene) %>% unique()
+
+sarc_sig <- read_excel("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/data/Rhaboid_Sarcomatoid_CancerCell23.xlsx",sheet = 4, col_names = TRUE) %>% pull(gene) %>% unique()
+```
+
+Rhabdoid signature 
+
+```{r}
+## 1. pan AV signature per PID group 
+rhab_sig_rel <- rhab_sig[rhab_sig %in% rownames(assay(vsd))]
+# Filter for available genes
+#TNBC_PID <- colnames(vsd[,vsd$TNBC == "TNBC"])
+#vsd_TNBC <- vsd[, colnames(vsd) %in% TNBC_PID]
+#df <- t(assay(vsd_TNBC)[rhab_sig_rel ,]) %>% as.data.frame
+df <- t(assay(vsd)[rhab_sig_rel ,]) %>% as.data.frame
+
+# Z-score gene expression 
+df <- as.data.frame(scale(df))
+
+df$signature_sum <- rowSums(df,na.rm = TRUE)
+df$TME_archetype <- vsd$TME_archetype[match(rownames(df), colnames(vsd))]
+
+compare_means(signature_sum ~ TME_archetype,df) #pairwise comparisons
+compare_means(signature_sum ~ TME_archetype,df, method = "kruskal.test") #global comparison
+
+ggplot(df, aes(x = TME_archetype, y = signature_sum))+
+  geom_jitter(aes(color = TME_archetype), size = 3, position=position_jitter(w=0.1,h=0.1))+
+  geom_boxplot(outlier.color = NA)+
+  scale_color_brewer(palette = "Paired")+
+  theme_classic()+
+  ylab("rhab_sig signature (Hu et al.)")+
+  stat_compare_means()
+
+mat <- df %>% pivot_longer(cols = 1:(ncol(df)-2), names_to = "gene", values_to = "exprs") %>% group_by(TME_archetype, gene) %>% summarize(mean = mean(exprs)) %>% na.omit()
+mat <- mat %>% filter(!is.na(mean))
+ht <- mat %>% pivot_wider(names_from = "gene", values_from = "mean") %>% column_to_rownames("TME_archetype")
+
+Heatmap(ht, name = "Mean signature Z-scores")
+```
+
+Sarcomatoid signature 
+
+```{r}
+## 1. pan AV signature per PID group 
+sarc_sig_rel <- sarc_sig[sarc_sig %in% rownames(assay(vsd))]
+# Filter for available genes
+#TNBC_PID <- colnames(vsd[,vsd$TNBC == "TNBC"])
+#vsd_TNBC <- vsd[, colnames(vsd) %in% TNBC_PID]
+#df <- t(assay(vsd_TNBC)[sarc_sig_rel ,]) %>% as.data.frame
+df <- t(assay(vsd)[sarc_sig_rel ,]) %>% as.data.frame
+
+# Z-score gene expression 
+df <- as.data.frame(scale(df))
+
+df$signature_sum <- rowSums(df,na.rm = TRUE)
+df$TME_archetype <- vsd$TME_archetype[match(rownames(df), colnames(vsd))]
+
+compare_means(signature_sum ~ TME_archetype,df) #pairwise comparisons
+compare_means(signature_sum ~ TME_archetype,df, method = "kruskal.test") #global comparison
+
+ggplot(df, aes(x = TME_archetype, y = signature_sum))+
+  geom_jitter(aes(color = TME_archetype), size = 3, position=position_jitter(w=0.1,h=0.1))+
+  geom_boxplot(outlier.color = NA)+
+  scale_color_brewer(palette = "Paired")+
+  theme_classic()+
+  ylab("sarc_sig signature (Hu et al.)")+
+  stat_compare_means()
+
+mat <- df %>% pivot_longer(cols = 1:(ncol(df)-2), names_to = "gene", values_to = "exprs") %>% group_by(TME_archetype, gene) %>% summarize(mean = mean(exprs)) %>% na.omit()
+mat <- mat %>% filter(!is.na(mean))
+ht <- mat %>% pivot_wider(names_from = "gene", values_from = "mean") %>% column_to_rownames("TME_archetype")
+
+Heatmap(ht, name = "Mean signature Z-scores")
+```
+
+
+
+
 ## DEA - Combined
 
 ### ICAM1_driven vs. mTOR_driven 
@@ -1043,6 +1534,53 @@ vsd <- DESeq2::vst(dds)
 #Save objects 
 saveRDS(res, "/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_ICAM1mTORgroups.rds") 
 saveRDS(vsd, "/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_vsd_ICAM1mTORgroups.rds") 
+
+
+# ## Add colors 
+# metadata(vsd)$colors$KRT57_score <- setNames(c("grey",wes_palette("Moonrise3")[1:3]), c("KRT5/7-", "KRT5/7+","KRT5+", "KRT7+"))
+# metadata(vsd)$colors$PAM50 <- setNames(brewer.pal(6,"Paired"),sort(unique(vsd$PAM50Call_RNAseq)))
+# rownames(vsd) <- rowData(vsd)$gene_name
+```
+
+### TME archetype
+
+```{r}
+kirc.clean <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_cleaned.rds")
+```
+
+```{r}
+library(DESeq2)
+
+kirc.clean.fil <- kirc.clean[,!is.na(kirc.clean$TME_archetype)]
+
+# Create DESeqDataset
+ddsSE_1 <- DESeqDataSet(kirc.clean.fil, design = ~ TME_archetype)
+
+# Filter genes
+summary(rowSums(counts(ddsSE_1)) >= 10)
+keep <- rowSums(counts(ddsSE_1)) >= 10
+ddsSE_1 <- ddsSE_1[keep, ]
+
+# DESeq analysis includes count normalization based on size factors
+dds <- DESeq(ddsSE_1, )
+
+# Check which specific comparison for downstream analysis
+resultsNames(dds)
+rownames(dds) <- rowData(dds)$gene_name
+
+# Extract results - also performs independent filtering
+res <- DESeq2::results(dds, name = "TME_archetype_TME_suppressed_vs_TME_activated", alpha = 0.05, lfcThreshold = 1) #alpha = 0.05, 
+#res <- DESeq2::results(dds, contrast = c("TME_archetype", "TME_silent", "TME_suppressed"), alpha = 0.05, lfcThreshold = 1) #alpha = 0.05, 
+# Variance-stabilizing transformation
+vsd <- DESeq2::vst(dds)
+```
+
+### Save
+
+```{r}
+#Save objects 
+saveRDS(res, "/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_TMEarchetype.rds") 
+saveRDS(vsd, "/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_vsd_TMEarchetype.rds") 
 
 
 # ## Add colors 
@@ -1187,14 +1725,70 @@ Heatmap(ht_MCP, name = "mean MCP-Z-score")
 ```
 
 ```{r}
-saveRDS(res_MCP, "/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_MCP.rds") 
+#Z-scoring of MCP results by cell type
+res_MCP_1 <- res_MCP %>% dplyr::select(-cell_type)
+rownames(res_MCP_1) <- res_MCP$cell_type
+res_MCP_z <- as.data.frame(t(scale(t(res_MCP_1), center=TRUE, scale=TRUE)))
+res_MCP_z <- res_MCP_z %>% rownames_to_column("cell_type")
+
+res_MCP_plot <- res_MCP_z %>% pivot_longer(2:ncol(res_MCP_z), names_to = "PID", values_to = "score")
+
+res_MCP_plot$TME_archetype <- kirc.clean$TME_archetype[match(res_MCP_plot$PID, colnames(kirc.clean))]
+
+ggplot(res_MCP_plot, aes(x = TME_archetype, y = score))+
+  geom_boxplot(outlier.colour = NA)+
+  geom_jitter(aes(color = TME_archetype), size = 3, position=position_jitter(w=0.1,h=0.1))+
+  facet_wrap(~cell_type, scales = "free_y")+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90))+
+  scale_color_brewer(palette = "Set1")+
+  guides(color = "none")
+  #stat_compare_means(method = "t.test")
+  
+# Heatmap visualization  
+ht_MCP <- res_MCP_plot %>% group_by(TME_archetype, cell_type) %>% dplyr::summarize(mean = mean(score)) %>% na.omit() %>% pivot_wider(names_from = TME_archetype, values_from = mean) %>% column_to_rownames("cell_type") 
+
+Heatmap(ht_MCP, name = "mean MCP-Z-score")
+```
+
+```{r}
+#saveRDS(res_MCP, "/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_MCP.rds") 
 ```
 
 ### Quanti-Seq 
 
 ```{r}
-res_quanti <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_quantiseq.rds") 
+#res_quanti <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_quantiseq.rds") 
 #res_quanti <- immunedeconv::deconvolute(TPM_mat, method = "quantiseq")
+```
+
+```{r}
+#Z-scoring of quanti results by cell type
+res_quanti_z <- res_quanti %>% filter(cell_type != "uncharacterized cell") %>% column_to_rownames("cell_type")
+
+res_quanti_z <- as.data.frame(t(scale(t(res_quanti_z), center=TRUE, scale=TRUE)))
+res_quanti_z <- res_quanti_z %>% rownames_to_column("cell_type")
+
+res_quanti_plot <- res_quanti_z %>% pivot_longer(2:ncol(res_quanti_z), names_to = "PID", values_to = "score")
+
+res_quanti_plot$TME_archetype <- kirc.clean$TME_archetype[match(res_quanti_plot$PID, colnames(kirc.clean))]
+
+ggplot(res_quanti_plot, aes(x = TME_archetype, y = score))+
+  geom_boxplot(outlier.colour = NA)+
+  geom_jitter(aes(color = TME_archetype), size = 3, position=position_jitter(w=0.1,h=0.1))+
+  facet_wrap(~cell_type, scales = "free_y")+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90))+
+  scale_color_brewer(palette = "Set1")+
+  guides(color = "none")
+  #scale_color_manual(values = metadata(vsd)$colors$KRT57_score)
+  #stat_compare_means(method = "t.test")
+  
+
+# Heatmap visualization  
+ht_quanti <- res_quanti_plot %>% group_by(TME_archetype, cell_type) %>% dplyr::summarize(mean = mean(score)) %>% na.omit() %>% pivot_wider(names_from = TME_archetype, values_from = mean) %>% column_to_rownames("cell_type")
+
+Heatmap(ht_quanti, name = "mean quanti-Z-score")
 ```
 
 ```{r}
