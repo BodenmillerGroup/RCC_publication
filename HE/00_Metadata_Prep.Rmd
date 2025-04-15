@@ -16,6 +16,8 @@ library(tidyverse)
 library(SingleCellExperiment)
 ```
 
+# Discovery 
+
 # Prepare data for CLAM preprocessing
 
 ## Full metadata processing
@@ -179,4 +181,61 @@ write_csv(PID_test_out, "/mnt/central_nas/rcc_volume/RCC/HE/CLAM/TME_archetypes/
 ```{r}
 write.csv(images, "/mnt/central_nas/rcc_volume/RCC/HE/data_analysis/metadata_images.csv")
 ```
+
+
+# CPTAC 
+
+# Prepare data for CLAM preprocessing
+
+## Pre-processing
+
+```{r}
+CPTAC_meta <- read_excel("/mnt/central_nas/rcc_volume/RCC/HE/CLAM/CPTAC/CPTAC_meta_raw.xlsx")
+```
+
+```{r}
+CPTAC_meta <- separate_rows(CPTAC_meta, Slide_ID, sep = ";")
+
+# Survival
+CPTAC_meta$OS_days <- CPTAC_meta$`Overall survival, days`
+CPTAC_meta$DFS_days <- CPTAC_meta$`Recurrence-free survival, days`
+CPTAC_meta$status_DFS <- CPTAC_meta$`Recurrence status (1, yes; 0, no)`
+CPTAC_meta$status_OS <- CPTAC_meta$`Survival status (1, dead; 0, alive)`
+
+# Clinical
+CPTAC_meta$ISUP_simple <- CPTAC_meta$Tumor_grade
+CPTAC_meta$ISUP_combined <- ifelse(CPTAC_meta$ISUP_simple %in% c("G1","G2"),"G1/2", ifelse(CPTAC_meta$ISUP_simple %in% c("G3","G4"), "G3/4", NA))
+
+CPTAC_meta$pT_simple <- str_remove(CPTAC_meta$Tumor_stage, "Stage ")
+roman_to_arabic <- c("I" = 1, "II" = 2, "III" = 3, "IV" = 4)
+CPTAC_meta$pT_simple <- unname(roman_to_arabic)[match(CPTAC_meta$pT_simple, names(roman_to_arabic))]
+CPTAC_meta$pT_combined <- ifelse(CPTAC_meta$pT_simple %in% c("1","2"),"1/2", ifelse(CPTAC_meta$pT_simple %in% c("3","4"), "3/4", NA))
+
+necrose_name <- c("0", "1", NA)
+names(necrose_name) <- unique(CPTAC_meta$NECROSIS)
+CPTAC_meta$necrose <- unname(necrose_name)[match(CPTAC_meta$NECROSIS, names(necrose_name))]
+```
+
+```{r}
+write.xlsx(CPTAC_meta, "/mnt/central_nas/rcc_volume/RCC/HE/CLAM/CPTAC/CPTAC_meta_clean.xlsx")
+```
+
+## Move files
+
+```{r}
+slides_selected <- paste0(CPTAC_meta$Slide_ID, ".svs")
+
+slides_all <- list.files("/mnt/central_nas/rcc_volume/RCC/HE/CPTAC/PKG - CPTAC-CCRCC_v1/CCRCC/")
+
+slides_move <- slides_all[slides_all %in% slides_selected]
+slides_missing <- slides_selected[!slides_selected %in% slides_move]
+```
+
+```{r}
+# Copy files
+slides_dest <- "/mnt/central_nas/rcc_volume/RCC/HE/CLAM/CPTAC/raw/"
+
+#file.copy(from = slides_move, to = slides_dest)
+```
+
 

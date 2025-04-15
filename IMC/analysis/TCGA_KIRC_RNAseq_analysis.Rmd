@@ -1759,7 +1759,7 @@ Heatmap(ht_MCP, name = "mean MCP-Z-score")
 
 ```{r}
 #res_quanti <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_quantiseq.rds") 
-#res_quanti <- immunedeconv::deconvolute(TPM_mat, method = "quantiseq")
+res_quanti <- immunedeconv::deconvolute(TPM_mat, method = "quantiseq")
 ```
 
 ```{r}
@@ -1824,6 +1824,74 @@ Heatmap(ht_quanti, name = "mean quanti-Z-score")
 
 ```{r}
 saveRDS(res_quanti, "/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_quantiseq.rds") 
+```
+
+
+### xCell
+
+```{r}
+res_xcell <- immunedeconv::deconvolute(TPM_mat, method = "xcell")
+saveRDS(res_xcell, "/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_xcell.rds") 
+```
+
+
+```{r}
+#Z-scoring of quanti results by cell type
+res_xcell_z <- res_xcell %>% column_to_rownames("cell_type")
+
+res_xcell_z <- as.data.frame(t(scale(t(res_xcell_z), center=TRUE, scale=TRUE)))
+res_xcell_z <- res_xcell_z %>% rownames_to_column("cell_type")
+
+res_xcell_plot <- res_xcell_z %>% pivot_longer(2:ncol(res_xcell_z), names_to = "PID", values_to = "score")
+
+res_xcell_plot$TME_archetype <- kirc.clean$TME_archetype[match(res_xcell_plot$PID, colnames(kirc.clean))]
+
+res_xcell_plot <- res_xcell_plot %>% filter(!is.na(TME_archetype))
+
+ggplot(res_xcell_plot, aes(x = TME_archetype, y = score))+
+  geom_boxplot(outlier.colour = NA)+
+  geom_jitter(aes(color = TME_archetype), size = 3, position=position_jitter(w=0.1,h=0.1))+
+  facet_wrap(~cell_type, scales = "free_y")+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90))+
+  scale_color_brewer(palette = "Set1")+
+  guides(color = "none")
+  #scale_color_manual(values = metadata(vsd)$colors$KRT57_score)
+  #stat_compare_means(method = "t.test")
+  
+
+# Heatmap visualization  
+ht_quanti <- res_xcell_plot %>% group_by(TME_archetype, cell_type) %>% dplyr::summarize(mean = mean(score)) %>% pivot_wider(names_from = TME_archetype, values_from = mean) %>% column_to_rownames("cell_type")
+
+Heatmap(ht_quanti, name = "mean quanti-Z-score")
+```
+```{r}
+#Z-scoring of quanti results by cell type
+res_xcell_z <- res_xcell %>% column_to_rownames("cell_type")
+
+res_xcell_z <- as.data.frame(t(scale(t(res_xcell_z), center=TRUE, scale=TRUE)))
+res_xcell_z <- res_xcell_z %>% rownames_to_column("cell_type")
+
+res_xcell_plot <- res_xcell_z %>% pivot_longer(2:ncol(res_xcell_z), names_to = "PID", values_to = "score")
+
+res_xcell_plot$PID_ICAM_mTOR_group <- kirc.clean$PID_ICAM_mTOR_group[match(res_xcell_plot$PID, colnames(kirc.clean))]
+
+ggplot(res_xcell_plot, aes(x = PID_ICAM_mTOR_group, y = score))+
+  geom_boxplot(outlier.colour = NA)+
+  geom_jitter(aes(color = PID_ICAM_mTOR_group), size = 3, position=position_jitter(w=0.1,h=0.1))+
+  facet_wrap(~cell_type, scales = "free_y")+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90))+
+  scale_color_brewer(palette = "Set1")+
+  guides(color = "none")
+  #scale_color_manual(values = metadata(vsd)$colors$KRT57_score)
+  #stat_compare_means(method = "t.test")
+  
+
+# Heatmap visualization  
+ht_xcell <- res_xcell_plot %>% group_by(PID_ICAM_mTOR_group, cell_type) %>% dplyr::summarize(mean = mean(score)) %>% pivot_wider(names_from = PID_ICAM_mTOR_group, values_from = mean) %>% column_to_rownames("cell_type")
+
+Heatmap(ht_xcell, name = "mean quanti-Z-score")
 ```
 
 

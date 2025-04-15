@@ -16,7 +16,7 @@ library(tidyverse)
 library(SingleCellExperiment)
 ```
 
-# TCGA evaluation from CLAM
+# 1. TCGA evaluation from CLAM
 
 ## Read in data
 
@@ -161,4 +161,5 @@ write_csv(results_combined, "/mnt/central_nas/rcc_volume/RCC/HE/CLAM/TCGA_KIRC/T
 ```
 
 
+# 2. CPTAC evaluation from CLAM
 
