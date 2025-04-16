@@ -651,7 +651,11 @@ Heatmap(scale(ht), name = "Scaled mean Z-scores")+
 
 ```{r}
 # Define GOI of interest
-GOI <- c("UCHL1", "KIF2A", "GPNMB", "HYOU1") #Cancer Cell study 2023 (Li et al.)
+GOI <- c("UCHL1", "GPNMB", "HYOU1") #Cancer Cell study 2023 (Li et al.)
+
+# UCHL1 - high grade, poor prognosis, BAP1, methly1 assocation 
+# GPNMB - high grade association
+# HYOU1 - glycoprotein related - poor prognosis for protein? 
 
 GOI_rel <- GOI[GOI %in% rownames(vsd)]
 

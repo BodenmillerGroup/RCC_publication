@@ -225,7 +225,7 @@ write.xlsx(CPTAC_meta, "/mnt/central_nas/rcc_volume/RCC/HE/CLAM/CPTAC/CPTAC_meta
 ```{r}
 slides_selected <- paste0(CPTAC_meta$Slide_ID, ".svs")
 
-slides_all <- list.files("/mnt/central_nas/rcc_volume/RCC/HE/CPTAC/PKG - CPTAC-CCRCC_v1/CCRCC/")
+slides_all <- list.files("/mnt/central_nas/rcc_volume/RCC/HE/CPTAC/")
 
 slides_move <- slides_all[slides_all %in% slides_selected]
 slides_missing <- slides_selected[!slides_selected %in% slides_move]
@@ -233,9 +233,14 @@ slides_missing <- slides_selected[!slides_selected %in% slides_move]
 
 ```{r}
 # Copy files
+slides_move_full <- paste0("/mnt/central_nas/rcc_volume/RCC/HE/CPTAC/", slides_move)
 slides_dest <- "/mnt/central_nas/rcc_volume/RCC/HE/CLAM/CPTAC/raw/"
 
-#file.copy(from = slides_move, to = slides_dest)
+file.copy(from = slides_move_full, to = slides_dest)
 ```
 
+
+```{r}
+
+```
 
