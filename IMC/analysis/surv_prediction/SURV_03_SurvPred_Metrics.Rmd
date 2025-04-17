@@ -220,7 +220,7 @@ ggsurvplot(surv_plots[[2]],
 # Display averaged chf across all folds
 data_comb <- do.call("rbind", data_out)
 
-data_comb <- data_comb %>% group_by(PID) %>% mutate(mean_chf = mean(chf)) %>% select(PID, OS_months, status_OS, mean_chf) %>% unique() %>% ungroup() %>% mutate(risk_group = ifelse(mean_chf > median(mean_chf), "high", "low"))
+data_comb <- data_comb %>% group_by(PID) %>% mutate(mean_chf = mean(chf)) %>% dplyr::select(PID, OS_months, status_OS, mean_chf) %>% unique() %>% ungroup() %>% mutate(risk_group = ifelse(mean_chf > median(mean_chf), "high", "low"))
 
 fit <- survfit(Surv(data_comb$OS_months, data_comb$status_OS) ~ risk_group, data = data_comb)
 

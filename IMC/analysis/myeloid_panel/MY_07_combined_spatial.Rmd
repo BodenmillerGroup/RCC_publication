@@ -3576,7 +3576,7 @@ masks <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/others/myeloid_panel_old/d
 
 ```{r}
 # Select images
-cur_PID <- "B1997.29774"
+#cur_PID <- "B1997.29774"
 cur_PID <- (test %>% filter(M2_CD8_dist_category == "low") %>% arrange(-CD274) %>% rownames_to_column("PID") %>% pull(PID))[1:10]
 cur_sample <- (colData(sce) %>% as.data.frame %>% select(PID, sample_id) %>% filter(PID %in%cur_PID) %>% pull(sample_id) %>% unique())
 
@@ -4330,8 +4330,8 @@ ggplot(pretreatment_mc, aes(x = spatial_CD8_pheno, y = fra, fill = pretreatment)
 
 ```{r load images}
 #Load images and masks
-images <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/images_segtest.rds")
-masks <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/masks_segtest_4.rds")
+images <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/images.rds")
+masks <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/masks.rds")
 ```
 
 ## Plot cell features onto image

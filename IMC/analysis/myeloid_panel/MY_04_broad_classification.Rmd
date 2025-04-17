@@ -1448,6 +1448,8 @@ cur_sample <- sample(unique(sce$sample_id), 40)
 cur_sample <- (colData(sce) %>% as.data.frame %>% select(sample_id, astir_type) %>% group_by(sample_id) %>% filter(astir_type == "NK_cell") %>% count() %>% arrange(desc(n)) %>% pull(sample_id))[1:10]
 
 cur_sample <- (colData(sce) %>% as.data.frame %>% select(sample_id, cluster_som_16) %>% group_by(sample_id) %>% filter(cluster_som_16 == "4") %>% count() %>% arrange(desc(n)) %>% pull(sample_id))[1:10]
+
+cur_sample <- c("202207_TMA20.4_Block2_SE_109", "202207_TMA224.2_BlockB_SE_019")
 ```
 
 ```{r}
