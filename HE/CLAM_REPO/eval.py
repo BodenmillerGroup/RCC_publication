@@ -101,6 +101,16 @@ elif args.task == 'task_3_TCGA_archetypes':
                             label_dict = {'TME_suppressed':0,'TME_activated':1,'TME_silent':2},
                             patient_strat= False,
                             ignore=[])
+    
+elif args.task == 'task_4_CPTAC_archetypes':
+    args.n_classes=3
+    dataset = Generic_MIL_Dataset(csv_path = 'dataset_csv/metadata_CPTAC_archetypes.csv',
+                            data_dir= os.path.join(args.data_root_dir, 'features'),
+                            shuffle = False, 
+                            print_info = True,
+                            label_dict = {'TME_suppressed':0,'TME_activated':1,'TME_silent':2},
+                            patient_strat= False,
+                            ignore=[])
 
 # elif args.task == 'tcga_kidney_cv':
 #     args.n_classes=3
