@@ -24,44 +24,36 @@ library(tidyverse)
 ## Read results from different models 
 
 ```{r}
-cv_results <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_GEN_exp_ALL.rds")
+cv_results <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_CLIN_fav.rds")
 
 cv_results_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_exp.rds")
 
-cv_results_2 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_exp_gen.rds")
+cv_results_2 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_TU_expanded.rds")
 
-cv_results_3 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_TU_expanded.rds")
+cv_results_3 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_MY_expanded.rds")
 
-cv_results_4 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_MY_expanded.rds")
+cv_results_4 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_Tcell_expanded.rds")
 
-cv_results_5 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_Tcell_expanded.rds")
-
-cv_results_6 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_GEN_exp.rds")
-
-cv_results_7 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_exp_ALL.rds")
-
-# cv_results_7 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_CLIN_fav.rds")
+cv_results_5 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_CLIN_fav_IMC_exp.rds")
 ```
 
 ```{r}
 # Create list from results
 # Define the cross-validation results as a list
 cv_results_list <- list(
-  "IMC_ALL_gen" = cv_results,
-  "IMC_exp" = cv_results_1,
-  "IMC_exp_gen" = cv_results_2,
-  "IMC_TU" = cv_results_3,
-  "IMC_MY" = cv_results_4,
-  "IMC_Tcell" = cv_results_5,
-  "IMC_Gen" = cv_results_6,
-  "IMC_ALL" = cv_results_7
+  "CLIN" = cv_results,
+  "IMC" = cv_results_1,
+  "IMC_TU" = cv_results_2,
+  "IMC_MY" = cv_results_3,
+  "IMC_Tcell" = cv_results_4,
+  "CLIN_IMC" = cv_results_5
 )
 ```
 
 ```{r}
 # Define colors 
-col_cv <- setNames(c("grey","#1F78B4", "lightblue", "blueviolet", "orchid1", "darkblue"),
-c("CLIN_fav", "IMC", "IMC_TU", "IMC_MY", "IMC_Tcell", "IMC_CLIN_fav_IMC"))
+col_cv <- setNames(c("grey","firebrick", "#825CA6", "#F2B342", "#317EC2", "firebrick1"),
+c("CLIN", "IMC", "IMC_TU", "IMC_MY", "IMC_Tcell", "CLIN_IMC"))
 ```
 
 ### Integrated Brier Score
@@ -128,9 +120,10 @@ ggplot(out_ibs, aes(x = reorder(model,-IBS), y = IBS, fill = model))+
   geom_boxplot(outlier.colour = NA)+
   #coord_cartesian(ylim = c(0.5,1))+
   theme_classic()+
-  stat_compare_means(ref.group = "IMC_ALL", paired = FALSE, method = "t.test", method.args = list(alternative = "less", label = "p.format"))+
+  stat_compare_means(ref.group = "CLIN", paired = FALSE, method = "t.test", method.args = list(alternative = "less", label = "p.format"))+
   #stat_compare_means(vjust = 1, method = "anova")+
-  #scale_fill_manual(values = col_cv)+
+  scale_fill_manual(values = col_cv)+
+  #scale_fill_brewer(palette = "Paired")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   xlab("Models")+
   ylab("Integrated Brier Score")
@@ -165,6 +158,7 @@ ggplot(out_concordance, aes(x = reorder(model,concordance), y = concordance, fil
   stat_compare_means(ref.group = "IMC_ALL", paired = FALSE, method = "t.test", method.args = list(alternative = "greater", label = "p.format"))+
   #stat_compare_means(vjust = 1, method = "anova")+
   #scale_fill_manual(values = col_cv)+
+  scale_fill_brewer(palette = "Paired")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   xlab("Models")+
   ylab("Concordance (Uno)")
@@ -339,7 +333,7 @@ anno <- anno[match(colnames(heatmap), anno$feature),]
 
 
 HeatmapAnnotation(
-  boxplot = anno_boxplot(heatmap, 
+  importance = anno_boxplot(heatmap, 
                          gp = gpar(fill = "darkgrey"), box_width = 0.75,
                          height = unit(6,"cm"),
                          show_row_names = FALSE), 
@@ -349,7 +343,7 @@ HeatmapAnnotation(
   col = list(origin = col_origin,
              type = col_type,
              spatial = col_spatial),
-  text = anno_text(colnames(heatmap)),
+  #text = anno_text(colnames(heatmap)),
   gap = unit(1,"mm"),
   border = TRUE
 )%v%NULL
@@ -492,6 +486,43 @@ ha_types <- HeatmapAnnotation(
 
 
 col_group <- setNames(c("#0571B0", "gold3", "#CA0020"),c("1","2","3"))
+#col_group <- setNames(c("#92C5DE", "#F4A582", "#CA0020","#0571B0"),c("1","2","3","4"))
+
+# Add colAnno
+col_anno <- key_aggregated %>% rownames_to_column("PID_group") %>% select(PID_group)
+ca <- columnAnnotation(PID_group = anno_simple(col_anno, col = col_group))
+
+Heatmap(t(key_aggregated), 
+        bottom_annotation = ca)+
+  ha_types+
+  rowAnnotation(text = anno_text(row_anno$feature))
+```
+
+```{r}
+key_aggregated <- metadata_selected %>% select(BF_PL_TME_archetypes, all_of(top_features)) %>% pivot_longer(cols = 2:ncol(.),names_to = "feature", values_to = "score") %>% group_by(BF_PL_TME_archetypes, feature) %>% summarize(mean = mean(score)) %>% pivot_wider(id_cols = 1, names_from = "feature", values_from = "mean") %>% column_to_rownames("BF_PL_TME_archetypes")
+
+other_IMC_features <- unique(plot$feature)[!unique(plot$feature) %in% top_features]
+
+other_aggregated <- metadata_selected %>% select(BF_PL_TME_archetypes, all_of(other_IMC_features)) %>% pivot_longer(cols = 2:ncol(.),names_to = "feature", values_to = "score") %>% group_by(BF_PL_TME_archetypes, feature) %>% summarize(mean = mean(score)) %>% pivot_wider(id_cols = 1, names_from = "feature", values_from = "mean") %>% column_to_rownames("BF_PL_TME_archetypes")
+
+
+# Add rowAnno
+row_anno <- plot %>% ungroup %>% filter(feature %in% top_features) %>% select(feature, feature_origin, feature_type, feature_spatial) %>% unique()
+
+row_anno <- row_anno[match(colnames(key_aggregated), row_anno$feature),]
+
+ha_types <- HeatmapAnnotation(
+    origin = row_anno$feature_origin,
+    type = row_anno$feature_type,
+    spatial = row_anno$feature_spatial, 
+    col = list(origin = col_origin,
+             type = col_type,
+             spatial = col_spatial),
+    border = TRUE,
+    which = "row")
+
+
+col_group <- setNames(c("#0571B0", "gold3", "#CA0020"),c("TME_activated","TME_silent","TME_suppressed"))
 #col_group <- setNames(c("#92C5DE", "#F4A582", "#CA0020","#0571B0"),c("1","2","3","4"))
 
 # Add colAnno

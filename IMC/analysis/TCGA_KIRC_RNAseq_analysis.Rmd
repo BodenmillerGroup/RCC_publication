@@ -319,6 +319,7 @@ kirc.clean <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA
 ### Define groups
 
 ```{r}
+counts_norm <- counts(res, normalized = TRUE)
 colnames(counts_norm) <- res$PID
 rownames(counts_norm)
 
@@ -390,7 +391,8 @@ vsd$PID_group_test <- anno$metacluster[match(vsd$PID, anno$PID)]
 df_check$PID_group_test <- anno$metacluster[match(rownames(df_check), anno$PID)]
 
 ggplot(df_check, aes(ICAM1_minmax, MTOR_minmax, color = PID_group_test))+
-  geom_point()
+  geom_point()+
+  theme_classic()
 ```
 
 ```{r}
@@ -469,6 +471,7 @@ ggsurvplot(fit,
           risk.table.col = "strata", # Change risk table color by groups
           linetype = "strata", # Change line type by groups
           surv.median.line = "hv", # Specify median survival
+          palette = "Set1",
           #palette = unname(metadata(kirc.clean)$colors$ISUP_combined),
           ggtheme = theme_classic())
 ```

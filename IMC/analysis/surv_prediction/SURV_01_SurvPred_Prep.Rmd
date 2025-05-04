@@ -467,7 +467,7 @@ tumor_key <- read_csv("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest
 ```{r}
 paste0("Number of EXP features before preprocessing: ", sum(str_count(colnames(tumor_key), "EXP_")))
 paste0("Number of MC features before preprocessing: ", sum(str_count(colnames(tumor_key), "MC_")))
-paste0("Number of D features before preprocessing: ", sum(str_count(colnames(tumor_key), "D_")))
+paste0("Number of D features before preprocessing: ", sum(str_count(colnames(tumor_key), "D_"))-1)
 paste0("Number of INT features before preprocessing: ", sum(str_count(colnames(tumor_key), "INT_")))
 ```
 
