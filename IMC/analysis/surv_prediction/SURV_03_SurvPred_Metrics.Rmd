@@ -16,6 +16,8 @@ library(survival)
 library(survminer)
 library(pec)
 library(tidyverse)
+library(easyalluvial)
+library(ggnewscale)
 ```
 
 
@@ -617,6 +619,223 @@ alluvial_wide(df_alluvial,
 
 #### Associations
 
+##### Key survival features
+
+```{r}
+library(dplyr)
+library(tibble)
+
+# Prepare patient group data and mutation matrix
+cur_groups <- metadata_genome %>%
+  select(PID, all_of(top_features)) %>%
+  unique()
+
+cur_mut_clonal <- metadata_genome %>%
+  select(PID, all_of(GOI_clonal)) %>%
+  unique() %>% remove_rownames %>% 
+  column_to_rownames("PID")
+
+# Initialize result list
+results <- list()
+
+# Loop through each gene and feature
+for (gene in GOI_clonal) {
+  # Add mutation status to cur_groups
+  cur_groups$mutation_status <- as.character(cur_mut_clonal[cur_groups$PID, gene])
+  
+  for (feature in top_features) {
+    df <- cur_groups %>%
+      filter(!is.na(mutation_status), !is.na(.data[[feature]]))
+    
+    if (n_distinct(df$mutation_status) < 2) next  # Skip if only one group
+    
+    # Perform Wilcoxon test
+    wt <- wilcox.test(df[[feature]] ~ df$mutation_status)
+    
+    # Compute effect size (mean difference)
+    med_mut <- mean(df[[feature]][df$mutation_status == "1"], na.rm = TRUE)
+    med_wt  <- mean(df[[feature]][df$mutation_status == "0"], na.rm = TRUE)
+    effect_size <- med_mut - med_wt
+    direction <- ifelse(effect_size > 0, "up", "down")
+    
+    # Store result
+    results[[length(results) + 1]] <- tibble(
+      gene = gene,
+      feature = feature,
+      p_value = wt$p.value,
+      effect_size = effect_size,
+      direction = direction
+    )
+  }
+}
+
+# Combine all results into one dataframe
+summary_df <- bind_rows(results)
+
+# Optional: sort by p-value
+summary_df <- summary_df %>% arrange(p_value)
+
+summary_df <- summary_df %>% group_by(gene) %>% mutate(fdr = p.adjust(p_value, method = "fdr")) 
+```
+
+
+```{r}
+# FDR at 0.1 with trends
+summary_df$result <- ifelse(summary_df$effect_size > 0 & summary_df$fdr < 0.1, "UP",
+                             ifelse(summary_df$effect_size > 0 & summary_df$p_value < 0.05, "UP_trend", 
+                                    ifelse(summary_df$effect_size < 0 & summary_df$fdr < 0.1, "DOWN", 
+                                           ifelse(summary_df$effect_size < 0 & summary_df$p_value < 0.05, "DOWN_trend","NOTSIG"))))
+
+## hierarchical clustering on odds_ratio
+cur_df <- summary_df  %>% select(gene, feature, effect_size) %>% pivot_wider(values_from = effect_size, names_from = gene)
+
+# rows 
+dd <- dist(cur_df[2:ncol(cur_df)], method = "euclidean")
+hc <- hclust(dd)
+plot(hc)
+row_sorted <- hc$order
+summary_df$feature <- factor(summary_df$feature, levels = cur_df[row_sorted,]$feature)
+
+# columns 
+dd <- dist(t(cur_df[2:ncol(cur_df)]), method = "euclidean")
+hc <- hclust(dd)
+plot(hc)
+column_sorted <- hc$order
+summary_df$gene <- factor(summary_df$gene, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
+
+ggplot(summary_df , aes(x=feature, y = gene,col = effect_size, size = -log10(fdr)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 0)+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = summary_df ,shape = 1,aes(size = -log10(fdr), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+
+summary_df_fil <- summary_df %>% filter(result != "NOTSIG")
+
+ggplot(summary_df_fil, aes(x=feature, y = gene,col = effect_size, size = -log10(fdr)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 0)+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = summary_df_fil, shape = 1,aes(size = -log10(fdr), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+```
+
+
+```{r}
+# Patient group info 
+cur_groups <- metadata_genome %>%
+  select(PID, all_of(top_features)) %>%
+  unique()
+
+# Binary mutation matrix
+## Here GOI clonal 
+genome_type <- c("VHL_wildtype", "VHL_monodriver", "BAP1_driven", "PBRM1_driven", "multiple_drivers")
+ 
+cur_mut_clonal <- metadata_genome %>% as.data.frame %>% select(PID, all_of(genome_type)) %>% unique() %>% remove_rownames %>% column_to_rownames("PID")
+
+# Initialize result list
+results <- list()
+
+# Loop through each gene and feature
+for (gene in genome_type) {
+  # Add mutation status to cur_groups
+  cur_groups$mutation_status <- as.character(cur_mut_clonal[cur_groups$PID, gene])
+  
+  for (feature in top_features) {
+    df <- cur_groups %>%
+      filter(!is.na(mutation_status), !is.na(.data[[feature]]))
+    
+    if (n_distinct(df$mutation_status) < 2) next  # Skip if only one group
+    
+    # Perform Wilcoxon test
+    wt <- wilcox.test(df[[feature]] ~ df$mutation_status)
+    
+    # Compute effect size (mean difference)
+    med_mut <- mean(df[[feature]][df$mutation_status == "1"], na.rm = TRUE)
+    med_wt  <- mean(df[[feature]][df$mutation_status == "0"], na.rm = TRUE)
+    effect_size <- med_mut - med_wt
+    direction <- ifelse(effect_size > 0, "up", "down")
+    
+    # Store result
+    results[[length(results) + 1]] <- tibble(
+      gene = gene,
+      feature = feature,
+      p_value = wt$p.value,
+      effect_size = effect_size,
+      direction = direction
+    )
+  }
+}
+
+# Combine all results into one dataframe
+summary_df <- bind_rows(results)
+
+# Optional: sort by p-value
+summary_df <- summary_df %>% arrange(p_value)
+
+summary_df <- summary_df %>% group_by(gene) %>% mutate(fdr = p.adjust(p_value, method = "fdr")) 
+
+```
+
+```{r}
+# FDR at 0.1 with trends
+summary_df$result <- ifelse(summary_df$effect_size > 0 & summary_df$fdr < 0.1, "UP",
+                             ifelse(summary_df$effect_size > 0 & summary_df$p_value < 0.05, "UP_trend", 
+                                    ifelse(summary_df$effect_size < 0 & summary_df$fdr < 0.1, "DOWN", 
+                                           ifelse(summary_df$effect_size < 0 & summary_df$p_value < 0.05, "DOWN_trend","NOTSIG"))))
+
+## hierarchical clustering on odds_ratio
+cur_df <- summary_df  %>% select(gene, feature, effect_size) %>% pivot_wider(values_from = effect_size, names_from = gene)
+
+# rows 
+dd <- dist(cur_df[2:ncol(cur_df)], method = "euclidean")
+hc <- hclust(dd)
+plot(hc)
+row_sorted <- hc$order
+summary_df$feature <- factor(summary_df$feature, levels = cur_df[row_sorted,]$feature)
+
+# columns 
+dd <- dist(t(cur_df[2:ncol(cur_df)]), method = "euclidean")
+hc <- hclust(dd)
+plot(hc)
+column_sorted <- hc$order
+summary_df$gene <- factor(summary_df$gene, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
+
+ggplot(summary_df , aes(x=feature, y = gene,col = effect_size, size = -log10(fdr)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 0)+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = summary_df ,shape = 1,aes(size = -log10(fdr), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+
+summary_df_fil <- summary_df %>% filter(result != "NOTSIG")
+
+ggplot(summary_df_fil, aes(x=feature, y = gene,col = effect_size, size = -log10(fdr)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 0)+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = summary_df_fil, shape = 1,aes(size = -log10(fdr), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+
+##### Survival archetypes
+
 TO CHECK: Association with PL groups 
 
 ```{r}
@@ -1184,6 +1403,28 @@ ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_a
   scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))
 ```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 ```{r}
 metadata_genome$genomic_subtype <- genomic_sub$genomic_subtype[match(metadata_genome$PID, genomic_sub$PID)]
