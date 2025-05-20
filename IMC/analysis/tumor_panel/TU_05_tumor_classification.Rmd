@@ -3840,6 +3840,8 @@ ggsurvplot(fit,
 
 ## ICAM1 and mTOR based patient groups 
 
+(also tried VHL here)
+
 Per patient
 
 ```{r}
@@ -3875,7 +3877,7 @@ plotReducedDim(mean_sce, dimred = "PCA_sub", by_exprs_values = "min_max_PID",col
 mean_sce <- aggregateAcrossCells(sce, ids = sce$PID,
                                  statistics = "mean",
                                  use.assay.type = "min_max",
-                                 subset.row = rownames(sce) %in% c("ICAM1", "mTOR"))
+                                 subset.row = rownames(sce) %in% c("ICAM1", "VHL"))
 
 assay(mean_sce, "min_max_PID") <- assay(mean_sce, "min_max") - rowMins(assay(mean_sce, "min_max"))
 assay(mean_sce, "min_max_PID") <- assay(mean_sce, "min_max_PID") / (rowMaxs(assay(mean_sce, "min_max")) - rowMins(assay(mean_sce, "min_max")))
@@ -3947,7 +3949,7 @@ cur_surv <- colData(sce) %>% as.data.frame() %>%
   unique()
 
 #Plot survival curves
-fit <- survfit(Surv(OS_months, status_OS) ~ PID_ICAM_mTOR_group, data = cur_surv)
+fit <- survfit(Surv(OS_months, status_OS) ~ PID_group_test, data = cur_surv)
 print(fit)
 
 ggsurvplot(fit,

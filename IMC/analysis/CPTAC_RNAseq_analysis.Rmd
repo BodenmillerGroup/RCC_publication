@@ -215,8 +215,8 @@ CPTAC.clean$DFS_days <- as.numeric(CPTAC.clean$DFS_days)
 ## Save
 
 ```{r}
-saveRDS(CPTAC.clean,"/mnt/central_nas/rcc_volume/RCC/validation/CPTAC/CPTAC_cleaned.rds")
-#CPTAC.clean <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/CPTAC/CPTAC_cleaned.rds")
+#saveRDS(CPTAC.clean,"/mnt/central_nas/rcc_volume/RCC/validation/CPTAC/CPTAC_cleaned.rds")
+CPTAC.clean <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/CPTAC/CPTAC_cleaned.rds")
 ```
 
 
@@ -313,16 +313,17 @@ mat <- assay(vsd)
 ### Save
 
 ```{r}
-#saveRDS(res, "/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_nodesign.rds") 
-#saveRDS(vsd, "/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_vsd_nodesign.rds") 
-#saveRDS(CPTAC.clean,"/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_cleaned.rds")
+saveRDS(res, "/mnt/central_nas/rcc_volume/RCC/validation/CPTAC/CPTAC_res_nodesign.rds")
+saveRDS(vsd, "/mnt/central_nas/rcc_volume/RCC/validation/CPTAC/CPTAC_vsd_nodesign.rds")
+saveRDS(CPTAC.clean,"/mnt/central_nas/rcc_volume/RCC/validation/CPTAC/CPTAC_cleaned.rds")
 
-# res <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_nodesign.rds") 
-# vsd <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_vsd_nodesign.rds") 
-# CPTAC.clean <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_cleaned.rds")
+
+res <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/CPTAC/CPTAC_res_nodesign.rds")
+vsd <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/CPTAC/CPTAC_vsd_nodesign.rds")
+CPTAC.clean <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/CPTAC/CPTAC_cleaned.rds")
 ```
 
-## ICAM1 and mTOR signature 
+## ICAM1 and VHL signature 
 
 ### Define groups
 
@@ -331,26 +332,26 @@ counts_norm <- counts(res, normalized = TRUE)
 colnames(counts_norm) <- res$PID
 rownames(counts_norm)
 
-df_check <- counts_norm %>% t() %>% as.data.frame %>% select("ICAM1", "VHL")
+df_check <- counts_norm %>% t() %>% as.data.frame %>% select("ICAM1", "MTOR")
 
 rownames(df_check) <- res$PID
 
 df_check$ICAM1_minmax <- scale(df_check$ICAM1, center = min(df_check$ICAM1), scale = max(df_check$ICAM1) - min(df_check$ICAM1))[,1]
-df_check$VHL_minmax <- scale(df_check$VHL, center = min(df_check$VHL), scale = max(df_check$VHL) - min(df_check$VHL))[,1]
+df_check$MTOR_minmax <- scale(df_check$MTOR, center = min(df_check$MTOR), scale = max(df_check$MTOR) - min(df_check$MTOR))[,1]
 
 quantile(df_check$ICAM1)
-quantile(df_check$VHL)
+quantile(df_check$MTOR)
 
-ggplot(df_check, aes(ICAM1, VHL))+
+ggplot(df_check, aes(ICAM1, MTOR))+
   geom_point()
-ggplot(df_check, aes(ICAM1_minmax, VHL_minmax))+
+ggplot(df_check, aes(ICAM1_minmax, MTOR_minmax))+
   geom_point()
 ```
 
 ```{r}
 library(clValid)
 
-df_test <- df_check %>% select(ICAM1_minmax, VHL_minmax)
+df_test <- df_check %>% select(ICAM1_minmax, MTOR_minmax)
 
 #Internal measures
 set.seed(22)
@@ -361,7 +362,7 @@ plot(testCL, legend = FALSE)
 library(dendextend)
 library(circlize)
 avg_dend_obj_MCP <- as.dendrogram(agnes(df_test,metric = "euclidean",method = "ward"))
-avg_col_dend_MCP <- color_branches(avg_dend_obj_MCP, k = 3)
+avg_col_dend_MCP <- color_branches(avg_dend_obj_MCP, k = 4)
 plot(avg_col_dend_MCP)
 
 #chosen method: kmeans, k=14
@@ -372,9 +373,9 @@ plot(avg_col_dend_MCP)
 set.seed(22)
 h_PID <- Heatmap(df_test, 
         col = viridis(100), 
-        #row_km = 3, row_km_repeats = 10000,
-        row_split = 3, 
-        cluster_rows = avg_col_dend_MCP,
+        row_km = 3, row_km_repeats = 10000,
+        #row_split = 4, 
+        #cluster_rows = avg_col_dend_MCP,
         name = "min_max")
 h_PID <- draw(h_PID)
 
@@ -393,7 +394,7 @@ res$PID_group_test <- anno$metacluster[match(res$PID, anno$PID)]
 vsd$PID_group_test <- anno$metacluster[match(vsd$PID, anno$PID)]
 df_check$PID_group_test <- anno$metacluster[match(rownames(df_check), anno$PID)]
 
-ggplot(df_check, aes(ICAM1_minmax, VHL_minmax, color = PID_group_test))+
+ggplot(df_check, aes(ICAM1_minmax, MTOR_minmax, color = PID_group_test))+
   geom_point()+
   theme_classic()
 ```
@@ -998,6 +999,8 @@ ht <- mat %>% pivot_wider(names_from = "gene", values_from = "mean") %>% column_
 
 Heatmap(ht, name = "Mean signature Z-scores")
 ```
+
+# CONTINUE HERE
 
 ### Save
 
