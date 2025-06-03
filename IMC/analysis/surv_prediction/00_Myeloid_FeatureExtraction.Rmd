@@ -71,11 +71,16 @@ sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/
 ### Mean 
 
 ```{r}
+rownames(sce)[rowData(sce)$myeloid_cluster_1]
+
+rowData(sce)$myeloid_cluster_2 <- rownames(sce) %in% c("MPO", "CD16", "HLADR", "CD68", "CD163", "CD11c", "CD11b", 
+"MMP9", "CCR2", "Arginase", "CD33", "CD209", "CD206", "CD15", "VISTA", "IDO1", "CD274")
+
 # Aggregrate across cells with the mean
 mean_sce <- aggregateAcrossCells(sce, ids = sce$PID,
                                  statistics = "mean",
                                  use.assay.type = "min_max",
-                                 subset.row = rowData(sce)$myeloid_cluster_1)
+                                 subset.row = rowData(sce)$myeloid_cluster_2)
 ```
 
 ```{r}
@@ -297,6 +302,26 @@ ggplot(plot_cox_combined, aes(x=group, y = category,col = HR, size= -log10(p_val
   scale_size(range = c(2,10))+
   new_scale_colour() +
   geom_point(data = plot_cox_combined,shape = 1,aes(size = -log10(p_value), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("Cox model")
+
+plot_cox_combined$type <- "expression"
+plot_cox_combined_fil <- plot_cox_combined %>% filter(result != "NOTSIG")
+both <- plot_cox_combined_fil %>% group_by(group,result) %>% count() %>% filter(n > 1) %>% pull(group) %>% unfactor()
+plot_cox_combined_fil$category <- ifelse(plot_cox_combined_fil$group %in% both, "both", plot_cox_combined_fil$category)
+plot_cox_combined_fil <- plot_cox_combined_fil %>% group_by(group, category) %>% reframe(HR = mean(HR), p_value = mean(p_value), result = result, type = type) %>% unique()
+
+ggplot(plot_cox_combined_fil, aes(x=group, y = type, shape = category, col = HR, size= -log10(p_value)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  scale_shape_manual(values = c(16,15,17))+
+  new_scale(new_aes = "shape")+
+  new_scale(new_aes = "color") +
+  geom_point(data = plot_cox_combined_fil,aes(size = -log10(p_value), shape = category, col = result), stroke =1.5)+
+  scale_shape_manual(values = c(1,0,2))+
   scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   ylab("Cox model")
@@ -647,6 +672,26 @@ ggplot(plot_cox_combined, aes(x=group, y = category,col = HR, size= -log10(p_val
   scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   ylab("Cox model")
+
+plot_cox_combined$type <- "phenotypes"
+plot_cox_combined_fil <- plot_cox_combined %>% filter(result != "NOTSIG")
+both <- plot_cox_combined_fil %>% group_by(group,result) %>% count() %>% filter(n > 1) %>% pull(group) %>% unfactor()
+plot_cox_combined_fil$category <- ifelse(plot_cox_combined_fil$group %in% both, "both", plot_cox_combined_fil$category)
+plot_cox_combined_fil <- plot_cox_combined_fil %>% group_by(group, category) %>% reframe(HR = mean(HR), p_value = mean(p_value), result = result, type = type) %>% unique()
+
+ggplot(plot_cox_combined_fil, aes(x=group, y = type, shape = category, col = HR, size= -log10(p_value)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  scale_shape_manual(values = c(16,15,17))+
+  new_scale(new_aes = "shape")+
+  new_scale(new_aes = "color") +
+  geom_point(data = plot_cox_combined_fil,aes(size = -log10(p_value), shape = category, col = result), stroke =1.5)+
+  scale_shape_manual(values = c(1,0,2))+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("Cox model")
 ```
 
 
@@ -709,6 +754,10 @@ return(DA)
 DA_out <- do.call(rbind, DA)
 ```
 
+```{r}
+# Filter metaclusters that are differential abundant across at least 2 categories
+MC_diff_abun <- DA_out %>% filter(sign == TRUE) %>% group_by(cluster, result) %>% dplyr::count() %>% filter(n >= 2) %>% pull(cluster) %>% unique() %>% unfactor()
+```
 
 ```{r}
 library(ggnewscale)
@@ -724,6 +773,18 @@ ggplot(DA_out, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
   geom_point(data = DA_out,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
   scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+DA_out_fil <- DA_out[DA_out$cluster %in% MC_diff_abun, ]
+ggplot(DA_out_fil, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8")+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = DA_out_fil,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("Disease progression")
 ```
 
 ```{r}
@@ -966,6 +1027,26 @@ ggplot(plot_cox_combined, aes(x=group, y = category,col = HR, size= -log10(p_val
   scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   ylab("Cox model")
+
+plot_cox_combined$type <- "districts"
+plot_cox_combined_fil <- plot_cox_combined %>% filter(result != "NOTSIG")
+both <- plot_cox_combined_fil %>% group_by(group,result) %>% count() %>% filter(n > 1) %>% pull(group) %>% unfactor()
+plot_cox_combined_fil$category <- ifelse(plot_cox_combined_fil$group %in% both, "both", plot_cox_combined_fil$category)
+plot_cox_combined_fil <- plot_cox_combined_fil %>% group_by(group, category) %>% reframe(HR = mean(HR), p_value = mean(p_value), result = result, type = type) %>% unique()
+
+ggplot(plot_cox_combined_fil, aes(x=group, y = type, shape = category, col = HR, size= -log10(p_value)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  scale_shape_manual(values = c(16,15,17))+
+  new_scale(new_aes = "shape")+
+  new_scale(new_aes = "color") +
+  geom_point(data = plot_cox_combined_fil,aes(size = -log10(p_value), shape = category, col = result), stroke =1.5)+
+  scale_shape_manual(values = c(1,0,2))+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("Cox model")
 ```
 
 ## Differential abundance testing 
@@ -1027,6 +1108,10 @@ return(DA)
 DA_out <- do.call(rbind, DA)
 ```
 
+```{r}
+# Filter metaclusters that are differential abundant across at least 2 categories
+D_diff_abun <- DA_out %>% filter(sign == TRUE) %>% group_by(cluster, result) %>% dplyr::count() %>% filter(n >= 2) %>% pull(cluster) %>% unique() %>% unfactor()
+```
 
 ```{r}
 library(ggnewscale)
@@ -1042,6 +1127,18 @@ ggplot(DA_out, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
   geom_point(data = DA_out,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
   scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+DA_out_fil <- DA_out[DA_out$cluster %in% D_diff_abun, ]
+ggplot(DA_out_fil, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8")+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = DA_out_fil,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("Disease progression")
 ```
 
 ```{r}
@@ -1316,6 +1413,37 @@ cur_surv_median_results <- cur_surv_plot
 ```
 
 
+```{r}
+# Combined visualization 
+cur_surv_mean_results$category <- "mean"
+cur_surv_median_results$category <- "median"
+
+plot_int_combined <- rbind(cur_surv_mean_results, cur_surv_median_results)
+plot_int_combined$type <- "interaction"
+both <- plot_int_combined %>% group_by(group,direction) %>% count() %>% filter(n > 1) %>% pull(group)
+plot_int_combined$category <- ifelse(plot_int_combined$group %in% both, "both", plot_int_combined$category)
+plot_int_combined_fil <- plot_int_combined %>% group_by(group, category) %>% reframe(p = mean(p), 
+                                                                                     result = result, 
+                                                                                     type = type, 
+                                                                                     int_type = int_type, 
+                                                                                     direction = direction) %>% unique()
+priority_order <- c("DOWN" = 1, "DOWN_trend" = 2, "UP" = 1, "UP_trend" = 2)
+plot_int_combined_fil <- plot_int_combined_fil %>%
+  group_by(group) %>%
+  slice_min(order_by = priority_order[result], with_ties = FALSE)
+
+ggplot(plot_int_combined_fil, aes(x=reorder(group,-log10(p)), y = type, col = result, size = -log10(p), shape = category))+
+  geom_point()+
+  theme_classic()+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+  scale_size(range = c(2,10))+
+  scale_shape_manual(values = c(16,15,17))+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  facet_grid(~ direction, scales = "free_x", space = "free_x")+
+  new_scale("shape")+
+  geom_point(data = plot_int_combined_fil, aes(shape = int_type), col = "black")+
+  scale_shape_manual(values = c(4, 3))
+```
 
 
 ## Extract survival relevant features

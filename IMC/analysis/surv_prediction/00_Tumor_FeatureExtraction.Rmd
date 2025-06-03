@@ -77,7 +77,7 @@ sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sc
 mean_sce <- aggregateAcrossCells(sce, ids = sce$PID,
                                  statistics = "mean",
                                  use.assay.type = "min_max",
-                                 subset.row = rowData(sce)$tumor_cluster)
+                                 subset.row = rowData(sce)$tumor_cluster_1)
 ```
 
 ```{r}
@@ -754,6 +754,11 @@ DA_out <- do.call(rbind, DA)
 
 
 ```{r}
+# Filter metaclusters that are differential abundant across at least 2 categories
+MC_diff_abun <- DA_out %>% filter(sign == TRUE) %>% group_by(cluster, result) %>% dplyr::count() %>% filter(n >= 2) %>% pull(cluster) %>% unique() %>% unfactor()
+```
+
+```{r}
 library(ggnewscale)
 DA_out$category <- factor(DA_out$category,levels = c("PDL1_score", "necrose","pT_combined","ISUP_combined"))
 #DA_out <- DA_out %>% filter(category %in% c("pT_combined","ISUP_combined"))
@@ -1104,6 +1109,10 @@ return(DA)
 DA_out <- do.call(rbind, DA)
 ```
 
+```{r}
+# Filter metaclusters that are differential abundant across at least 2 categories
+D_diff_abun <- DA_out %>% filter(sign == TRUE) %>% group_by(cluster, result) %>% dplyr::count() %>% filter(n >= 2) %>% pull(cluster) %>% unique() %>% unfactor()
+```
 
 ```{r}
 library(ggnewscale)
