@@ -440,8 +440,8 @@ variant_combined <- foreach(i = seq_along(files), .combine = "rbind")%do%{
 ```
 
 ```{r}
-write_csv(variant_combined, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_cohort1.csv")
-#variant_combined <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_cohort1.csv")
+#write_csv(variant_combined, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_cohort1.csv")
+variant_combined <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_cohort1.csv")
 ```
 
 #### Match identifiers
@@ -484,7 +484,7 @@ write_csv(ID_match_no_match, "/mnt/central_nas/rcc_volume/RCC/genome/data_analys
 ```
 
 ```{r}
-#write_csv(variant_combined, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_cohort1.csv")
+write_csv(variant_combined, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_cohort1.csv")
 #variant_combined <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_cohort1.csv")
 ```
 
@@ -544,7 +544,7 @@ variant_combined_filtered$variant_consequence_combined[variant_combined_filtered
 
 ```{r}
 write_csv(variant_combined_filtered, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_filtered_cohort1.csv")
-#variant_combined_filtered <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_filtered_cohort1.csv")
+variant_combined_filtered <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_filtered_cohort1.csv")
 ```
 
 #### Oncoprint
@@ -772,6 +772,8 @@ variant_consensus_filtered$variant_consequence_combined[variant_consensus_filter
 
 ```{r}
 write_csv(variant_consensus_filtered, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_consensus_filtered_cohort1.csv")
+#variant_consensus_filtered <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_consensus_filtered_cohort1.csv")
+
 ```
 
 #### Oncoprint

@@ -106,6 +106,105 @@ for (entry in colnames(metadata_PL)[colnames(metadata_PL) %in% c("IMC_TU_PL_PID_
 }
 ```
 
+### Add data modality information 
+
+```{r}
+# HE data
+HE_images <- data.frame(slide_id = list.files("/mnt/central_nas/rcc_volume/RCC/HE/images/"),
+           TMA_id = str_split(str_split(list.files("/mnt/central_nas/rcc_volume/RCC/HE/images/"), "_", simplify = TRUE)[,2], ".tif", simplify = TRUE)[,1])
+
+metadata_selected$HE_data <- metadata_selected$TMA_id %in% HE_images$TMA_id
+
+# IMC - ccRCC data only
+sce_TU <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_05.rds")
+metadata_selected$IMC_TU_data <- metadata_selected$PID %in% unique(sce_TU$PID) 
+
+sce_T <- readRDS("/mnt/central_nas_full/users/marllu/T_panel/data_analysis/sce_ccRCC_T_07.rds")
+metadata_selected$IMC_T_data <- metadata_selected$PID %in% unique(sce_T$PID) 
+
+sce_MY <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_06.rds")
+metadata_selected$IMC_MY_data <- metadata_selected$PID %in% unique(sce_MY$PID) 
+
+# Targeted sequencing 
+mut_anno <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_full_withmeta.csv")
+metadata_selected$GEN_data <- metadata_selected$PID %in% unique(mut_anno$PID) 
+
+# MALDI-MSI data (TO BE UPDATED WHEN NEW DATA ARRIVES)
+maldi_data <- read_csv("/mnt/central_nas_full/projects/RCC_DL/metadata_general.csv")
+metadata_selected$MSI_data <- metadata_selected$PID %in% (maldi_data %>% filter(!is.na(metabolic_subtype)) %>% pull(PID) %>% unique())
+
+# Survival information
+metadata_selected$surv_data <- ifelse(!is.na(metadata_selected$OS_months),TRUE,FALSE)
+```
+
+### Rich cohort overview
+
+ccRCC only 
+
+```{r}
+library(ComplexHeatmap)
+library(foreach)
+library(ggsci)
+library(RColorBrewer)
+
+#Filter for columns to visualize
+Meta_viz <- metadata_selected %>% filter(subtype_combined == "ccRCC") %>% select(PID, gender, age_bin, pT_simple, ISUP_simple, necrose, surv_data, IMC_TU_data, IMC_T_data, IMC_MY_data, HE_data, MSI_data, GEN_data)
+                                         
+Meta_viz <- as.data.frame(lapply(Meta_viz, as.character))
+Meta_viz[is.na(Meta_viz)] <- "Unknown"
+
+#Arrange
+Meta_viz <- Meta_viz %>% arrange(desc(pT_simple), desc(ISUP_simple), desc(necrose))
+
+colors <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/color.rds")
+names(colors$pT_simple)[1:4] <- paste0("T",names(colors$pT_simple)[1:4])
+names(colors$ISUP)[1:4] <- paste0("G",names(colors$ISUP)[1:4])
+names(colors$necrose)[1:2] <- paste0("NE",names(colors$necrose)[1:2])
+
+#Color scheme
+col <- list(PID = colors$PID, 
+            gender = colors$gender, 
+            age_bin = colors$age_bin, 
+            pT_simple = colors$pT_simple, 
+            ISUP_simple = colors$ISUP, 
+            necrose = colors$necrose, 
+            surv_data = setNames(c("black","grey"), c("FALSE", "TRUE")),
+            IMC_TU_data = setNames(c("black","grey"), c("FALSE", "TRUE")), 
+            IMC_T_data = setNames(c("black","grey"), c("FALSE", "TRUE")), 
+            IMC_MY_data = setNames(c("black","grey"), c("FALSE", "TRUE")), 
+            HE_data = setNames(c("black","grey"), c("FALSE", "TRUE")), 
+            MSI_data = setNames(c("black","grey"), c("FALSE", "TRUE")), 
+            GEN_data = setNames(c("black","grey"), c("FALSE", "TRUE"))
+            )
+
+#Heatmap Annotation
+sample_anno <- HeatmapAnnotation(PID = Meta_viz$PID,
+                                gender = Meta_viz$gender,
+                                age_bin = Meta_viz$age_bin,
+                                pT_simple = Meta_viz$pT_simple,
+                                ISUP_simple = Meta_viz$ISUP_simple,
+                                necrose = Meta_viz$necrose,
+                                surv_data = Meta_viz$surv_data,
+                                IMC_TU_data = Meta_viz$IMC_TU_data,
+                                IMC_T_data = Meta_viz$IMC_T_data, 
+                                IMC_MY_data = Meta_viz$IMC_MY_data,
+                                HE_data = Meta_viz$HE_data, 
+                                MSI_data = Meta_viz$MSI_data,
+                                GEN_data = Meta_viz$GEN_data,
+                                col = col,
+                                border = T,
+                                na_col = "black",
+                                gap = unit(5, "points"),
+                                show_annotation_name = T,
+                                show_legend = c(PID = FALSE)
+                                )%v%NULL
+
+#Display plot
+draw(sample_anno)
+```
+
+
+
 ## Load HE image information 
 
 ```{r}
@@ -130,12 +229,12 @@ images_test <- images %>% filter(PID %in% PID_test)
 ```
 
 ```{r}
-# Move test files
-from_test <- paste0("/mnt/central_nas/rcc_volume/RCC/HE/images/", images_test$slide_id)
-
-to_test <- "/mnt/central_nas/rcc_volume/RCC/HE/CLAM_test/raw/"
-
-file.copy(from = from_test, to = to_test)
+# # Move test files
+# from_test <- paste0("/mnt/central_nas/rcc_volume/RCC/HE/images/", images_test$slide_id)
+# 
+# to_test <- "/mnt/central_nas/rcc_volume/RCC/HE/CLAM_test/raw/"
+# 
+# file.copy(from = from_test, to = to_test)
 ```
 
 ```{r}
@@ -159,12 +258,12 @@ PID_test_out <- images %>% filter(!is.na(BF_PL_TME_archetypes))
 ```
 
 ```{r}
-# Move test files
-from_test <- paste0("/mnt/central_nas/rcc_volume/RCC/HE/images/", PID_test_out$slide_id)
-
-to_test <- "/mnt/central_nas/rcc_volume/RCC/HE/CLAM/TME_archetypes/raw/"
-
-file.copy(from = from_test, to = to_test)
+# # Move test files
+# from_test <- paste0("/mnt/central_nas/rcc_volume/RCC/HE/images/", PID_test_out$slide_id)
+# 
+# to_test <- "/mnt/central_nas/rcc_volume/RCC/HE/CLAM/TME_archetypes/raw/"
+# 
+# file.copy(from = from_test, to = to_test)
 ```
 
 ```{r}
