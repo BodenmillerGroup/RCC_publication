@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Step 4: Create splits 
-# NOTE: Make sure to adjust create_splits_seq.py with your dataset specifications.
+# NOTE: Make sure to adjust create_splits_seq.py with your dataset specifications. Use 50% of labels for grid_search
 python create_splits_seq.py --task task_LM_TME_archetypes --seed 1 --k 1 --label_frac 0.5 --split_dir /mnt/central_nas/rcc_volume/RCC/HE/CLAM/TME_archetypes/splits/
 
 #echo "[INFO] Split creation completed."
