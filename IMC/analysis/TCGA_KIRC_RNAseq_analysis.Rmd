@@ -319,29 +319,30 @@ kirc.clean <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA
 ### Define groups
 
 ```{r}
+counts_norm <- counts(res, normalized = TRUE)
 colnames(counts_norm) <- res$PID
 rownames(counts_norm)
 
-df_check <- counts_norm %>% t() %>% as.data.frame %>% select("ICAM1", "MTOR")
+df_check <- counts_norm %>% t() %>% as.data.frame %>% select("ICAM1", "VHL")
 
 rownames(df_check) <- res$PID
 
 df_check$ICAM1_minmax <- scale(df_check$ICAM1, center = min(df_check$ICAM1), scale = max(df_check$ICAM1) - min(df_check$ICAM1))[,1]
-df_check$MTOR_minmax <- scale(df_check$MTOR, center = min(df_check$MTOR), scale = max(df_check$MTOR) - min(df_check$MTOR))[,1]
+df_check$VHL_minmax <- scale(df_check$VHL, center = min(df_check$VHL), scale = max(df_check$VHL) - min(df_check$VHL))[,1]
 
 quantile(df_check$ICAM1)
-quantile(df_check$MTOR)
+quantile(df_check$VHL)
 
-ggplot(df_check, aes(ICAM1, MTOR))+
+ggplot(df_check, aes(ICAM1, VHL))+
   geom_point()
-ggplot(df_check, aes(ICAM1_minmax, MTOR_minmax))+
+ggplot(df_check, aes(ICAM1_minmax, VHL_minmax))+
   geom_point()
 ```
 
 ```{r}
 library(clValid)
 
-df_test <- df_check %>% select(ICAM1_minmax, MTOR_minmax)
+df_test <- df_check %>% select(ICAM1_minmax, VHL_minmax)
 
 #Internal measures
 set.seed(22)
@@ -349,10 +350,10 @@ testCL<- clValid(df_test,nClust = 3:6,clMethods = c("hierarchical","agnes","kmea
 summary(testCL)
 plot(testCL, legend = FALSE)
 
-#Stability measures 
-testCL_1<- clValid(df_test,nClust = 3:6,clMethods = c("hierarchical","agnes","kmeans"),validation="stability",metric="euclidean", method = "ward", maxitems = 3000)
-summary(testCL_1)
-plot(testCL_1, legend = FALSE)
+# #Stability measures 
+# testCL_1<- clValid(df_test,nClust = 3:6,clMethods = c("hierarchical","agnes","kmeans"),validation="stability",metric="euclidean", method = "ward", maxitems = 3000)
+# summary(testCL_1)
+# plot(testCL_1, legend = FALSE)
 
 library(dendextend)
 library(circlize)
@@ -368,9 +369,9 @@ plot(avg_col_dend_MCP)
 set.seed(22)
 h_PID <- Heatmap(df_test, 
         col = viridis(100), 
-        row_km = 3, row_km_repeats = 10000,
-        #row_split = 3, 
-        #cluster_rows = avg_col_dend_MCP,
+        #row_km = 3, row_km_repeats = 10000,
+        row_split = 3, 
+        cluster_rows = avg_col_dend_MCP,
         name = "min_max")
 h_PID <- draw(h_PID)
 
@@ -389,13 +390,14 @@ res$PID_group_test <- anno$metacluster[match(res$PID, anno$PID)]
 vsd$PID_group_test <- anno$metacluster[match(vsd$PID, anno$PID)]
 df_check$PID_group_test <- anno$metacluster[match(rownames(df_check), anno$PID)]
 
-ggplot(df_check, aes(ICAM1_minmax, MTOR_minmax, color = PID_group_test))+
-  geom_point()
+ggplot(df_check, aes(ICAM1_minmax, VHL_minmax, color = PID_group_test))+
+  geom_point()+
+  theme_classic()
 ```
 
 ```{r}
 # Define GOI of interest
-GOI <- c("ICAM1", "MTOR")
+GOI <- c("ICAM1", "VHL")
 
 GOI_rel <- GOI[GOI %in% rownames(vsd)]
 
@@ -434,16 +436,16 @@ unique(vsd$PID_group_test)
 
 ## vsd object 
 vsd$PID_ICAM_mTOR_group <- unfactor(vsd$PID_group_test)
-vsd$PID_ICAM_mTOR_group[vsd$PID_ICAM_mTOR_group == "1"] <- "MTOR_driven"
-vsd$PID_ICAM_mTOR_group[vsd$PID_ICAM_mTOR_group == "2"] <- "Not_ICAM_mTOR_driven"
-vsd$PID_ICAM_mTOR_group[vsd$PID_ICAM_mTOR_group == "3"] <- "ICAM1_driven"
+vsd$PID_ICAM_mTOR_group[vsd$PID_ICAM_mTOR_group == "1"] <- "ICAM1_driven"
+vsd$PID_ICAM_mTOR_group[vsd$PID_ICAM_mTOR_group == "2"] <- "VHL_driven"
+vsd$PID_ICAM_mTOR_group[vsd$PID_ICAM_mTOR_group == "3"] <- "Not_ICAM_VHL_driven"
 vsd$PID_ICAM_mTOR_group <- factor(vsd$PID_ICAM_mTOR_group)
 
 ## kirc.clean object 
 kirc.clean$PID_ICAM_mTOR_group <- unfactor(kirc.clean$PID_group_test)
-kirc.clean$PID_ICAM_mTOR_group[kirc.clean$PID_ICAM_mTOR_group == "1"] <- "MTOR_driven"
-kirc.clean$PID_ICAM_mTOR_group[kirc.clean$PID_ICAM_mTOR_group == "2"] <- "Not_ICAM_mTOR_driven"
-kirc.clean$PID_ICAM_mTOR_group[kirc.clean$PID_ICAM_mTOR_group == "3"] <- "ICAM1_driven"
+kirc.clean$PID_ICAM_mTOR_group[kirc.clean$PID_ICAM_mTOR_group == "1"] <- "ICAM1_driven"
+kirc.clean$PID_ICAM_mTOR_group[kirc.clean$PID_ICAM_mTOR_group == "2"] <- "VHL_driven"
+kirc.clean$PID_ICAM_mTOR_group[kirc.clean$PID_ICAM_mTOR_group == "3"] <- "Not_ICAM_VHL_driven"
 kirc.clean$PID_ICAM_mTOR_group <- factor(kirc.clean$PID_ICAM_mTOR_group)
 ```
 
@@ -455,12 +457,12 @@ kirc.clean$PID_ICAM_mTOR_group <- factor(kirc.clean$PID_ICAM_mTOR_group)
 library(survival)
 library(survminer)
 
-cur_surv <- colData(kirc.clean) %>% as.data.frame() %>% dplyr::select(PID, OS_days, status_OS, PID_ICAM_mTOR_group) %>% 
+cur_surv <- colData(kirc.clean) %>% as.data.frame() %>% dplyr::select(PID, OS_days, status_OS, PID_group_test, PID_ICAM_mTOR_group) %>% 
   #mutate(PID_ICAM_mTOR_group = ifelse(PID_ICAM_mTOR_group %in% c("2","3"), "2/3", PID_ICAM_mTOR_group)) %>% 
   unique()
 
 #Plot survival curves
-fit <- survfit(Surv(OS_days, status_OS) ~ PID_ICAM_mTOR_group, data = cur_surv)
+fit <- survfit(Surv(OS_days, status_OS) ~ PID_group_test, data = cur_surv)
 print(fit)
 
 ggsurvplot(fit,
@@ -469,6 +471,7 @@ ggsurvplot(fit,
           risk.table.col = "strata", # Change risk table color by groups
           linetype = "strata", # Change line type by groups
           surv.median.line = "hv", # Specify median survival
+          palette = "Set1",
           #palette = unname(metadata(kirc.clean)$colors$ISUP_combined),
           ggtheme = theme_classic())
 ```
@@ -1003,8 +1006,8 @@ saveRDS(vsd, "/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_vsd
 saveRDS(kirc.clean,"/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_cleaned.rds")
 
 # res <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_nodesign.rds") 
-# vsd <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_vsd_nodesign.rds") 
-# kirc.clean <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_cleaned.rds")
+vsd <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_vsd_nodesign.rds") 
+kirc.clean <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_cleaned.rds")
 ```
 
 
@@ -1187,17 +1190,16 @@ dittoBarPlot(vsd[,!is.na(vsd$VHL)], var = "VHL", group.by = "TME_archetype",reta
 
 ```{r}
 # Define GOI of interest
-GOI <- c("ICAM1", "MTOR")
+GOI <- c("ICAM1", "VHL")
+#GOI <- c("VHL","CA9", "KRT19", "GPX4", "HLA-DRA", "NFKB1", "CCND1", "HIF1A", "TP53", "MYC", "ICAM1", "PDK4", "NT5E", "SMARCA4", "PKM", "CD274", "MME", "IDH2", "EPAS1", "AURKA", "HAVCR2", "EGFR", "RPS6", "FLT1", "MTOR", "RB1", "SLC2A1", "FH", "GLUD1", "CD44", "VIM")
 
 GOI_rel <- GOI[GOI %in% rownames(vsd)]
-
-#c("CA9", "KRT19", "GPX4", "HLA-DRA", "NFKB1", "CCND1", "HIF1A", "TP53", "MYC", "ICAM1", "PDK4", "NT5E", "SMARCA4", "PKM", "CD274", "MME", "IDH2", "EPAS1", "AURKA", "HAVCR2", "EGFR", "RPS6", "FLT1", "MTOR", "RB1", "MTOR", "SLC2A1", "FH", "GLUD1", "CD44", "VIM")
 
 # Define heatmap based on normalized counts 
 ## Option 1: size-factor normalized counts 
 #df <- t(counts(dds, normalized = TRUE)[GOI,]) %>% as.data.frame %>% rownames_to_column("PID")
 ## Option 2: vst counts
-df <- t(assay(vsd)[GOI,]) %>% as.data.frame 
+df <- t(assay(vsd)[GOI_rel,]) %>% as.data.frame 
 df <- df %>% rownames_to_column("PID")
 
 ## Create heatmap body 

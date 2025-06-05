@@ -1205,6 +1205,10 @@ write_csv(metadata_selected_fil_cc, "/mnt/central_nas/rcc_volume/RCC/survival_pr
 ```
 
 ```{r}
+metadata_selected_fil <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/all_features_processed.rds")
+```
+
+```{r}
 # Patients 
 paste0("Number of patients after preprocessing: ", length(rownames(metadata_selected_fil_cc)))
 

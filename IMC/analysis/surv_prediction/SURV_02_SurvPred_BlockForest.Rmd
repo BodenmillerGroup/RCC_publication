@@ -8,6 +8,7 @@ params:
   add_all_features: FALSE
   add_surv_time: FALSE 
   add_PL_level: FALSE
+  add_GEN_level: FALSE
   favor_clinical: 0
   run_name: BF_markdown_test.rds
 output_file: "/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/html/last_run.html"
@@ -35,7 +36,8 @@ library(survminer)
 blocks_selected <- params$blocks_selected #Select which data types to use
 add_all_features <- params$add_all_features # Add all features or just selection
 add_surv_time <- params$add_surv_time #Add survival time in training
-add_PL_level <- params$add_PL_level #Add survival time in training
+add_PL_level <- params$add_PL_level #Add PL in training
+add_GEN_level <- params$add_GEN_level #Add GEN in training
 favor_clinical <- params$favor_clinical #Favor specific block in BlockForest - 1 is CLIN (default; 0 would not favor)
 run_name <- params$run_name #Name of output file
 ```
@@ -79,6 +81,13 @@ str(meta)
 # Remove or add Patient-level groupings 
 if(isFALSE(add_PL_level)){
   meta <- meta[,!str_detect(colnames(meta), "_PL_")]
+}
+```
+
+```{r}
+# Remove or add general broad features
+if(isFALSE(add_GEN_level)){
+  meta <- meta[,!str_detect(colnames(meta), "_GEN_")]
 }
 ```
 

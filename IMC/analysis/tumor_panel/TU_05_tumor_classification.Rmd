@@ -648,10 +648,10 @@ masks <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/
 
 ```{r}
 # Select images of interest
-set.seed(22)
+set.seed(2201)
 cur_sample <- sample(unique(sce$sample_id), 30)
 
-cur_sample <- (colData(sce) %>% as.data.frame %>% select(sample_id, tu_cluster_mm_130) %>% group_by(sample_id) %>% filter(tu_cluster_mm_130 == "68") %>% count() %>% arrange(desc(n)) %>% pull(sample_id))[1:10]
+cur_sample <- (colData(sce) %>% as.data.frame %>% select(sample_id, tumor_metacluster_names) %>% group_by(sample_id) %>% filter(tumor_metacluster_names == "mTORhi_VHL_PKM2hi") %>% count() %>% arrange(desc(n)) %>% pull(sample_id))[1:10]
 
 cur_images <- images[mcols(images)$sample_id %in% cur_sample]
 cur_masks <- masks[mcols(masks)$sample_id %in% cur_sample]
@@ -3840,6 +3840,8 @@ ggsurvplot(fit,
 
 ## ICAM1 and mTOR based patient groups 
 
+(also tried VHL here)
+
 Per patient
 
 ```{r}
@@ -3866,7 +3868,8 @@ plotReducedDim(mean_sce, dimred = "PCA", by_exprs_values = "min_max_PID",colour_
 plotReducedDim(mean_sce, dimred = "PCA_sub", by_exprs_values = "min_max_PID",colour_by = "MYC")+
 plotReducedDim(mean_sce, dimred = "PCA_sub", by_exprs_values = "min_max_PID",colour_by = "ICAM1")+
 plotReducedDim(mean_sce, dimred = "PCA_sub", by_exprs_values = "min_max_PID",colour_by = "mTOR")+
-plotReducedDim(mean_sce, dimred = "PCA_sub", by_exprs_values = "min_max_PID",colour_by = "PID_ICAM_mTOR_group")
+plotReducedDim(mean_sce, dimred = "PCA_sub", by_exprs_values = "min_max_PID",colour_by = "PID_ICAM_mTOR_group")+
+  scale_color_brewer(palette = "Set1")
 
 ```
 
@@ -3874,7 +3877,7 @@ plotReducedDim(mean_sce, dimred = "PCA_sub", by_exprs_values = "min_max_PID",col
 mean_sce <- aggregateAcrossCells(sce, ids = sce$PID,
                                  statistics = "mean",
                                  use.assay.type = "min_max",
-                                 subset.row = rownames(sce) %in% c("ICAM1", "mTOR"))
+                                 subset.row = rownames(sce) %in% c("ICAM1", "VHL"))
 
 assay(mean_sce, "min_max_PID") <- assay(mean_sce, "min_max") - rowMins(assay(mean_sce, "min_max"))
 assay(mean_sce, "min_max_PID") <- assay(mean_sce, "min_max_PID") / (rowMaxs(assay(mean_sce, "min_max")) - rowMins(assay(mean_sce, "min_max")))
@@ -3946,7 +3949,7 @@ cur_surv <- colData(sce) %>% as.data.frame() %>%
   unique()
 
 #Plot survival curves
-fit <- survfit(Surv(OS_months, status_OS) ~ PID_ICAM_mTOR_group, data = cur_surv)
+fit <- survfit(Surv(OS_months, status_OS) ~ PID_group_test, data = cur_surv)
 print(fit)
 
 ggsurvplot(fit,
@@ -3956,7 +3959,7 @@ ggsurvplot(fit,
           linetype = "strata", # Change line type by groups
           surv.median.line = "hv", # Specify median survival
           ggtheme = theme_classic(), # Change ggplot2 theme
-          #palette = "Set1",
+          palette = "Set1",
           conf.int = FALSE)
 ```
 ```{r}
@@ -3964,10 +3967,10 @@ library(survival)
 library(survminer)
 
 cur_surv <- colData(sce) %>% as.data.frame() %>%
-  select(PID, age, gender, pT_simple, PID_group_test, OS_months, status_OS) %>% 
+  select(PID, age, gender, pT_simple, PID_ICAM_mTOR_group, OS_months, status_OS) %>% 
   unique()
 
-covariates_null <- cur_surv %>% select(-PID, -OS_months, -status_OS, -PID_group_test) %>% colnames
+covariates_null <- cur_surv %>% select(-PID, -OS_months, -status_OS, -PID_ICAM_mTOR_group) %>% colnames
 multi_formula_null <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates_null, collapse = " + ")))
 multi_model_null <- coxph(multi_formula_null, data = cur_surv)
 
