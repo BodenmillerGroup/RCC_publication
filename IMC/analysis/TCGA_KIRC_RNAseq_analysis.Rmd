@@ -1125,12 +1125,12 @@ Cox_df$OS_days <- vsd$OS_days[match(rownames(Cox_df),vsd$PID)]
 
 Cox_df$gender <- vsd$gender[match(rownames(Cox_df),vsd$PID)]
 Cox_df$pT_simple <- as.factor(vsd$pT_combined[match(rownames(Cox_df),vsd$PID)])
-Cox_df$ISUP_simple <- as.factor(vsd$ISUP_combined[match(rownames(Cox_df),vsd$PID)])
+#Cox_df$ISUP_simple <- as.factor(vsd$ISUP_combined[match(rownames(Cox_df),vsd$PID)])
 
 #Based on proportions
-covariates <- Cox_df %>% dplyr::select(-status_OS,-OS_days, -gender, -pT_simple, -ISUP_simple, -TME_silent) %>% colnames
+covariates <- Cox_df %>% dplyr::select(-status_OS,-OS_days, -gender, -pT_simple, -TME_silent) %>% colnames
 
-multi_formula <- as.formula(paste("Surv(OS_days, status_OS) ~ gender + pT_simple + ISUP_simple +", paste(covariates, collapse = " + "), "+ TME_silent"))
+multi_formula <- as.formula(paste("Surv(OS_days, status_OS) ~ gender + pT_simple +", paste(covariates, collapse = " + "), "+ TME_silent"))
 
 multi_model <- coxph(multi_formula, data = Cox_df)
 
@@ -1190,9 +1190,9 @@ dittoBarPlot(vsd[,!is.na(vsd$VHL)], var = "VHL", group.by = "TME_archetype",reta
 
 ```{r}
 # Define GOI of interest
-GOI <- c("ICAM1", "VHL")
+#GOI <- c("ICAM1", "VHL")
 #GOI <- c("VHL","CA9", "KRT19", "GPX4", "HLA-DRA", "NFKB1", "CCND1", "HIF1A", "TP53", "MYC", "ICAM1", "PDK4", "NT5E", "SMARCA4", "PKM", "CD274", "MME", "IDH2", "EPAS1", "AURKA", "HAVCR2", "EGFR", "RPS6", "FLT1", "MTOR", "RB1", "SLC2A1", "FH", "GLUD1", "CD44", "VIM")
-
+GOI <- c("VHL", "NFKB1", "CCND1", "ICAM1", "EGFR", "FLT1", "RB1")
 GOI_rel <- GOI[GOI %in% rownames(vsd)]
 
 # Define heatmap based on normalized counts 

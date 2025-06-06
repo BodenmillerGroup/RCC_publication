@@ -203,6 +203,78 @@ sample_anno <- HeatmapAnnotation(PID = Meta_viz$PID,
 draw(sample_anno)
 ```
 
+### Rich panel overview
+
+
+```{r}
+all_markers <- c(rownames(sce_MY), rownames(sce_T), rownames(sce_TU))
+
+all_markers[all_markers == "Ir191"] <- "DNA1"
+all_markers[all_markers == "Ir193"] <- "DNA2"
+all_markers[all_markers == "PDL1"] <- "CD274"
+all_markers[all_markers == "CD279"] <- "PD1"
+all_markers[all_markers == "Tim-3"] <- "Tim3"
+all_markers[all_markers == "Vim"] <- "Vimentin"
+all_markers[all_markers == "CD45"] <- "CD45RO_RA"
+all_markers[all_markers == "CD45RO"] <- "CD45RO_RA"
+all_markers[all_markers == "CD31"] <- "CD31_vWF"
+all_markers[all_markers == "CD31/vWF"] <- "CD31_vWF"
+all_markers[all_markers == "clCas/PARP"] <- "clCAS_PARP"
+
+all_markers
+
+panel <- c(rep("MY",length(rownames(sce_MY))), rep("T",length(rownames(sce_T))), rep("TU",length(rownames(sce_TU))))
+
+count <- as.data.frame(table(all_markers))
+
+
+panel_anno <- data.frame(marker = all_markers, 
+                         panel = panel)
+
+panel_anno$count <- count$Freq[match(panel_anno$marker, count$all_markers)]
+
+panel_anno$panel_shared <- ifelse(panel_anno$count == "3", "shared", panel_anno$panel)
+
+panel_anno_red <- panel_anno %>% select(-panel) %>% unique() %>% arrange(panel_shared)
+
+
+HeatmapAnnotation(panel = panel_anno_red$panel_shared,
+                  count = panel_anno_red$count,
+                  marker = anno_text(panel_anno_red$marker),
+                  #col = col,
+                  border = T,
+                  na_col = "black",
+                  gap = unit(5, "points"),
+                  show_annotation_name = T)%v%NULL
+
+
+# Marker categories
+marker_cat <- data.frame(marker = unique(panel_anno_red$marker))
+
+ifelse(marker_cat$marker %in% c("H3", "DNA1", "DNA2"), "DNA",
+       ifelse(marker_cat$marker %in% c("CA9", "panCK"), "Tumor_GEN",
+              ifelse(marker_cat$marker %in% c("SMA", "CD31_vWF", "Vimentin"), "Non_Immune_GEN",
+                     ifelse(marker_cat$marker %in% c("MPO", "CD3", "CD4", "CD8a", "CD20", "CD45RO_RA", "CD11c", "CD68", "CD38"), "Immune_GEN",
+                            ifelse(ifelse(marker_cat$marker %in% c("TMEM173", "CD73", "IRF4", "CD44"), "Immunoregulatory", ifelse())))))
+
+
+
+c("CD16", "HLADR", , "CD303", "CD163", "VCAM1", "CD56", 
+"IDO1", "DCLAMP", "CD11b", "MMP9", "CCR2", "Arginase", "CCL19", 
+"CXCL13", "CD33", "VISTA", "CD209", "CXCL12", "CCL21", "CD206", 
+"clCAS_PARP", "Ki67", , "CD15", "GATA3", "CD44", "4-1BB", 
+"CD45RA", , "LAG-3", "PD1", "CD7", "GranB", "EOMES", "FOXP3", 
+"CD278", "GITR", "CD134", "Tbet", "Tim3", "NKG2A", "GranK", "GPX4", 
+"NFKB", "CyclinD1", "HIF1a", "p53", "MYC", "ICAM1", "CD140b", 
+"PDK4", "BRG1", "PKM2", "CD10", "IDH2", "HIF2a", "AuroraKinaseA", 
+"EGFR", "S6", "VEGFR1", "VHL", "RB1", "mTOR", "GLUT1", "Fumarase", 
+"GLUD1_2", , , , , , 
+, , "CD73", "CD274", ,, 
+)
+
+```
+
+
 
 
 ## Load HE image information 
