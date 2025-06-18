@@ -148,7 +148,7 @@ library(ggsci)
 library(RColorBrewer)
 
 #Filter for columns to visualize
-Meta_viz <- metadata_selected %>% filter(subtype_combined == "ccRCC") %>% select(PID, gender, age_bin, pT_simple, ISUP_simple, necrose, surv_data, IMC_TU_data, IMC_T_data, IMC_MY_data, HE_data, MSI_data, GEN_data)
+Meta_viz <- metadata_selected %>% filter(subtype_combined == "ccRCC") %>% dplyr::select(PID, gender, age_bin, pT_simple, ISUP_simple, necrose, surv_data, IMC_TU_data, IMC_T_data, IMC_MY_data, HE_data, MSI_data, GEN_data)
                                          
 Meta_viz <- as.data.frame(lapply(Meta_viz, as.character))
 Meta_viz[is.na(Meta_viz)] <- "Unknown"
@@ -200,7 +200,9 @@ sample_anno <- HeatmapAnnotation(PID = Meta_viz$PID,
                                 )%v%NULL
 
 #Display plot
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/cohort_overview/ccRCC_cohort_heatmap.pdf", width = 11, height = 4, onefile = FALSE)
 draw(sample_anno)
+dev.off()
 ```
 
 ### Rich panel overview
@@ -235,46 +237,163 @@ panel_anno$count <- count$Freq[match(panel_anno$marker, count$all_markers)]
 
 panel_anno$panel_shared <- ifelse(panel_anno$count == "3", "shared", panel_anno$panel)
 
-panel_anno_red <- panel_anno %>% select(-panel) %>% unique() %>% arrange(panel_shared)
 
 
-HeatmapAnnotation(panel = panel_anno_red$panel_shared,
-                  count = panel_anno_red$count,
+library(dplyr)
+
+panel_anno_red <- panel_anno %>%
+  group_by(marker) %>%
+  summarise(
+    count = mean(count),
+    panel_combined = paste0(unique(panel), collapse = "_"),
+    .groups = "drop"
+  )
+
+# Marker categories
+panel_anno_red$marker_cat <- ifelse(panel_anno_red$marker %in% c("H3", "DNA1", "DNA2"), "DNA",
+       ifelse(panel_anno_red$marker %in% c("CA9", "panCK", "VCAM1"), "Tumor_GEN",
+              ifelse(panel_anno_red$marker %in% c("SMA", "CD31_vWF", "Vimentin"), "Non_Immune_GEN",
+                     ifelse(panel_anno_red$marker %in% c("MPO", "CD3", "CD4", "CD8a", "CD20", "CD45RO_RA", "CD11c", "CD68", "CD38", "HLADR", "CD56", "CD274"), "Immune_GEN",
+                            ifelse(panel_anno_red$marker %in% c("TMEM173", "CD73", "IRF4", "CD44", "CXCL12", "CXCL13", "CCL19", "CCL21"), "Immunoregulatory", 
+                                          ifelse(panel_anno_red$marker %in% c("CD16", "CD303","CD163", "DCLAMP", "CD11b", "MMP9", "CCR2", "Arginase", "CD33", "VISTA", "CD209", "CD206", "CD15", "IDO1"), "Myeloid_SPE", 
+                                                 ifelse(panel_anno_red$marker %in% c("GATA3", "4-1BB", "CD45RA", "LAG-3", "PD1", "CD7", "GranB", "EOMES", "FOXP3", "CD278", "GITR", "CD134", "Tbet", "NKG2A", "GranK", "Tim3"), "Tcell_SPE", 
+                                                        ifelse(panel_anno_red$marker %in% c("GPX4", "PDK4", "PKM2", "IDH2", "GLUT1", "Fumarase", "GLUD1_2", "S6")
+, "Tumor_Metabolism_SPE", 
+ifelse(panel_anno_red$marker %in% c("HIF1a", "CD140b", "BRG1", "HIF2a", "VEGFR1", "VHL"), "Tumor_Hypoxia_Angio_SPE", 
+       ifelse(panel_anno_red$marker %in% c("NFKB", "p53", "MYC", "EGFR", "RB1", "mTOR", "CyclinD1"), "Tumor_Oncogenic_SPE", 
+              ifelse(panel_anno_red$marker %in% c("CD44", "ICAM1", "CD10", "AuroraKinaseA"), "Tumor_Other_SPE",
+                     ifelse(panel_anno_red$marker %in% c("clCAS_PARP", "Ki67"), "State", NA))))))))))))
+
+# Colors
+col <- list(panel = setNames(c("black","#929882","#ba8874","#596db4", "#F2B342", "#317EC2", "#825CA6"), 
+                             c("MY_T_TU", "MY_T", "MY_TU", "T_TU", "MY", "T", "TU")),
+            cat = setNames(c("#33A02C", "#B2DF8A", "#A6CEE3","#FDBF6F", "#B15928", "#1F78B4","#FFFF99","#6A3D9A",  "#E31A1C", "#CAB2D6", "#FB9A99", "#FF7F00"),
+                           c("DNA", "State", "Immune_GEN", "Immunoregulatory", "Non_Immune_GEN", "Tcell_SPE", "Myeloid_SPE", "Tumor_GEN", "Tumor_Hypoxia_Angio_SPE", "Tumor_Metabolism_SPE", "Tumor_Oncogenic_SPE", "Tumor_Other_SPE"
+)),
+count = colorRamp2(c(min(panel_anno_red$count),max(panel_anno_red$count)), c(brewer.pal(3,"Greys")[1],brewer.pal(3,"Greys")[3]))
+)
+
+# Arrange
+panel_anno_red <- panel_anno_red %>% arrange(-count, panel_combined, marker_cat)
+
+# Plot
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/cohort_overview/ccRCC_IMCpanel_heatmap.pdf", width = 12, height = 3, onefile = FALSE)
+HeatmapAnnotation(count = panel_anno_red$count,
+                  cat = panel_anno_red$marker_cat,
+                  panel = panel_anno_red$panel_combined,
                   marker = anno_text(panel_anno_red$marker),
-                  #col = col,
+                  col = col,
                   border = T,
                   na_col = "black",
                   gap = unit(5, "points"),
                   show_annotation_name = T)%v%NULL
-
-
-# Marker categories
-marker_cat <- data.frame(marker = unique(panel_anno_red$marker))
-
-ifelse(marker_cat$marker %in% c("H3", "DNA1", "DNA2"), "DNA",
-       ifelse(marker_cat$marker %in% c("CA9", "panCK"), "Tumor_GEN",
-              ifelse(marker_cat$marker %in% c("SMA", "CD31_vWF", "Vimentin"), "Non_Immune_GEN",
-                     ifelse(marker_cat$marker %in% c("MPO", "CD3", "CD4", "CD8a", "CD20", "CD45RO_RA", "CD11c", "CD68", "CD38"), "Immune_GEN",
-                            ifelse(ifelse(marker_cat$marker %in% c("TMEM173", "CD73", "IRF4", "CD44"), "Immunoregulatory", ifelse())))))
-
-
-
-c("CD16", "HLADR", , "CD303", "CD163", "VCAM1", "CD56", 
-"IDO1", "DCLAMP", "CD11b", "MMP9", "CCR2", "Arginase", "CCL19", 
-"CXCL13", "CD33", "VISTA", "CD209", "CXCL12", "CCL21", "CD206", 
-"clCAS_PARP", "Ki67", , "CD15", "GATA3", "CD44", "4-1BB", 
-"CD45RA", , "LAG-3", "PD1", "CD7", "GranB", "EOMES", "FOXP3", 
-"CD278", "GITR", "CD134", "Tbet", "Tim3", "NKG2A", "GranK", "GPX4", 
-"NFKB", "CyclinD1", "HIF1a", "p53", "MYC", "ICAM1", "CD140b", 
-"PDK4", "BRG1", "PKM2", "CD10", "IDH2", "HIF2a", "AuroraKinaseA", 
-"EGFR", "S6", "VEGFR1", "VHL", "RB1", "mTOR", "GLUT1", "Fumarase", 
-"GLUD1_2", , , , , , 
-, , "CD73", "CD274", ,, 
-)
-
+dev.off()
 ```
 
+### Survival overview 
 
+```{r}
+metadata_surv <- metadata_selected %>% filter(PID %in% metadata_PL$PID & subtype_combined == "ccRCC")
+
+fit <- survfit(Surv(OS_months, status_OS) ~ 1, data = metadata_surv)
+
+summary(fit)$table["median"]
+summary(fit)$table["0.95LCL"]
+summary(fit)$table["0.95UCL"]
+summary(fit)$table["events"]
+
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/cohort_overview/ccRCC_survival_all.pdf", width = 7, height = 4, onefile = FALSE)
+ggsurvplot(
+  fit,
+  risk.table = TRUE,
+  conf.int = TRUE,
+  xlab = "Time (Months)",
+  ylab = "Survival probability (OS)",
+  risk.table.col = "strata", 
+  linetype = "strata",
+  surv.median.line = "hv", 
+  palette = "black",
+  ggtheme = theme_classic()
+)
+dev.off()
+```
+
+```{r}
+fit <- survfit(Surv(OS_months, status_OS) ~ pT_combined, data = metadata_surv)
+print(fit)
+
+fit_p1 <- ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = c("#ABCFE5", "#08306B"),
+          conf.int = TRUE)
+
+# ISUP grading
+fit_1 <- survfit(Surv(OS_months, status_OS) ~ ISUP_combined, data = metadata_surv)
+print(fit_1)
+
+fit_p2 <- ggsurvplot(fit_1,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), 
+          conf.int = TRUE,
+          palette = c("#FC9F81", "#67000D")
+          #log.rank.weights = "n"
+)
+
+# Necrosis
+fit_2 <- survfit(Surv(OS_months, status_OS) ~ necrose, data = metadata_surv)
+print(fit_2)
+
+fit_p3 <- ggsurvplot(fit_2,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(),
+          conf.int = TRUE, # Change ggplot2 theme
+          palette = c("#bf8cf0", "#3F007D")
+          #log.rank.weights = "n"
+)
+
+#PDL1 score
+fit_3 <- survfit(Surv(OS_months, status_OS) ~ PDL1_score, data = metadata_surv)
+print(fit_3)
+
+fit_p4 <- ggsurvplot(fit_3,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = c("#AADBAB","#00441B"),
+          conf.int = TRUE
+)
+
+library(patchwork)
+p1 <- fit_p1$plot
+p2 <- fit_p2$plot
+p3 <- fit_p3$plot
+p4 <- fit_p4$plot
+
+# Combine into 2x2 grid
+(p1 + p2) /
+(p3 + p4)
+
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/cohort_overview/ccRCC_CCcat_survival_all.pdf", width = 10, height = 8, onefile = FALSE)
+arrange_ggsurvplots(list(fit_p1, fit_p2, fit_p3, fit_p4), 
+                    ncol = 2, nrow = 2)
+dev.off()
+```
 
 
 ## Load HE image information 
