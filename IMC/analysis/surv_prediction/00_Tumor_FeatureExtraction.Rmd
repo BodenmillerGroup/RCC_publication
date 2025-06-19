@@ -309,7 +309,8 @@ both <- plot_cox_combined_fil %>% group_by(group,result) %>% count() %>% filter(
 plot_cox_combined_fil$category <- ifelse(plot_cox_combined_fil$group %in% both, "both", plot_cox_combined_fil$category)
 plot_cox_combined_fil <- plot_cox_combined_fil %>% group_by(group, category) %>% reframe(HR = mean(HR), p_value = mean(p_value), result = result, type = type) %>% unique()
 
-ggplot(plot_cox_combined_fil, aes(x=group, y = type, shape = category, col = HR, size= -log10(p_value)))+
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/TU_cox_expression_bubble.pdf", width = 3, height = 5)
+ggplot(plot_cox_combined_fil, aes(x=reorder(group,HR), y = type, shape = category, col = HR, size= -log10(p_value)))+
   geom_point()+
   theme_classic()+
   scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
@@ -321,7 +322,9 @@ ggplot(plot_cox_combined_fil, aes(x=group, y = type, shape = category, col = HR,
   scale_shape_manual(values = c(1,0,2))+
   scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
-  ylab("Cox model")
+  ylab("Cox model")+
+  coord_flip()
+#dev.off()
 ```
 
 
@@ -677,7 +680,8 @@ both <- plot_cox_combined_fil %>% group_by(group,result) %>% count() %>% filter(
 plot_cox_combined_fil$category <- ifelse(plot_cox_combined_fil$group %in% both, "both", plot_cox_combined_fil$category)
 plot_cox_combined_fil <- plot_cox_combined_fil %>% group_by(group, category) %>% reframe(HR = mean(HR), p_value = mean(p_value), result = result, type = type) %>% unique()
 
-ggplot(plot_cox_combined_fil, aes(x=group, y = type, shape = category, col = HR, size= -log10(p_value)))+
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/TU_cox_pheno_bubble.pdf", width = 4, height = 5)
+ggplot(plot_cox_combined_fil, aes(x=reorder(group,HR), y = type, shape = category, col = HR, size= -log10(p_value)))+
   geom_point()+
   theme_classic()+
   scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
@@ -689,7 +693,9 @@ ggplot(plot_cox_combined_fil, aes(x=group, y = type, shape = category, col = HR,
   scale_shape_manual(values = c(1,0,2))+
   scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
-  ylab("Cox model")
+  ylab("Cox model")+
+  coord_flip()
+#dev.off()
 ```
 
 
@@ -774,6 +780,9 @@ ggplot(DA_out, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))
 
 DA_out_fil <- DA_out[DA_out$cluster %in% MC_diff_abun, ]
+
+
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/TU_diffabun_pheno.pdf", width = 6, height = 4)
 ggplot(DA_out_fil, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
   geom_point()+
   theme_classic()+
@@ -784,7 +793,7 @@ ggplot(DA_out_fil, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
   scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   ylab("Disease progression")
-
+dev.off()
 ```
 
 ```{r}
@@ -1034,7 +1043,8 @@ both <- plot_cox_combined_fil %>% group_by(group,result) %>% count() %>% filter(
 plot_cox_combined_fil$category <- ifelse(plot_cox_combined_fil$group %in% both, "both", plot_cox_combined_fil$category)
 plot_cox_combined_fil <- plot_cox_combined_fil %>% group_by(group, category) %>% reframe(HR = mean(HR), p_value = mean(p_value), result = result, type = type) %>% unique()
 
-ggplot(plot_cox_combined_fil, aes(x=group, y = type, shape = category, col = HR, size= -log10(p_value)))+
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/TU_cox_district_bubble.pdf", width = 4, height = 5)
+ggplot(plot_cox_combined_fil, aes(x=reorder(group,HR), y = type, shape = category, col = HR, size= -log10(p_value)))+
   geom_point()+
   theme_classic()+
   scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
@@ -1043,11 +1053,12 @@ ggplot(plot_cox_combined_fil, aes(x=group, y = type, shape = category, col = HR,
   new_scale(new_aes = "shape")+
   new_scale(new_aes = "color") +
   geom_point(data = plot_cox_combined_fil,aes(size = -log10(p_value), shape = category, col = result), stroke =1.5)+
-  scale_shape_manual(values = c(1,0,2))+
+  scale_shape_manual(values = c(1,2,0))+
   scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
-  ylab("Cox model")
-
+  ylab("Cox model")+
+  coord_flip()
+dev.off()
 ```
 
 ## Differential abundance testing 
@@ -1130,6 +1141,8 @@ ggplot(DA_out, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))
 
 DA_out_fil <- DA_out[DA_out$cluster %in% D_diff_abun, ] 
+
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/TU_diffabun_districts.pdf", width = 6, height = 4)
 ggplot(DA_out_fil, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
   geom_point()+
   theme_classic()+
@@ -1139,6 +1152,7 @@ ggplot(DA_out_fil, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
   geom_point(data = DA_out_fil,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
   scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))
+dev.off()
 ```
 
 ```{r}
@@ -1231,13 +1245,13 @@ rownames(spicy_out) <- spicyTest$imageIDs
 # A: Only select interactions FROM tumor cells
 #selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "TU") & str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "TU")
 # B: Only select interactions FROM tumor cells TO non-tumor cells
-# selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "TU") &
-#   (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "TU")) & 
-#   (!str_detect(colnames(spicy_out), "Unknown"))
-
-selected_pairs <- (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "TU") |
-  (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "TU"))) & 
+selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "TU") &
+  (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "TU")) &
   (!str_detect(colnames(spicy_out), "Unknown"))
+
+# selected_pairs <- (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "TU") |
+#   (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "TU"))) & 
+#   (!str_detect(colnames(spicy_out), "Unknown"))
 
 spicy_out_selected <- spicy_out[,selected_pairs]
 
@@ -1275,19 +1289,19 @@ library(survminer)
 cur_surv_out <- foreach(x = colnames(out_df %>% select(-PID, -status_OS, -OS_months)), .combine = "rbind")%do%{
   formula <- as.formula(paste("Surv(OS_months, status_OS) ~ ", x))
   fit <- survdiff(formula, data = out_df)
-  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[1], exp_2 = fit$exp[1])
+  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[1], exp_2 = fit$exp[1], ratio = fit$obs[1]/fit$exp[1])
 }
 
 # Adjust p-values using BH 
 cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
 
 # Create and plot heatmap 
-cur_surv_plot <- cur_surv_out %>% mutate(direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% filter(p < 0.05)
+cur_surv_plot <- cur_surv_out %>% mutate(direction = ifelse(ratio > 1, "high", "low"), type = "survival_prob") %>% filter(p < 0.05)
 
-cur_surv_plot$result <- ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p_adj < 0.1, "UP",
-                             ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p < 0.05, "UP_trend", 
-                                    ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p_adj < 0.1, "DOWN", 
-                                           ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p < 0.05, "DOWN_trend",NA))))
+cur_surv_plot$result <- ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p < 0.05, "UP",
+                             #ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p < 0.05, "UP_trend", 
+                                    #ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p_adj < 0.1, "DOWN", 
+                                           ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p < 0.05, "DOWN",NA))#))
 
 
 # Add info on hetero or homotypic interaction
@@ -1312,7 +1326,7 @@ cur_surv_mean_results <- cur_surv_plot
 cur_surv <- colData(sce) %>% as.data.frame() %>% select(PID, OS_months, status_OS) %>% unique() 
 
 cur_surv$HLADR_CD8 <- out_df$TU_HLADRhi__CD8_T_cell[match(cur_surv$PID, out_df$PID)]
-cur_surv$ICAM_2 <- out_df$TU_ICAM1hi_CD73__TU_ICAM1hi_CD73[match(cur_surv$PID, out_df$PID)]
+#cur_surv$ICAM_2 <- out_df$TU_ICAM1hi_CD73__TU_ICAM1hi_CD73[match(cur_surv$PID, out_df$PID)]
 
 # #Plot specific survival curves
 # fit <- survfit(Surv(OS_months, status_OS) ~ ICAM1Macro, data = cur_surv)
@@ -1330,19 +1344,19 @@ cur_surv$ICAM_2 <- out_df$TU_ICAM1hi_CD73__TU_ICAM1hi_CD73[match(cur_surv$PID, o
 # )
 # 
 #Plot specific survival curves
-fit <- survfit(Surv(OS_months, status_OS) ~ ICAM_2, data = cur_surv)
-print(fit)
-
-ggsurvplot(fit,
-          pval = TRUE,
-          risk.table = TRUE, # Add risk table
-          risk.table.col = "strata", # Change risk table color by groups
-          linetype = "strata", # Change line type by groups
-          surv.median.line = "hv", # Specify median survival
-          ggtheme = theme_classic(), # Change ggplot2 theme
-          palette = "Set1",
-          conf.int = TRUE
-)
+#fit <- survfit(Surv(OS_months, status_OS) ~ ICAM_2, data = cur_surv)
+#print(fit)
+# 
+# ggsurvplot(fit,
+#           pval = TRUE,
+#           risk.table = TRUE, # Add risk table
+#           risk.table.col = "strata", # Change risk table color by groups
+#           linetype = "strata", # Change line type by groups
+#           surv.median.line = "hv", # Specify median survival
+#           ggtheme = theme_classic(), # Change ggplot2 theme
+#           palette = "Set1",
+#           conf.int = TRUE
+# )
 #Plot specific survival curves
 fit <- survfit(Surv(OS_months, status_OS) ~ HLADR_CD8, data = cur_surv)
 print(fit)
@@ -1373,13 +1387,13 @@ rownames(spicy_out) <- spicyTest$imageIDs
 # A: Only select interactions FROM tumor cells
 #selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "TU") & str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "TU")
 # B: Only select interactions FROM tumor cells TO non-tumor cells
-#selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "TU") &
-#  (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "TU")) & 
-#  (!str_detect(colnames(spicy_out), "Unknown"))
+selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "TU") &
+ (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "TU")) &
+ (!str_detect(colnames(spicy_out), "Unknown"))
 
-selected_pairs <- (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "TU") |
-  (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "TU"))) & 
-  (!str_detect(colnames(spicy_out), "Unknown"))
+# selected_pairs <- (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "TU") |
+#   (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "TU"))) & 
+#   (!str_detect(colnames(spicy_out), "Unknown"))
 
 spicy_out_selected <- spicy_out[,selected_pairs]
 
@@ -1418,19 +1432,19 @@ library(survminer)
 cur_surv_out <- foreach(x = colnames(out_df %>% select(-PID, -status_OS, -OS_months)), .combine = "rbind")%do%{
   formula <- as.formula(paste("Surv(OS_months, status_OS) ~ ", x))
   fit <- survdiff(formula, data = out_df)
-  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[1], exp_2 = fit$exp[1])
+  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[1], exp_2 = fit$exp[1], ratio = fit$obs[1]/fit$exp[1])
 }
 
 # Adjust p-values using BH 
 cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
 
 # Create and plot heatmap 
-cur_surv_plot <- cur_surv_out %>% mutate(direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% filter(p < 0.05)
+cur_surv_plot <- cur_surv_out %>% mutate(direction = ifelse(ratio > 1, "high", "low"), type = "survival_prob") %>% filter(p < 0.05)
 
-cur_surv_plot$result <- ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p_adj < 0.1, "UP",
-                             ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p < 0.05, "UP_trend", 
-                                    ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p_adj < 0.1, "DOWN", 
-                                           ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p < 0.05, "DOWN_trend",NA))))
+cur_surv_plot$result <- ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p < 0.05, "UP",
+                             #ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p < 0.05, "UP_trend", 
+                                    #ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p_adj < 0.1, "DOWN", 
+                                           ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p < 0.05, "DOWN",NA))#))
 
 
 # Add info on hetero or homotypic interaction
@@ -1461,24 +1475,43 @@ plot_int_combined$category <- ifelse(plot_int_combined$group %in% both, "both", 
 plot_int_combined_fil <- plot_int_combined %>% group_by(group, category) %>% reframe(p = mean(p), 
                                                                                      result = result, 
                                                                                      type = type, 
+                                                                                     ratio = ratio,
                                                                                      int_type = int_type, 
                                                                                      direction = direction) %>% unique()
-priority_order <- c("DOWN" = 1, "DOWN_trend" = 2, "UP" = 1, "UP_trend" = 2)
-plot_int_combined_fil <- plot_int_combined_fil %>%
-  group_by(group) %>%
-  slice_min(order_by = priority_order[result], with_ties = FALSE)
 
-ggplot(plot_int_combined_fil, aes(x=reorder(group,-log10(p)), y = type, col = result, size = -log10(p), shape = category))+
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/TU_Cox_interaction_bubble.pdf", width = 6, height = 5)
+ggplot(plot_int_combined_fil, aes(x=reorder(group,ratio), y = type, shape = category, col = ratio, size= -log10(p)))+
   geom_point()+
   theme_classic()+
-  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
   scale_size(range = c(2,10))+
   scale_shape_manual(values = c(16,15,17))+
+  new_scale(new_aes = "shape")+
+  new_scale(new_aes = "color") +
+  geom_point(data = plot_int_combined_fil,aes(size = -log10(p), shape = category, col = result), stroke =1.5)+
+  scale_shape_manual(values = c(1,0,2))+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
-  facet_grid(~ direction, scales = "free_x", space = "free_x")+
-  new_scale("shape")+
-  geom_point(data = plot_int_combined_fil, aes(shape = int_type), col = "black")+
-  scale_shape_manual(values = c(4, 3))
+  ylab("Cox model")+
+  coord_flip()
+dev.off()
+
+#priority_order <- c("DOWN" = 1, "DOWN_trend" = 2, "UP" = 1, "UP_trend" = 2)
+#plot_int_combined_fil <- plot_int_combined_fil %>%
+#  group_by(group) %>%
+#  slice_min(order_by = priority_order[result], with_ties = FALSE)
+
+# ggplot(plot_int_combined_fil, aes(x=reorder(group,ratio), y = type, col = ratio, size = -log10(p), shape = category))+
+#   geom_point()+
+#   theme_classic()+
+#   scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+#   scale_size(range = c(2,10))+
+#   scale_shape_manual(values = c(16,15,17))+
+#   theme(axis.text.x = element_text(angle = 90, hjust = 1))
+#new_scale("shape")
+  #geom_point(data = plot_int_combined_fil, aes(shape = int_type), col = "black")+
+  #scale_shape_manual(values = c(4, 3))
+#dev.off()
 ```
 
 

@@ -200,9 +200,9 @@ sample_anno <- HeatmapAnnotation(PID = Meta_viz$PID,
                                 )%v%NULL
 
 #Display plot
-pdf("/mnt/central_nas/rcc_volume/RCC/figures/cohort_overview/ccRCC_cohort_heatmap.pdf", width = 11, height = 4, onefile = FALSE)
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/cohort_overview/ccRCC_cohort_heatmap.pdf", width = 11, height = 4, onefile = FALSE)
 draw(sample_anno)
-dev.off()
+#dev.off()
 ```
 
 ### Rich panel overview
@@ -277,7 +277,7 @@ count = colorRamp2(c(min(panel_anno_red$count),max(panel_anno_red$count)), c(bre
 panel_anno_red <- panel_anno_red %>% arrange(-count, panel_combined, marker_cat)
 
 # Plot
-pdf("/mnt/central_nas/rcc_volume/RCC/figures/cohort_overview/ccRCC_IMCpanel_heatmap.pdf", width = 12, height = 3, onefile = FALSE)
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/cohort_overview/ccRCC_IMCpanel_heatmap.pdf", width = 12, height = 3, onefile = FALSE)
 HeatmapAnnotation(count = panel_anno_red$count,
                   cat = panel_anno_red$marker_cat,
                   panel = panel_anno_red$panel_combined,
@@ -287,7 +287,7 @@ HeatmapAnnotation(count = panel_anno_red$count,
                   na_col = "black",
                   gap = unit(5, "points"),
                   show_annotation_name = T)%v%NULL
-dev.off()
+#dev.off()
 ```
 
 ### Survival overview 
@@ -302,7 +302,7 @@ summary(fit)$table["0.95LCL"]
 summary(fit)$table["0.95UCL"]
 summary(fit)$table["events"]
 
-pdf("/mnt/central_nas/rcc_volume/RCC/figures/cohort_overview/ccRCC_survival_all.pdf", width = 7, height = 4, onefile = FALSE)
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/cohort_overview/ccRCC_survival_all.pdf", width = 7, height = 4, onefile = FALSE)
 ggsurvplot(
   fit,
   risk.table = TRUE,
@@ -315,7 +315,7 @@ ggsurvplot(
   palette = "black",
   ggtheme = theme_classic()
 )
-dev.off()
+#dev.off()
 ```
 
 ```{r}
@@ -380,19 +380,10 @@ fit_p4 <- ggsurvplot(fit_3,
 )
 
 library(patchwork)
-p1 <- fit_p1$plot
-p2 <- fit_p2$plot
-p3 <- fit_p3$plot
-p4 <- fit_p4$plot
-
-# Combine into 2x2 grid
-(p1 + p2) /
-(p3 + p4)
-
-pdf("/mnt/central_nas/rcc_volume/RCC/figures/cohort_overview/ccRCC_CCcat_survival_all.pdf", width = 10, height = 8, onefile = FALSE)
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/cohort_overview/ccRCC_CCcat_survival_all.pdf", width = 10, height = 8, onefile = FALSE)
 arrange_ggsurvplots(list(fit_p1, fit_p2, fit_p3, fit_p4), 
                     ncol = 2, nrow = 2)
-dev.off()
+#dev.off()
 ```
 
 

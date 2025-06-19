@@ -2284,12 +2284,12 @@ colnames(spicy_out) <- gsub("/", "_", colnames(spicy_out))
 # A: Only select interactions FROM tumor cells
 #selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "TU") & str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "TU")
 # B: Only select interactions FROM tumor cells TO non-tumor cells
-# selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "TU") &
-#   (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "TU")) & 
-#   (!str_detect(colnames(spicy_out), "Unknown"))
+selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD8") &
+  (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "CD8")) &
+  (!str_detect(colnames(spicy_out), "Unknown"))
 
-selected_pairs <- (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD8") |
-  (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD8"))) & (!str_detect(colnames(spicy_out), "Unknown"))
+# selected_pairs <- (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD8") |
+#   (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD8"))) & (!str_detect(colnames(spicy_out), "Unknown"))
   # (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "CD4") |
   # (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "CD8"))) &
   # (!str_detect(colnames(spicy_out), "Unknown"))
@@ -2405,11 +2405,15 @@ colnames(spicy_out) <- gsub("/", "_", colnames(spicy_out))
 #   (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "TU")) & 
 #   (!str_detect(colnames(spicy_out), "Unknown"))
 
-selected_pairs <- (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD8") |
-  (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD8"))) & (!str_detect(colnames(spicy_out), "Unknown"))
-  # (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "CD4") |
-  # (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "CD8"))) &
-  # (!str_detect(colnames(spicy_out), "Unknown"))
+selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD8") &
+  (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "CD8")) &
+  (!str_detect(colnames(spicy_out), "Unknown"))
+
+# selected_pairs <- (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD8") |
+#   (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD8"))) & (!str_detect(colnames(spicy_out), "Unknown"))
+#   # (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "CD4") |
+#   # (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "CD8"))) &
+#   # (!str_detect(colnames(spicy_out), "Unknown"))
 
 spicy_out_selected <- spicy_out[,selected_pairs]
 
@@ -2594,8 +2598,12 @@ colnames(spicy_out) <- gsub("/", "_", colnames(spicy_out))
 #   (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "TU")) & 
 #   (!str_detect(colnames(spicy_out), "Unknown"))
 
-selected_pairs <- (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD4") |
-  (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD4"))) & (!str_detect(colnames(spicy_out), "Unknown"))
+selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD4") &
+  (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "CD4")) &
+  (!str_detect(colnames(spicy_out), "Unknown"))
+
+# selected_pairs <- (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD4") |
+#   (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD4"))) & (!str_detect(colnames(spicy_out), "Unknown"))
   # (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "CD4") |
   # (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "CD8"))) &
   # (!str_detect(colnames(spicy_out), "Unknown"))
@@ -2691,8 +2699,12 @@ colnames(spicy_out) <- gsub("/", "_", colnames(spicy_out))
 #   (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "TU")) & 
 #   (!str_detect(colnames(spicy_out), "Unknown"))
 
-selected_pairs <- (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD4") |
-  (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD4"))) & (!str_detect(colnames(spicy_out), "Unknown"))
+selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD4") &
+  (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "CD4")) &
+  (!str_detect(colnames(spicy_out), "Unknown"))
+
+# selected_pairs <- (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD4") |
+#   (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD4"))) & (!str_detect(colnames(spicy_out), "Unknown"))
   # (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "CD4") |
   # (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "CD8"))) &
   # (!str_detect(colnames(spicy_out), "Unknown"))
