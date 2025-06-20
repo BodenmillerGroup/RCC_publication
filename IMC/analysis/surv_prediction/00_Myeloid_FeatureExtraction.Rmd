@@ -312,7 +312,8 @@ both <- plot_cox_combined_fil %>% group_by(group,result) %>% count() %>% filter(
 plot_cox_combined_fil$category <- ifelse(plot_cox_combined_fil$group %in% both, "both", plot_cox_combined_fil$category)
 plot_cox_combined_fil <- plot_cox_combined_fil %>% group_by(group, category) %>% reframe(HR = mean(HR), p_value = mean(p_value), result = result, type = type) %>% unique()
 
-ggplot(plot_cox_combined_fil, aes(x=group, y = type, shape = category, col = HR, size= -log10(p_value)))+
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/MY_cox_expression_bubble.pdf", width = 3, height = 5)
+ggplot(plot_cox_combined_fil, aes(x=reorder(group,HR), y = type, shape = category, col = HR, size= -log10(p_value)))+
   geom_point()+
   theme_classic()+
   scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
@@ -324,7 +325,9 @@ ggplot(plot_cox_combined_fil, aes(x=group, y = type, shape = category, col = HR,
   scale_shape_manual(values = c(1,0,2))+
   scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
-  ylab("Cox model")
+  ylab("Cox model")+
+  coord_flip()
+dev.off()
 ```
 
 
@@ -679,7 +682,8 @@ both <- plot_cox_combined_fil %>% group_by(group,result) %>% count() %>% filter(
 plot_cox_combined_fil$category <- ifelse(plot_cox_combined_fil$group %in% both, "both", plot_cox_combined_fil$category)
 plot_cox_combined_fil <- plot_cox_combined_fil %>% group_by(group, category) %>% reframe(HR = mean(HR), p_value = mean(p_value), result = result, type = type) %>% unique()
 
-ggplot(plot_cox_combined_fil, aes(x=group, y = type, shape = category, col = HR, size= -log10(p_value)))+
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/MY_cox_pheno_bubble.pdf", width = 3, height = 5)
+ggplot(plot_cox_combined_fil, aes(x=reorder(group,HR), y = type, shape = category, col = HR, size= -log10(p_value)))+
   geom_point()+
   theme_classic()+
   scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
@@ -691,7 +695,9 @@ ggplot(plot_cox_combined_fil, aes(x=group, y = type, shape = category, col = HR,
   scale_shape_manual(values = c(1,0,2))+
   scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
-  ylab("Cox model")
+  ylab("Cox model")+
+  coord_flip()
+dev.off()
 ```
 
 
@@ -775,6 +781,8 @@ ggplot(DA_out, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))
 
 DA_out_fil <- DA_out[DA_out$cluster %in% MC_diff_abun, ]
+
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/MY_diffabun_pheno.pdf", width = 6, height = 4)
 ggplot(DA_out_fil, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
   geom_point()+
   theme_classic()+
@@ -785,6 +793,7 @@ ggplot(DA_out_fil, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
   scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   ylab("Disease progression")
+dev.off()
 ```
 
 ```{r}
@@ -1034,7 +1043,8 @@ both <- plot_cox_combined_fil %>% group_by(group,result) %>% count() %>% filter(
 plot_cox_combined_fil$category <- ifelse(plot_cox_combined_fil$group %in% both, "both", plot_cox_combined_fil$category)
 plot_cox_combined_fil <- plot_cox_combined_fil %>% group_by(group, category) %>% reframe(HR = mean(HR), p_value = mean(p_value), result = result, type = type) %>% unique()
 
-ggplot(plot_cox_combined_fil, aes(x=group, y = type, shape = category, col = HR, size= -log10(p_value)))+
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/MY_cox_districts_bubble.pdf", width = 3, height = 5)
+ggplot(plot_cox_combined_fil, aes(x=reorder(group,HR), y = type, shape = category, col = HR, size= -log10(p_value)))+
   geom_point()+
   theme_classic()+
   scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
@@ -1043,10 +1053,12 @@ ggplot(plot_cox_combined_fil, aes(x=group, y = type, shape = category, col = HR,
   new_scale(new_aes = "shape")+
   new_scale(new_aes = "color") +
   geom_point(data = plot_cox_combined_fil,aes(size = -log10(p_value), shape = category, col = result), stroke =1.5)+
-  scale_shape_manual(values = c(1,0,2))+
+  scale_shape_manual(values = c(1,2,0))+
   scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
-  ylab("Cox model")
+  ylab("Cox model")+
+  coord_flip()
+dev.off()
 ```
 
 ## Differential abundance testing 
@@ -1275,19 +1287,19 @@ library(survminer)
 cur_surv_out <- foreach(x = colnames(out_df %>% select(-PID, -status_OS, -OS_months)), .combine = "rbind")%do%{
   formula <- as.formula(paste("Surv(OS_months, status_OS) ~ ", x))
   fit <- survdiff(formula, data = out_df)
-  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[1], exp_2 = fit$exp[1])
+  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[1], exp_2 = fit$exp[1], ratio = fit$obs[1]/fit$exp[1])
 }
 
 # Adjust p-values using BH 
 cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
 
 # Create and plot heatmap 
-cur_surv_plot <- cur_surv_out %>% mutate(direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% filter(p < 0.05)
+cur_surv_plot <- cur_surv_out %>% mutate(direction = ifelse(ratio > 1, "high", "low"), type = "survival_prob") %>% filter(p < 0.05)
 
-cur_surv_plot$result <- ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p_adj < 0.1, "UP",
-                             ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p < 0.05, "UP_trend", 
-                                    ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p_adj < 0.1, "DOWN", 
-                                           ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p < 0.05, "DOWN_trend",NA))))
+cur_surv_plot$result <- ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p < 0.05, "UP",
+                             #ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p < 0.05, "UP_trend", 
+                                    #ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p_adj < 0.1, "DOWN", 
+                                           ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p < 0.05, "DOWN",NA))#))
 
 
 # Add info on hetero or homotypic interaction
@@ -1376,7 +1388,6 @@ out_df$status_OS <- sce$status_OS[match(out_df$PID, sce$PID)]
 out_df$OS_months <- sce$OS_months[match(out_df$PID, sce$PID)]
 ```
 
-
 ```{r}
 #Assess survival impact across categories
 library(survival)
@@ -1386,19 +1397,19 @@ library(survminer)
 cur_surv_out <- foreach(x = colnames(out_df %>% select(-PID, -status_OS, -OS_months)), .combine = "rbind")%do%{
   formula <- as.formula(paste("Surv(OS_months, status_OS) ~ ", x))
   fit <- survdiff(formula, data = out_df)
-  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[1], exp_2 = fit$exp[1])
+  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[1], exp_2 = fit$exp[1], ratio = fit$obs[1]/fit$exp[1])
 }
 
 # Adjust p-values using BH 
 cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
 
 # Create and plot heatmap 
-cur_surv_plot <- cur_surv_out %>% mutate(direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% filter(p < 0.05)
+cur_surv_plot <- cur_surv_out %>% mutate(direction = ifelse(ratio > 1, "high", "low"), type = "survival_prob") %>% filter(p < 0.05)
 
-cur_surv_plot$result <- ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p_adj < 0.1, "UP",
-                             ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p < 0.05, "UP_trend", 
-                                    ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p_adj < 0.1, "DOWN", 
-                                           ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p < 0.05, "DOWN_trend",NA))))
+cur_surv_plot$result <- ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p < 0.05, "UP",
+                             #ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p < 0.05, "UP_trend", 
+                                    #ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p_adj < 0.1, "DOWN", 
+                                           ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p < 0.05, "DOWN",NA))#))
 
 
 # Add info on hetero or homotypic interaction
@@ -1418,6 +1429,56 @@ ggplot(cur_surv_plot, aes(x=reorder(group,-log10(p)), y = type, col = result, si
 cur_surv_median_results <- cur_surv_plot 
 ```
 
+```{r}
+# Combined visualization 
+cur_surv_mean_results$category <- "mean"
+cur_surv_median_results$category <- "median"
+
+plot_int_combined <- rbind(cur_surv_mean_results, cur_surv_median_results)
+plot_int_combined$type <- "interaction"
+both <- plot_int_combined %>% group_by(group,direction) %>% count() %>% filter(n > 1) %>% pull(group)
+plot_int_combined$category <- ifelse(plot_int_combined$group %in% both, "both", plot_int_combined$category)
+plot_int_combined_fil <- plot_int_combined %>% group_by(group, category) %>% reframe(p = mean(p), 
+                                                                                     result = result, 
+                                                                                     type = type, 
+                                                                                     ratio = ratio,
+                                                                                     int_type = int_type, 
+                                                                                     direction = direction) %>% unique()
+
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/MY_Cox_interaction_bubble.pdf", width = 4, height = 5)
+ggplot(plot_int_combined_fil, aes(x=reorder(group,ratio), y = type, shape = category, col = ratio, size= -log10(p)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  scale_shape_manual(values = c(16,15,17))+
+  new_scale(new_aes = "shape")+
+  new_scale(new_aes = "color") +
+  geom_point(data = plot_int_combined_fil,aes(size = -log10(p), shape = category, col = result), stroke =1.5)+
+  scale_shape_manual(values = c(1,0,2))+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("Cox model")+
+  coord_flip()
+dev.off()
+
+#priority_order <- c("DOWN" = 1, "DOWN_trend" = 2, "UP" = 1, "UP_trend" = 2)
+#plot_int_combined_fil <- plot_int_combined_fil %>%
+#  group_by(group) %>%
+#  slice_min(order_by = priority_order[result], with_ties = FALSE)
+
+# ggplot(plot_int_combined_fil, aes(x=reorder(group,ratio), y = type, col = ratio, size = -log10(p), shape = category))+
+#   geom_point()+
+#   theme_classic()+
+#   scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+#   scale_size(range = c(2,10))+
+#   scale_shape_manual(values = c(16,15,17))+
+#   theme(axis.text.x = element_text(angle = 90, hjust = 1))
+#new_scale("shape")
+  #geom_point(data = plot_int_combined_fil, aes(shape = int_type), col = "black")+
+  #scale_shape_manual(values = c(4, 3))
+#dev.off()
+```
 
 ```{r}
 # Combined visualization 
@@ -1522,7 +1583,7 @@ sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/
 ## Myeloid HLADR expression based
 
 ```{r}
-# ICAM1-mTOR groups
+# Myeloid HLADR groups
 PID_level_df <- colData(sce) %>% as.data.frame %>% select(PID, my_HLADR_group_names) %>% unique()
 colnames(PID_level_df)[2] <- paste0("PL_", colnames(PID_level_df)[2])
 ```
