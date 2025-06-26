@@ -42,7 +42,7 @@ library(BiocParallel)
 library(BiocNeighbors)
 library(BiocSingular)
 library(tiff)
-library(ggrepel)
+library(ggrepel)t
 library(EBImage)
 library(viridis)
 library(mclust)

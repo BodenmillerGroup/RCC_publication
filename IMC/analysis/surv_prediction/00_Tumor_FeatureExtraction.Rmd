@@ -782,7 +782,7 @@ ggplot(DA_out, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
 DA_out_fil <- DA_out[DA_out$cluster %in% MC_diff_abun, ]
 
 
-pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/TU_diffabun_pheno.pdf", width = 6, height = 4)
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/TU_diffabun_pheno.pdf", width = 6, height = 4)
 ggplot(DA_out_fil, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
   geom_point()+
   theme_classic()+
@@ -793,7 +793,7 @@ ggplot(DA_out_fil, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
   scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   ylab("Disease progression")
-dev.off()
+#dev.off()
 ```
 
 ```{r}
@@ -1043,7 +1043,7 @@ both <- plot_cox_combined_fil %>% group_by(group,result) %>% count() %>% filter(
 plot_cox_combined_fil$category <- ifelse(plot_cox_combined_fil$group %in% both, "both", plot_cox_combined_fil$category)
 plot_cox_combined_fil <- plot_cox_combined_fil %>% group_by(group, category) %>% reframe(HR = mean(HR), p_value = mean(p_value), result = result, type = type) %>% unique()
 
-pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/TU_cox_district_bubble.pdf", width = 4, height = 5)
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/TU_cox_district_bubble.pdf", width = 4, height = 5)
 ggplot(plot_cox_combined_fil, aes(x=reorder(group,HR), y = type, shape = category, col = HR, size= -log10(p_value)))+
   geom_point()+
   theme_classic()+
@@ -1142,7 +1142,7 @@ ggplot(DA_out, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
 
 DA_out_fil <- DA_out[DA_out$cluster %in% D_diff_abun, ] 
 
-pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/TU_diffabun_districts.pdf", width = 6, height = 4)
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/TU_diffabun_districts.pdf", width = 6, height = 4)
 ggplot(DA_out_fil, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
   geom_point()+
   theme_classic()+
@@ -1152,7 +1152,7 @@ ggplot(DA_out_fil, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
   geom_point(data = DA_out_fil,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
   scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))
-dev.off()
+#dev.off()
 ```
 
 ```{r}
@@ -1479,7 +1479,7 @@ plot_int_combined_fil <- plot_int_combined %>% group_by(group, category) %>% ref
                                                                                      int_type = int_type, 
                                                                                      direction = direction) %>% unique()
 
-pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/TU_Cox_interaction_bubble.pdf", width = 6, height = 5)
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/TU_Cox_interaction_bubble.pdf", width = 6, height = 5)
 ggplot(plot_int_combined_fil, aes(x=reorder(group,ratio), y = type, shape = category, col = ratio, size= -log10(p)))+
   geom_point()+
   theme_classic()+
@@ -1494,7 +1494,7 @@ ggplot(plot_int_combined_fil, aes(x=reorder(group,ratio), y = type, shape = cate
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   ylab("Cox model")+
   coord_flip()
-dev.off()
+#dev.off()
 
 #priority_order <- c("DOWN" = 1, "DOWN_trend" = 2, "UP" = 1, "UP_trend" = 2)
 #plot_int_combined_fil <- plot_int_combined_fil %>%
@@ -1526,6 +1526,52 @@ colnames(INT_surv_relevant_df) <- paste0("INT_",colnames(INT_surv_relevant_df))
 colnames(INT_surv_relevant_df)[1] <- "PID"
 
 INT_surv_relevant_df
+```
+
+Show examples 
+
+```{r}
+PID_int_rel <- INT_surv_relevant_df %>% select(PID, INT_TU_HLADRhi__CD8_T_cell) %>% arrange(desc(INT_TU_HLADRhi__CD8_T_cell)) %>% slice(1:10) %>% pull(PID)
+
+sample_id_rel <- unique(sce[,sce$PID %in% PID_int_rel]$sample_id)
+
+
+# All relevant 
+plotSpatial(sce[,sce$sample_id %in% sample_id_rel & sce$celltype_combined %in% c("TU_HLADRhi","CD8_T_cell")], 
+            node_color_by = "celltype_combined",
+            #node_shape_by = "celltype_combined",
+            img_id = "sample_id", 
+            node_size_fix = 3)+
+  scale_color_manual(values = c("#377EB8", "#E41A1C"))
+
+# Specific
+int_score <- spicy_out_selected_long %>% filter(pair == "TU_HLADRhi__CD8_T_cell" & sample_id == sample_id_rel[18]) %>% pull(coef)
+
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/TU_images_interaction_HLADRCD8.pdf", width = 4, height = 10, onefile = FALSE)
+plotSpatial(sce[,sce$sample_id %in% sample_id_rel[18] & sce$celltype_combined %in% c("TU_HLADRhi","CD8_T_cell")], 
+            node_color_by = "celltype_combined",
+            #node_shape_by = "celltype_combined",
+            img_id = "sample_id", 
+            node_size_fix = 2)+
+  scale_color_manual(values = c("#377EB8", "#E41A1C"))+
+  #guides(color = "none")+
+  ggtitle(paste(sample_id_rel[18], round(int_score,2)))
+dev.off()
+```
+
+
+```{r}
+sample_id_rel <- sample(sce$sample_id, 30)
+
+images <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/images.rds")
+masks <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/masks.rds")
+
+cur_images <- images[mcols(images)$sample_id %in% sample_id_rel]
+cur_masks <- masks[mcols(masks)$sample_id %in% sample_id_rel]
+cur_sce <- sce[,sce$sample_id %in% sample_id_rel]
+
+library(cytoviewer)
+cytoviewer(image = cur_images, mask = cur_masks, object = cur_sce, img_id = "sample_id", cell_id = "ObjectNumber")
 ```
 
 Add to tumor key features 

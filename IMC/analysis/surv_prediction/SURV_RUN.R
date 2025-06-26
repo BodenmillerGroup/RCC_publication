@@ -197,3 +197,4 @@ rmarkdown::render("~/GitHub/RCC/IMC/analysis/surv_prediction/SURV_02_SurvPred_Bl
                     run_name = "BF_CLIN_IMC_nofav.rds"),
                   output_file = paste0("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/html/", run_name, ".html")
 )
+
