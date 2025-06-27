@@ -56,8 +56,8 @@ cv_results_list <- list(
 
 ```{r}
 # Define colors 
-col_cv <- setNames(c("grey","firebrick", "#825CA6", "#F2B342", "#317EC2", "firebrick1"),
-c("CLIN", "IMC", "IMC_TU", "IMC_MY", "IMC_Tcell", "CLIN_IMC"))
+col_cv <- setNames(c("grey","#825CA6", "#F2B342", "#317EC2", "firebrick1"),
+c("GEN", "TU", "MY", "T", "IMC_noGEN"))
 ```
 
 ### Integrated Brier Score
@@ -121,13 +121,16 @@ out_ibs <- data.frame(fold = 1:10, t(do.call("rbind", ibs_scores_list))[1:10,]) 
 # Plot
 library(ggpubr)
 ggplot(out_ibs, aes(x = reorder(model,-IBS, FUN = median), y = IBS, fill = model))+
-  geom_boxplot(outlier.colour = NA)+
+  geom_point(aes(color = model))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
   #coord_cartesian(ylim = c(0.5,1))+
   theme_classic()+
   stat_compare_means(ref.group = "GEN", paired = FALSE, method = "t.test", method.args = list(alternative = "less", label = "p.format"))+
-  #stat_compare_means(vjust = 1, method = "anova")+
-  #scale_fill_manual(values = col_cv)+
-  scale_fill_brewer(palette = "Paired")+
+  stat_compare_means(vjust = 1, method = "anova")+
+  scale_fill_manual(values = col_cv)+
+  scale_color_manual(values = col_cv)+
+  #scale_fill_brewer(palette = "Paired")+
+  #scale_color_brewer(palette = "Paired")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   xlab("Models")+
   ylab("Integrated Brier Score")
@@ -154,13 +157,15 @@ out_concordance <- data.frame(fold = 1:10, t(do.call("rbind", concordance_scores
 
 library(ggpubr)
 ggplot(out_concordance, aes(x = reorder(model,concordance, FUN = median), y = concordance, fill = model))+
-  geom_boxplot(outlier.colour = NA)+
+  geom_point(aes(color = model))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
   #coord_cartesian(ylim = c(0.5,1))+
   theme_classic()+
   stat_compare_means(ref.group = "GEN", paired = FALSE, method = "t.test", method.args = list(alternative = "greater", label = "p.format"))+
-  #stat_compare_means(vjust = 1, method = "anova")+
-  #scale_fill_manual(values = col_cv)+
-  scale_fill_brewer(palette = "Paired")+
+  stat_compare_means(vjust = 1, method = "anova")+
+  scale_fill_manual(values = col_cv)+
+  scale_color_manual(values = col_cv)+
+  #scale_fill_brewer(palette = "Paired")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   xlab("Models")+
   ylab("Concordance (Uno)")
@@ -192,13 +197,13 @@ cv_results_8 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockFore
 # Create list from results
 # Define the cross-validation results as a list
 cv_results_list <- list(
-  "MY" = cv_results_1,
-  "T" = cv_results_2,
-  "TU" = cv_results_3,
+  #"MY" = cv_results_1,
+  #"T" = cv_results_2,
+  #"TU" = cv_results_3,
   "IMC" = cv_results_4,
-  "MY_all" = cv_results_5,
-  "T_all" = cv_results_6,
-  "TU_all" = cv_results_7,
+  #"MY_all" = cv_results_5,
+  #"T_all" = cv_results_6,
+  #"TU_all" = cv_results_7,
   "IMC_all" = cv_results_8
   )
 ```
@@ -272,12 +277,14 @@ out_ibs$type <- str_split(out_ibs$model, "_", simplify = TRUE)[,1]
 
 # Plot
 library(ggpubr)
-ggplot(out_ibs, aes(x = reorder(cat,-IBS, FUN = median), y = IBS, fill = cat))+
-  facet_wrap(~type)+
-  geom_boxplot(outlier.colour = NA)+
+ggplot(out_ibs, aes(x = cat, y = IBS, fill = cat))+
+  #facet_wrap(~type)+
+  geom_point(aes(color = cat))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
   theme_classic()+
   stat_compare_means(aes(group=cat), ref.group = "ALL", paired = FALSE, method = "t.test", method.args = list(alternative = "less", label = "p.format"))+
   scale_fill_brewer(palette = "Set1")+
+  scale_color_brewer(palette = "Set1")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   xlab("Models")+
   ylab("Integrated Brier Score")
@@ -305,15 +312,14 @@ out_concordance$cat <- ifelse(str_detect(out_concordance$model, "all"), "ALL", "
 out_concordance$type <- str_split(out_concordance$model, "_", simplify = TRUE)[,1]
 
 library(ggpubr)
-ggplot(out_concordance, aes(x = reorder(cat,concordance), y = concordance, fill = cat))+
-  facet_wrap(~type)+
-  geom_boxplot(outlier.colour = NA)+
-  #coord_cartesian(ylim = c(0.5,1))+
+ggplot(out_concordance, aes(x = cat, y = concordance, fill = cat))+
+  #facet_wrap(~type)+
+  geom_point(aes(color = cat))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
   theme_classic()+
   stat_compare_means(aes(group=cat), ref.group = "ALL", paired = FALSE, method = "t.test", method.args = list(alternative = "greater", label = "p.format"))+
-  #stat_compare_means(vjust = 1, method = "anova")+
-  #scale_fill_manual(values = col_cv)+
   scale_fill_brewer(palette = "Set1")+
+  scale_color_brewer(palette = "Set1")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   xlab("Models")+
   ylab("Concordance (Uno)")
@@ -344,15 +350,15 @@ cv_results_list <- list(
   "IMC" = cv_results_1,
   "CLIN" = cv_results_2,
   #"CLIN_IMC_nofav" = cv_results_3,
-  "CLINfav_IMC" = cv_results_4#,
+  "CLINfav_IMC" = cv_results_4
   #"CLIN_IMCfav" = cv_results_5
   )
 ```
 
 ```{r}
 # Define colors 
-col_cv <- setNames(c("grey","firebrick", "#825CA6", "#F2B342", "#317EC2", "firebrick1"),
-c("CLIN", "IMC", "IMC_TU", "IMC_MY", "IMC_Tcell", "CLIN_IMC"))
+col_cv <- setNames(c("firebrick1", "grey", "firebrick4"),
+c("IMC", "CLIN", "CLINfav_IMC"))
 ```
 
 ### Integrated Brier Score
@@ -416,12 +422,15 @@ out_ibs <- data.frame(fold = 1:10, t(do.call("rbind", ibs_scores_list))[1:10,]) 
 # Plot
 library(ggpubr)
 ggplot(out_ibs, aes(x = reorder(model,-IBS, FUN = median), y = IBS, fill = model))+
-  geom_boxplot(outlier.colour = NA)+
-  geom_point()+
+  geom_point(aes(color = model))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
   theme_classic()+
   stat_compare_means(ref.group = "CLIN", paired = FALSE, method = "t.test", method.args = list(alternative = "less", label = "p.format"))+
   stat_compare_means(ref.group = "IMC", paired = FALSE, method = "t.test", method.args = list(alternative = "less", label = "p.format"), vjust = 1)+
-  scale_fill_brewer(palette = "Paired")+
+  stat_compare_means(vjust = 2, method = "anova")+
+  #scale_fill_brewer(palette = "Paired")+
+  scale_fill_manual(values = col_cv)+
+  scale_color_manual(values = col_cv)+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   xlab("Models")+
   ylab("Integrated Brier Score")
@@ -446,14 +455,14 @@ out_concordance <- data.frame(fold = 1:10, t(do.call("rbind", concordance_scores
 
 library(ggpubr)
 ggplot(out_concordance, aes(x = reorder(model,concordance, FUN = median), y = concordance, fill = model))+
-  geom_boxplot(outlier.colour = NA)+
-    geom_point()+
+  geom_point(aes(color = model))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
   theme_classic()+
   stat_compare_means(ref.group = "CLIN", paired = FALSE, method = "t.test", method.args = list(alternative = "greater", label = "p.format"))+
     stat_compare_means(ref.group = "IMC", paired = FALSE, method = "t.test", method.args = list(alternative = "greater", label = "p.format"), vjust = 1)+
-  #stat_compare_means(vjust = 1, method = "anova")+
-  #scale_fill_manual(values = col_cv)+
-  scale_fill_brewer(palette = "Paired")+
+  stat_compare_means(vjust = 2, method = "anova")+
+  scale_fill_manual(values = col_cv)+
+  scale_color_manual(values = col_cv)+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   xlab("Models")+
   ylab("Concordance (Uno)")
@@ -555,7 +564,7 @@ plot$feature_type <- ifelse(str_detect(plot$feature, "_EXP"), "EXP",
 plot$feature_spatial <- ifelse(plot$feature_type %in% c("EXP", "MC"), "non_spatial", ifelse(plot$feature_type %in% c("D", "INT"), "spatial", NA))
 
 # Define colors 
-col_origin <- setNames(c("lightblue", "blueviolet", "orchid1"),c("TU", "MY", "T"))
+col_origin <- setNames(c("#825CA6", "#F2B342", "#317EC2"),c("TU", "MY", "T"))
 
 col_type <- setNames(c("#1F78B4","#A6CEE3", "#B2DF8A", "#33A02C"),c("EXP", "MC", "INT", "D"))
 
@@ -653,7 +662,7 @@ ggplot(ordered_features, aes(x = reorder(feature,-mean), y = mean))+
 ```{r}
 # Extract features
 ordered_features_median <- ordered_features %>% filter(median > -0.1) %>% pull(feature)      
-#ordered_features_mean <- ordered_features %>% filter(mean > 0) %>% pull(feature)      
+ordered_features_mean <- ordered_features %>% filter(mean > 0) %>% pull(feature)      
 
 top_features <- ordered_features_median
 

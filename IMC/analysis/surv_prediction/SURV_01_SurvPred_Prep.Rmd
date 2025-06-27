@@ -567,8 +567,8 @@ high_corr_pairs_df
 
 ```{r}
 # Remove specific pairs 
-#removed_numeric <- c("IMC_TU_D_ICAM1_dom", "IMC_TU_D_mTORhi_dom", "IMC_TU_D_mTORlo_dom")
-removed_numeric <- c("IMC_TU_MC_ICAM1hi_CD73", "IMC_TU_MC_mTORhi_VHL_PKM2hi", "IMC_TU_MC_mTORlow_MYCmed_PKM2hi")
+removed_numeric <- c("IMC_TU_D_ICAM1_dom", "IMC_TU_D_mTORhi_dom", "IMC_TU_D_mTORlo_dom")
+#removed_numeric <- c("IMC_TU_MC_ICAM1hi_CD73", "IMC_TU_MC_mTORhi_VHL_PKM2hi", "IMC_TU_MC_mTORlow_MYCmed_PKM2hi")
 
 tumor_selected_fil <- tumor_selected %>% select(-all_of(removed_numeric))
 

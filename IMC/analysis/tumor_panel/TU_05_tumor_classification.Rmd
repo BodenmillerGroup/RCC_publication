@@ -3858,7 +3858,7 @@ assay(mean_sce, "min_max_PID") <- assay(mean_sce, "min_max_PID") / (rowMaxs(assa
 
 # Run PCA
 mean_sce <- runPCA(mean_sce, exprs_values = "min_max_PID", name = "PCA", subset_row = rownames(mean_sce))
-mean_sce <- runPCA(mean_sce, exprs_values = "min_max_PID", subset_row = rownames(mean_sce) %in% c("MYC","ICAM1", "mTOR"), name = "PCA_sub")
+mean_sce <- runPCA(mean_sce, exprs_values = "min_max_PID", subset_row = rownames(mean_sce) %in% c("MYC","ICAM1", "CyclinD1"), name = "PCA_sub")
 
 # Visualize Reduced Dimensions
 plotReducedDim(mean_sce, dimred = "PCA", by_exprs_values = "min_max_PID",colour_by = "MYC")+
@@ -3867,7 +3867,7 @@ plotReducedDim(mean_sce, dimred = "PCA", by_exprs_values = "min_max_PID",colour_
 
 plotReducedDim(mean_sce, dimred = "PCA_sub", by_exprs_values = "min_max_PID",colour_by = "MYC")+
 plotReducedDim(mean_sce, dimred = "PCA_sub", by_exprs_values = "min_max_PID",colour_by = "ICAM1")+
-plotReducedDim(mean_sce, dimred = "PCA_sub", by_exprs_values = "min_max_PID",colour_by = "mTOR")+
+plotReducedDim(mean_sce, dimred = "PCA_sub", by_exprs_values = "min_max_PID",colour_by = "CyclinD1")+
 plotReducedDim(mean_sce, dimred = "PCA_sub", by_exprs_values = "min_max_PID",colour_by = "PID_ICAM_mTOR_group")+
   scale_color_brewer(palette = "Set1")
 
@@ -3877,7 +3877,7 @@ plotReducedDim(mean_sce, dimred = "PCA_sub", by_exprs_values = "min_max_PID",col
 mean_sce <- aggregateAcrossCells(sce, ids = sce$PID,
                                  statistics = "mean",
                                  use.assay.type = "min_max",
-                                 subset.row = rownames(sce) %in% c("ICAM1", "VHL"))
+                                 subset.row = rownames(sce) %in% c("ICAM1", "CyclinD1"))
 
 assay(mean_sce, "min_max_PID") <- assay(mean_sce, "min_max") - rowMins(assay(mean_sce, "min_max"))
 assay(mean_sce, "min_max_PID") <- assay(mean_sce, "min_max_PID") / (rowMaxs(assay(mean_sce, "min_max")) - rowMins(assay(mean_sce, "min_max")))

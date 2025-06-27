@@ -570,7 +570,7 @@ high_corr_pairs_df
 
 ```{r}
 # Remove specific pairs 
-removed_numeric <- high_corr_pairs_df$Var2
+removed_numeric <- high_corr_pairs_df$Var1
 
 tumor_selected_fil <- tumor_selected %>% select(-all_of(removed_numeric))
 
