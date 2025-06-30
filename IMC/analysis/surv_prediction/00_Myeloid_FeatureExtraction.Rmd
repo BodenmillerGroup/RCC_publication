@@ -56,6 +56,12 @@ library(psych)
 
 #Batch correction
 library(batchelor)
+
+conflicts_prefer(dplyr::count)
+conflicts_prefer(dplyr::filter)
+conflicts_prefer(dplyr::select)
+conflicts_prefer(dplyr::slice)
+conflicts_prefer(dplyr::mutate)
 ```
 
 # Extract survival relevant features
@@ -1240,16 +1246,17 @@ spicy_out <- spicyTest$dataframe
 rownames(spicy_out) <- spicy_out$imageID
 
 ## Different options for selecting interactions
-# A: Only select interactions FROM myeloid cells
-#selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "MY") & str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "MY")
-# B: Only select interactions FROM myeloid cells TO non-myeloid cells
-selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "MY") &
- (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "MY")) &
+# A: Only select interactions FROM myeloid cells (heterotypic and homtotypic)
+selected_pairs <- (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "MY") |
+ (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "MY"))) &
  (!str_detect(colnames(spicy_out), "Unknown_Other"))
 
-# selected_pairs <- (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "MY") |
-#  (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "MY"))) &
+# B: Only select interactions FROM myeloid cells TO non-myeloid cells
+# selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "MY") &
+#  (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "MY")) &
 #  (!str_detect(colnames(spicy_out), "Unknown_Other"))
+
+
 
 spicy_out_selected <- spicy_out[,selected_pairs]
 
@@ -1350,15 +1357,14 @@ spicy_out <- spicyTest$dataframe
 rownames(spicy_out) <- spicy_out$imageID
 
 ## Different options for selecting interactions
-# A: Only select interactions FROM myeloid cells
-#selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "MY") & str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "MY")
-# B: Only select interactions FROM myeloid cells TO non-myeloid cells
-selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "MY") &
- (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "MY")) &
+# A: Only select interactions FROM myeloid cells (heterotypic and homtotypic)
+selected_pairs <- (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "MY") |
+ (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "MY"))) &
  (!str_detect(colnames(spicy_out), "Unknown_Other"))
 
-# selected_pairs <- (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "MY") |
-#  (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "MY"))) &
+# B: Only select interactions FROM myeloid cells TO non-myeloid cells
+# selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "MY") &
+#  (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "MY")) &
 #  (!str_detect(colnames(spicy_out), "Unknown_Other"))
 
 spicy_out_selected <- spicy_out[,selected_pairs]

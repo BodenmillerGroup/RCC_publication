@@ -58,6 +58,12 @@ library(psych)
 
 #Batch correction
 library(batchelor)
+
+conflicts_prefer(dplyr::count)
+conflicts_prefer(dplyr::filter)
+conflicts_prefer(dplyr::select)
+conflicts_prefer(dplyr::slice)
+conflicts_prefer(dplyr::mutate)
 ```
 
 # Extract survival relevant features
@@ -1242,16 +1248,17 @@ spicy_out <- as.data.frame(do.call("cbind",spicyTest$pairwiseAssoc))
 rownames(spicy_out) <- spicyTest$imageIDs
 
 ## Different options for selecting interactions
-# A: Only select interactions FROM tumor cells
-#selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "TU") & str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "TU")
-# B: Only select interactions FROM tumor cells TO non-tumor cells
-selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "TU") &
-  (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "TU")) &
+
+#A: Only select interactions FROM tumor cells (hetero and homotypic)
+selected_pairs <- (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "TU") |
+  (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "TU"))) &
   (!str_detect(colnames(spicy_out), "Unknown"))
 
-# selected_pairs <- (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "TU") |
-#   (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "TU"))) & 
+# # B: Only select interactions FROM tumor cells TO non-tumor cells
+# selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "TU") &
+#   (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "TU")) &
 #   (!str_detect(colnames(spicy_out), "Unknown"))
+
 
 spicy_out_selected <- spicy_out[,selected_pairs]
 
@@ -1384,15 +1391,14 @@ spicy_out <- as.data.frame(do.call("cbind",spicyTest$pairwiseAssoc))
 rownames(spicy_out) <- spicyTest$imageIDs
 
 ## Different options for selecting interactions
-# A: Only select interactions FROM tumor cells
-#selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "TU") & str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "TU")
-# B: Only select interactions FROM tumor cells TO non-tumor cells
-selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "TU") &
- (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "TU")) &
- (!str_detect(colnames(spicy_out), "Unknown"))
+#A: Only select interactions FROM tumor cells (hetero and homotypic)
+selected_pairs <- (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "TU") |
+  (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "TU"))) &
+  (!str_detect(colnames(spicy_out), "Unknown"))
 
-# selected_pairs <- (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "TU") |
-#   (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "TU"))) & 
+# # B: Only select interactions FROM tumor cells TO non-tumor cells
+# selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "TU") &
+#   (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "TU")) &
 #   (!str_detect(colnames(spicy_out), "Unknown"))
 
 spicy_out_selected <- spicy_out[,selected_pairs]
@@ -1571,7 +1577,7 @@ cur_masks <- masks[mcols(masks)$sample_id %in% sample_id_rel]
 cur_sce <- sce[,sce$sample_id %in% sample_id_rel]
 
 library(cytoviewer)
-cytoviewer(image = cur_images, mask = cur_masks, object = cur_sce, img_id = "sample_id", cell_id = "ObjectNumber")
+#cytoviewer(image = cur_images, mask = cur_masks, object = cur_sce, img_id = "sample_id", cell_id = "ObjectNumber")
 ```
 
 Add to tumor key features 

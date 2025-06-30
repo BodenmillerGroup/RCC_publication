@@ -18,6 +18,14 @@ library(pec)
 library(tidyverse)
 library(easyalluvial)
 library(ggnewscale)
+library(ComplexHeatmap)
+
+conflicts_prefer(dplyr::count)
+conflicts_prefer(dplyr::filter)
+conflicts_prefer(dplyr::select)
+conflicts_prefer(dplyr::slice)
+conflicts_prefer(dplyr::mutate)
+conflicts_prefer(base::setdiff)
 ```
 
 
@@ -28,15 +36,15 @@ library(ggnewscale)
 ### Read results from different models 
 
 ```{r}
-cv_results_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_GEN.rds")
+cv_results_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_old/BF_IMC_GEN.rds")
 
-cv_results_2 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_MY.rds")
+cv_results_2 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_old/BF_IMC_MY.rds")
 
-cv_results_3 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_T.rds")
+cv_results_3 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_old/BF_IMC_T.rds")
 
-cv_results_4 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_TU.rds")
+cv_results_4 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_old/BF_IMC_TU.rds")
 
-cv_results_5 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_noGEN.rds")
+cv_results_5 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_old/BF_IMC_noGEN.rds")
 
 #cv_results_6 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC.rds")
 ```
@@ -119,6 +127,7 @@ ibs_scores_list <- lapply(cv_results_list, function(res_obj) {
 out_ibs <- data.frame(fold = 1:10, t(do.call("rbind", ibs_scores_list))[1:10,]) %>% pivot_longer(2:ncol(.), names_to = "model", values_to = "IBS")
 
 # Plot
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_IBS_GENvsOthers.pdf", width = 6, height = 3.5, onefile = FALSE)
 library(ggpubr)
 ggplot(out_ibs, aes(x = reorder(model,-IBS, FUN = median), y = IBS, fill = model))+
   geom_point(aes(color = model))+
@@ -134,6 +143,7 @@ ggplot(out_ibs, aes(x = reorder(model,-IBS, FUN = median), y = IBS, fill = model
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   xlab("Models")+
   ylab("Integrated Brier Score")
+dev.off()
 ```
 
 ### Concordance (Uno)
@@ -156,6 +166,7 @@ out_concordance <- data.frame(fold = 1:10, t(do.call("rbind", concordance_scores
 #out_concordance <- rbind(out_concordance, fit_cox_out)
 
 library(ggpubr)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_Conc_GENvsOthers.pdf", width = 6, height = 3.5, onefile = FALSE)
 ggplot(out_concordance, aes(x = reorder(model,concordance, FUN = median), y = concordance, fill = model))+
   geom_point(aes(color = model))+
   geom_boxplot(outlier.colour = NA, alpha = 0.8)+
@@ -169,6 +180,7 @@ ggplot(out_concordance, aes(x = reorder(model,concordance, FUN = median), y = co
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   xlab("Models")+
   ylab("Concordance (Uno)")
+dev.off()
 ```
 
 ## Test 2: All vs selected
@@ -176,21 +188,21 @@ ggplot(out_concordance, aes(x = reorder(model,concordance, FUN = median), y = co
 ### Read results from different models 
 
 ```{r}
-cv_results_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_MY.rds")
+cv_results_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_old/BF_IMC_MY.rds")
 
-cv_results_2 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_T.rds")
+cv_results_2 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_old/BF_IMC_T.rds")
 
-cv_results_3 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_TU.rds")
+cv_results_3 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_old/BF_IMC_TU.rds")
 
-cv_results_4 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_noGEN.rds")
+cv_results_4 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_old/BF_IMC_noGEN.rds")
 
-cv_results_5 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_MY_all.rds")
+cv_results_5 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_old/BF_IMC_MY_all.rds")
 
-cv_results_6 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_T_all.rds")
+cv_results_6 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_old/BF_IMC_T_all.rds")
 
-cv_results_7 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_TU_all.rds")
+cv_results_7 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_old/BF_IMC_TU_all.rds")
 
-cv_results_8 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_noGEN_all.rds")
+cv_results_8 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_old/BF_IMC_noGEN_all.rds")
 ```
 
 ```{r}
@@ -210,8 +222,8 @@ cv_results_list <- list(
 
 ```{r}
 # Define colors 
-col_cv <- setNames(c("grey","firebrick", "#825CA6", "#F2B342", "#317EC2", "firebrick1"),
-c("CLIN", "IMC", "IMC_TU", "IMC_MY", "IMC_Tcell", "CLIN_IMC"))
+col_cv <- setNames(c("firebrick1", "grey"),
+c("SELECTED", "ALL"))
 ```
 
 ### Integrated Brier Score
@@ -277,17 +289,21 @@ out_ibs$type <- str_split(out_ibs$model, "_", simplify = TRUE)[,1]
 
 # Plot
 library(ggpubr)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_IBS_ALLvsSELECTED.pdf", width = 3.5, height = 3.5, onefile = FALSE)
 ggplot(out_ibs, aes(x = cat, y = IBS, fill = cat))+
   #facet_wrap(~type)+
   geom_point(aes(color = cat))+
   geom_boxplot(outlier.colour = NA, alpha = 0.8)+
   theme_classic()+
   stat_compare_means(aes(group=cat), ref.group = "ALL", paired = FALSE, method = "t.test", method.args = list(alternative = "less", label = "p.format"))+
-  scale_fill_brewer(palette = "Set1")+
-  scale_color_brewer(palette = "Set1")+
+  scale_fill_manual(values = col_cv)+
+  scale_color_manual(values = col_cv)+
+  #scale_fill_brewer(palette = "Set1")+
+  #scale_color_brewer(palette = "Set1")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   xlab("Models")+
   ylab("Integrated Brier Score")
+dev.off()
 ```
 
 
@@ -312,17 +328,21 @@ out_concordance$cat <- ifelse(str_detect(out_concordance$model, "all"), "ALL", "
 out_concordance$type <- str_split(out_concordance$model, "_", simplify = TRUE)[,1]
 
 library(ggpubr)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_Conc_ALLvsSELECTED.pdf", width = 3.5, height = 3.5, onefile = FALSE)
 ggplot(out_concordance, aes(x = cat, y = concordance, fill = cat))+
   #facet_wrap(~type)+
   geom_point(aes(color = cat))+
   geom_boxplot(outlier.colour = NA, alpha = 0.8)+
   theme_classic()+
   stat_compare_means(aes(group=cat), ref.group = "ALL", paired = FALSE, method = "t.test", method.args = list(alternative = "greater", label = "p.format"))+
-  scale_fill_brewer(palette = "Set1")+
-  scale_color_brewer(palette = "Set1")+
+  scale_fill_manual(values = col_cv)+
+  scale_color_manual(values = col_cv)+
+  # scale_fill_brewer(palette = "Set1")+
+  # scale_color_brewer(palette = "Set1")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   xlab("Models")+
   ylab("Concordance (Uno)")
+dev.off()
 ```
 
 
@@ -331,13 +351,13 @@ ggplot(out_concordance, aes(x = cat, y = concordance, fill = cat))+
 ### Read results from different models 
 
 ```{r}
-cv_results_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_noGEN.rds")
+cv_results_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_old/BF_IMC_noGEN.rds")
 
-cv_results_2 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_CLIN.rds")
+cv_results_2 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_old/BF_CLIN.rds")
 
 #cv_results_3 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_CLIN_IMC_nofav.rds")
 
-cv_results_4 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_CLIN_IMC.rds")
+cv_results_4 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_old/BF_CLIN_IMC.rds")
 
 #cv_results_5 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_CLIN_IMCfav.rds")
 
@@ -421,6 +441,8 @@ out_ibs <- data.frame(fold = 1:10, t(do.call("rbind", ibs_scores_list))[1:10,]) 
 
 # Plot
 library(ggpubr)
+
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_IBS_CLINvsIMC.pdf", width = 4.5, height = 3.5, onefile = FALSE)
 ggplot(out_ibs, aes(x = reorder(model,-IBS, FUN = median), y = IBS, fill = model))+
   geom_point(aes(color = model))+
   geom_boxplot(outlier.colour = NA, alpha = 0.8)+
@@ -434,6 +456,7 @@ ggplot(out_ibs, aes(x = reorder(model,-IBS, FUN = median), y = IBS, fill = model
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   xlab("Models")+
   ylab("Integrated Brier Score")
+dev.off()
 ```
 
 ### Concordance (Uno)
@@ -454,6 +477,7 @@ concordance_scores_list <- lapply(cv_results_list, function(res_obj) {
 out_concordance <- data.frame(fold = 1:10, t(do.call("rbind", concordance_scores_list))[1:10,]) %>% pivot_longer(2:ncol(.), names_to = "model", values_to = "concordance")
 
 library(ggpubr)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_Conc_CLINvsIMC.pdf", width = 4.5, height = 3.5, onefile = FALSE)
 ggplot(out_concordance, aes(x = reorder(model,concordance, FUN = median), y = concordance, fill = model))+
   geom_point(aes(color = model))+
   geom_boxplot(outlier.colour = NA, alpha = 0.8)+
@@ -466,6 +490,7 @@ ggplot(out_concordance, aes(x = reorder(model,concordance, FUN = median), y = co
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   xlab("Models")+
   ylab("Concordance (Uno)")
+dev.off()
 ```
 
 ### Check specific model 
@@ -473,7 +498,7 @@ ggplot(out_concordance, aes(x = reorder(model,concordance, FUN = median), y = co
 #### Kaplan-Meier and risk group definition
 
 ```{r}
-cv_results_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC_noGEN.rds")
+cv_results_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_old/BF_IMC_noGEN.rds")
 dataset <- cv_results_1
 surv_plots <- list()
 data_out <- list()
@@ -662,7 +687,7 @@ ggplot(ordered_features, aes(x = reorder(feature,-mean), y = mean))+
 ```{r}
 # Extract features
 ordered_features_median <- ordered_features %>% filter(median > -0.1) %>% pull(feature)      
-ordered_features_mean <- ordered_features %>% filter(mean > 0) %>% pull(feature)      
+ordered_features_mean <- ordered_features %>% filter(mean > -0.1) %>% pull(feature)      
 
 top_features <- ordered_features_median
 
@@ -699,12 +724,14 @@ median_diff <- plot %>% ungroup %>% select(feature) %>% unique()
 median_diff$diff_median <- ordered_features$diff_median[match(median_diff$feature, ordered_features$feature)]
 median_diff <- median_diff[match(colnames(heatmap), median_diff$feature),]
 
+
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_FeatureImportance_Box.pdf", width = 13, height = 4.5, onefile = FALSE)
 HeatmapAnnotation(
   importance = anno_boxplot(heatmap, 
                          gp = gpar(fill = "white"), box_width = 0.75,
-                         height = unit(6,"cm"), outline = FALSE,
+                         height = unit(4,"cm"), outline = FALSE,
                          show_row_names = FALSE),
-  median_diff = anno_lines(median_diff$diff_median, height = unit(2,"cm")),
+  median_diff = anno_lines(median_diff$diff_median, height = unit(1.5,"cm")),
   top = anno$top_feature,
   origin = anno$feature_origin, 
   type = anno$feature_type, 
@@ -717,6 +744,7 @@ HeatmapAnnotation(
   gap = unit(1,"mm"),
   border = TRUE
 )%v%NULL
+dev.off()
 ```
 
 ### Cluster patients
@@ -749,7 +777,7 @@ plot(testCL)
 ```
 
 ```{r}
-set.seed(2201)
+set.seed(22)
 h_select <- Heatmap(key_out, 
         row_km = 3, #or3
         #row_split = 3,
@@ -788,6 +816,7 @@ surv_out <- metadata_selected %>% select(PID, OS_months, status_OS, PID_group_te
 
 fit <- survfit(Surv(OS_months, status_OS) ~ PID_group_test, data = surv_out)
 
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_Kaplan_SurvArchetypes.pdf", width = 8, height = 5, onefile = FALSE)
 ggsurvplot(fit, 
           pval = TRUE,
           risk.table = TRUE, # Add risk table
@@ -798,6 +827,7 @@ ggsurvplot(fit,
           palette = c("#0571B0", "#CA0020","gold3"),#c("#F21A00", "#3B9AB2", "gold")
           conf.int = TRUE
 )
+dev.off()
 ```
 
 ```{r}
@@ -857,9 +887,11 @@ ca <- columnAnnotation(PID_group = anno_simple(col_anno, col = col_group))
 #   ha_types+
 #   rowAnnotation(text = anno_text(row_anno$feature))
 
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_KeyFeatures_SurvArchetypes.pdf", width = 8, height = 5, onefile = FALSE)
 Heatmap(t(key_aggregated))+ 
   ha_types+
   rowAnnotation(text = anno_text(row_anno$feature))
+dev.off()
 ```
 
 ```{r, fig.height=20, fig.width=10}
@@ -1179,6 +1211,49 @@ ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_a
   theme(axis.text.x = element_text(angle = 90, hjust = 1))
 ```
 
+
+###### Spatial groups
+
+```{r}
+surv_out <- metadata_selected %>% select(PID, OS_months, status_OS, IMC_T_PL_spatial_CD8_pheno) %>% unique()
+
+fit <- survfit(Surv(OS_months, status_OS) ~ IMC_T_PL_spatial_CD8_pheno, data = surv_out)
+
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_Kaplan_SpatialCD8.pdf", width = 8, height = 5, onefile = FALSE)
+ggsurvplot(fit, 
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = c("steelblue1", "navy","firebrick"),#c("#F21A00", "#3B9AB2", "gold")
+          conf.int = FALSE
+)
+dev.off()
+```
+
+```{r}
+library(survival)
+library(survminer)
+
+cur_surv <- metadata_selected %>% select(PID, OS_months, status_OS, CLIN_age, CLIN_gender, CLIN_pT_simple, IMC_T_PL_spatial_CD8_pheno) %>% unique()
+
+covariates_null <- cur_surv %>% select(-PID, -OS_months, -status_OS, -IMC_T_PL_spatial_CD8_pheno) %>% colnames
+multi_formula_null <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates_null, collapse = " + ")))
+multi_model_null <- coxph(multi_formula_null, data = cur_surv)
+
+covariates_full <- cur_surv %>% select(-PID, -OS_months, -status_OS) %>% colnames
+multi_formula_full <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates_full, collapse = " + ")))
+multi_model_full <- coxph(multi_formula_full, data = cur_surv)
+
+#cur_surv is.na(cur_surv$PID_metagroups)
+
+# Log-likelihood ratio test
+anova(multi_model_null, multi_model_full)
+```
+
+
 ```{r}
 # Patient group info 
 cur_groups <- metadata_selected %>% select(PID,  TME_activated, TME_silent, TME_suppressed) %>% unique()
@@ -1239,6 +1314,7 @@ hc <- hclust(dd, method = "ward.D2")
 plot(hc)
 row_sorted <- hc$order
 fisher_full$category <- factor(fisher_full$category, levels = cur_df[row_sorted,]$category)
+fisher_full$category <- factor(fisher_full$category, levels = c("TME_suppressed", "TME_silent", "TME_activated"))
 
 # columns 
 dd <- dist(t(cur_df[2:ncol(cur_df)]), method = "euclidean")
@@ -1248,6 +1324,7 @@ column_sorted <- hc$order
 fisher_full$gene <- factor(fisher_full$gene, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
 
 
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/SurvPred_SurvArchetypes_BubbleAsso_SpatialCD8.pdf", width = 5, height = 4)
 ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_adj)))+
   geom_point()+
   theme_classic()+
@@ -1256,10 +1333,13 @@ ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_a
   new_scale_colour() +
   geom_point(data = fisher_full,shape = 1,aes(size = -log10(p_adj), col = result), stroke =1.5)+
   scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  coord_flip()
+dev.off()
 ```
 
-TO CHECK: Association with mutations
+
+###### Genomics
 
 ```{r}
 # Read in genomics data 
@@ -1381,6 +1461,7 @@ hc <- hclust(dd, method = "ward.D2")
 plot(hc)
 row_sorted <- hc$order
 fisher_full$category <- factor(fisher_full$category, levels = cur_df[row_sorted,]$category)
+fisher_full$category <- factor(fisher_full$category, levels = c("TME_suppressed", "TME_silent", "TME_activated"))
 
 # columns 
 dd <- dist(t(cur_df[2:ncol(cur_df)]), method = "euclidean")
@@ -1388,7 +1469,6 @@ hc <- hclust(dd, method = "ward.D2")
 plot(hc)
 column_sorted <- hc$order
 fisher_full$gene <- factor(fisher_full$gene, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
-
 
 ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_adj)))+
   geom_point()+
@@ -1399,6 +1479,22 @@ ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_a
   geom_point(data = fisher_full,shape = 1,aes(size = -log10(p_adj), col = result), stroke =1.5)+
   scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+
+# Select significant ones
+CNV_selected <- fisher_full %>% filter(result != "NOTSIG") %>% pull(gene) %>% unfactor
+fisher_full_selected <- fisher_full %>% filter(gene %in% CNV_selected)
+
+ggplot(fisher_full_selected, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_adj)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = fisher_full_selected,shape = 1,aes(size = -log10(p_adj), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  coord_flip()
 ```
 
 
@@ -1520,6 +1616,7 @@ hc <- hclust(dd, method = "ward.D2")
 plot(hc)
 row_sorted <- hc$order
 fisher_full$category <- factor(fisher_full$category, levels = cur_df[row_sorted,]$category)
+fisher_full$category <- factor(fisher_full$category, levels = c("TME_suppressed", "TME_silent", "TME_activated"))
 
 # columns 
 dd <- dist(t(cur_df[2:ncol(cur_df)]), method = "euclidean")
@@ -1538,6 +1635,21 @@ ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_a
   geom_point(data = fisher_full,shape = 1,aes(size = -log10(p_adj), col = result), stroke =1.5)+
   scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+# Select significant ones
+mut_selected <- fisher_full %>% filter(result != "NOTSIG") %>% pull(gene) %>% unfactor
+fisher_full_selected <- fisher_full %>% filter(gene %in% mut_selected)
+
+ggplot(fisher_full_selected, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_adj)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = fisher_full_selected,shape = 1,aes(size = -log10(p_adj), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  coord_flip()
 ```
 
 
@@ -1620,9 +1732,9 @@ colnames(fisher_full) <- c("gene", "odds_ratio", "p_value", "p_adj", "category",
 ```{r}
 # FDR at 0.1 with trends
 fisher_full$result <- ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_adj < 0.1, "UP",
-                             ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_value < 0.05, "UP_trend", 
+                             ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_value < 0.1, "UP_trend", 
                                     ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_adj < 0.1, "DOWN", 
-                                           ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_value < 0.05, "DOWN_trend","NOTSIG"))))
+                                           ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_value < 0.1, "DOWN_trend","NOTSIG"))))
 
 # Replace INF values with max
 fisher_full$odds_ratio[fisher_full$odds_ratio == Inf] <- max(fisher_full$odds_ratio[!fisher_full$odds_ratio == Inf])
@@ -1636,6 +1748,7 @@ hc <- hclust(dd, method = "ward.D2")
 plot(hc)
 row_sorted <- hc$order
 fisher_full$category <- factor(fisher_full$category, levels = cur_df[row_sorted,]$category)
+fisher_full$category <- factor(fisher_full$category, levels = c("TME_suppressed", "TME_silent", "TME_activated"))
 
 # columns 
 dd <- dist(t(cur_df[2:ncol(cur_df)]), method = "euclidean")
@@ -1653,7 +1766,8 @@ ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_a
   new_scale_colour() +
   geom_point(data = fisher_full,shape = 1,aes(size = -log10(p_adj), col = result), stroke =1.5)+
   scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  coord_flip()
 ```
 
 

@@ -58,6 +58,12 @@ library(psych)
 
 #Batch correction
 library(batchelor)
+
+conflicts_prefer(dplyr::count)
+conflicts_prefer(dplyr::filter)
+conflicts_prefer(dplyr::select)
+conflicts_prefer(dplyr::slice)
+conflicts_prefer(dplyr::mutate)
 ```
 
 # Extract survival relevant features
@@ -2334,18 +2340,14 @@ colnames(spicy_out) <- gsub("-", "_", colnames(spicy_out))
 colnames(spicy_out) <- gsub("/", "_", colnames(spicy_out)) 
 
 ## Different options for selecting interactions
-# A: Only select interactions FROM tumor cells
-#selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "TU") & str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "TU")
-# B: Only select interactions FROM tumor cells TO non-tumor cells
-selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD8") &
-  (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "CD8")) &
-  (!str_detect(colnames(spicy_out), "Unknown"))
+# A: Only select interactions FROM CD8 to others (hetero and homo)
+selected_pairs <- (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD8") | 
+  (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD8"))) & (!str_detect(colnames(spicy_out), "Unknown"))
 
-# selected_pairs <- (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD8") |
-#   (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD8"))) & (!str_detect(colnames(spicy_out), "Unknown"))
-  # (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "CD4") |
-  # (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "CD8"))) &
-  # (!str_detect(colnames(spicy_out), "Unknown"))
+# B: Only select interactions FROM CD8 to non-CD8
+# selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD8") &
+#   (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "CD8")) &
+#   (!str_detect(colnames(spicy_out), "Unknown"))
 
 spicy_out_selected <- spicy_out[,selected_pairs]
 
@@ -2451,22 +2453,14 @@ colnames(spicy_out) <- gsub("-", "_", colnames(spicy_out))
 colnames(spicy_out) <- gsub("/", "_", colnames(spicy_out)) 
 
 ## Different options for selecting interactions
-# A: Only select interactions FROM tumor cells
-#selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "TU") & str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "TU")
-# B: Only select interactions FROM tumor cells TO non-tumor cells
-# selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "TU") &
-#   (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "TU")) & 
+# A: Only select interactions FROM CD8 to others (hetero and homo)
+selected_pairs <- (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD8") | 
+  (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD8"))) & (!str_detect(colnames(spicy_out), "Unknown"))
+
+# B: Only select interactions FROM CD8 to non-CD8
+# selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD8") &
+#   (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "CD8")) &
 #   (!str_detect(colnames(spicy_out), "Unknown"))
-
-selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD8") &
-  (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "CD8")) &
-  (!str_detect(colnames(spicy_out), "Unknown"))
-
-# selected_pairs <- (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD8") |
-#   (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD8"))) & (!str_detect(colnames(spicy_out), "Unknown"))
-#   # (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "CD4") |
-#   # (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "CD8"))) &
-#   # (!str_detect(colnames(spicy_out), "Unknown"))
 
 spicy_out_selected <- spicy_out[,selected_pairs]
 
@@ -2558,11 +2552,11 @@ ggplot(plot_int_combined_fil, aes(x=reorder(group,ratio), y = type, shape = cate
   theme_classic()+
   scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
   scale_size(range = c(2,10))+
-  scale_shape_manual(values = c(16,17))+
+  scale_shape_manual(values = c(16,15,17))+
   new_scale(new_aes = "shape")+
   new_scale(new_aes = "color") +
   geom_point(data = plot_int_combined_fil,aes(size = -log10(p), shape = category, col = result), stroke =1.5)+
-  scale_shape_manual(values = c(1,2))+
+  scale_shape_manual(values = c(1,0,2))+
   scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   ylab("Cox model")+
@@ -2695,22 +2689,14 @@ colnames(spicy_out) <- gsub("-", "_", colnames(spicy_out))
 colnames(spicy_out) <- gsub("/", "_", colnames(spicy_out)) 
 
 ## Different options for selecting interactions
-# A: Only select interactions FROM tumor cells
-#selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "TU") & str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "TU")
-# B: Only select interactions FROM tumor cells TO non-tumor cells
-# selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "TU") &
-#   (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "TU")) & 
+# A: Only select interactions FROM CD4 to others (hetero and homo)
+selected_pairs <- (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD4") | 
+  (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD4"))) & (!str_detect(colnames(spicy_out), "Unknown"))
+
+# B: Only select interactions FROM CD4 to non-CD4
+# selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD4") &
+#   (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "CD4")) &
 #   (!str_detect(colnames(spicy_out), "Unknown"))
-
-selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD4") &
-  (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "CD4")) &
-  (!str_detect(colnames(spicy_out), "Unknown"))
-
-# selected_pairs <- (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD4") |
-#   (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD4"))) & (!str_detect(colnames(spicy_out), "Unknown"))
-  # (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "CD4") |
-  # (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "CD8"))) &
-  # (!str_detect(colnames(spicy_out), "Unknown"))
 
 spicy_out_selected <- spicy_out[,selected_pairs]
 
@@ -2796,22 +2782,14 @@ colnames(spicy_out) <- gsub("-", "_", colnames(spicy_out))
 colnames(spicy_out) <- gsub("/", "_", colnames(spicy_out)) 
 
 ## Different options for selecting interactions
-# A: Only select interactions FROM tumor cells
-#selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "TU") & str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "TU")
-# B: Only select interactions FROM tumor cells TO non-tumor cells
-# selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "TU") &
-#   (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "TU")) & 
+# A: Only select interactions FROM CD4 to others (hetero and homo)
+selected_pairs <- (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD4") | 
+  (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD4"))) & (!str_detect(colnames(spicy_out), "Unknown"))
+
+# B: Only select interactions FROM CD4 to non-CD4
+# selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD4") &
+#   (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "CD4")) &
 #   (!str_detect(colnames(spicy_out), "Unknown"))
-
-selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD4") &
-  (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "CD4")) &
-  (!str_detect(colnames(spicy_out), "Unknown"))
-
-# selected_pairs <- (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD4") |
-#   (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD4"))) & (!str_detect(colnames(spicy_out), "Unknown"))
-  # (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "CD4") |
-  # (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "CD8"))) &
-  # (!str_detect(colnames(spicy_out), "Unknown"))
 
 spicy_out_selected <- spicy_out[,selected_pairs]
 
@@ -2897,7 +2875,7 @@ plot_int_combined_fil <- plot_int_combined %>% group_by(group, category) %>% ref
                                                                                      int_type = int_type, 
                                                                                      direction = direction) %>% unique()
 
-pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/T_CD4_Cox_interaction_bubble.pdf", width = 4, height = 4)
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/T_CD4_Cox_interaction_bubble.pdf", width = 4, height = 4)
 ggplot(plot_int_combined_fil, aes(x=reorder(group,ratio), y = type, shape = category, col = ratio, size= -log10(p)))+
   geom_point()+
   theme_classic()+
@@ -2912,7 +2890,7 @@ ggplot(plot_int_combined_fil, aes(x=reorder(group,ratio), y = type, shape = cate
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   ylab("Cox model")+
   coord_flip()
-dev.off()
+#dev.off()
 
 #priority_order <- c("DOWN" = 1, "DOWN_trend" = 2, "UP" = 1, "UP_trend" = 2)
 #plot_int_combined_fil <- plot_int_combined_fil %>%
