@@ -1713,6 +1713,27 @@ metadata_selected$metabolic_subtype <- metadata_other$metabolic_subtype_name[mat
 metadata_metabolome <- metadata_selected %>% filter(!is.na(metabolic_subtype))
 ```
 
+Survival
+
+```{r}
+surv_out <- metadata_metabolome %>% select(PID, OS_months, status_OS, metabolic_subtype) %>% unique()
+
+fit <- survfit(Surv(OS_months, status_OS) ~ metabolic_subtype, data = surv_out)
+
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survival_MetabolicSub_Archetypes.pdf", width = 7, height = 4, onefile = FALSE)
+ggsurvplot(fit, 
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = c("#00b0be", "#ffb255", "#f45f74", "#98c127"),
+          conf.int = FALSE
+)
+dev.off()
+```
+
 ```{r}
 library(caret)
 
@@ -1787,6 +1808,7 @@ hc <- hclust(dd, method = "ward.D2")
 plot(hc)
 row_sorted <- hc$order
 fisher_full$category <- factor(fisher_full$category, levels = cur_df[row_sorted,]$category)
+fisher_full$category <- factor(fisher_full$category, levels = c("TME_suppressed", "TME_silent", "TME_activated"))
 
 # columns 
 dd <- dist(t(cur_df[2:ncol(cur_df)]), method = "euclidean")
@@ -1796,6 +1818,7 @@ column_sorted <- hc$order
 fisher_full$gene <- factor(fisher_full$gene, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
 
 
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/MetabolicSub_Archetypes_Bubble.pdf", width = 7, height = 5, onefile = FALSE)
 ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_adj)))+
   geom_point()+
   theme_classic()+
@@ -1804,7 +1827,9 @@ ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_a
   new_scale_colour() +
   geom_point(data = fisher_full,shape = 1,aes(size = -log10(p_adj), col = result), stroke =1.5)+
   scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  coord_flip()
+dev.off()
 ```
 
 
