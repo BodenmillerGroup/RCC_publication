@@ -26,6 +26,10 @@ library(tidyverse)
 library(caret)
 library(survival)
 library(survminer)
+library(conflicted)
+conflicts_prefer(base::unname)
+conflicts_prefer(dplyr::filter)
+conflicts_prefer(dplyr::select)
 ```
 
 # 2. BlockForest survival prediction

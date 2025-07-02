@@ -26,11 +26,11 @@ TCGA_meta <- read_csv("/mnt/central_nas/rcc_volume/RCC/HE/CLAM/TCGA_KIRC/TCGA_KI
 
 
 ```{r}
-out <- list.files("/mnt/central_nas/rcc_volume/RCC/HE/CLAM/TCGA_KIRC/eval_results/train_b32_lr1low_svm_s1_TCGA_EVAL/")
+out <- list.files("/mnt/central_nas/rcc_volume/RCC/HE/CLAM/TCGA_KIRC/eval_results/train_b16_lr2low_s1_TCGA_EVAL/")
 out <- out[str_detect(out, "fold")]
 
 results <- foreach(i = out, .combine = "rbind")%do%{
-  results <- read_csv(paste0("/mnt/central_nas/rcc_volume/RCC/HE/CLAM/TCGA_KIRC/eval_results/train_b32_lr1low_svm_s1_TCGA_EVAL/", i))
+  results <- read_csv(paste0("/mnt/central_nas/rcc_volume/RCC/HE/CLAM/TCGA_KIRC/eval_results/train_b16_lr2low_s1_TCGA_EVAL/", i))
   results$fold <- str_extract(i, "(\\d)+")
   return(results)
 }
@@ -70,7 +70,7 @@ Here, we are selecting the best performing model fold (fold 0).
 
 ```{r}
 # Mean proportions across images per patient
-results_selected <- results %>% filter(fold == "0") %>% group_by(TME_archetype, PID, fold) %>% mutate(prop = mean(prop)) %>% dplyr::select(PID, fold, TME_archetype, prop) %>% unique()
+results_selected <- results %>% filter(fold == "7") %>% group_by(TME_archetype, PID, fold) %>% mutate(prop = mean(prop)) %>% dplyr::select(PID, fold, TME_archetype, prop) %>% unique()
 ```
 
 ```{r}
@@ -171,11 +171,11 @@ CPTAC_meta <- read_excel("/mnt/central_nas/rcc_volume/RCC/HE/CLAM/CPTAC/CPTAC_me
 
 
 ```{r}
-out <- list.files("/mnt/central_nas/rcc_volume/RCC/HE/CLAM/CPTAC/eval_results/train_b32_lr1low_svm_s1_CPTAC_EVAL/")
+out <- list.files("/mnt/central_nas/rcc_volume/RCC/HE/CLAM/CPTAC/eval_results/train_b16_lr2low_s1_CPTAC_EVAL/")
 out <- out[str_detect(out, "fold")]
 
 results <- foreach(i = out, .combine = "rbind")%do%{
-  results <- read_csv(paste0("/mnt/central_nas/rcc_volume/RCC/HE/CLAM/CPTAC/eval_results/train_b32_lr1low_svm_s1_CPTAC_EVAL/", i))
+  results <- read_csv(paste0("/mnt/central_nas/rcc_volume/RCC/HE/CLAM/CPTAC/eval_results/train_b16_lr2low_s1_CPTAC_EVAL/", i))
   results$fold <- str_extract(i, "(\\d)+")
   return(results)
 }
@@ -215,7 +215,7 @@ Here, we are selecting the best performing model fold (fold 0).
 
 ```{r}
 # Mean proportions across images per patient
-results_selected <- results %>% filter(fold == "0") %>% group_by(TME_archetype, PID, fold) %>% mutate(prop = mean(prop)) %>% dplyr::select(PID, fold, TME_archetype, prop) %>% unique()
+results_selected <- results %>% filter(fold == "7") %>% group_by(TME_archetype, PID, fold) %>% mutate(prop = mean(prop)) %>% dplyr::select(PID, fold, TME_archetype, prop) %>% unique()
 ```
 
 ```{r}

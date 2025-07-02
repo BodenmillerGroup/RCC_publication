@@ -323,30 +323,30 @@ counts_norm <- counts(res, normalized = TRUE)
 colnames(counts_norm) <- res$PID
 rownames(counts_norm)
 
-df_check <- counts_norm %>% t() %>% as.data.frame %>% select("ICAM1", "VHL")
+df_check <- counts_norm %>% t() %>% as.data.frame %>% select("ICAM1", "CCND1")
 
 rownames(df_check) <- res$PID
 
 df_check$ICAM1_minmax <- scale(df_check$ICAM1, center = min(df_check$ICAM1), scale = max(df_check$ICAM1) - min(df_check$ICAM1))[,1]
-df_check$VHL_minmax <- scale(df_check$VHL, center = min(df_check$VHL), scale = max(df_check$VHL) - min(df_check$VHL))[,1]
+df_check$CCND1_minmax <- scale(df_check$CCND1, center = min(df_check$CCND1), scale = max(df_check$CCND1) - min(df_check$CCND1))[,1]
 
 quantile(df_check$ICAM1)
-quantile(df_check$VHL)
+quantile(df_check$CCND1)
 
-ggplot(df_check, aes(ICAM1, VHL))+
+ggplot(df_check, aes(ICAM1, CCND1))+
   geom_point()
-ggplot(df_check, aes(ICAM1_minmax, VHL_minmax))+
+ggplot(df_check, aes(ICAM1_minmax, CCND1_minmax))+
   geom_point()
 ```
 
 ```{r}
 library(clValid)
 
-df_test <- df_check %>% select(ICAM1_minmax, VHL_minmax)
+df_test <- df_check %>% select(ICAM1_minmax, CCND1_minmax)
 
 #Internal measures
 set.seed(22)
-testCL<- clValid(df_test,nClust = 3:6,clMethods = c("hierarchical","agnes","kmeans"),validation="internal",metric="euclidean", method = "ward", maxitems = 5000)
+testCL<- clValid(df_test,nClust = 2:6,clMethods = c("hierarchical","agnes","kmeans"),validation="internal",metric="euclidean", method = "ward", maxitems = 5000)
 summary(testCL)
 plot(testCL, legend = FALSE)
 
@@ -366,12 +366,12 @@ plot(avg_col_dend_MCP)
 
 
 ```{r}
-set.seed(22)
+set.seed(2201)
 h_PID <- Heatmap(df_test, 
         col = viridis(100), 
-        #row_km = 3, row_km_repeats = 10000,
-        row_split = 3, 
-        cluster_rows = avg_col_dend_MCP,
+        row_km = 3, row_km_repeats = 1000,
+        #row_split = 3, 
+        #cluster_rows = avg_col_dend_MCP,
         name = "min_max")
 h_PID <- draw(h_PID)
 
@@ -390,9 +390,33 @@ res$PID_group_test <- anno$metacluster[match(res$PID, anno$PID)]
 vsd$PID_group_test <- anno$metacluster[match(vsd$PID, anno$PID)]
 df_check$PID_group_test <- anno$metacluster[match(rownames(df_check), anno$PID)]
 
-ggplot(df_check, aes(ICAM1_minmax, VHL_minmax, color = PID_group_test))+
+ggplot(df_check, aes(ICAM1_minmax, CCND1_minmax, color = PID_group_test))+
   geom_point()+
   theme_classic()
+```
+
+```{r}
+#Assess survival impact 
+library(survival)
+library(survminer)
+
+cur_surv <- colData(kirc.clean) %>% as.data.frame() %>% dplyr::select(PID, OS_days, status_OS, PID_group_test) %>% 
+  #mutate(PID_ICAM_mTOR_group = ifelse(PID_ICAM_mTOR_group %in% c("2","3"), "2/3", PID_ICAM_mTOR_group)) %>% 
+  unique()
+
+#Plot survival curves
+fit <- survfit(Surv(OS_days, status_OS) ~ PID_group_test, data = cur_surv)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          palette = "Set1",
+          #palette = unname(metadata(kirc.clean)$colors$ISUP_combined),
+          ggtheme = theme_classic())
 ```
 
 ```{r}
@@ -457,7 +481,7 @@ kirc.clean$PID_ICAM_mTOR_group <- factor(kirc.clean$PID_ICAM_mTOR_group)
 library(survival)
 library(survminer)
 
-cur_surv <- colData(kirc.clean) %>% as.data.frame() %>% dplyr::select(PID, OS_days, status_OS, PID_group_test, PID_ICAM_mTOR_group) %>% 
+cur_surv <- colData(kirc.clean) %>% as.data.frame() %>% dplyr::select(PID, OS_days, status_OS, PID_group_test) %>% 
   #mutate(PID_ICAM_mTOR_group = ifelse(PID_ICAM_mTOR_group %in% c("2","3"), "2/3", PID_ICAM_mTOR_group)) %>% 
   unique()
 
@@ -1125,12 +1149,12 @@ Cox_df$OS_days <- vsd$OS_days[match(rownames(Cox_df),vsd$PID)]
 
 Cox_df$gender <- vsd$gender[match(rownames(Cox_df),vsd$PID)]
 Cox_df$pT_simple <- as.factor(vsd$pT_combined[match(rownames(Cox_df),vsd$PID)])
-Cox_df$ISUP_simple <- as.factor(vsd$ISUP_combined[match(rownames(Cox_df),vsd$PID)])
+#Cox_df$ISUP_simple <- as.factor(vsd$ISUP_combined[match(rownames(Cox_df),vsd$PID)])
 
 #Based on proportions
-covariates <- Cox_df %>% dplyr::select(-status_OS,-OS_days, -gender, -pT_simple, -ISUP_simple, -TME_silent) %>% colnames
+covariates <- Cox_df %>% dplyr::select(-status_OS,-OS_days, -gender, -pT_simple, -TME_silent) %>% colnames
 
-multi_formula <- as.formula(paste("Surv(OS_days, status_OS) ~ gender + pT_simple + ISUP_simple +", paste(covariates, collapse = " + "), "+ TME_silent"))
+multi_formula <- as.formula(paste("Surv(OS_days, status_OS) ~ gender + pT_simple +", paste(covariates, collapse = " + "), "+ TME_silent"))
 
 multi_model <- coxph(multi_formula, data = Cox_df)
 
@@ -1190,9 +1214,9 @@ dittoBarPlot(vsd[,!is.na(vsd$VHL)], var = "VHL", group.by = "TME_archetype",reta
 
 ```{r}
 # Define GOI of interest
-GOI <- c("ICAM1", "VHL")
+#GOI <- c("ICAM1", "VHL")
 #GOI <- c("VHL","CA9", "KRT19", "GPX4", "HLA-DRA", "NFKB1", "CCND1", "HIF1A", "TP53", "MYC", "ICAM1", "PDK4", "NT5E", "SMARCA4", "PKM", "CD274", "MME", "IDH2", "EPAS1", "AURKA", "HAVCR2", "EGFR", "RPS6", "FLT1", "MTOR", "RB1", "SLC2A1", "FH", "GLUD1", "CD44", "VIM")
-
+GOI <- c("VHL", "NFKB1", "CCND1", "ICAM1", "EGFR", "FLT1", "RB1")
 GOI_rel <- GOI[GOI %in% rownames(vsd)]
 
 # Define heatmap based on normalized counts 
