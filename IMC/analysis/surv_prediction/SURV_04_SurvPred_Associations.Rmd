@@ -992,7 +992,7 @@ for (i in seq_along(mut_list_full)){
 }
 
 # Optional: Create a new list entry called "Clonality" for gene mutation clonality annotation per PID
-subclonal_anno <- full_consensus_GOI %>% select(PID, Genes, clonality) %>% unique() %>% pivot_wider(id_cols = PID, names_from = Genes, values_from = clonality) %>% column_to_rownames("PID")
+subclonal_anno <- mut_anno %>% select(PID, Genes, clonality) %>% unique() %>% pivot_wider(id_cols = PID, names_from = Genes, values_from = clonality) %>% column_to_rownames("PID")
 
 subclonal_anno[is.na(subclonal_anno)] <- "none"
 subclonal_anno <- t(ifelse(subclonal_anno == "subclonal", 1, 0))
@@ -1032,7 +1032,7 @@ test_alter_fun(fun_alter)
 
 ## Step 2: Column Annotation
 c_anno <- data.frame(PID = colnames(mut_list_full[1]$frameshift_variant))
-c_anno$cohort <- full_consensus_GOI$cohort[match(c_anno$PID, full_consensus_GOI$PID)]
+c_anno$cohort <- mut_anno$cohort[match(c_anno$PID, mut_anno$PID)]
 c_anno$BF_PL_TME_archetypes <- metadata_selected$BF_PL_TME_archetypes[match(c_anno$PID, metadata_selected$PID)]
 
 
@@ -1818,7 +1818,7 @@ column_sorted <- hc$order
 fisher_full$gene <- factor(fisher_full$gene, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
 
 
-pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/MetabolicSub_Archetypes_Bubble.pdf", width = 7, height = 5, onefile = FALSE)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/MetabolicSub_Archetypes_Bubble.pdf", width = 7, height = 6, onefile = FALSE)
 ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_adj)))+
   geom_point()+
   theme_classic()+
