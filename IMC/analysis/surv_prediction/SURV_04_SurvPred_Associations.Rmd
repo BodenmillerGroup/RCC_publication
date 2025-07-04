@@ -1525,6 +1525,104 @@ ggplot(fisher_full_selected, aes(x=category, y = gene,col = odds_ratio, size = -
 dev.off()
 ```
 
+###### CNV burden 
+
+```{r}
+## Key CNV arm-level events
+CNV_arm_sum_out <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/CNV_key_armlevel_combined_consensus.csv")
+CNV_arm_sum_out$chr_arm_type <- paste0(CNV_arm_sum_out$chr_arm, "_", CNV_arm_sum_out$type_summarized)
+```
+
+```{r}
+# Only clonal key events
+CNV_per_PID <- CNV_arm_sum_out %>% mutate(binary = ifelse(type_summarized %in% c("gain", "loss"), 1, 0)) %>% filter(clonality == "clonal") %>% pivot_wider(id_cols = PID, names_from = chr_arm_type, values_from = binary)
+CNV_per_PID[is.na(CNV_per_PID)] <- 0
+
+CNV_burden <- CNV_per_PID %>% column_to_rownames("PID") %>% mutate(burden = rowSums(.)) %>% rownames_to_column("PID") %>% select(PID, burden)
+
+CNV_burden$BF_PL_TME_archetypes <- metadata_selected$BF_PL_TME_archetypes[match(CNV_burden$PID, metadata_selected$PID)]
+CNV_burden <- CNV_burden %>% filter(!is.na(BF_PL_TME_archetypes))
+
+ggplot(CNV_burden, aes(x = BF_PL_TME_archetypes, y = burden, fill = BF_PL_TME_archetypes))+
+  geom_point(aes(color = BF_PL_TME_archetypes))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
+  theme_classic()+
+  stat_compare_means(vjust = 1)+
+  scale_fill_manual(values = col_group)+
+  scale_color_manual(values = col_group)+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  xlab("Models")+
+  ylab("CNV events")
+
+# All key events
+CNV_per_PID <- CNV_arm_sum_out %>% mutate(binary = ifelse(!type_summarized %in% c("neutral"), 1, 0)) %>% pivot_wider(id_cols = PID, names_from = chr_arm_type, values_from = binary)
+CNV_per_PID[is.na(CNV_per_PID)] <- 0
+
+CNV_burden <- CNV_per_PID %>% column_to_rownames("PID") %>% mutate(burden = rowSums(.)) %>% rownames_to_column("PID") %>% select(PID, burden)
+
+CNV_burden$BF_PL_TME_archetypes <- metadata_selected$BF_PL_TME_archetypes[match(CNV_burden$PID, metadata_selected$PID)]
+CNV_burden <- CNV_burden %>% filter(!is.na(BF_PL_TME_archetypes))
+
+ggplot(CNV_burden, aes(x = BF_PL_TME_archetypes, y = burden, fill = BF_PL_TME_archetypes))+
+  geom_point(aes(color = BF_PL_TME_archetypes))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
+  theme_classic()+
+  stat_compare_means(vjust = 1)+
+  scale_fill_manual(values = col_group)+
+  scale_color_manual(values = col_group)+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  xlab("Models")+
+  ylab("CNV events")
+```
+
+```{r}
+## Key CNV arm-level events
+CNV_arm_sum_out_1 <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/CNV_armlevel_combined_consensus.csv")
+CNV_arm_sum_out_1$chr_arm_type <- paste0(CNV_arm_sum_out_1$chr_arm, "_", CNV_arm_sum_out_1$type_summarized)
+```
+
+```{r}
+# Only clonal key events
+CNV_per_PID <- CNV_arm_sum_out_1 %>% mutate(binary = ifelse(type_summarized %in% c("gain", "loss"), 1, 0)) %>% filter(clonality == "clonal") %>% pivot_wider(id_cols = PID, names_from = chr_arm_type, values_from = binary)
+CNV_per_PID[is.na(CNV_per_PID)] <- 0
+
+CNV_burden <- CNV_per_PID %>% column_to_rownames("PID") %>% mutate(burden = rowSums(.)) %>% rownames_to_column("PID") %>% select(PID, burden)
+
+CNV_burden$BF_PL_TME_archetypes <- metadata_selected$BF_PL_TME_archetypes[match(CNV_burden$PID, metadata_selected$PID)]
+CNV_burden <- CNV_burden %>% filter(!is.na(BF_PL_TME_archetypes))
+
+ggplot(CNV_burden, aes(x = BF_PL_TME_archetypes, y = burden, fill = BF_PL_TME_archetypes))+
+  geom_point(aes(color = BF_PL_TME_archetypes))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
+  theme_classic()+
+  stat_compare_means(vjust = 1)+
+  scale_fill_manual(values = col_group)+
+  scale_color_manual(values = col_group)+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  xlab("Models")+
+  ylab("CNV events")
+
+# All key events
+CNV_per_PID <- CNV_arm_sum_out_1 %>% mutate(binary = ifelse(!type_summarized %in% c("neutral"), 1, 0)) %>% pivot_wider(id_cols = PID, names_from = chr_arm_type, values_from = binary)
+CNV_per_PID[is.na(CNV_per_PID)] <- 0
+
+CNV_burden <- CNV_per_PID %>% column_to_rownames("PID") %>% mutate(burden = rowSums(.)) %>% rownames_to_column("PID") %>% select(PID, burden)
+
+CNV_burden$BF_PL_TME_archetypes <- metadata_selected$BF_PL_TME_archetypes[match(CNV_burden$PID, metadata_selected$PID)]
+CNV_burden <- CNV_burden %>% filter(!is.na(BF_PL_TME_archetypes))
+
+ggplot(CNV_burden, aes(x = BF_PL_TME_archetypes, y = burden, fill = BF_PL_TME_archetypes))+
+  geom_point(aes(color = BF_PL_TME_archetypes))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
+  theme_classic()+
+  stat_compare_means(vjust = 1)+
+  scale_fill_manual(values = col_group)+
+  scale_color_manual(values = col_group)+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  xlab("Models")+
+  ylab("CNV events")
+```
+
 
 ###### Genomic subtypes
 
