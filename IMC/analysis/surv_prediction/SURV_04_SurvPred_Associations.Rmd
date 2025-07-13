@@ -1227,6 +1227,272 @@ ggplot(fisher_full_selected, aes(x=category, y = gene,col = odds_ratio, size = -
 dev.off()
 ```
 
+###### Mutational burden 
+
+```{r}
+# OPTION 1: Selected all variants (not only high/medium impact) across all genes (not only GOI)
+variant_combined_filtered <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_clonality_consensus_cohort1.csv")
+variant_combined_filtered$cohort <- "cohort_old"
+variant_combined_filtered <- variant_combined_filtered %>% select(-sample_id, -variant_consequence_clean)
+
+variant_combined_filtered_2 <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_cohort2.csv")
+variant_combined_filtered_2$cohort <- "cohort_new"
+variant_combined_filtered_2$clonality <- "clonal" #add clonal attribute 
+
+variant_combined_full <- rbind(variant_combined_filtered, variant_combined_filtered_2)
+```
+
+```{r}
+# RUNS VERY LONG ACROSS ALL GENES
+# #Load processed data file and select columns of interest
+# snv <- variant_combined_full
+# 
+# # Optional: Filter low-cov patients
+# #snv <- snv %>% filter(!PID_old %in% PID_kick_out)
+# 
+# snv$mut_level <- snv$variant_consequence
+# 
+# snv <- snv %>% select(PID, Genes, mut_level)
+# 
+# mut_levels_for_matrix <- snv %>% pull(mut_level) %>% unique()
+# 
+# # Select genes 
+# ## A: All genes 
+# Genes_list <- snv %>% pull(Genes) %>% unique()
+# ## B: Genes of Interest e.g. IntOGen driver genes 
+# #Genes_list <- snv %>% filter(Genes %in% GOI) %>% pull(Genes) %>% unique()
+# #Genes_list <- Genes_list[!Genes_list %in% c("SF3B1", "STAG2", "ARHGAP35")]
+# 
+# #Placeholders 
+# mut_list <- list()
+# placeholder_Genes <- Genes_list[1]
+# pids <- unique(snv$PID)
+# placeholder_pid <- pids[1]
+# 
+# for(mut in mut_levels_for_matrix){
+#   
+#   #select all SNVs/Indels of the mut_level and give a value of 1
+#   x <- snv %>%
+#     dplyr::filter(mut_level==mut,
+#                   Genes %in% Genes_list | 
+#                     grepl(paste0(paste0("^", Genes_list, "[,;]"), collapse="|"), Genes) |       #allow for multi-Genes mutations
+#                     grepl(paste0(paste0("[,;]", Genes_list, "$"), collapse="|"), Genes) ) %>%  
+#     dplyr::select(PID, Genes) %>%
+#     dplyr::mutate(value=1) %>%
+#     dplyr::distinct()
+#   
+#   if(dim(x)[1]!=0){
+#     x <- x %>%
+#       tidyr::spread(Genes, value)
+#     
+#     #transpose and replace NA by 0
+#     y <- x %>% column_to_rownames("PID")
+#     y <- t(y)
+#     y[is.na(y)] <- 0
+#     
+#   }else{
+#     y <- tibble(0)
+#     colnames(y) <- placeholder_pid
+#     rownames(y) <- placeholder_Genes
+#   }
+#   
+#   mut_list[[mut]] <- as.matrix(y)
+# }
+# 
+# #Unify matrices
+# mut_list_full <- unify_mat_list(mut_list)
+# 
+# # Create a new list entry called "Multiple" for multiple gene mutations within a PID
+# sum_matrix <- Reduce(`+`, mut_list_full)
+# mut_list_full$multiple <- as.matrix(ifelse(sum_matrix > 1, 1,0))
+# 
+# # keep the order of annotation and mutation list
+# #ord= anno$PID_short
+#   
+# # show every gene and patient
+# # blank for patients  and.or genes missing 
+# for (i in seq_along(mut_list_full)){
+#   dif_gen = setdiff(Genes_list,rownames(mut_list_full[[i]]))
+#   dif_pat = setdiff(pids,colnames(mut_list_full[[i]]))
+#   
+#   blank= matrix(ncol=length(dif_pat),nrow=length(rownames(mut_list_full[[i]])),0)
+#   colnames(blank)=dif_pat
+#   rownames(blank)=rownames(mut_list_full[[i]])
+#   mut_list_full[[i]]=cbind(mut_list_full[[i]],blank)
+#   
+#   blank= matrix(ncol=ncol(mut_list_full[[i]]),nrow=length(dif_gen),0)
+#   colnames(blank)=colnames(mut_list_full[[i]])
+#   rownames(blank)=dif_gen
+#   mut_list_full[[i]]=rbind(mut_list_full[[i]],blank)
+#   #mut_list_full[[i]]=mut_list_full[[i]][,ord]
+# }
+# 
+# # Optional: Create a new list entry called "Clonality" for gene mutation clonality annotation per PID
+# subclonal_anno <- variant_combined_full %>% select(PID, Genes, clonality) %>% unique() %>% pivot_wider(id_cols = PID, names_from = Genes, values_from = clonality) %>% column_to_rownames("PID")
+# 
+# subclonal_anno[is.na(subclonal_anno)] <- "none"
+# subclonal_anno <- t(ifelse(subclonal_anno == "subclonal", 1, 0))
+# 
+# subclonal_anno <- subclonal_anno[match(rownames(mut_list_full$missense_variant), rownames(subclonal_anno)),]
+# subclonal_anno <- subclonal_anno[,match(colnames(mut_list_full$missense_variant), colnames(subclonal_anno))]
+# 
+# mut_list_full$subclonal <- subclonal_anno
+```
+
+```{r}
+sum_matrix <- Reduce(`+`, mut_list_full)
+sum_matrix <- as.matrix(ifelse(sum_matrix >= 1, 1,0))
+sum_matrix[mut_list_full$subclonal == 1] <- 0.5
+save_sum <- as.data.frame(t(sum_matrix)) %>% rownames_to_column("PID")
+```
+
+```{r}
+MUT_burden <- save_sum %>% column_to_rownames("PID") %>% mutate(burden = rowSums(.)) %>% rownames_to_column("PID") %>% select(PID, burden)
+
+MUT_burden$BF_PL_TME_archetypes <- metadata_selected$BF_PL_TME_archetypes[match(MUT_burden$PID, metadata_selected$PID)]
+MUT_burden <- MUT_burden %>% filter(!is.na(BF_PL_TME_archetypes))
+
+col_group <- setNames(c("#0571B0", "gold3", "#CA0020"),c("TME_activated","TME_silent","TME_suppressed"))
+
+ggplot(MUT_burden, aes(x = BF_PL_TME_archetypes, y = burden, fill = BF_PL_TME_archetypes))+
+  geom_point(aes(color = BF_PL_TME_archetypes))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
+  theme_classic()+
+  stat_compare_means(vjust = 1)+
+  scale_fill_manual(values = col_group)+
+  scale_color_manual(values = col_group)+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  xlab("Models")+
+  ylab("MUT events")
+```
+
+
+```{r}
+# OPTION 2: Selected impact variants across GOI genes
+variant_combined_full <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_full_withmeta.csv")
+
+#Load processed data file and select columns of interest
+snv <- variant_combined_full
+
+# Optional: Filter low-cov patients
+#snv <- snv %>% filter(!PID_old %in% PID_kick_out)
+
+snv$mut_level <- snv$variant_consequence_clean
+
+snv <- snv %>% select(PID, Genes, mut_level)
+
+mut_levels_for_matrix <- snv %>% pull(mut_level) %>% unique()
+
+# Select genes 
+## A: All genes 
+Genes_list <- snv %>% pull(Genes) %>% unique()
+## B: Genes of Interest e.g. IntOGen driver genes 
+Genes_list <- snv %>% filter(Genes %in% GOI) %>% pull(Genes) %>% unique()
+Genes_list <- Genes_list[!Genes_list %in% c("SF3B1", "STAG2", "ARHGAP35")]
+
+#Placeholders 
+mut_list <- list()
+placeholder_Genes <- Genes_list[1]
+pids <- unique(snv$PID)
+placeholder_pid <- pids[1]
+
+for(mut in mut_levels_for_matrix){
+  
+  #select all SNVs/Indels of the mut_level and give a value of 1
+  x <- snv %>%
+    dplyr::filter(mut_level==mut,
+                  Genes %in% Genes_list | 
+                    grepl(paste0(paste0("^", Genes_list, "[,;]"), collapse="|"), Genes) |       #allow for multi-Genes mutations
+                    grepl(paste0(paste0("[,;]", Genes_list, "$"), collapse="|"), Genes) ) %>%  
+    dplyr::select(PID, Genes) %>%
+    dplyr::mutate(value=1) %>%
+    dplyr::distinct()
+  
+  if(dim(x)[1]!=0){
+    x <- x %>%
+      tidyr::spread(Genes, value)
+    
+    #transpose and replace NA by 0
+    y <- x %>% column_to_rownames("PID")
+    y <- t(y)
+    y[is.na(y)] <- 0
+    
+  }else{
+    y <- tibble(0)
+    colnames(y) <- placeholder_pid
+    rownames(y) <- placeholder_Genes
+  }
+  
+  mut_list[[mut]] <- as.matrix(y)
+}
+
+#Unify matrices
+mut_list_full <- unify_mat_list(mut_list)
+
+# Create a new list entry called "Multiple" for multiple gene mutations within a PID
+sum_matrix <- Reduce(`+`, mut_list_full)
+mut_list_full$multiple <- as.matrix(ifelse(sum_matrix > 1, 1,0))
+
+# keep the order of annotation and mutation list
+#ord= anno$PID_short
+  
+# show every gene and patient
+# blank for patients  and.or genes missing 
+for (i in seq_along(mut_list_full)){
+  dif_gen = setdiff(Genes_list,rownames(mut_list_full[[i]]))
+  dif_pat = setdiff(pids,colnames(mut_list_full[[i]]))
+  
+  blank= matrix(ncol=length(dif_pat),nrow=length(rownames(mut_list_full[[i]])),0)
+  colnames(blank)=dif_pat
+  rownames(blank)=rownames(mut_list_full[[i]])
+  mut_list_full[[i]]=cbind(mut_list_full[[i]],blank)
+  
+  blank= matrix(ncol=ncol(mut_list_full[[i]]),nrow=length(dif_gen),0)
+  colnames(blank)=colnames(mut_list_full[[i]])
+  rownames(blank)=dif_gen
+  mut_list_full[[i]]=rbind(mut_list_full[[i]],blank)
+  #mut_list_full[[i]]=mut_list_full[[i]][,ord]
+}
+
+# Optional: Create a new list entry called "Clonality" for gene mutation clonality annotation per PID
+subclonal_anno <- variant_combined_full %>% select(PID, Genes, clonality) %>% unique() %>% pivot_wider(id_cols = PID, names_from = Genes, values_from = clonality) %>% column_to_rownames("PID")
+
+subclonal_anno[is.na(subclonal_anno)] <- "none"
+subclonal_anno <- t(ifelse(subclonal_anno == "subclonal", 1, 0))
+
+subclonal_anno <- subclonal_anno[match(rownames(mut_list_full$missense_variant), rownames(subclonal_anno)),]
+subclonal_anno <- subclonal_anno[,match(colnames(mut_list_full$missense_variant), colnames(subclonal_anno))]
+
+mut_list_full$subclonal <- subclonal_anno
+```
+
+```{r}
+sum_matrix <- Reduce(`+`, mut_list_full)
+sum_matrix <- as.matrix(ifelse(sum_matrix >= 1, 1,0))
+sum_matrix[mut_list_full$subclonal == 1] <- 0.5
+save_sum <- as.data.frame(t(sum_matrix)) %>% rownames_to_column("PID")
+```
+
+```{r}
+MUT_burden <- save_sum %>% column_to_rownames("PID") %>% mutate(burden = rowSums(.)) %>% rownames_to_column("PID") %>% select(PID, burden)
+
+MUT_burden$BF_PL_TME_archetypes <- metadata_selected$BF_PL_TME_archetypes[match(MUT_burden$PID, metadata_selected$PID)]
+MUT_burden <- MUT_burden %>% filter(!is.na(BF_PL_TME_archetypes))
+
+col_group <- setNames(c("#0571B0", "gold3", "#CA0020"),c("TME_activated","TME_silent","TME_suppressed"))
+
+ggplot(MUT_burden, aes(x = BF_PL_TME_archetypes, y = burden, fill = BF_PL_TME_archetypes))+
+  geom_point(aes(color = BF_PL_TME_archetypes))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
+  theme_classic()+
+  stat_compare_means(vjust = 1)+
+  scale_fill_manual(values = col_group)+
+  scale_color_manual(values = col_group)+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  xlab("Models")+
+  ylab("MUT events (Drivers)")
+```
+
 
 ###### CNV
 
@@ -1576,13 +1842,13 @@ ggplot(CNV_burden, aes(x = BF_PL_TME_archetypes, y = burden, fill = BF_PL_TME_ar
 ```
 
 ```{r}
-## Key CNV arm-level events
+## All CNV arm-level events
 CNV_arm_sum_out_1 <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/CNV_armlevel_combined_consensus.csv")
 CNV_arm_sum_out_1$chr_arm_type <- paste0(CNV_arm_sum_out_1$chr_arm, "_", CNV_arm_sum_out_1$type_summarized)
 ```
 
 ```{r}
-# Only clonal key events
+# Only clonal all events
 CNV_per_PID <- CNV_arm_sum_out_1 %>% mutate(binary = ifelse(type_summarized %in% c("gain", "loss"), 1, 0)) %>% filter(clonality == "clonal") %>% pivot_wider(id_cols = PID, names_from = chr_arm_type, values_from = binary)
 CNV_per_PID[is.na(CNV_per_PID)] <- 0
 
@@ -1602,7 +1868,7 @@ ggplot(CNV_burden, aes(x = BF_PL_TME_archetypes, y = burden, fill = BF_PL_TME_ar
   xlab("Models")+
   ylab("CNV events")
 
-# All key events
+# All events
 CNV_per_PID <- CNV_arm_sum_out_1 %>% mutate(binary = ifelse(!type_summarized %in% c("neutral"), 1, 0)) %>% pivot_wider(id_cols = PID, names_from = chr_arm_type, values_from = binary)
 CNV_per_PID[is.na(CNV_per_PID)] <- 0
 
@@ -1621,6 +1887,34 @@ ggplot(CNV_burden, aes(x = BF_PL_TME_archetypes, y = burden, fill = BF_PL_TME_ar
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   xlab("Models")+
   ylab("CNV events")
+```
+
+###### Tumor IMC expression
+
+```{r}
+sce_TU <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_05.rds")
+
+# Add archetypes
+sce_TU$BF_PL_TME_archetypes <- metadata_selected$BF_PL_TME_archetypes[match(sce_TU$PID, metadata_selected$PID)]
+
+sce_TU <- sce_TU[,!is.na(sce_TU$BF_PL_TME_archetypes)]
+```
+
+```{r, fig.height=20, fig.width=8}
+# Aggregate expression per PID 
+archetype_mean_PID <- aggregateAcrossCells(sce_TU, ids = sce_TU$PID,
+                                 statistics = "mean",
+                                 use.assay.type = "min_max",
+                                 subset.row = rowData(sce_TU)$tumor_cluster_1)
+
+
+# Violin plot
+plotExpression(archetype_mean_PID, 
+               features = rownames(sce_TU)[rowData(sce_TU)$tumor_cluster_1],
+               x = "BF_PL_TME_archetypes", exprs_values = "min_max", 
+               colour_by = "BF_PL_TME_archetypes") +
+    theme(axis.text.x =  element_text(angle = 90))+
+    scale_color_manual(values = col_group)
 ```
 
 
