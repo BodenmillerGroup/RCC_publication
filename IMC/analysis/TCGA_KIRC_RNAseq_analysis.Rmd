@@ -319,12 +319,57 @@ kirc.clean <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA
 ### Define groups
 
 ```{r}
+library(dplyr)
+library(scater)
+
 counts_norm <- counts(res, normalized = TRUE)
 colnames(counts_norm) <- res$PID
 rownames(counts_norm)
 
-df_check <- counts_norm %>% t() %>% as.data.frame %>% select("ICAM1", "CCND1")
+df_check <- counts_norm %>% 
+  t() %>% 
+  as.data.frame() %>% 
+  select("ICAM1", "CCND1", "MYC", "MTOR", "VHL", "NFKB1")
+rownames(df_check) <- res$PID
 
+df_minmax <- as.data.frame(lapply(df_check, function(x) {
+  (x - min(x)) / (max(x) - min(x))
+}))
+rownames(df_minmax) <- rownames(df_check)
+
+expr_mat <- t(as.matrix(df_minmax))
+
+# Step 2: Create a new SingleCellExperiment object
+sce_minmax <- SingleCellExperiment(
+  assays = list(min_max = expr_mat),
+  colData = data.frame(PID = rownames(df_minmax), row.names = rownames(df_minmax))
+)
+
+# Step 3: Run PCA on subset of genes (e.g., MYC, ICAM1, CCND1)
+subset_genes <- c("MYC", "ICAM1", "CCND1")
+sce_minmax <- runPCA(sce_minmax,
+                     exprs_values = "min_max",
+                     subset_row = rownames(sce_minmax) %in% subset_genes,
+                     name = "PCA_sub")
+
+# Step 4: Visualize PCA colored by marker (e.g., ICAM1 expression)
+plotReducedDim(sce_minmax, dimred = "PCA_sub", 
+               colour_by = I(assay(sce_minmax, "min_max")["ICAM1", ]))
+
+plotReducedDim(sce_minmax, dimred = "PCA_sub", 
+               colour_by = I(assay(sce_minmax, "min_max")["CCND1", ]))
+
+plotReducedDim(sce_minmax, dimred = "PCA_sub", 
+               colour_by = I(assay(sce_minmax, "min_max")["MYC", ]))
+```
+
+
+```{r}
+counts_norm <- counts(res, normalized = TRUE)
+colnames(counts_norm) <- res$PID
+rownames(counts_norm)
+
+df_check <- counts_norm %>% t() %>% as.data.frame %>% select("ICAM1", "CCND1", "MYC", "MTOR", "VHL", "NFKB1")
 rownames(df_check) <- res$PID
 
 df_check$ICAM1_minmax <- scale(df_check$ICAM1, center = min(df_check$ICAM1), scale = max(df_check$ICAM1) - min(df_check$ICAM1))[,1]
