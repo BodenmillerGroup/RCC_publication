@@ -207,8 +207,17 @@ end_time <- Sys.time()
 
 run_time <- paste0("Run time: ",round(as.numeric(difftime(end_time, start_time, units = "mins")), digits = 2), " min")
 print(run_time)
-      
-# Save results
-saveRDS(cv_results, paste0("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/", run_name))
-write.csv(run_time, paste0("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/runtime/", run_name, "_runtime.csv"))
+
+current_date <- Sys.Date()
+model_base_path <- file.path("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest", 
+                             paste0("models_", current_date))
+runtime_path <- file.path(model_base_path, "runtime")
+
+# Create directories
+if(!dir.exists(model_base_path)){dir.create(model_base_path, recursive = TRUE, showWarnings = FALSE)}
+if(!dir.exists(runtime_path)){dir.create(runtime_path, recursive = TRUE, showWarnings = FALSE)}
+
+# Save objects
+saveRDS(cv_results, paste0(model_base_path, run_name))
+write.csv(run_time, paste0(runtime_path, "/",runtime, paste0(run_name, "_runtime.csv")))
 ```

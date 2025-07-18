@@ -354,7 +354,7 @@ surv_out <- metadata_selected %>% select(PID, OS_months, status_OS, PID_group_te
 
 fit <- survfit(Surv(OS_months, status_OS) ~ PID_group_test, data = surv_out)
 
-pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_Kaplan_SurvArchetypes.pdf", width = 8, height = 5, onefile = FALSE)
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_Kaplan_SurvArchetypes.pdf", width = 8, height = 5, onefile = FALSE)
 ggsurvplot(fit, 
           pval = TRUE,
           risk.table = TRUE, # Add risk table
@@ -365,7 +365,41 @@ ggsurvplot(fit,
           palette = c("#0571B0", "#CA0020","gold3"),#c("#F21A00", "#3B9AB2", "gold")
           conf.int = TRUE
 )
-dev.off()
+#dev.off()
+```
+```{r}
+# Remains significant for dividing the stages
+## Filter for low stages
+surv_out <- metadata_selected %>% filter(CLIN_pT_simple %in% c("T1", "T2")) %>% select(PID, OS_months, status_OS, PID_group_test) %>% unique()
+
+fit <- survfit(Surv(OS_months, status_OS) ~ PID_group_test, data = surv_out)
+
+ggsurvplot(fit, 
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = c("#0571B0", "#CA0020","gold3"),#c("#F21A00", "#3B9AB2", "gold")
+          conf.int = FALSE
+)
+
+# Filter for high stages
+surv_out <- metadata_selected %>% filter(CLIN_pT_simple %in% c("T3", "T4")) %>% select(PID, OS_months, status_OS, PID_group_test) %>% unique()
+
+fit <- survfit(Surv(OS_months, status_OS) ~ PID_group_test, data = surv_out)
+
+ggsurvplot(fit, 
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = c("#0571B0", "#CA0020","gold3"),#c("#F21A00", "#3B9AB2", "gold")
+          conf.int = FALSE
+)
 ```
 
 ```{r}
@@ -895,7 +929,6 @@ CNV_arm_sum_out$chr_arm_type <- paste0(CNV_arm_sum_out$chr_arm, "_", CNV_arm_sum
 CNV_per_PID <- CNV_arm_sum_out %>% mutate(binary = ifelse(type_summarized %in% c("gain", "loss"), 1, 0)) %>% filter(clonality == "clonal") %>% pivot_wider(id_cols = PID, names_from = chr_arm_type, values_from = binary)
 CNV_per_PID[is.na(CNV_per_PID)] <- 0
 ```
-
 
 ###### Mutations
 
@@ -1493,6 +1526,53 @@ ggplot(MUT_burden, aes(x = BF_PL_TME_archetypes, y = burden, fill = BF_PL_TME_ar
   ylab("MUT events (Drivers)")
 ```
 
+###### Mutation ITH index
+
+```{r}
+# Intra-tumor genomic heterogeneity index (ITH)
+## Driver mutations
+ITH_index <- mut_anno %>% filter(Genes %in% Genes_list & cohort == "cohort_old") %>% group_by(PID, clonality) %>% dplyr::count() %>% ungroup() %>% pivot_wider(names_from = "clonality", values_from = "n") %>% replace_na(list(clonal = 0, subclonal = 0)) %>% mutate(ITH_index = subclonal/clonal)
+
+# Replace Inf with max(ITH_index)
+ITH_index$ITH_index[ITH_index$ITH_index == Inf] <- max(ITH_index %>% filter(ITH_index != Inf) %>% pull(ITH_index))
+
+# Add archetypes
+ITH_index$BF_PL_TME_archetypes <- metadata_selected$BF_PL_TME_archetypes[match(ITH_index$PID, metadata_selected$PID)]
+ITH_index <- ITH_index %>% filter(!is.na(BF_PL_TME_archetypes))
+
+ggplot(ITH_index, aes(x = BF_PL_TME_archetypes, y = ITH_index, fill = BF_PL_TME_archetypes))+
+  geom_point(aes(color = BF_PL_TME_archetypes))+
+  geom_boxplot(outlier.color = NA)+
+  guides(color = "none")+
+  theme_classic()+
+  stat_compare_means(vjust = 1)+
+  scale_fill_manual(values = col_group)+
+  scale_color_manual(values = col_group)+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("ITH index (Driver)")
+
+
+## All mutations
+ITH_index <- variant_combined_full %>% filter(Genes %in% Genes_list & cohort == "cohort_old") %>% group_by(PID, clonality) %>% dplyr::count() %>% ungroup() %>% pivot_wider(names_from = "clonality", values_from = "n") %>% replace_na(list(clonal = 0, subclonal = 0)) %>% mutate(ITH_index = subclonal/clonal)
+
+# Replace Inf with max(ITH_index)
+ITH_index$ITH_index[ITH_index$ITH_index == Inf] <- max(ITH_index %>% filter(ITH_index != Inf) %>% pull(ITH_index))
+
+# Add archetypes
+ITH_index$BF_PL_TME_archetypes <- metadata_selected$BF_PL_TME_archetypes[match(ITH_index$PID, metadata_selected$PID)]
+ITH_index <- ITH_index %>% filter(!is.na(BF_PL_TME_archetypes))
+
+ggplot(ITH_index, aes(x = BF_PL_TME_archetypes, y = ITH_index, fill = BF_PL_TME_archetypes))+
+  geom_point(aes(color = BF_PL_TME_archetypes))+
+  geom_boxplot(outlier.color = NA)+
+  guides(color = "none")+
+  theme_classic()+
+  stat_compare_means(vjust = 1)+
+  scale_fill_manual(values = col_group)+
+  scale_color_manual(values = col_group)+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("ITH index (Driver)")
+```
 
 ###### CNV
 
@@ -1916,7 +1996,34 @@ plotExpression(archetype_mean_PID,
     theme(axis.text.x =  element_text(angle = 90))+
     scale_color_manual(values = col_group)
 ```
+```{r}
+sce_T <- readRDS("/mnt/central_nas_full/users/marllu/T_panel/data_analysis/sce_ccRCC_T_07.rds")
 
+# Add archetypes
+sce_T$BF_PL_TME_archetypes <- metadata_selected$BF_PL_TME_archetypes[match(sce_T$PID, metadata_selected$PID)]
+
+sce_T <- sce_T[,!is.na(sce_T$BF_PL_TME_archetypes) & sce_T$analysis_cat == "tumor"]
+sce_T
+```
+
+```{r}
+# Aggregate expression per PID 
+archetype_mean_PID <- aggregateAcrossCells(sce_T, ids = sce_T$PID,
+                                 statistics = "mean",
+                                 use.assay.type = "min_max",
+                                 subset.row = rownames(sce_T) %in% c("CD44", "CD38"))
+
+
+# Violin plot
+plotExpression(archetype_mean_PID, 
+               features = c("CD44", "CD38"),
+               x = "BF_PL_TME_archetypes", exprs_values = "min_max", 
+               colour_by = "BF_PL_TME_archetypes") +
+    theme(axis.text.x =  element_text(angle = 90))+
+    scale_color_manual(values = col_group)
+
+### Add CD44 into model for tumor cells
+```
 
 ###### Genomic subtypes
 

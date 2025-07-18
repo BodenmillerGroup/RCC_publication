@@ -72,6 +72,10 @@ conflicts_prefer(dplyr::mutate)
 
 ```{r}
 sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_05.rds")
+
+# Add CD44 into model from T cell panel
+sce_T <- readRDS("/mnt/central_nas_full/users/marllu/T_panel/data_analysis/sce_ccRCC_T_07.rds")
+sce_T <- sce_T[,sce_T$analysis_cat == "tumor"]
 ```
 
 ## Survival related 
@@ -84,10 +88,17 @@ mean_sce <- aggregateAcrossCells(sce, ids = sce$PID,
                                  statistics = "mean",
                                  use.assay.type = "min_max",
                                  subset.row = rowData(sce)$tumor_cluster_1)
+
+mean_sce_T <- aggregateAcrossCells(sce_T, ids = sce_T$PID,
+                                 statistics = "mean",
+                                 use.assay.type = "min_max",
+                                 subset.row = rownames(sce_T) %in% c("CD44"))
 ```
 
 ```{r}
 mean_exp_df <- assay(mean_sce, "min_max") %>% t() %>% as.data.frame
+mean_exp_df_T <- assay(mean_sce_T, "min_max") %>% t() %>% as.data.frame
+mean_exp_df$CD44 <- mean_exp_df_T$CD44[match(rownames(mean_exp_df), rownames(mean_exp_df_T))]
 
 out_df <- data.frame(PID = unique(sce$PID))
 
@@ -113,7 +124,7 @@ library(survminer)
 cur_surv_out <- foreach(x = colnames(out_df %>% select(-PID, -status_OS, -OS_months)), .combine = "rbind")%do%{
   formula <- as.formula(paste("Surv(OS_months, status_OS) ~ ", x))
   fit <- survdiff(formula, data = out_df)
-  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[1], exp_2 = fit$exp[1])
+  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[1], exp_2 = fit$exp[1], ratio = fit$obs[1]/fit$exp[1])
 }
 
 # Adjust p-values using BH 
@@ -121,11 +132,11 @@ cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
 
 # Create and plot heatmap 
 # Create and plot heatmap 
-cur_surv_plot <- cur_surv_out %>% mutate(direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% filter(p < 0.05)
+cur_surv_plot <- cur_surv_out %>% mutate(direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% filter(p_adj < 0.05)
 
-cur_surv_plot$result <- ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p_adj < 0.1, "UP",
+cur_surv_plot$result <- ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p_adj < 0.05, "UP",
                              ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p < 0.05, "UP_trend", 
-                                    ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p_adj < 0.1, "DOWN", 
+                                    ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p_adj < 0.05, "DOWN", 
                                            ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p < 0.05, "DOWN_trend",NA))))
 
 library(ggnewscale)
@@ -188,6 +199,8 @@ hr_mean
 
 ```{r}
 mean_exp_df <- assay(mean_sce, "min_max") %>% t() %>% as.data.frame
+mean_exp_df_T <- assay(mean_sce_T, "min_max") %>% t() %>% as.data.frame
+mean_exp_df$CD44 <- mean_exp_df_T$CD44[match(rownames(mean_exp_df), rownames(mean_exp_df_T))]
 
 out_df <- data.frame(PID = unique(sce$PID))
 
@@ -213,7 +226,7 @@ library(survminer)
 cur_surv_out <- foreach(x = colnames(out_df %>% select(-PID, -status_OS, -OS_months)), .combine = "rbind")%do%{
   formula <- as.formula(paste("Surv(OS_months, status_OS) ~ ", x))
   fit <- survdiff(formula, data = out_df)
-  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[1], exp_2 = fit$exp[1])
+  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[1], exp_2 = fit$exp[1], ratio = fit$obs[1]/fit$exp[1])
 }
 
 # Adjust p-values using BH 
@@ -221,11 +234,11 @@ cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
 
 # Create and plot heatmap 
 # Create and plot heatmap 
-cur_surv_plot <- cur_surv_out %>% mutate(direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% filter(p < 0.05)
+cur_surv_plot <- cur_surv_out %>% mutate(direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% filter(p_adj < 0.05)
 
-cur_surv_plot$result <- ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p_adj < 0.1, "UP",
+cur_surv_plot$result <- ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p_adj < 0.05, "UP",
                              ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p < 0.05, "UP_trend", 
-                                    ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p_adj < 0.1, "DOWN", 
+                                    ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p_adj < 0.05, "DOWN", 
                                            ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p < 0.05, "DOWN_trend",NA))))
 
 library(ggnewscale)
@@ -241,6 +254,37 @@ ggplot(cur_surv_plot, aes(x=reorder(group,-log10(p)), y = type, col = result, si
 median_exp_results <- cur_surv_plot
 ```
 
+```{r}
+# Combined visualization 
+mean_exp_results$category <- "mean"
+median_exp_results$category <- "median"
+
+plot_exp_combined <- rbind(mean_exp_results, median_exp_results)
+plot_exp_combined$type <- "expression"
+both <- plot_exp_combined %>% group_by(group,direction) %>% count() %>% filter(n > 1) %>% pull(group)
+plot_exp_combined$category <- ifelse(plot_exp_combined$group %in% both, "both", plot_exp_combined$category)
+plot_exp_combined_fil <- plot_exp_combined %>% group_by(group, category) %>% reframe(p = mean(p), 
+                                                                                     result = result, 
+                                                                                     type = type, 
+                                                                                     ratio = mean(ratio),
+                                                                                     direction = direction) %>% unique()
+
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/TU_Cox_experaction_bubble.pdf", width = 6, height = 5)
+ggplot(plot_exp_combined_fil, aes(x=reorder(group,ratio), y = type, shape = category, col = ratio, size= -log10(p)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  scale_shape_manual(values = c(16,15,17))+
+  new_scale(new_aes = "shape")+
+  new_scale(new_aes = "color") +
+  geom_point(data = plot_exp_combined_fil,aes(size = -log10(p), shape = category, col = result), stroke =1.5)+
+  scale_shape_manual(values = c(1,0,2))+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("Cox model")+
+  coord_flip()
+```
 
 ```{r}
 # UNIVARIATE COX 
@@ -338,10 +382,14 @@ ggplot(plot_cox_combined_fil, aes(x=reorder(group,HR), y = type, shape = categor
 
 ```{r}
 # From COX models
-markers_surv_relevant <- c(str_remove(plot_df_median %>% filter(p_value < 0.05) %>% pull(group), "high"), str_remove(plot_df_mean %>% filter(p_value < 0.05) %>% pull(group), "high")) %>% unique()
+#plot_cox_combined_fil
+# From KM models
+markers_surv_relevant <- plot_exp_combined_fil$group
 
 # Extract min_max expression values
 mean_exp_df <- assay(mean_sce, "min_max") %>% as.data.frame %>% filter(rownames(.) %in% markers_surv_relevant) %>% t() %>% as.data.frame %>% rownames_to_column("PID")
+mean_exp_CD44 <- assay(mean_sce_T, "min_max") %>% as.data.frame %>% filter(rownames(.) %in% "CD44") %>% t() %>% as.data.frame %>% rownames_to_column("PID")
+mean_exp_df$CD44 <- mean_exp_CD44$CD44[match(mean_exp_df$PID, mean_exp_CD44$PID)]
 
 colnames(mean_exp_df) <- paste0("EXP_", colnames(mean_exp_df))
 colnames(mean_exp_df)[1] <- "PID"
@@ -361,7 +409,9 @@ write_csv(tumor_key_features, "/mnt/central_nas/rcc_volume/RCC/survival_pred/Blo
 
 ```{r}
 ## Save ALL features without pre-selection
-tumor_all_features <- mean_exp_df <- assay(mean_sce, "min_max") %>% as.data.frame %>% t() %>% as.data.frame %>% rownames_to_column("PID")
+tumor_all_features <- assay(mean_sce, "min_max") %>% as.data.frame %>% t() %>% as.data.frame %>% rownames_to_column("PID")
+mean_exp_CD44 <- assay(mean_sce_T, "min_max") %>% as.data.frame %>% filter(rownames(.) %in% "CD44") %>% t() %>% as.data.frame %>% rownames_to_column("PID")
+tumor_all_features$CD44 <- mean_exp_CD44$CD44[match(tumor_all_features$PID, mean_exp_CD44$PID)]
 
 ## Add survival information
 colnames(tumor_all_features) <- paste0("EXP_",colnames(tumor_all_features))
@@ -1235,6 +1285,116 @@ sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sc
 spicyTest <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/07_comb/spicyTest_ISUP_includeOFF.rds")
 ```
 
+# Proximity - countInteractions 
+
+```{r}
+sce_fil <- sce[,!is.na(sce$celltype_combined)]
+
+count_TU <- countInteractions(sce_fil, 
+                  group_by = "sample_id", 
+                  label = "celltype_combined", 
+                  colPairName = "neighborhood", 
+                  method = "interaction")
+
+out <- count_TU
+```
+
+
+```{r}
+out$cellpair <- paste0(out$from_label, "__", out$to_label)
+count_out <- out %>% as.data.frame() %>% select(group_by, cellpair, ct) %>% pivot_wider(names_from = cellpair, values_from = ct) %>% as.data.frame()
+
+colnames(count_out) <- gsub("-", "_", colnames(count_out)) 
+colnames(count_out) <- gsub("/", "_", colnames(count_out)) 
+
+count_out <- count_out %>% column_to_rownames("group_by")
+
+## Select from "TU" interactions - All
+# selected_pairs <- (str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,1], "TU") |
+#   (str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,1], "TU"))) & (!str_detect(colnames(count_out), "Unknown"))
+
+## Select from "TU" interactions - heterotypic only
+selected_pairs <- (str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,1], "TU") &
+  (!str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,2], "TU"))) & (!str_detect(colnames(count_out), "Unknown"))
+
+count_out_selected <- count_out[,selected_pairs]
+
+count_out_selected <- count_out_selected %>% rownames_to_column("sample_id")
+count_out_selected$PID <- sce$PID[match(count_out_selected$sample_id, sce$sample_id)]
+
+count_out_selected_long <- count_out_selected %>% pivot_longer(cols = 2:(ncol(count_out_selected)-1), names_to = "pair", values_to = "coef")
+
+# Perform mean interaction score split for all categories 
+out_df <- data.frame(PID = unique(sce$PID))
+
+for(i in unique(count_out_selected_long$pair)){
+count_out_loop <- count_out_selected_long %>% filter(pair == i) %>% group_by(PID) %>% mutate(mean_coef = mean(coef,na.rm = TRUE)) %>% select(PID, mean_coef) %>% unique()
+
+count_out_loop <- count_out_loop %>% mutate(cat = ifelse(mean_coef < mean(count_out_loop$mean_coef, na.rm = TRUE), "low", "high"))
+
+out_df[,i] <- count_out_loop$cat[match(out_df$PID, count_out_loop$PID)]
+}
+
+## Add survival information 
+out_df$status_OS <- sce$status_OS[match(out_df$PID, sce$PID)]
+out_df$OS_months <- sce$OS_months[match(out_df$PID, sce$PID)]
+
+# Filter columns with only one entry of high/low
+include <- c("PID", "status_OS", "OS_months", 
+             out_df %>% filter(!is.na(status_OS)) %>% select(-PID, -status_OS, -OS_months) %>% pivot_longer(1:ncol(.), names_to = "int", values_to = "value") %>% group_by(int) %>% dplyr::count(value) %>% dplyr::count(value) %>% mutate(sum = sum(n)) %>% filter(sum > 2) %>% pull("int") %>% unique())
+
+out_df <- out_df[, colnames(out_df) %in% include]
+```
+
+```{r}
+#Assess survival impact across categories
+library(survival)
+library(survminer)
+
+# Extract p-values from log-rank / direction of trend
+cur_surv_out <- foreach(x = colnames(out_df %>% select(-PID, -status_OS, -OS_months)), .combine = "rbind")%do%{
+  formula <- as.formula(paste("Surv(OS_months, status_OS) ~ ", x))
+  fit <- survdiff(formula, data = out_df)
+  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[1], exp_2 = fit$exp[1])
+}
+
+# Adjust p-values using BH 
+cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
+
+# Create and plot heatmap 
+cur_surv_plot <- cur_surv_out %>% mutate(direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% filter(p < 0.05)
+
+cur_surv_plot$result <- ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p_adj < 0.1, "UP",
+                             ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p < 0.05, "UP_trend", 
+                                    ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p_adj < 0.1, "DOWN", 
+                                           ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p < 0.05, "DOWN_trend",NA))))
+
+
+# Add info on hetero or homotypic interaction
+cur_surv_plot$int_type <- ifelse((str_count(cur_surv_plot$group, "TU") > 1 | str_count(cur_surv_plot$group, "TU") > 1), "homotypic", "heterotypic")
+
+library(ggnewscale)
+ggplot(cur_surv_plot, aes(x=reorder(group,-log10(p)), y = type, col = result, size = -log10(p), shape = int_type))+
+  geom_point()+
+  theme_classic()+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+  scale_size(range = c(2,10))+
+  scale_shape_manual(values = c(18, 16))+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  facet_grid(~ direction, scales = "free_x", space = "free_x")
+
+# Add as result for mean
+cur_surv_countInt_results_mean <- cur_surv_plot 
+```
+
+
+# Point-pattern - L-cross 
+
+```{r}
+sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_07.rds")
+spicyTest <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/07_comb/spicyTest_ISUP_includeOFF.rds")
+```
+
 ## Survival testing 
 
 ### Mean 
@@ -1481,7 +1641,7 @@ plot_int_combined$category <- ifelse(plot_int_combined$group %in% both, "both", 
 plot_int_combined_fil <- plot_int_combined %>% group_by(group, category) %>% reframe(p = mean(p), 
                                                                                      result = result, 
                                                                                      type = type, 
-                                                                                     ratio = ratio,
+                                                                                     ratio = mean(ratio),
                                                                                      int_type = int_type, 
                                                                                      direction = direction) %>% unique()
 
