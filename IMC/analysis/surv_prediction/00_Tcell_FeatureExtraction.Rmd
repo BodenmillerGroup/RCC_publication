@@ -2270,59 +2270,263 @@ write_csv(Tcell_all_features, "/mnt/central_nas/rcc_volume/RCC/survival_pred/Blo
 
 # 4. Interactions
 
-## Differential interaction analysis
-
 ```{r}
-# ### General phenotype interaction difference
-# library(spicyR)
-# library(lisaClust)
-# 
-# ## ISUP 
-# 
-# set.seed(22)
-# 
-# # Generate segmentedCells object 
-# cur_sce <- sce
-# 
-# cells <- data.frame(row.names = colnames(cur_sce))
-# cells$x <- cur_sce$Pos_X
-# cells$y <- cur_sce$Pos_Y
-# cells$imageID <- cur_sce$sample_id
-# cells$imageCellID <- cur_sce$ObjectNumber
-# cells$cellType <- cur_sce$celltype_combined # adjust
-# 
-# cells_sc <- SegmentedCells(cells, cellProfiler = TRUE)
-# 
-# # Add condition and patient id
-# unique(cur_sce$ISUP_combined)
-# 
-# cat <- relevel(x=factor(cur_sce$ISUP_combined), ref = "1/2")
-# 
-# imagePheno(cells_sc) <- DataFrame(imageID = cur_sce$sample_id, # analogous to colData
-#           PID = cur_sce$PID,
-#           ISUP = cat
-#           )
-# 
-# cells_sc
-# 
-# # Run differential interaction analysis 
-# spicyTest <- spicy(cells_sc, 
-#       condition = "ISUP", 
-#       subject = "PID", 
-#       BPPARAM = BiocParallel::MulticoreParam())
-# 
-# saveRDS(spicyTest, "/mnt/central_nas_full/users/lasmey/rcc_volume/RCC/IMC/T_panel/data_analysis/spicyTest_Tcell_ISUP_LM_combined.rds")
-# 
-# topPairs(spicyTest, cutoff = 0.05, n=40)
-# 
-# out_ISUP <- signifPlot(spicyTest,
-#                        fdr = TRUE,
-#                        marksToPlot = unique(sce$celltype_combined)) # adjust
-# 
-# out_ISUP
+sce <- readRDS("/mnt/central_nas_full/users/marllu/T_panel/data_analysis/sce_ccRCC_T_07.rds")
 ```
 
+# Proximity - countInteractions 
+
+```{r}
+sce_fil <- sce[,!is.na(sce$celltype_combined)]
+
+count_T <- countInteractions(sce_fil, 
+                  group_by = "sample_id", 
+                  label = "celltype_combined", 
+                  colPairName = "neighborhood", 
+                  method = "interaction")
+
+out <- count_T
+```
+
+
+## Survival testing 
+
+### Mean 
+
+```{r}
+out$cellpair <- paste0(out$from_label, "__", out$to_label)
+count_out <- out %>% as.data.frame() %>% select(group_by, cellpair, ct) %>% pivot_wider(names_from = cellpair, values_from = ct) %>% as.data.frame()
+
+colnames(count_out) <- gsub("-", "_", colnames(count_out)) 
+colnames(count_out) <- gsub("/", "_", colnames(count_out)) 
+
+count_out <- count_out %>% column_to_rownames("group_by")
+
+## Select from "T" interactions - All
+# selected_pairs <- (str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,1], "T") |
+#   (str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,1], "T"))) & (!str_detect(colnames(count_out), "Unknown"))
+
+## Select from "T" interactions - heterotypic only
+selected_pairs_CD8 <- (str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,1], "CD8") &
+  (!str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,2], "CD8"))) & (!str_detect(colnames(count_out), "Unknown"))
+
+selected_pairs_CD4 <- (str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,1], "CD4") &
+  (!str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,2], "CD4"))) & (!str_detect(colnames(count_out), "Unknown"))
+
+count_out_selected <- cbind(count_out[,selected_pairs_CD8], count_out[,selected_pairs_CD4])
+
+count_out_selected <- count_out_selected %>% rownames_to_column("sample_id")
+count_out_selected$PID <- sce$PID[match(count_out_selected$sample_id, sce$sample_id)]
+
+count_out_selected_long <- count_out_selected %>% pivot_longer(cols = 2:(ncol(count_out_selected)-1), names_to = "pair", values_to = "coef")
+
+# Perform mean interaction score split for all categories 
+out_df <- data.frame(PID = unique(sce$PID))
+
+for(i in unique(count_out_selected_long$pair)){
+count_out_loop <- count_out_selected_long %>% filter(pair == i) %>% group_by(PID) %>% mutate(mean_coef = mean(coef,na.rm = TRUE)) %>% select(PID, mean_coef) %>% unique()
+
+count_out_loop <- count_out_loop %>% mutate(cat = ifelse(mean_coef < mean(count_out_loop$mean_coef, na.rm = TRUE), "low", "high"))
+
+out_df[,i] <- count_out_loop$cat[match(out_df$PID, count_out_loop$PID)]
+}
+
+## Add survival information 
+out_df$status_OS <- sce$status_OS[match(out_df$PID, sce$PID)]
+out_df$OS_months <- sce$OS_months[match(out_df$PID, sce$PID)]
+
+# Filter columns with only one entry of high/low
+include <- c("PID", "status_OS", "OS_months", 
+             out_df %>% filter(!is.na(status_OS)) %>% select(-PID, -status_OS, -OS_months) %>% pivot_longer(1:ncol(.), names_to = "int", values_to = "value") %>% group_by(int) %>% dplyr::count(value) %>% dplyr::count(value) %>% mutate(sum = sum(n)) %>% filter(sum > 2) %>% pull("int") %>% unique())
+
+out_df <- out_df[, colnames(out_df) %in% include]
+```
+
+```{r}
+#Assess survival impact across categories
+library(survival)
+library(survminer)
+
+# Extract p-values from log-rank / direction of trend
+cur_surv_out <- foreach(x = colnames(out_df %>% select(-PID, -status_OS, -OS_months)), .combine = "rbind")%do%{
+  formula <- as.formula(paste("Surv(OS_months, status_OS) ~ ", x))
+  fit <- survdiff(formula, data = out_df)
+  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[1], exp_2 = fit$exp[1], ratio = fit$obs[1]/fit$exp[1])
+}
+
+# Adjust p-values using BH 
+cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
+
+# Create and plot heatmap 
+cur_surv_plot <- cur_surv_out %>% mutate(direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% filter(p < 0.05)
+
+cur_surv_plot$result <- ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p < 0.05, "UP",
+                             #ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p < 0.05, "UP_trend", 
+                                    #ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p_adj < 0.1, "DOWN", 
+                                           ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p < 0.05, "DOWN",NA))#))
+
+
+# Add info on hetero or homotypic interaction
+cur_surv_plot$int_type <- ifelse((str_count(cur_surv_plot$group, "MY") > 1 | str_count(cur_surv_plot$group, "MY") > 1), "homotypic", "heterotypic")
+
+library(ggnewscale)
+ggplot(cur_surv_plot, aes(x=reorder(group,-log10(p)), y = type, col = result, size = -log10(p), shape = int_type))+
+  geom_point()+
+  theme_classic()+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+  scale_size(range = c(2,10))+
+  scale_shape_manual(values = c(18, 16))+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  facet_grid(~ direction, scales = "free_x", space = "free_x")
+
+# Add as result for mean
+cur_surv_countInt_results_mean <- cur_surv_plot 
+```
+
+### Median 
+
+```{r}
+out$cellpair <- paste0(out$from_label, "__", out$to_label)
+count_out <- out %>% as.data.frame() %>% select(group_by, cellpair, ct) %>% pivot_wider(names_from = cellpair, values_from = ct) %>% as.data.frame()
+
+colnames(count_out) <- gsub("-", "_", colnames(count_out)) 
+colnames(count_out) <- gsub("/", "_", colnames(count_out)) 
+
+count_out <- count_out %>% column_to_rownames("group_by")
+
+## Select from "T" interactions - heterotypic only
+selected_pairs_CD8 <- (str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,1], "CD8") &
+  (!str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,2], "CD8"))) & (!str_detect(colnames(count_out), "Unknown"))
+
+selected_pairs_CD4 <- (str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,1], "CD4") &
+  (!str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,2], "CD4"))) & (!str_detect(colnames(count_out), "Unknown"))
+
+count_out_selected <- cbind(count_out[,selected_pairs_CD8], count_out[,selected_pairs_CD4])
+
+count_out_selected <- count_out_selected %>% rownames_to_column("sample_id")
+count_out_selected$PID <- sce$PID[match(count_out_selected$sample_id, sce$sample_id)]
+
+count_out_selected_long <- count_out_selected %>% pivot_longer(cols = 2:(ncol(count_out_selected)-1), names_to = "pair", values_to = "coef")
+
+# Perform mean interaction score split for all categories 
+out_df <- data.frame(PID = unique(sce$PID))
+
+for(i in unique(count_out_selected_long$pair)){
+count_out_loop <- count_out_selected_long %>% filter(pair == i) %>% group_by(PID) %>% mutate(mean_coef = median(coef,na.rm = TRUE)) %>% select(PID, mean_coef) %>% unique()
+
+count_out_loop <- count_out_loop %>% mutate(cat = ifelse(mean_coef < mean(count_out_loop$mean_coef, na.rm = TRUE), "low", "high"))
+
+out_df[,i] <- count_out_loop$cat[match(out_df$PID, count_out_loop$PID)]
+}
+
+## Add survival information 
+out_df$status_OS <- sce$status_OS[match(out_df$PID, sce$PID)]
+out_df$OS_months <- sce$OS_months[match(out_df$PID, sce$PID)]
+
+# Filter columns with only one entry of high/low
+include <- c("PID", "status_OS", "OS_months", 
+             out_df %>% filter(!is.na(status_OS)) %>% select(-PID, -status_OS, -OS_months) %>% pivot_longer(1:ncol(.), names_to = "int", values_to = "value") %>% group_by(int) %>% dplyr::count(value) %>% dplyr::count(value) %>% mutate(sum = sum(n)) %>% filter(sum > 2) %>% pull("int") %>% unique())
+
+out_df <- out_df[, colnames(out_df) %in% include]
+```
+
+```{r}
+#Assess survival impact across categories
+library(survival)
+library(survminer)
+
+# Extract p-values from log-rank / direction of trend
+cur_surv_out <- foreach(x = colnames(out_df %>% select(-PID, -status_OS, -OS_months)), .combine = "rbind")%do%{
+  formula <- as.formula(paste("Surv(OS_months, status_OS) ~ ", x))
+  fit <- survdiff(formula, data = out_df)
+  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[1], exp_2 = fit$exp[1], ratio = fit$obs[1]/fit$exp[1])
+}
+
+# Adjust p-values using BH 
+cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
+
+# Create and plot heatmap 
+cur_surv_plot <- cur_surv_out %>% mutate(direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% filter(p < 0.05)
+
+cur_surv_plot$result <- ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p < 0.05, "UP",
+                             #ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p < 0.05, "UP_trend", 
+                                    #ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p_adj < 0.1, "DOWN", 
+                                           ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p < 0.05, "DOWN",NA))#))
+
+
+# Add info on hetero or homotypic interaction
+cur_surv_plot$int_type <- ifelse((str_count(cur_surv_plot$group, "MY") > 1 | str_count(cur_surv_plot$group, "MY") > 1), "homotypic", "heterotypic")
+
+library(ggnewscale)
+ggplot(cur_surv_plot, aes(x=reorder(group,-log10(p)), y = type, col = result, size = -log10(p), shape = int_type))+
+  geom_point()+
+  theme_classic()+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+  scale_size(range = c(2,10))+
+  scale_shape_manual(values = c(18, 16))+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  facet_grid(~ direction, scales = "free_x", space = "free_x")
+
+# Add as result for mean
+cur_surv_countInt_results_median <- cur_surv_plot 
+```
+
+
+```{r}
+# Combined visualization 
+cur_surv_countInt_results_mean$category <- "mean"
+cur_surv_countInt_results_median$category <- "median"
+
+plot_int_combined <- rbind(cur_surv_countInt_results_mean, cur_surv_countInt_results_median)
+plot_int_combined$type <- "interaction"
+both <- plot_int_combined %>% group_by(group,direction) %>% count() %>% filter(n > 1) %>% pull(group)
+plot_int_combined$category <- ifelse(plot_int_combined$group %in% both, "both", plot_int_combined$category)
+plot_int_combined_fil <- plot_int_combined %>% group_by(group, category) %>% reframe(p = mean(p), 
+                                                                                     result = result, 
+                                                                                     type = type, 
+                                                                                     ratio = mean(ratio),
+                                                                                     int_type = int_type, 
+                                                                                     direction = direction) %>% unique()
+
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/MY_Cox_interaction_bubble.pdf", width = 6, height = 5)
+ggplot(plot_int_combined_fil, aes(x=reorder(group,ratio), y = type, shape = category, col = ratio, size= -log10(p)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  scale_shape_manual(values = c(16,15,17))+
+  new_scale(new_aes = "shape")+
+  new_scale(new_aes = "color") +
+  geom_point(data = plot_int_combined_fil,aes(size = -log10(p), shape = category, col = result), stroke =1.5)+
+  scale_shape_manual(values = c(1,0,2))+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("Cox model")+
+  coord_flip()
+#dev.off()
+
+#priority_order <- c("DOWN" = 1, "DOWN_trend" = 2, "UP" = 1, "UP_trend" = 2)
+#plot_int_combined_fil <- plot_int_combined_fil %>%
+#  group_by(group) %>%
+#  slice_min(order_by = priority_order[result], with_ties = FALSE)
+
+# ggplot(plot_int_combined_fil, aes(x=reorder(group,ratio), y = type, col = ratio, size = -log10(p), shape = category))+
+#   geom_point()+
+#   theme_classic()+
+#   scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+#   scale_size(range = c(2,10))+
+#   scale_shape_manual(values = c(16,15,17))+
+#   theme(axis.text.x = element_text(angle = 90, hjust = 1))
+#new_scale("shape")
+  #geom_point(data = plot_int_combined_fil, aes(shape = int_type), col = "black")+
+  #scale_shape_manual(values = c(4, 3))
+#dev.off()
+```
+
+# L-cross
+
 ### CD8 
+
 
 #### Survival testing 
 
