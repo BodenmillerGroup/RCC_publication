@@ -2902,27 +2902,27 @@ ggplot(plot_int_combined_fil, aes(x=reorder(group,-log10(p)), y = type, col = re
 ## Extract survival-relevant features
 
 ```{r}
-# # L-cross
-# INT_surv_relevant <- unique(c(cur_surv_mean_results$group, cur_surv_median_results$group))
-# 
-# INT_surv_relevant_df <- spicy_out_selected_long %>% group_by(PID, pair) %>% mutate(mean_coef = mean(coef,na.rm = TRUE)) %>% select(PID,pair, mean_coef) %>% unique() %>% filter(pair %in% INT_surv_relevant) %>% pivot_wider(id_cols = "PID",names_from = "pair", values_from = "mean_coef") %>% as.data.frame
-# 
-# colnames(INT_surv_relevant_df) <- paste0("INT_",colnames(INT_surv_relevant_df))
-# colnames(INT_surv_relevant_df)[1] <- "PID"
-# 
-# INT_surv_relevant_df
+# L-cross
+INT_surv_relevant <- unique(c(cur_surv_mean_results$group, cur_surv_median_results$group))
 
-# Interactions
-INT_surv_relevant <- unique(c(cur_surv_countInt_results_mean$group, cur_surv_countInt_results_median$group))
-
-INT_surv_relevant_df <- count_out_selected_long %>% group_by(PID, pair) %>% mutate(mean_coef = mean(coef,na.rm = TRUE)) %>% select(PID, mean_coef) %>% unique() %>% filter(pair %in% INT_surv_relevant) %>% pivot_wider(id_cols = "PID",names_from = "pair", values_from = "mean_coef") %>% as.data.frame
+INT_surv_relevant_df <- spicy_out_selected_long %>% group_by(PID, pair) %>% mutate(mean_coef = mean(coef,na.rm = TRUE)) %>% select(PID,pair, mean_coef) %>% unique() %>% filter(pair %in% INT_surv_relevant) %>% pivot_wider(id_cols = "PID",names_from = "pair", values_from = "mean_coef") %>% as.data.frame
 
 colnames(INT_surv_relevant_df) <- paste0("INT_",colnames(INT_surv_relevant_df))
 colnames(INT_surv_relevant_df)[1] <- "PID"
 
-INT_surv_relevant_df <- INT_surv_relevant_df %>% mutate_all(~ifelse(is.nan(.), NA, .))
-
 INT_surv_relevant_df
+
+# # Interactions
+# INT_surv_relevant <- unique(c(cur_surv_countInt_results_mean$group, cur_surv_countInt_results_median$group))
+# 
+# INT_surv_relevant_df <- count_out_selected_long %>% group_by(PID, pair) %>% mutate(mean_coef = mean(coef,na.rm = TRUE)) %>% select(PID, mean_coef) %>% unique() %>% filter(pair %in% INT_surv_relevant) %>% pivot_wider(id_cols = "PID",names_from = "pair", values_from = "mean_coef") %>% as.data.frame
+# 
+# colnames(INT_surv_relevant_df) <- paste0("INT_",colnames(INT_surv_relevant_df))
+# colnames(INT_surv_relevant_df)[1] <- "PID"
+# 
+# INT_surv_relevant_df <- INT_surv_relevant_df %>% mutate_all(~ifelse(is.nan(.), NA, .))
+# 
+# INT_surv_relevant_df
 ```
 
 Add to Tcell key features 
@@ -2947,21 +2947,21 @@ write_csv(Tcell_key_features, "/mnt/central_nas/rcc_volume/RCC/survival_pred/Blo
 ## Extract all features
 
 ```{r}
-# # L-cross
-# INT_all_df <- spicy_out_selected_long %>% group_by(PID, pair) %>% mutate(mean_coef = mean(coef,na.rm = TRUE)) %>% select(PID,pair, mean_coef) %>% unique() %>% pivot_wider(id_cols = "PID",names_from = "pair", values_from = "mean_coef") %>% as.data.frame
-# 
-# colnames(INT_all_df) <- paste0("INT_",colnames(INT_all_df))
-# colnames(INT_all_df)[1] <- "PID"
-
-# Interactions 
-INT_all_df <- count_out_selected_long %>% group_by(PID, pair) %>% mutate(mean_coef = mean(coef,na.rm = TRUE)) %>% select(PID, mean_coef) %>% unique() %>% pivot_wider(id_cols = "PID",names_from = "pair", values_from = "mean_coef") %>% as.data.frame
+# L-cross
+INT_all_df <- spicy_out_selected_long %>% group_by(PID, pair) %>% mutate(mean_coef = mean(coef,na.rm = TRUE)) %>% select(PID,pair, mean_coef) %>% unique() %>% pivot_wider(id_cols = "PID",names_from = "pair", values_from = "mean_coef") %>% as.data.frame
 
 colnames(INT_all_df) <- paste0("INT_",colnames(INT_all_df))
 colnames(INT_all_df)[1] <- "PID"
 
-INT_all_df <- INT_all_df %>% mutate_all(~ifelse(is.nan(.), NA, .))
-
-INT_all_df
+# # Interactions 
+# INT_all_df <- count_out_selected_long %>% group_by(PID, pair) %>% mutate(mean_coef = mean(coef,na.rm = TRUE)) %>% select(PID, mean_coef) %>% unique() %>% pivot_wider(id_cols = "PID",names_from = "pair", values_from = "mean_coef") %>% as.data.frame
+# 
+# colnames(INT_all_df) <- paste0("INT_",colnames(INT_all_df))
+# colnames(INT_all_df)[1] <- "PID"
+# 
+# INT_all_df <- INT_all_df %>% mutate_all(~ifelse(is.nan(.), NA, .))
+# 
+# INT_all_df
 ```
 
 Add to all features 

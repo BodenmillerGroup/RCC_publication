@@ -567,8 +567,9 @@ high_corr_pairs_df
 
 ```{r}
 # Remove specific pairs 
-removed_numeric <- c("IMC_TU_D_ICAM1_dom", "IMC_TU_D_mTORhi_dom", "IMC_TU_D_mTORlo_dom")
-#removed_numeric <- c("IMC_TU_MC_ICAM1hi_CD73", "IMC_TU_MC_mTORhi_VHL_PKM2hi", "IMC_TU_MC_mTORlow_MYCmed_PKM2hi")
+#removed_numeric <- c("IMC_TU_D_ICAM1_dom", "IMC_TU_D_mTORhi_dom", "IMC_TU_D_mTORlo_dom")
+
+removed_numeric <- high_corr_pairs_df$Var1
 
 #removed_numeric <- c("IMC_TU_D_ICAM1_dom", "IMC_TU_D_mTORhi_dom", "IMC_TU_D_mTORlo_dom", "IMC_TU_INT_TU_MYCmed__TU_MYCmed_mTORlow_PKM2hi", "IMC_TU_INT_TU_MYCmed_mTORlow_PKM2hi__TU_HLADRhi", "IMC_TU_INT_TU_HLADRhi__TU_MYChi_ICAM1")
 
@@ -809,8 +810,8 @@ high_corr_pairs_df
 
 ```{r}
 # Remove specific pairs 
-#removed_numeric <- c("IMC_MY_INT_MY_Neutro_MDSC__MY_M2_like", "IMC_MY_INT_MY_C_M__MY_M2_like", "IMC_MY_INT_MY_M1_like__MY_Ag_M", "IMC_MY_INT_MY_C_M__MY_Neutro_MDSC")
-removed_numeric <- NULL 
+removed_numeric <- c("IMC_MY_INT_MY_Neutro_MDSC__MY_M2_like", "IMC_MY_INT_MY_C_M__MY_M2_like", "IMC_MY_INT_MY_M1_like__MY_Ag_M", "IMC_MY_INT_MY_C_M__MY_Neutro_MDSC")
+#removed_numeric <- NULL 
 
 myeloid_selected_fil <- myeloid_selected %>% select(-all_of(removed_numeric))
 
