@@ -14,25 +14,18 @@ knitr::opts_chunk$set(echo = TRUE)
 # Software requirements
 
 ```{r lib, message=FALSE,warning=FALSE}
-#Data containers
 library(SpatialExperiment)
 library(SingleCellExperiment)
-
-#Data processing
 library(scuttle)
 library(scater)
 library(scran)
 library(imcRtools)
-
-#Data visualization
 library(cytomapper)
 library(dittoSeq)
 library(pheatmap)
 library(cowplot)
 library(ComplexHeatmap)
 library(circlize)
-
-#Utilities
 library(tidyverse)
 library(openxlsx)
 library(stringr)
@@ -55,20 +48,18 @@ library(bluster)
 library(psych)
 library(corrplot)
 library(psych)
-
-#Batch correction
-library(batchelor)
-
+library(conflicted)
 conflicts_prefer(dplyr::count)
 conflicts_prefer(dplyr::filter)
 conflicts_prefer(dplyr::select)
 conflicts_prefer(dplyr::slice)
 conflicts_prefer(dplyr::mutate)
+conflicts_prefer(dplyr::desc)
 ```
 
 # Extract survival relevant features
 
-## 1. Differential expression
+# 1. Differential expression
 
 ```{r}
 sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_05.rds")
@@ -255,38 +246,6 @@ median_exp_results <- cur_surv_plot
 ```
 
 ```{r}
-# Combined visualization 
-mean_exp_results$category <- "mean"
-median_exp_results$category <- "median"
-
-plot_exp_combined <- rbind(mean_exp_results, median_exp_results)
-plot_exp_combined$type <- "expression"
-both <- plot_exp_combined %>% group_by(group,direction) %>% count() %>% filter(n > 1) %>% pull(group)
-plot_exp_combined$category <- ifelse(plot_exp_combined$group %in% both, "both", plot_exp_combined$category)
-plot_exp_combined_fil <- plot_exp_combined %>% group_by(group, category) %>% reframe(p = mean(p), 
-                                                                                     result = result, 
-                                                                                     type = type, 
-                                                                                     ratio = mean(ratio),
-                                                                                     direction = direction) %>% unique()
-
-#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/TU_Cox_experaction_bubble.pdf", width = 6, height = 5)
-ggplot(plot_exp_combined_fil, aes(x=reorder(group,ratio), y = type, shape = category, col = ratio, size= -log10(p)))+
-  geom_point()+
-  theme_classic()+
-  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
-  scale_size(range = c(2,10))+
-  scale_shape_manual(values = c(16,15,17))+
-  new_scale(new_aes = "shape")+
-  new_scale(new_aes = "color") +
-  geom_point(data = plot_exp_combined_fil,aes(size = -log10(p), shape = category, col = result), stroke =1.5)+
-  scale_shape_manual(values = c(1,0,2))+
-  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
-  ylab("Cox model")+
-  coord_flip()
-```
-
-```{r}
 # UNIVARIATE COX 
 
 ## Add covariates 
@@ -330,6 +289,42 @@ hr_median
 ```
 
 ```{r}
+## KM estimate 
+
+# Combined visualization
+mean_exp_results$category <- "mean"
+median_exp_results$category <- "median"
+
+plot_exp_combined <- rbind(mean_exp_results, median_exp_results)
+plot_exp_combined$type <- "expression"
+both <- plot_exp_combined %>% group_by(group,direction) %>% count() %>% filter(n > 1) %>% pull(group)
+plot_exp_combined$category <- ifelse(plot_exp_combined$group %in% both, "both", plot_exp_combined$category)
+plot_exp_combined_fil <- plot_exp_combined %>% group_by(group, category) %>% reframe(p = mean(p), 
+                                                                                     result = result, 
+                                                                                     type = type, 
+                                                                                     ratio = mean(ratio),
+                                                                                     direction = direction) %>% unique()
+
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/TU_Cox_experaction_bubble.pdf", width = 6, height = 5)
+ggplot(plot_exp_combined_fil, aes(x=reorder(group,ratio), y = type, shape = category, col = ratio, size= -log10(p)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  scale_shape_manual(values = c(16,15,17))+
+  new_scale(new_aes = "shape")+
+  new_scale(new_aes = "color") +
+  geom_point(data = plot_exp_combined_fil,aes(size = -log10(p), shape = category, col = result), stroke =1.5)+
+  scale_shape_manual(values = c(1,0,2))+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("Cox model")+
+  coord_flip()
+```
+
+```{r}
+## Cox estimate 
+
 # Combined visualization in dot plot
 cox_median <- plot_df_median %>% mutate(sign = p_value < 0.05, result = ifelse(plot_df_median$HR > 1 & plot_df_median$p_value < 0.05, "UP",ifelse(plot_df_median$HR < 1 & plot_df_median$p_value < 0.05, "DOWN", "NOTSIG"))) %>% mutate(category = "median") %>% arrange(desc(HR))
 cox_median$group <- factor(cox_median$group, levels = cox_median$group)
@@ -1836,15 +1831,15 @@ ggplot(plot_int_combined_fil, aes(x=reorder(group,ratio), y = type, shape = cate
 ## Extract survival relevant features
 
 ```{r}
-# L-cross
-INT_surv_relevant <- unique(c(cur_surv_mean_results$group, cur_surv_median_results$group))
-
-INT_surv_relevant_df <- spicy_out_selected_long %>% group_by(PID, pair) %>% mutate(mean_coef = mean(coef,na.rm = TRUE)) %>% select(PID,pair, mean_coef) %>% unique() %>% filter(pair %in% INT_surv_relevant) %>% pivot_wider(id_cols = "PID",names_from = "pair", values_from = "mean_coef") %>% as.data.frame
-
-colnames(INT_surv_relevant_df) <- paste0("INT_",colnames(INT_surv_relevant_df))
-colnames(INT_surv_relevant_df)[1] <- "PID"
-
-INT_surv_relevant_df
+# # L-cross
+# INT_surv_relevant <- unique(c(cur_surv_mean_results$group, cur_surv_median_results$group))
+# 
+# INT_surv_relevant_df <- spicy_out_selected_long %>% group_by(PID, pair) %>% mutate(mean_coef = mean(coef,na.rm = TRUE)) %>% select(PID,pair, mean_coef) %>% unique() %>% filter(pair %in% INT_surv_relevant) %>% pivot_wider(id_cols = "PID",names_from = "pair", values_from = "mean_coef") %>% as.data.frame
+# 
+# colnames(INT_surv_relevant_df) <- paste0("INT_",colnames(INT_surv_relevant_df))
+# colnames(INT_surv_relevant_df)[1] <- "PID"
+# 
+# INT_surv_relevant_df
 
 # Interactions
 INT_surv_relevant <- unique(c(cur_surv_countInt_results_mean$group, cur_surv_countInt_results_median$group))
@@ -1880,11 +1875,11 @@ write_csv(tumor_key_features, "/mnt/central_nas/rcc_volume/RCC/survival_pred/Blo
 ## Extract all features
 
 ```{r}
-# L-cross
-INT_all_df <- spicy_out_selected_long %>% group_by(PID, pair) %>% mutate(mean_coef = mean(coef,na.rm = TRUE)) %>% select(PID,pair, mean_coef) %>% unique() %>% pivot_wider(id_cols = "PID",names_from = "pair", values_from = "mean_coef") %>% as.data.frame
-
-colnames(INT_all_df) <- paste0("INT_",colnames(INT_all_df))
-colnames(INT_all_df)[1] <- "PID"
+# # L-cross
+# INT_all_df <- spicy_out_selected_long %>% group_by(PID, pair) %>% mutate(mean_coef = mean(coef,na.rm = TRUE)) %>% select(PID,pair, mean_coef) %>% unique() %>% pivot_wider(id_cols = "PID",names_from = "pair", values_from = "mean_coef") %>% as.data.frame
+# 
+# colnames(INT_all_df) <- paste0("INT_",colnames(INT_all_df))
+# colnames(INT_all_df)[1] <- "PID"
 
 # Interactions 
 INT_all_df <- count_out_selected_long %>% group_by(PID, pair) %>% mutate(mean_coef = mean(coef,na.rm = TRUE)) %>% select(PID, mean_coef) %>% unique() %>% pivot_wider(id_cols = "PID",names_from = "pair", values_from = "mean_coef") %>% as.data.frame
@@ -1919,32 +1914,32 @@ write_csv(tumor_all_features, "/mnt/central_nas/rcc_volume/RCC/survival_pred/Blo
 Show examples 
 
 ```{r}
-PID_int_rel <- INT_surv_relevant_df %>% select(PID, INT_TU_HLADRhi__CD8_T_cell) %>% arrange(desc(INT_TU_HLADRhi__CD8_T_cell)) %>% slice(1:10) %>% pull(PID)
-
-sample_id_rel <- unique(sce[,sce$PID %in% PID_int_rel]$sample_id)
-
-
-# All relevant 
-plotSpatial(sce[,sce$sample_id %in% sample_id_rel & sce$celltype_combined %in% c("TU_HLADRhi","CD8_T_cell")], 
-            node_color_by = "celltype_combined",
-            #node_shape_by = "celltype_combined",
-            img_id = "sample_id", 
-            node_size_fix = 3)+
-  scale_color_manual(values = c("#377EB8", "#E41A1C"))
-
-# Specific
-int_score <- spicy_out_selected_long %>% filter(pair == "TU_HLADRhi__CD8_T_cell" & sample_id == sample_id_rel[18]) %>% pull(coef)
-
-pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/TU_images_interaction_HLADRCD8.pdf", width = 4, height = 10, onefile = FALSE)
-plotSpatial(sce[,sce$sample_id %in% sample_id_rel[18] & sce$celltype_combined %in% c("TU_HLADRhi","CD8_T_cell")], 
-            node_color_by = "celltype_combined",
-            #node_shape_by = "celltype_combined",
-            img_id = "sample_id", 
-            node_size_fix = 2)+
-  scale_color_manual(values = c("#377EB8", "#E41A1C"))+
-  #guides(color = "none")+
-  ggtitle(paste(sample_id_rel[18], round(int_score,2)))
-dev.off()
+# PID_int_rel <- INT_surv_relevant_df %>% select(PID, INT_TU_HLADRhi__CD8_T_cell) %>% arrange(desc(INT_TU_HLADRhi__CD8_T_cell)) %>% slice(1:10) %>% pull(PID)
+# 
+# sample_id_rel <- unique(sce[,sce$PID %in% PID_int_rel]$sample_id)
+# 
+# 
+# # All relevant 
+# plotSpatial(sce[,sce$sample_id %in% sample_id_rel & sce$celltype_combined %in% c("TU_HLADRhi","CD8_T_cell")], 
+#             node_color_by = "celltype_combined",
+#             #node_shape_by = "celltype_combined",
+#             img_id = "sample_id", 
+#             node_size_fix = 3)+
+#   scale_color_manual(values = c("#377EB8", "#E41A1C"))
+# 
+# # Specific
+# int_score <- spicy_out_selected_long %>% filter(pair == "TU_HLADRhi__CD8_T_cell" & sample_id == sample_id_rel[18]) %>% pull(coef)
+# 
+# pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/TU_images_interaction_HLADRCD8.pdf", width = 4, height = 10, onefile = FALSE)
+# plotSpatial(sce[,sce$sample_id %in% sample_id_rel[18] & sce$celltype_combined %in% c("TU_HLADRhi","CD8_T_cell")], 
+#             node_color_by = "celltype_combined",
+#             #node_shape_by = "celltype_combined",
+#             img_id = "sample_id", 
+#             node_size_fix = 2)+
+#   scale_color_manual(values = c("#377EB8", "#E41A1C"))+
+#   #guides(color = "none")+
+#   ggtitle(paste(sample_id_rel[18], round(int_score,2)))
+# dev.off()
 ```
 
 

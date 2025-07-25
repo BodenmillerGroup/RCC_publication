@@ -12,25 +12,18 @@ knitr::opts_chunk$set(echo = TRUE)
 # Software requirements
 
 ```{r lib, message=FALSE,warning=FALSE}
-#Data containers
 library(SpatialExperiment)
 library(SingleCellExperiment)
-
-#Data processing
 library(scuttle)
 library(scater)
 library(scran)
 library(imcRtools)
-
-#Data visualization
 library(cytomapper)
 library(dittoSeq)
 library(pheatmap)
 library(cowplot)
 library(ComplexHeatmap)
 library(circlize)
-
-#Utilities
 library(tidyverse)
 library(openxlsx)
 library(stringr)
@@ -53,15 +46,13 @@ library(bluster)
 library(psych)
 library(corrplot)
 library(psych)
-
-#Batch correction
-library(batchelor)
-
+library(conflicted)
 conflicts_prefer(dplyr::count)
 conflicts_prefer(dplyr::filter)
 conflicts_prefer(dplyr::select)
 conflicts_prefer(dplyr::slice)
 conflicts_prefer(dplyr::mutate)
+conflicts_prefer(dplyr::desc)
 ```
 
 # Extract survival relevant features
@@ -116,7 +107,7 @@ library(survminer)
 cur_surv_out <- foreach(x = colnames(out_df %>% select(-PID, -status_OS, -OS_months)), .combine = "rbind")%do%{
   formula <- as.formula(paste("Surv(OS_months, status_OS) ~ ", x))
   fit <- survdiff(formula, data = out_df)
-  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[1], exp_2 = fit$exp[1])
+  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[1], exp_2 = fit$exp[1], ratio = fit$obs[1]/fit$exp[1])
 }
 
 # Adjust p-values using BH 
@@ -124,11 +115,11 @@ cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
 
 # Create and plot heatmap 
 # Create and plot heatmap 
-cur_surv_plot <- cur_surv_out %>% mutate(direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% filter(p < 0.05)
+cur_surv_plot <- cur_surv_out %>% mutate(direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% filter(p_adj < 0.05)
 
-cur_surv_plot$result <- ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p_adj < 0.1, "UP",
+cur_surv_plot$result <- ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p_adj < 0.05, "UP",
                              ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p < 0.05, "UP_trend", 
-                                    ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p_adj < 0.1, "DOWN", 
+                                    ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p_adj < 0.05, "DOWN", 
                                            ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p < 0.05, "DOWN_trend",NA))))
 
 library(ggnewscale)
@@ -216,7 +207,7 @@ library(survminer)
 cur_surv_out <- foreach(x = colnames(out_df %>% select(-PID, -status_OS, -OS_months)), .combine = "rbind")%do%{
   formula <- as.formula(paste("Surv(OS_months, status_OS) ~ ", x))
   fit <- survdiff(formula, data = out_df)
-  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[1], exp_2 = fit$exp[1])
+  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[1], exp_2 = fit$exp[1], ratio = fit$obs[1]/fit$exp[1])
 }
 
 # Adjust p-values using BH 
@@ -224,11 +215,11 @@ cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
 
 # Create and plot heatmap 
 # Create and plot heatmap 
-cur_surv_plot <- cur_surv_out %>% mutate(direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% filter(p < 0.05)
+cur_surv_plot <- cur_surv_out %>% mutate(direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% filter(p_adj < 0.05)
 
-cur_surv_plot$result <- ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p_adj < 0.1, "UP",
+cur_surv_plot$result <- ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p_adj < 0.05, "UP",
                              ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p < 0.05, "UP_trend", 
-                                    ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p_adj < 0.1, "DOWN", 
+                                    ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p_adj < 0.05, "DOWN", 
                                            ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p < 0.05, "DOWN_trend",NA))))
 
 library(ggnewscale)
@@ -289,6 +280,43 @@ hr_median
 ```
 
 ```{r}
+## KM estimate 
+
+# Combined visualization
+mean_exp_results$category <- "mean"
+median_exp_results$category <- "median"
+
+plot_exp_combined <- rbind(mean_exp_results, median_exp_results)
+plot_exp_combined$type <- "expression"
+both <- plot_exp_combined %>% group_by(group,direction) %>% count() %>% filter(n > 1) %>% pull(group)
+plot_exp_combined$category <- ifelse(plot_exp_combined$group %in% both, "both", plot_exp_combined$category)
+plot_exp_combined_fil <- plot_exp_combined %>% group_by(group, category) %>% reframe(p = mean(p), 
+                                                                                     result = result, 
+                                                                                     type = type, 
+                                                                                     ratio = mean(ratio),
+                                                                                     direction = direction) %>% unique()
+
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/MY_Cox_expression_bubble.pdf", width = 6, height = 5)
+ggplot(plot_exp_combined_fil, aes(x=reorder(group,ratio), y = type, shape = category, col = ratio, size= -log10(p)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  scale_shape_manual(values = c(16,15,17))+
+  new_scale(new_aes = "shape")+
+  new_scale(new_aes = "color") +
+  geom_point(data = plot_exp_combined_fil,aes(size = -log10(p), shape = category, col = result), stroke =1.5)+
+  scale_shape_manual(values = c(1,0,2))+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("Cox model")+
+  coord_flip()
+```
+
+
+```{r}
+## Cox
+
 # Combined visualization in dot plot
 cox_median <- plot_df_median %>% mutate(sign = p_value < 0.05, result = ifelse(plot_df_median$HR > 1 & plot_df_median$p_value < 0.05, "UP",ifelse(plot_df_median$HR < 1 & plot_df_median$p_value < 0.05, "DOWN", "NOTSIG"))) %>% mutate(category = "median") %>% arrange(desc(HR))
 cox_median$group <- factor(cox_median$group, levels = cox_median$group)
@@ -341,7 +369,9 @@ dev.off()
 
 ```{r}
 # From COX models
-markers_surv_relevant <- c(str_remove(plot_df_median %>% filter(p_value < 0.05) %>% pull(group), "high"), str_remove(plot_df_mean %>% filter(p_value < 0.05) %>% pull(group), "high")) %>% unique()
+#markers_surv_relevant <- c(str_remove(plot_df_median %>% filter(p_value < 0.05) %>% pull(group), "high"), str_remove(plot_df_mean %>% filter(p_value < 0.05) %>% pull(group), "high")) %>% unique()
+# From KM models
+markers_surv_relevant <- plot_exp_combined_fil$group
 
 # Extract min_max expression values
 mean_exp_df <- assay(mean_sce, "min_max") %>% as.data.frame %>% filter(rownames(.) %in% markers_surv_relevant) %>% t() %>% as.data.frame %>% rownames_to_column("PID")
@@ -1771,15 +1801,15 @@ ggplot(plot_int_combined_fil, aes(x=reorder(group,-log10(p)), y = type, col = re
 ## Extract survival relevant features
 
 ```{r}
-# L-cross
-INT_surv_relevant <- unique(c(cur_surv_mean_results$group, cur_surv_median_results$group))
-
-INT_surv_relevant_df <- spicy_out_selected_long %>% group_by(PID, pair) %>% mutate(mean_coef = mean(coef,na.rm = TRUE)) %>% select(PID,pair, mean_coef) %>% unique() %>% filter(pair %in% INT_surv_relevant) %>% pivot_wider(id_cols = "PID",names_from = "pair", values_from = "mean_coef") %>% as.data.frame
-
-colnames(INT_surv_relevant_df) <- paste0("INT_",colnames(INT_surv_relevant_df))
-colnames(INT_surv_relevant_df)[1] <- "PID"
-
-INT_surv_relevant_df
+# # L-cross
+# INT_surv_relevant <- unique(c(cur_surv_mean_results$group, cur_surv_median_results$group))
+# 
+# INT_surv_relevant_df <- spicy_out_selected_long %>% group_by(PID, pair) %>% mutate(mean_coef = mean(coef,na.rm = TRUE)) %>% select(PID,pair, mean_coef) %>% unique() %>% filter(pair %in% INT_surv_relevant) %>% pivot_wider(id_cols = "PID",names_from = "pair", values_from = "mean_coef") %>% as.data.frame
+# 
+# colnames(INT_surv_relevant_df) <- paste0("INT_",colnames(INT_surv_relevant_df))
+# colnames(INT_surv_relevant_df)[1] <- "PID"
+# 
+# INT_surv_relevant_df
 
 # Interactions
 INT_surv_relevant <- unique(c(cur_surv_countInt_results_mean$group, cur_surv_countInt_results_median$group))
@@ -1816,11 +1846,11 @@ write_csv(myeloid_key_features, "/mnt/central_nas/rcc_volume/RCC/survival_pred/B
 ## Extract all features
 
 ```{r}
-# L-cross
-INT_all_df <- spicy_out_selected_long %>% group_by(PID, pair) %>% mutate(mean_coef = mean(coef,na.rm = TRUE)) %>% select(PID,pair, mean_coef) %>% unique() %>% pivot_wider(id_cols = "PID",names_from = "pair", values_from = "mean_coef") %>% as.data.frame
-
-colnames(INT_all_df) <- paste0("INT_",colnames(INT_all_df))
-colnames(INT_all_df)[1] <- "PID"
+# # L-cross
+# INT_all_df <- spicy_out_selected_long %>% group_by(PID, pair) %>% mutate(mean_coef = mean(coef,na.rm = TRUE)) %>% select(PID,pair, mean_coef) %>% unique() %>% pivot_wider(id_cols = "PID",names_from = "pair", values_from = "mean_coef") %>% as.data.frame
+# 
+# colnames(INT_all_df) <- paste0("INT_",colnames(INT_all_df))
+# colnames(INT_all_df)[1] <- "PID"
 
 # Interactions 
 INT_all_df <- count_out_selected_long %>% group_by(PID, pair) %>% mutate(mean_coef = mean(coef,na.rm = TRUE)) %>% select(PID, mean_coef) %>% unique() %>% pivot_wider(id_cols = "PID",names_from = "pair", values_from = "mean_coef") %>% as.data.frame

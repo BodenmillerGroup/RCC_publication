@@ -5,6 +5,7 @@
 rmarkdown::render("~/GitHub/RCC/IMC/analysis/surv_prediction/SURV_02_SurvPred_BlockForest.Rmd",
                   params = list(
                     blocks_selected = c("IMC_GEN_"),
+                    types_remove = NULL, #Select which features to remove
                     add_all_features = FALSE, # Add all features or selection
                     add_surv_time = FALSE, # Add survival time in training
                     add_PL_level = FALSE, # Add PL-info
@@ -17,6 +18,7 @@ rmarkdown::render("~/GitHub/RCC/IMC/analysis/surv_prediction/SURV_02_SurvPred_Bl
 rmarkdown::render("~/GitHub/RCC/IMC/analysis/surv_prediction/SURV_02_SurvPred_BlockForest.Rmd",
                   params = list(
                     blocks_selected = c("IMC_T_"),
+                    types_remove = NULL, #Select which features to remove
                     add_all_features = FALSE, # Add all features or selection
                     add_surv_time = FALSE, # Add survival time in training
                     add_PL_level = FALSE, # Add PL-info
@@ -29,6 +31,7 @@ rmarkdown::render("~/GitHub/RCC/IMC/analysis/surv_prediction/SURV_02_SurvPred_Bl
 rmarkdown::render("~/GitHub/RCC/IMC/analysis/surv_prediction/SURV_02_SurvPred_BlockForest.Rmd",
                   params = list(
                     blocks_selected = c("IMC_MY_"),
+                    types_remove = NULL, #Select which features to remove
                     add_all_features = FALSE, # Add all features or selection
                     add_surv_time = FALSE, # Add survival time in training
                     add_PL_level = FALSE, # Add PL-info
@@ -41,6 +44,7 @@ rmarkdown::render("~/GitHub/RCC/IMC/analysis/surv_prediction/SURV_02_SurvPred_Bl
 rmarkdown::render("~/GitHub/RCC/IMC/analysis/surv_prediction/SURV_02_SurvPred_BlockForest.Rmd",
                   params = list(
                     blocks_selected = c("IMC_TU_"),
+                    types_remove = NULL, #Select which features to remove
                     add_all_features = FALSE, # Add all features or selection
                     add_surv_time = FALSE, # Add survival time in training
                     add_PL_level = FALSE, # Add PL-info
@@ -53,6 +57,7 @@ rmarkdown::render("~/GitHub/RCC/IMC/analysis/surv_prediction/SURV_02_SurvPred_Bl
 rmarkdown::render("~/GitHub/RCC/IMC/analysis/surv_prediction/SURV_02_SurvPred_BlockForest.Rmd",
                   params = list(
                     blocks_selected = c("IMC_"),
+                    types_remove = NULL, #Select which features to remove
                     add_all_features = FALSE, # Add all features or selection
                     add_surv_time = FALSE, # Add survival time in training
                     add_PL_level = FALSE, # Add PL-info
@@ -65,6 +70,7 @@ rmarkdown::render("~/GitHub/RCC/IMC/analysis/surv_prediction/SURV_02_SurvPred_Bl
 rmarkdown::render("~/GitHub/RCC/IMC/analysis/surv_prediction/SURV_02_SurvPred_BlockForest.Rmd",
                   params = list(
                     blocks_selected = c("IMC_"),
+                    types_remove = NULL, #Select which features to remove
                     add_all_features = FALSE, # Add all features or selection
                     add_surv_time = FALSE, # Add survival time in training
                     add_PL_level = FALSE, # Add PL-info
@@ -79,6 +85,7 @@ rmarkdown::render("~/GitHub/RCC/IMC/analysis/surv_prediction/SURV_02_SurvPred_Bl
 rmarkdown::render("~/GitHub/RCC/IMC/analysis/surv_prediction/SURV_02_SurvPred_BlockForest.Rmd",
                   params = list(
                     blocks_selected = c("IMC_GEN_"), 
+                    types_remove = NULL, #Select which features to remove
                     add_all_features = TRUE, # Add all features or selection
                     add_surv_time = FALSE, # Add survival time in training
                     add_PL_level = FALSE, # Add PL-info
@@ -91,6 +98,7 @@ rmarkdown::render("~/GitHub/RCC/IMC/analysis/surv_prediction/SURV_02_SurvPred_Bl
 rmarkdown::render("~/GitHub/RCC/IMC/analysis/surv_prediction/SURV_02_SurvPred_BlockForest.Rmd",
                   params = list(
                     blocks_selected = c("IMC_T_"), 
+                    types_remove = NULL, #Select which features to remove
                     add_all_features = TRUE, # Add all features or selection
                     add_surv_time = FALSE, # Add survival time in training
                     add_PL_level = FALSE, # Add PL-info
@@ -103,6 +111,7 @@ rmarkdown::render("~/GitHub/RCC/IMC/analysis/surv_prediction/SURV_02_SurvPred_Bl
 rmarkdown::render("~/GitHub/RCC/IMC/analysis/surv_prediction/SURV_02_SurvPred_BlockForest.Rmd",
                   params = list(
                     blocks_selected = c("IMC_MY_"), 
+                    types_remove = NULL, #Select which features to remove
                     add_all_features = TRUE, # Add all features or selection
                     add_surv_time = FALSE, # Add survival time in training
                     add_PL_level = FALSE, # Add PL-info
@@ -115,6 +124,7 @@ rmarkdown::render("~/GitHub/RCC/IMC/analysis/surv_prediction/SURV_02_SurvPred_Bl
 rmarkdown::render("~/GitHub/RCC/IMC/analysis/surv_prediction/SURV_02_SurvPred_BlockForest.Rmd",
                   params = list(
                     blocks_selected = c("IMC_TU_"), 
+                    types_remove = NULL, #Select which features to remove
                     add_all_features = TRUE, # Add all features or selection
                     add_surv_time = FALSE, # Add survival time in training
                     add_PL_level = FALSE, # Add PL-info
@@ -127,6 +137,7 @@ rmarkdown::render("~/GitHub/RCC/IMC/analysis/surv_prediction/SURV_02_SurvPred_Bl
 rmarkdown::render("~/GitHub/RCC/IMC/analysis/surv_prediction/SURV_02_SurvPred_BlockForest.Rmd",
                   params = list(
                     blocks_selected = c("IMC_"), 
+                    types_remove = NULL, #Select which features to remove
                     add_all_features = TRUE, # Add all features or selection
                     add_surv_time = FALSE, # Add survival time in training
                     add_PL_level = FALSE, # Add PL-info
@@ -139,6 +150,7 @@ rmarkdown::render("~/GitHub/RCC/IMC/analysis/surv_prediction/SURV_02_SurvPred_Bl
 rmarkdown::render("~/GitHub/RCC/IMC/analysis/surv_prediction/SURV_02_SurvPred_BlockForest.Rmd",
                   params = list(
                     blocks_selected = c("IMC_"), 
+                    types_remove = NULL, #Select which features to remove
                     add_all_features = TRUE, # Add all features or selection
                     add_surv_time = FALSE, # Add survival time in training
                     add_PL_level = FALSE, # Add PL-info
@@ -153,6 +165,7 @@ rmarkdown::render("~/GitHub/RCC/IMC/analysis/surv_prediction/SURV_02_SurvPred_Bl
 rmarkdown::render("~/GitHub/RCC/IMC/analysis/surv_prediction/SURV_02_SurvPred_BlockForest.Rmd",
                   params = list(
                     blocks_selected = c("CLIN"),
+                    types_remove = NULL, #Select which features to remove
                     add_all_features = FALSE, # Add all features or selection
                     add_surv_time = FALSE, # Add survival time in training
                     add_PL_level = FALSE, # Add PL-info
@@ -165,6 +178,7 @@ rmarkdown::render("~/GitHub/RCC/IMC/analysis/surv_prediction/SURV_02_SurvPred_Bl
 rmarkdown::render("~/GitHub/RCC/IMC/analysis/surv_prediction/SURV_02_SurvPred_BlockForest.Rmd",
                   params = list(
                     blocks_selected = c("CLIN","IMC"),
+                    types_remove = NULL, #Select which features to remove
                     add_all_features = FALSE, # Add all features or selection
                     add_surv_time = FALSE, # Add survival time in training
                     add_PL_level = FALSE, # Add PL-info
@@ -177,6 +191,7 @@ rmarkdown::render("~/GitHub/RCC/IMC/analysis/surv_prediction/SURV_02_SurvPred_Bl
 rmarkdown::render("~/GitHub/RCC/IMC/analysis/surv_prediction/SURV_02_SurvPred_BlockForest.Rmd",
                   params = list(
                     blocks_selected = c("CLIN","IMC"),
+                    types_remove = NULL, #Select which features to remove
                     add_all_features = FALSE, # Add all features or selection
                     add_surv_time = FALSE, # Add survival time in training
                     add_PL_level = FALSE, # Add PL-info
@@ -189,6 +204,7 @@ rmarkdown::render("~/GitHub/RCC/IMC/analysis/surv_prediction/SURV_02_SurvPred_Bl
 rmarkdown::render("~/GitHub/RCC/IMC/analysis/surv_prediction/SURV_02_SurvPred_BlockForest.Rmd",
                   params = list(
                     blocks_selected = c("CLIN","IMC"),
+                    types_remove = NULL, #Select which features to remove
                     add_all_features = FALSE, # Add all features or selection
                     add_surv_time = FALSE, # Add survival time in training
                     add_PL_level = FALSE, # Add PL-info

@@ -5,6 +5,7 @@ date: "`r Sys.Date()`"
 output: html_document
 params: 
   blocks_selected: !r c("CLIN", "IMC")
+  types_remove: !r NULL 
   add_all_features: FALSE
   add_surv_time: FALSE 
   add_PL_level: FALSE
@@ -38,6 +39,7 @@ conflicts_prefer(dplyr::select)
 
 ```{r}
 blocks_selected <- params$blocks_selected #Select which data types to use
+types_remove <- params$types_remove #Select which features to remove
 add_all_features <- params$add_all_features # Add all features or just selection
 add_surv_time <- params$add_surv_time #Add survival time in training
 add_PL_level <- params$add_PL_level #Add PL in training
@@ -92,6 +94,13 @@ if(isFALSE(add_PL_level)){
 # Remove or add general broad features
 if(isFALSE(add_GEN_level)){
   meta <- meta[,!str_detect(colnames(meta), "_GEN_")]
+}
+```
+
+```{r}
+# Remove specific features
+if(!is.null(types_remove)){
+  meta <- meta[, !str_detect(colnames(meta), paste(types_remove, collapse = "|"))]
 }
 ```
 
@@ -218,6 +227,6 @@ if(!dir.exists(model_base_path)){dir.create(model_base_path, recursive = TRUE, s
 if(!dir.exists(runtime_path)){dir.create(runtime_path, recursive = TRUE, showWarnings = FALSE)}
 
 # Save objects
-saveRDS(cv_results, paste0(model_base_path, run_name))
-write.csv(run_time, paste0(runtime_path, "/",runtime, paste0(run_name, "_runtime.csv")))
+saveRDS(cv_results, paste0(model_base_path, "/",run_name))
+write.csv(run_time, paste0(runtime_path, "/", paste0(run_name, "_runtime.csv")))
 ```
