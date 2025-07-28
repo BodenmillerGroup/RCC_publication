@@ -35,7 +35,7 @@ conflicts_prefer(base::setdiff)
 ### Kaplan-Meier and risk group definition
 
 ```{r}
-cv_results_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_old/BF_IMC_noGEN.rds")
+cv_results_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-28/BF_IMC_Lcross_noGEN.rds")
 dataset <- cv_results_1
 surv_plots <- list()
 data_out <- list()
@@ -225,7 +225,7 @@ ggplot(ordered_features, aes(x = reorder(feature,-mean), y = mean))+
 ```{r}
 # Extract features
 ordered_features_median <- ordered_features %>% filter(median > -0.1) %>% pull(feature)      
-ordered_features_mean <- ordered_features %>% filter(mean > -0.1) %>% pull(feature)      
+ordered_features_mean <- ordered_features %>% filter(mean > 0) %>% pull(feature)      
 
 top_features <- ordered_features_median
 
@@ -263,7 +263,7 @@ median_diff$diff_median <- ordered_features$diff_median[match(median_diff$featur
 median_diff <- median_diff[match(colnames(heatmap), median_diff$feature),]
 
 
-pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_FeatureImportance_Box.pdf", width = 13, height = 4.5, onefile = FALSE)
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_FeatureImportance_Box.pdf", width = 13, height = 4.5, onefile = FALSE)
 HeatmapAnnotation(
   importance = anno_boxplot(heatmap, 
                          gp = gpar(fill = "white"), box_width = 0.75,
@@ -282,7 +282,7 @@ HeatmapAnnotation(
   gap = unit(1,"mm"),
   border = TRUE
 )%v%NULL
-dev.off()
+#dev.off()
 ```
 
 ## Cluster patients
@@ -321,7 +321,7 @@ h_select <- Heatmap(key_out,
         #row_split = 3,
         clustering_method_rows = "ward.D2",
         clustering_method_columns = "ward.D2",
-        row_km_repeats = 1000)
+        row_km_repeats = 100)
 
 h_select <- draw(h_select)
 
@@ -459,11 +459,11 @@ ca <- columnAnnotation(PID_group = anno_simple(col_anno, col = col_group))
 #   ha_types+
 #   rowAnnotation(text = anno_text(row_anno$feature))
 
-pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_KeyFeatures_SurvArchetypes.pdf", width = 8, height = 5, onefile = FALSE)
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_KeyFeatures_SurvArchetypes.pdf", width = 8, height = 5, onefile = FALSE)
 Heatmap(t(key_aggregated))+ 
   ha_types+
   rowAnnotation(text = anno_text(row_anno$feature))
-dev.off()
+#dev.off()
 ```
 
 ```{r, fig.height=20, fig.width=10}
@@ -791,7 +791,7 @@ surv_out <- metadata_selected %>% select(PID, OS_months, status_OS, IMC_T_PL_spa
 
 fit <- survfit(Surv(OS_months, status_OS) ~ IMC_T_PL_spatial_CD8_pheno, data = surv_out)
 
-pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_Kaplan_SpatialCD8.pdf", width = 8, height = 5, onefile = FALSE)
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_Kaplan_SpatialCD8.pdf", width = 8, height = 5, onefile = FALSE)
 ggsurvplot(fit, 
           pval = TRUE,
           risk.table = TRUE, # Add risk table
@@ -802,7 +802,7 @@ ggsurvplot(fit,
           palette = c("steelblue1", "navy","firebrick"),#c("#F21A00", "#3B9AB2", "gold")
           conf.int = FALSE
 )
-dev.off()
+#dev.off()
 ```
 
 ```{r}
@@ -896,7 +896,7 @@ column_sorted <- hc$order
 fisher_full$gene <- factor(fisher_full$gene, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
 
 
-pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/SurvPred_SurvArchetypes_BubbleAsso_SpatialCD8.pdf", width = 5, height = 4)
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/SurvPred_SurvArchetypes_BubbleAsso_SpatialCD8.pdf", width = 5, height = 4)
 ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_adj)))+
   geom_point()+
   theme_classic()+
@@ -907,7 +907,7 @@ ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_a
   scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   coord_flip()
-dev.off()
+#dev.off()
 ```
 
 
@@ -1097,9 +1097,9 @@ ht_all <- oncoPrint(mut_list_full,
                   pct_side = "right", row_names_side = "left")%v% ca
   
 
-pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Oncoprint_Mutations_Archetypes.pdf", width = 7, height = 6, onefile = FALSE)
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Oncoprint_Mutations_Archetypes.pdf", width = 7, height = 6, onefile = FALSE)
 draw(ht_all)
-dev.off()
+#dev.off()
 ```
 
 Survival 
@@ -1246,7 +1246,7 @@ ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_a
 mut_selected <- fisher_full %>% filter(result != "NOTSIG") %>% pull(gene) %>% unfactor
 fisher_full_selected <- fisher_full %>% filter(gene %in% mut_selected)
 
-pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Mutations_Archetypes_Bubble.pdf", width = 6, height = 3, onefile = FALSE)
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Mutations_Archetypes_Bubble.pdf", width = 6, height = 3, onefile = FALSE)
 ggplot(fisher_full_selected, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_adj)))+
   geom_point()+
   theme_classic()+
@@ -1257,7 +1257,7 @@ ggplot(fisher_full_selected, aes(x=category, y = gene,col = odds_ratio, size = -
   scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   coord_flip()
-dev.off()
+#dev.off()
 ```
 
 ###### Mutational burden 
@@ -1724,9 +1724,9 @@ ht_all <- oncoPrint(mut_list_full,
                   pct_side = "right", row_names_side = "left")%v%ca
   
 
-pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Oncoprint_CNVArms_Archetypes.pdf", width = 6, height = 6, onefile = FALSE)
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Oncoprint_CNVArms_Archetypes.pdf", width = 6, height = 6, onefile = FALSE)
 draw(ht_all)
-dev.off()
+#dev.off()
 ```
 
 Survival
@@ -1857,7 +1857,7 @@ ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_a
 CNV_selected <- fisher_full %>% filter(result != "NOTSIG") %>% pull(gene) %>% unfactor
 fisher_full_selected <- fisher_full %>% filter(gene %in% CNV_selected)
 
-pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/CNV_Archetypes_Bubble.pdf", width = 5, height = 3, onefile = FALSE)
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/CNV_Archetypes_Bubble.pdf", width = 5, height = 3, onefile = FALSE)
 ggplot(fisher_full_selected, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_adj)))+
   geom_point()+
   theme_classic()+
@@ -1868,7 +1868,7 @@ ggplot(fisher_full_selected, aes(x=category, y = gene,col = odds_ratio, size = -
   scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   coord_flip()
-dev.off()
+#dev.off()
 ```
 
 ###### CNV burden 
@@ -2219,7 +2219,7 @@ surv_out <- metadata_metabolome %>% select(PID, OS_months, status_OS, metabolic_
 
 fit <- survfit(Surv(OS_months, status_OS) ~ metabolic_subtype, data = surv_out)
 
-pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survival_MetabolicSub_Archetypes.pdf", width = 7, height = 4, onefile = FALSE)
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survival_MetabolicSub_Archetypes.pdf", width = 7, height = 4, onefile = FALSE)
 ggsurvplot(fit, 
           pval = TRUE,
           risk.table = TRUE, # Add risk table
@@ -2230,7 +2230,7 @@ ggsurvplot(fit,
           palette = c("#00b0be", "#ffb255", "#f45f74", "#98c127"),
           conf.int = FALSE
 )
-dev.off()
+#dev.off()
 ```
 
 ```{r}
@@ -2317,7 +2317,7 @@ column_sorted <- hc$order
 fisher_full$gene <- factor(fisher_full$gene, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
 
 
-pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/MetabolicSub_Archetypes_Bubble.pdf", width = 7, height = 6, onefile = FALSE)
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/MetabolicSub_Archetypes_Bubble.pdf", width = 7, height = 6, onefile = FALSE)
 ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_adj)))+
   geom_point()+
   theme_classic()+
@@ -2328,7 +2328,7 @@ ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_a
   scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   coord_flip()
-dev.off()
+#dev.off()
 ```
 
 

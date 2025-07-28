@@ -2611,14 +2611,11 @@ colnames(spicy_out) <- gsub("/", "_", colnames(spicy_out))
 
 ## Different options for selecting interactions
 # A: Only select interactions FROM CD8 to others (hetero and homo)
-# selected_pairs_CD8 <- (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD8") | 
-#   (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "CD8"))) & (!str_detect(colnames(spicy_out), "Unknown"))
+selected_pairs_CD8 <- (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD8") |
+   (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD8"))) & (!str_detect(colnames(spicy_out), "Unknown"))
 
-selected_pairs_CD8 <- (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD8") &
-  (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "CD8"))) & (!str_detect(colnames(spicy_out), "Unknown"))
-
-selected_pairs_CD4 <- (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD4") &
-  (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "CD4"))) & (!str_detect(colnames(spicy_out), "Unknown"))
+selected_pairs_CD4 <- (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD4") |
+   (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD4"))) & (!str_detect(colnames(spicy_out), "Unknown"))
 
 spicy_out_selected <- cbind(spicy_out[,selected_pairs_CD8], spicy_out[,selected_pairs_CD4])
 
@@ -2626,8 +2623,14 @@ spicy_out_selected <- cbind(spicy_out[,selected_pairs_CD8], spicy_out[,selected_
 # selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD8") &
 #   (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "CD8")) &
 #   (!str_detect(colnames(spicy_out), "Unknown"))
-
-#spicy_out_selected <- spicy_out[,selected_pairs]
+# 
+# selected_pairs_CD8 <- (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD8") &
+#   (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "CD8"))) & (!str_detect(colnames(spicy_out), "Unknown"))
+# 
+# selected_pairs_CD4 <- (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD4") &
+#   (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "CD4"))) & (!str_detect(colnames(spicy_out), "Unknown"))
+# 
+# spicy_out_selected <- cbind(spicy_out[,selected_pairs_CD8], spicy_out[,selected_pairs_CD4])
 
 spicy_out_selected <- spicy_out_selected %>% rownames_to_column("sample_id")
 spicy_out_selected$PID <- sce$PID[match(spicy_out_selected$sample_id, sce$sample_id)]
@@ -2732,23 +2735,25 @@ colnames(spicy_out) <- gsub("/", "_", colnames(spicy_out))
 
 ## Different options for selecting interactions
 # A: Only select interactions FROM CD8 to others (hetero and homo)
-# selected_pairs <- (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD8") | 
-#   (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD8"))) & (!str_detect(colnames(spicy_out), "Unknown"))
+selected_pairs_CD8 <- (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD8") |
+   (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD8"))) & (!str_detect(colnames(spicy_out), "Unknown"))
 
-selected_pairs_CD8 <- (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD8") &
-  (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "CD8"))) & (!str_detect(colnames(spicy_out), "Unknown"))
-
-selected_pairs_CD4 <- (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD4") &
-  (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "CD4"))) & (!str_detect(colnames(spicy_out), "Unknown"))
+selected_pairs_CD4 <- (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD4") |
+   (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD4"))) & (!str_detect(colnames(spicy_out), "Unknown"))
 
 spicy_out_selected <- cbind(spicy_out[,selected_pairs_CD8], spicy_out[,selected_pairs_CD4])
 
 # B: Only select interactions FROM CD8 to non-CD8
-# selected_pairs <- str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD8") &
-#   (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "CD8")) &
-#   (!str_detect(colnames(spicy_out), "Unknown"))
+# selected_pairs_CD8 <- (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD8") &
+#   (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "CD8"))) & (!str_detect(colnames(spicy_out), "Unknown"))
+# 
+# selected_pairs_CD4 <- (str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,1], "CD4") &
+#   (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "CD4"))) & (!str_detect(colnames(spicy_out), "Unknown"))
+# 
+# spicy_out_selected <- cbind(spicy_out[,selected_pairs_CD8], spicy_out[,selected_pairs_CD4])
 
-#spicy_out_selected <- spicy_out[,selected_pairs]
+
+
 
 spicy_out_selected <- spicy_out_selected %>% rownames_to_column("sample_id")
 spicy_out_selected$PID <- sce$PID[match(spicy_out_selected$sample_id, sce$sample_id)]

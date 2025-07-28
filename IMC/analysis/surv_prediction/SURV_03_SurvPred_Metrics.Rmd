@@ -493,3 +493,294 @@ ggplot(out_concordance, aes(x = reorder(model,concordance, FUN = median), y = co
 dev.off()
 ```
 
+
+## OTHER TESTS
+
+## Test: Compare Lcross and interaction values
+
+### Read results from different models 
+
+```{r}
+cv_results_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-25/BF_IMC_INT_countInt.rds")
+
+cv_results_2 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-25/BF_IMC_INT_countInt_all.rds")
+
+cv_results_3 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-25/BF_IMC_INT_Lcross.rds")
+
+cv_results_4 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-25/BF_IMC_INT_Lcross_all.rds")
+
+cv_results_5 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-25/BF_IMC_TU_countInt_all.rds")
+
+cv_results_6 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-25/BF_IMC_TU_Lcross_all.rds")
+```
+
+```{r}
+# Create list from results
+# Define the cross-validation results as a list
+cv_results_list <- list(
+  "INT" = cv_results_1,
+  "INT_all" = cv_results_2,
+  "L" = cv_results_3,
+  "L_all" = cv_results_4#,
+  #"TU_INT" = cv_results_5,
+  #"TU_L" = cv_results_6
+  )
+```
+
+### Integrated Brier Score
+
+```{r}
+# Initialize list to store IBS scores for each cross-validation result
+ibs_scores_list <- list()
+
+# Loop over each cross-validation result object using lapply
+ibs_scores_list <- lapply(cv_results_list, function(res_obj) {
+  # Apply function over each element in the result object (each fold in cross-validation)
+  sapply(res_obj, function(res) {
+    # Check if row counts match between actual_surv and actual_test
+    if (nrow(res$actual_surv) != nrow(res$actual_test)) {
+      stop("Row count mismatch between actual_surv and actual_test")
+    }
+    
+    # Define test data
+    test_data <- cbind(res$actual_surv, res$actual_test)
+    
+    # Time points in test data
+    times_test <- sort(unique(test_data$OS_months))
+    if(!0 %in% times_test){
+    times_test <- c(0, times_test) # Add timepoint 0 as baseline (if not included)
+    }
+    
+    # Time points in prediction
+    times_pred <- res$predictions$unique.death.times
+    
+    # Find the nearest indices for each desired time in the unique death times
+    time_indices <- sapply(times_test, function(t) which.min(abs(times_pred - t)))
+    
+    # Extract predicted survival probabilities at the specified times
+    aligned_surv_probs <- res$predictions$survival[, time_indices, drop = FALSE]
+    
+    # Calculate prediction error curve (PEC)
+    pec_obj <- pec(
+      object = list("BlockForest" = aligned_surv_probs),
+      formula = Surv(OS_months, status_OS) ~ 1,
+      cens.model = "marginal",
+      exact = TRUE,
+      data = test_data
+    )
+    
+    # Define the time range of interest for IBS
+    IBSrange <- quantile(test_data$OS_months, 0.9)
+    #IBSrange <- median(test_data$OS_months)
+    #IBSrange <- max(test_data$OS_months)
+    
+    # Calculate the CRPS and extract the IBS score
+    crps_val <- crps(pec_obj, start = 0, times = IBSrange)
+    ibs_score <- crps_val[2] # Adjust if necessary based on your specific data structure
+    
+    return(ibs_score)
+  })
+})
+
+# Convert scores to dataframe
+out_ibs <- data.frame(fold = 1:10, t(do.call("rbind", ibs_scores_list))[1:10,]) %>% pivot_longer(2:ncol(.), names_to = "model", values_to = "IBS")
+
+# Plot
+library(ggpubr)
+
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_IBS_CLINvsIMC.pdf", width = 4.5, height = 3.5, onefile = FALSE)
+ggplot(out_ibs, aes(x = reorder(model,-IBS, FUN = median), y = IBS, fill = model))+
+  geom_point(aes(color = model))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
+  theme_classic()+
+  stat_compare_means(ref.group = "CLIN", paired = FALSE, method = "t.test", method.args = list(alternative = "less", label = "p.format"))+
+  stat_compare_means(ref.group = "L_all", paired = FALSE, method = "t.test", method.args = list(alternative = "less", label = "p.format"), vjust = 1)+
+  stat_compare_means(vjust = 2, method = "anova")+
+  #scale_fill_brewer(palette = "Paired")+
+  #scale_fill_manual(values = col_cv)+
+  #scale_color_manual(values = col_cv)+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  xlab("Models")+
+  ylab("Integrated Brier Score")
+#dev.off()
+```
+
+### Concordance (Uno)
+
+```{r}
+# Initialize list to store concordance scores for each cross-validation result
+concordance_scores_list <- list()
+
+# Loop over each cross-validation result object using lapply
+concordance_scores_list <- lapply(cv_results_list, function(res_obj) {
+  # Apply function over each element in the result object (each fold in cross-validation)
+  sapply(res_obj, function(res) {
+    out <- concordance(Surv(res$actual_surv[, 1], res$actual_surv[, 2]) ~ rowSums(res$predictions$survival), timewt = "n/G2")
+    return(out$concordance)
+  })
+})
+
+out_concordance <- data.frame(fold = 1:10, t(do.call("rbind", concordance_scores_list))[1:10,]) %>% pivot_longer(2:ncol(.), names_to = "model", values_to = "concordance")
+
+library(ggpubr)
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_Conc_CLINvsIMC.pdf", width = 4.5, height = 3.5, onefile = FALSE)
+ggplot(out_concordance, aes(x = reorder(model,concordance, FUN = median), y = concordance, fill = model))+
+  geom_point(aes(color = model))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
+  theme_classic()+
+  stat_compare_means(ref.group = "CLIN", paired = FALSE, method = "t.test", method.args = list(alternative = "greater", label = "p.format"))+
+    stat_compare_means(ref.group = "L_all", paired = FALSE, method = "t.test", method.args = list(alternative = "greater", label = "p.format"), vjust = 1)+
+  stat_compare_means(vjust = 2, method = "anova")+
+  #scale_fill_manual(values = col_cv)+
+  #scale_color_manual(values = col_cv)+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  xlab("Models")+
+  ylab("Concordance (Uno)")
+#dev.off()
+```
+
+## Test: Others
+
+### Read results from different models 
+
+```{r}
+cv_results_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_old/BF_IMC_TU.rds")
+
+cv_results_2 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-25/BF_IMC_TU_countInt_all.rds")
+
+cv_results_3 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-25/BF_IMC_TU_Lcross_all.rds")
+
+cv_results_4 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-28/BF_IMC_Lcross.rds")
+
+cv_results_5 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-06-26/BF_IMC.rds")
+
+cv_results_6 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_old/BF_IMC_noGEN.rds")
+
+cv_results_7 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-28/BF_IMC_Lcross_noGEN.rds")
+```
+
+```{r}
+# Create list from results
+# Define the cross-validation results as a list
+cv_results_list <- list(
+  "TU_L_old" = cv_results_1,
+  "TU_INT" = cv_results_2,
+  "TU_L" = cv_results_3,
+  "IMC_L" = cv_results_4,
+  "IMC_Lother" = cv_results_5,
+  "IMC_old" = cv_results_6,
+  "IMC_L_noGEN" = cv_results_7
+  )
+```
+
+### Integrated Brier Score
+
+```{r}
+# Initialize list to store IBS scores for each cross-validation result
+ibs_scores_list <- list()
+
+# Loop over each cross-validation result object using lapply
+ibs_scores_list <- lapply(cv_results_list, function(res_obj) {
+  # Apply function over each element in the result object (each fold in cross-validation)
+  sapply(res_obj, function(res) {
+    # Check if row counts match between actual_surv and actual_test
+    if (nrow(res$actual_surv) != nrow(res$actual_test)) {
+      stop("Row count mismatch between actual_surv and actual_test")
+    }
+    
+    # Define test data
+    test_data <- cbind(res$actual_surv, res$actual_test)
+    
+    # Time points in test data
+    times_test <- sort(unique(test_data$OS_months))
+    if(!0 %in% times_test){
+    times_test <- c(0, times_test) # Add timepoint 0 as baseline (if not included)
+    }
+    
+    # Time points in prediction
+    times_pred <- res$predictions$unique.death.times
+    
+    # Find the nearest indices for each desired time in the unique death times
+    time_indices <- sapply(times_test, function(t) which.min(abs(times_pred - t)))
+    
+    # Extract predicted survival probabilities at the specified times
+    aligned_surv_probs <- res$predictions$survival[, time_indices, drop = FALSE]
+    
+    # Calculate prediction error curve (PEC)
+    pec_obj <- pec(
+      object = list("BlockForest" = aligned_surv_probs),
+      formula = Surv(OS_months, status_OS) ~ 1,
+      cens.model = "marginal",
+      exact = TRUE,
+      data = test_data
+    )
+    
+    # Define the time range of interest for IBS
+    IBSrange <- quantile(test_data$OS_months, 0.9)
+    #IBSrange <- median(test_data$OS_months)
+    #IBSrange <- max(test_data$OS_months)
+    
+    # Calculate the CRPS and extract the IBS score
+    crps_val <- crps(pec_obj, start = 0, times = IBSrange)
+    ibs_score <- crps_val[2] # Adjust if necessary based on your specific data structure
+    
+    return(ibs_score)
+  })
+})
+
+# Convert scores to dataframe
+out_ibs <- data.frame(fold = 1:10, t(do.call("rbind", ibs_scores_list))[1:10,]) %>% pivot_longer(2:ncol(.), names_to = "model", values_to = "IBS")
+
+# Plot
+library(ggpubr)
+
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_IBS_CLINvsIMC.pdf", width = 4.5, height = 3.5, onefile = FALSE)
+ggplot(out_ibs, aes(x = reorder(model,-IBS, FUN = median), y = IBS, fill = model))+
+  geom_point(aes(color = model))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
+  theme_classic()+
+  stat_compare_means(ref.group = "CLIN", paired = FALSE, method = "t.test", method.args = list(alternative = "less", label = "p.format"))+
+  stat_compare_means(ref.group = "TU_L", paired = FALSE, method = "t.test", method.args = list(alternative = "less", label = "p.format"), vjust = 1)+
+  stat_compare_means(vjust = 2, method = "anova")+
+  #scale_fill_brewer(palette = "Paired")+
+  #scale_fill_manual(values = col_cv)+
+  #scale_color_manual(values = col_cv)+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  xlab("Models")+
+  ylab("Integrated Brier Score")
+#dev.off()
+```
+
+### Concordance (Uno)
+
+```{r}
+# Initialize list to store concordance scores for each cross-validation result
+concordance_scores_list <- list()
+
+# Loop over each cross-validation result object using lapply
+concordance_scores_list <- lapply(cv_results_list, function(res_obj) {
+  # Apply function over each element in the result object (each fold in cross-validation)
+  sapply(res_obj, function(res) {
+    out <- concordance(Surv(res$actual_surv[, 1], res$actual_surv[, 2]) ~ rowSums(res$predictions$survival), timewt = "n/G2")
+    return(out$concordance)
+  })
+})
+
+out_concordance <- data.frame(fold = 1:10, t(do.call("rbind", concordance_scores_list))[1:10,]) %>% pivot_longer(2:ncol(.), names_to = "model", values_to = "concordance")
+
+library(ggpubr)
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_Conc_CLINvsIMC.pdf", width = 4.5, height = 3.5, onefile = FALSE)
+ggplot(out_concordance, aes(x = reorder(model,concordance, FUN = median), y = concordance, fill = model))+
+  geom_point(aes(color = model))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
+  theme_classic()+
+  stat_compare_means(ref.group = "CLIN", paired = FALSE, method = "t.test", method.args = list(alternative = "greater", label = "p.format"))+
+    stat_compare_means(ref.group = "TU_L", paired = FALSE, method = "t.test", method.args = list(alternative = "greater", label = "p.format"), vjust = 1)+
+  stat_compare_means(vjust = 2, method = "anova")+
+  #scale_fill_manual(values = col_cv)+
+  #scale_color_manual(values = col_cv)+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  xlab("Models")+
+  ylab("Concordance (Uno)")
+#dev.off()
+```

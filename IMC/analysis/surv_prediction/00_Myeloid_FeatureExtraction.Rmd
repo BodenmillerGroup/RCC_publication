@@ -1535,8 +1535,6 @@ selected_pairs <- (str_detect(str_split(colnames(spicy_out), "__", simplify = TR
 #  (!str_detect(str_split(colnames(spicy_out), "__", simplify = TRUE)[,2], "MY")) &
 #  (!str_detect(colnames(spicy_out), "Unknown_Other"))
 
-
-
 spicy_out_selected <- spicy_out[,selected_pairs]
 
 spicy_out_selected <- spicy_out_selected %>% rownames_to_column("sample_id")
