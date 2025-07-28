@@ -309,9 +309,13 @@ mat <- assay(vsd)
 #saveRDS(vsd, "/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_vsd_nodesign.rds") 
 #saveRDS(kirc.clean,"/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_cleaned.rds")
 
-res <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_nodesign.rds") 
-vsd <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_vsd_nodesign.rds") 
-kirc.clean <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_cleaned.rds")
+# res <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_nodesign.rds") 
+# vsd <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_vsd_nodesign.rds") 
+# kirc.clean <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_cleaned.rds")
+
+res <- readRDS("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_nodesign.rds") 
+vsd <- readRDS("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_vsd_nodesign.rds") 
+kirc.clean <- readRDS("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_cleaned.rds")
 ```
 
 ## ICAM1 and mTOR signature 
@@ -329,7 +333,7 @@ rownames(counts_norm)
 df_check <- counts_norm %>% 
   t() %>% 
   as.data.frame() %>% 
-  select("ICAM1", "CCND1", "MYC", "MTOR", "VHL", "NFKB1")
+  select("ICAM1", "CD44", "MYC", "MTOR", "VHL")
 rownames(df_check) <- res$PID
 
 df_minmax <- as.data.frame(lapply(df_check, function(x) {
@@ -346,7 +350,7 @@ sce_minmax <- SingleCellExperiment(
 )
 
 # Step 3: Run PCA on subset of genes (e.g., MYC, ICAM1, CCND1)
-subset_genes <- c("MYC", "ICAM1", "CCND1")
+subset_genes <- c("ICAM1", "CD44", "MTOR", "VHL")
 sce_minmax <- runPCA(sce_minmax,
                      exprs_values = "min_max",
                      subset_row = rownames(sce_minmax) %in% subset_genes,
@@ -357,7 +361,13 @@ plotReducedDim(sce_minmax, dimred = "PCA_sub",
                colour_by = I(assay(sce_minmax, "min_max")["ICAM1", ]))
 
 plotReducedDim(sce_minmax, dimred = "PCA_sub", 
-               colour_by = I(assay(sce_minmax, "min_max")["CCND1", ]))
+               colour_by = I(assay(sce_minmax, "min_max")["CD44", ]))
+
+plotReducedDim(sce_minmax, dimred = "PCA_sub", 
+               colour_by = I(assay(sce_minmax, "min_max")["VHL", ]))
+
+plotReducedDim(sce_minmax, dimred = "PCA_sub", 
+               colour_by = I(assay(sce_minmax, "min_max")["MTOR", ]))
 
 plotReducedDim(sce_minmax, dimred = "PCA_sub", 
                colour_by = I(assay(sce_minmax, "min_max")["MYC", ]))
@@ -369,29 +379,31 @@ counts_norm <- counts(res, normalized = TRUE)
 colnames(counts_norm) <- res$PID
 rownames(counts_norm)
 
-df_check <- counts_norm %>% t() %>% as.data.frame %>% select("ICAM1", "CCND1", "MYC", "MTOR", "VHL", "NFKB1")
+df_check <- counts_norm %>% t() %>% as.data.frame %>% select("ICAM1", "CD44", "MTOR", "VHL")
 rownames(df_check) <- res$PID
 
 df_check$ICAM1_minmax <- scale(df_check$ICAM1, center = min(df_check$ICAM1), scale = max(df_check$ICAM1) - min(df_check$ICAM1))[,1]
-df_check$CCND1_minmax <- scale(df_check$CCND1, center = min(df_check$CCND1), scale = max(df_check$CCND1) - min(df_check$CCND1))[,1]
+df_check$CD44_minmax <- scale(df_check$CD44, center = min(df_check$CD44), scale = max(df_check$CD44) - min(df_check$CD44))[,1]
+df_check$MTOR_minmax <- scale(df_check$MTOR, center = min(df_check$MTOR), scale = max(df_check$MTOR) - min(df_check$MTOR))[,1]
+df_check$VHL_minmax <- scale(df_check$VHL, center = min(df_check$VHL), scale = max(df_check$VHL) - min(df_check$VHL))[,1]
 
 quantile(df_check$ICAM1)
 quantile(df_check$CCND1)
 
-ggplot(df_check, aes(ICAM1, CCND1))+
-  geom_point()
-ggplot(df_check, aes(ICAM1_minmax, CCND1_minmax))+
+ggplot(df_check, aes(ICAM1_minmax, MTOR_minmax))+
   geom_point()
 ```
 
 ```{r}
 library(clValid)
 
-df_test <- df_check %>% select(ICAM1_minmax, CCND1_minmax)
+
+#df_test <- df_check %>% select(all_of(colnames(df_check)[str_detect(colnames(df_check), "minmax")]))
+df_test <- df_check %>% select(ICAM1_minmax, MTOR_minmax)
 
 #Internal measures
 set.seed(22)
-testCL<- clValid(df_test,nClust = 2:6,clMethods = c("hierarchical","agnes","kmeans"),validation="internal",metric="euclidean", method = "ward", maxitems = 5000)
+testCL<- clValid(df_test,nClust = 3:6,clMethods = c("hierarchical","agnes","kmeans"),validation="internal",metric="euclidean", method = "ward", maxitems = 5000)
 summary(testCL)
 plot(testCL, legend = FALSE)
 
@@ -414,7 +426,7 @@ plot(avg_col_dend_MCP)
 set.seed(2201)
 h_PID <- Heatmap(df_test, 
         col = viridis(100), 
-        row_km = 3, row_km_repeats = 1000,
+        row_km = 3, row_km_repeats = 10000,
         #row_split = 3, 
         #cluster_rows = avg_col_dend_MCP,
         name = "min_max")
@@ -435,7 +447,7 @@ res$PID_group_test <- anno$metacluster[match(res$PID, anno$PID)]
 vsd$PID_group_test <- anno$metacluster[match(vsd$PID, anno$PID)]
 df_check$PID_group_test <- anno$metacluster[match(rownames(df_check), anno$PID)]
 
-ggplot(df_check, aes(ICAM1_minmax, CCND1_minmax, color = PID_group_test))+
+ggplot(df_check, aes(ICAM1_minmax, MTOR_minmax, color = PID_group_test))+
   geom_point()+
   theme_classic()
 ```
@@ -466,7 +478,7 @@ ggsurvplot(fit,
 
 ```{r}
 # Define GOI of interest
-GOI <- c("ICAM1", "VHL")
+GOI <- c("ICAM1", "VHL", "CD44", "MTOR")
 
 GOI_rel <- GOI[GOI %in% rownames(vsd)]
 
@@ -505,16 +517,16 @@ unique(vsd$PID_group_test)
 
 ## vsd object 
 vsd$PID_ICAM_mTOR_group <- unfactor(vsd$PID_group_test)
-vsd$PID_ICAM_mTOR_group[vsd$PID_ICAM_mTOR_group == "1"] <- "ICAM1_driven"
-vsd$PID_ICAM_mTOR_group[vsd$PID_ICAM_mTOR_group == "2"] <- "VHL_driven"
-vsd$PID_ICAM_mTOR_group[vsd$PID_ICAM_mTOR_group == "3"] <- "Not_ICAM_VHL_driven"
+vsd$PID_ICAM_mTOR_group[vsd$PID_ICAM_mTOR_group == "1"] <- "MTOR_driven"
+vsd$PID_ICAM_mTOR_group[vsd$PID_ICAM_mTOR_group == "2"] <- "Not_ICAM_VHL_driven"
+vsd$PID_ICAM_mTOR_group[vsd$PID_ICAM_mTOR_group == "3"] <- "ICAM_driven"
 vsd$PID_ICAM_mTOR_group <- factor(vsd$PID_ICAM_mTOR_group)
 
 ## kirc.clean object 
 kirc.clean$PID_ICAM_mTOR_group <- unfactor(kirc.clean$PID_group_test)
-kirc.clean$PID_ICAM_mTOR_group[kirc.clean$PID_ICAM_mTOR_group == "1"] <- "ICAM1_driven"
-kirc.clean$PID_ICAM_mTOR_group[kirc.clean$PID_ICAM_mTOR_group == "2"] <- "VHL_driven"
-kirc.clean$PID_ICAM_mTOR_group[kirc.clean$PID_ICAM_mTOR_group == "3"] <- "Not_ICAM_VHL_driven"
+kirc.clean$PID_ICAM_mTOR_group[kirc.clean$PID_ICAM_mTOR_group == "1"] <- "MTOR_driven"
+kirc.clean$PID_ICAM_mTOR_group[kirc.clean$PID_ICAM_mTOR_group == "2"] <- "Not_ICAM_VHL_driven"
+kirc.clean$PID_ICAM_mTOR_group[kirc.clean$PID_ICAM_mTOR_group == "3"] <- "ICAM_driven"
 kirc.clean$PID_ICAM_mTOR_group <- factor(kirc.clean$PID_ICAM_mTOR_group)
 ```
 
@@ -838,7 +850,8 @@ Heatmap(scale(ht), name = "Scaled mean Z-scores")+
 
 ```{r}
 library(readxl)
-HU_SIG <- read_excel("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/data/DCCD_SubTables_NatureGenetics.xlsx",sheet = 8, col_names = TRUE)
+#HU_SIG <- read_excel("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/data/DCCD_SubTables_NatureGenetics.xlsx",sheet = 8, col_names = TRUE)
+HU_SIG <- read_excel("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/IMC/tumor_panel/data_analysis/data/DCCD_SubTables_NatureGenetics.xlsx",sheet = 8, col_names = TRUE)
 
 # Extract unique signatures genes for each immune subtype
 IM4 <- HU_SIG %>% filter(Immune_subtype == "IM4") %>% pull(Symbol) #De-clear differentiated ccRCC
@@ -992,9 +1005,13 @@ Heatmap(ht, name = "Mean signature Z-scores")
 
 ```{r}
 library(readxl)
-rhab_sig <- read_excel("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/data/Rhaboid_Sarcomatoid_CancerCell23.xlsx",sheet = 5, col_names = TRUE) %>% pull(gene) %>% unique()
+#rhab_sig <- read_excel("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/data/Rhaboid_Sarcomatoid_CancerCell23.xlsx",sheet = 5, col_names = TRUE) %>% pull(gene) %>% unique()
 
-sarc_sig <- read_excel("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/data/Rhaboid_Sarcomatoid_CancerCell23.xlsx",sheet = 4, col_names = TRUE) %>% pull(gene) %>% unique()
+rhab_sig <- read_excel("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/IMC/tumor_panel/data_analysis/data/Rhaboid_Sarcomatoid_CancerCell23.xlsx",sheet = 5, col_names = TRUE) %>% pull(gene) %>% unique()
+
+#sarc_sig <- read_excel("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/data/Rhaboid_Sarcomatoid_CancerCell23.xlsx",sheet = 4, col_names = TRUE) %>% pull(gene) %>% unique()
+
+sarc_sig <- read_excel("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/IMC/tumor_panel/data_analysis/data/Rhaboid_Sarcomatoid_CancerCell23.xlsx",sheet = 4, col_names = TRUE) %>% pull(gene) %>% unique()
 ```
 
 Rhabdoid signature 
@@ -1603,6 +1620,205 @@ res <- DESeq2::results(dds, contrast = c("PID_ICAM_mTOR_group", "mTOR_driven", "
 vsd <- DESeq2::vst(dds)
 ```
 
+
+```{r}
+library(DESeq2)
+
+# Create DESeqDataset
+ddsSE_1 <- DESeqDataSet(kirc.clean, design = ~ PID_ICAM_mTOR_group)
+
+# Filter genes
+## 1: Lowly expressed genes
+summary(rowSums(counts(ddsSE_1)) >= 10)
+keep <- rowSums(counts(ddsSE_1)) >= 10
+ddsSE_1 <- ddsSE_1[keep, ]
+
+## 2: Filter for protein-coding genes
+library(biomaRt)
+out <- data.frame(og = rownames(ddsSE_1), 
+           sh = sub("\\..*", "", rownames(ddsSE_1)))
+ensembl <- useEnsembl(biomart = "genes", dataset = "hsapiens_gene_ensembl")
+gene_info <- getBM(attributes = c("ensembl_gene_id", "gene_biotype"),
+                   filters = "ensembl_gene_id",
+                   values = out$sh,
+                   mart = ensembl)
+out$gene_biotype <- gene_info$gene_biotype[match(out$sh, gene_info$ensembl_gene_id)]
+keep_protein_coding <- out %>% filter(gene_biotype == "protein_coding") %>% pull(og)
+ddsSE_1 <- ddsSE_1[keep_protein_coding, ]
+
+
+# Perform DESeq analysis 
+## includes count normalization based on size factors
+dds <- DESeq(ddsSE_1, )
+
+# Check which specific comparison for downstream analysis
+resultsNames(dds)
+rownames(dds) <- rowData(dds)$gene_name
+```
+
+```{r}
+# Extract results - also performs independent filtering
+#res <- DESeq2::results(dds, name = "PID_ICAM_mTOR_group_mTOR_driven_vs_ICAM1_driven") #alpha = 0.05, 
+res <- DESeq2::results(dds, contrast = c("PID_ICAM_mTOR_group", "mTOR_driven", "ICAM1_driven"), alpha = 0.05, lfcThreshold = 1) #alpha = 0.05, 
+
+# Variance-stabilizing transformation
+vsd <- DESeq2::vst(dds)
+```
+
+```{r}
+## MTOR UP
+res_mtor_vs_not_icam_vhl <- results(dds,
+  contrast = c("PID_ICAM_mTOR_group", "MTOR_driven", "Not_ICAM_VHL_driven"),
+  alpha = 0.01,
+  lfcThreshold = 1
+)
+
+up_mtor_vs_not_icam <- res_mtor_vs_not_icam_vhl[
+  !is.na(res_mtor_vs_not_icam_vhl$padj) &
+  res_mtor_vs_not_icam_vhl$padj < 0.01 &
+  res_mtor_vs_not_icam_vhl$log2FoldChange > 1,
+]
+
+res_mtor_vs_icam <- results(dds,
+  contrast = c("PID_ICAM_mTOR_group", "MTOR_driven", "ICAM_driven"),
+  alpha = 0.01,
+  lfcThreshold = 1
+)
+
+up_res_mtor_vs_icam <- res_mtor_vs_icam[
+  !is.na(res_mtor_vs_icam$padj) &
+  res_mtor_vs_icam$padj < 0.01 &
+  res_mtor_vs_icam$log2FoldChange > 1,
+]
+
+MTORUP <- unique(c(rownames(up_mtor_vs_not_icam), rownames(up_res_mtor_vs_icam)))
+
+## ICAM UP
+res_ICAM_vs_not_icam_vhl <- results(dds,
+  contrast = c("PID_ICAM_mTOR_group", "ICAM_driven", "Not_ICAM_VHL_driven"),
+  alpha = 0.01,
+  lfcThreshold = 1
+)
+
+up_ICAM_vs_not_icam <- res_ICAM_vs_not_icam_vhl[
+  !is.na(res_ICAM_vs_not_icam_vhl$padj) &
+  res_ICAM_vs_not_icam_vhl$padj < 0.01 &
+  res_ICAM_vs_not_icam_vhl$log2FoldChange > 1,
+]
+
+res_ICAM_vs_MTOR <- results(dds,
+  contrast = c("PID_ICAM_mTOR_group", "ICAM_driven", "MTOR_driven"),
+  alpha = 0.01,
+  lfcThreshold = 1
+)
+
+up_res_ICAM_vs_MTOR <- res_ICAM_vs_MTOR[
+  !is.na(res_ICAM_vs_MTOR$padj) &
+  res_ICAM_vs_MTOR$padj < 0.01 &
+  res_ICAM_vs_MTOR$log2FoldChange > 1,
+]
+
+ICAMUP <- unique(c(rownames(up_ICAM_vs_not_icam), rownames(up_res_ICAM_vs_MTOR)))
+
+## NOTICAMMTOR UP
+res_not_icam_vhl_vs_ICAM <- results(dds,
+  contrast = c("PID_ICAM_mTOR_group", "Not_ICAM_VHL_driven", "ICAM_driven"),
+  alpha = 0.01,
+  lfcThreshold = 1
+)
+
+up_not_icam_vs_icam <- res_not_icam_vhl_vs_ICAM[
+  !is.na(res_not_icam_vhl_vs_ICAM$padj) &
+  res_not_icam_vhl_vs_ICAM$padj < 0.01 &
+  res_not_icam_vhl_vs_ICAM$log2FoldChange > 1,
+]
+
+res_not_icam_vs_MTOR <- results(dds,
+  contrast = c("PID_ICAM_mTOR_group", "Not_ICAM_VHL_driven", "MTOR_driven"),
+  alpha = 0.01,
+  lfcThreshold = 1
+)
+
+up_res_not_icam_vs_MTOR <- res_not_icam_vs_MTOR[
+  !is.na(res_not_icam_vs_MTOR$padj) &
+  res_not_icam_vs_MTOR$padj < 0.01 &
+  res_not_icam_vs_MTOR$log2FoldChange > 1,
+]
+
+NOTUP <- unique(c(rownames(up_not_icam_vs_icam), rownames(up_res_not_icam_vs_MTOR)))
+
+## COMBINE ALL KEY GENES
+KEYUP <- c(MTORUP, ICAMUP, NOTUP)
+
+unique(KEYUP)
+```
+
+```{r}
+# Define GOI of interest
+
+GOI_rel <- unique(KEYUP)
+
+#c("CA9", "KRT19", "GPX4", "HLA-DRA", "NFKB1", "CCND1", "HIF1A", "TP53", "MYC", "ICAM1", "PDK4", "NT5E", "SMARCA4", "PKM", "CD274", "MME", "IDH2", "EPAS1", "AURKA", "HAVCR2", "EGFR", "RPS6", "FLT1", "VHL", "RB1", "MTOR", "SLC2A1", "FH", "GLUD1", "CD44", "VIM")
+
+# Define heatmap based on normalized counts 
+## Option 1: size-factor normalized counts 
+#df <- t(counts(dds, normalized = TRUE)[GOI,]) %>% as.data.frame %>% rownames_to_column("PID")
+## Option 2: vst counts
+df <- t(assay(vsd)[GOI_rel,]) %>% as.data.frame 
+df <- df %>% rownames_to_column("PID")
+
+## Create heatmap body 
+df$TME_archetype <- vsd$PID_ICAM_mTOR_group[match(df$PID, colnames(vsd))]
+
+mat <- df %>% pivot_longer(cols = 2:(ncol(df)-1), names_to = "gene", values_to = "exprs") %>% group_by(TME_archetype, gene) %>% summarize(mean = mean(exprs)) %>% na.omit()
+
+ht <- mat %>% pivot_wider(names_from = "gene", values_from = "mean") %>% column_to_rownames("TME_archetype")
+
+## Create row annotation 
+anno <- df %>% dplyr::select(TME_archetype) %>% group_by(TME_archetype) %>% dplyr::count() %>% na.omit()
+anno <- anno[match(anno$TME_archetype, rownames(ht)),]
+
+## Print heatmap 
+Heatmap(ht, col = viridis(100), name = "Mean Z-scores")
+
+Heatmap(scale(ht), name = "Scaled mean Z-scores")+
+  rowAnnotation(n = anno_barplot(anno$n, gp = gpar(fill = "#440154FF")))+
+  rowAnnotation(anno = anno_text(anno$TME_archetype))
+```
+
+```{r}
+library(GSVA)
+expr_mat <- assay(vsd)
+
+gene_sets <- list(
+  MTOR_driven = MTORUP,
+  ICAM_driven = ICAMUP
+)
+
+ssgsea_scores <- GSVA::gsva(expr_mat, gene_sets, method = "ssgsea", kcdf = "Gaussian", mx.diff = TRUE)
+
+ssgsea_df <- as.data.frame(t(ssgsea_scores)) %>% rownames_to_column("PID") %>% mutate(score_diff = abs(MTOR_driven - ICAM_driven))
+  
+#pivot_longer(2:3, names_to = "group", values_to = "score")
+
+ggplot(ssgsea_df, aes(score_diff))+
+  geom_density()+
+  geom_rug()
+
+GMM_CK5 <- Mclust(ssgsea_df$score_diff, G = 2)
+
+GMM_df <- data.frame(class_diff = ifelse(GMM_CK5$classification == 2, 
+                                        "diff",
+                                        "not_diff"), 
+                     diff = ssgsea_df$score_diff,
+                     uncertainty = GMM_CK5$uncertainty)
+
+ggplot(GMM_df, aes(diff, color = class_diff))+
+  geom_density()+
+  geom_rug()
+```
+
+
 ### Save
 
 ```{r}
@@ -1765,8 +1981,8 @@ rownames(TPM_mat) <- rowData(kirc.clean)$gene_name
 ### MCP-counter 
 
 ```{r}
-res_MCP <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_MCP.rds") 
-#res_MCP <- immunedeconv::deconvolute(TPM_mat, method = "mcp_counter")
+#res_MCP <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_MCP.rds") 
+res_MCP <- immunedeconv::deconvolute(TPM_mat, method = "mcp_counter")
 ```
 
 ```{r}
