@@ -21,16 +21,17 @@ library(SingleCellExperiment)
 ## Read in data
 
 ```{r}
-TCGA_meta <- read_csv("/mnt/central_nas/rcc_volume/RCC/HE/CLAM/TCGA_KIRC/TCGA_KIRC_metadata_cleaned.csv")
+TCGA_meta <- read_csv("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/HE/CLAM/TCGA_KIRC/TCGA_KIRC_metadata_cleaned.csv")
+#TCGA_meta <- read_csv("/mnt/central_nas/rcc_volume/RCC/HE/CLAM/TCGA_KIRC/TCGA_KIRC_metadata_cleaned.csv")
 ```
 
 
 ```{r}
-out <- list.files("/mnt/central_nas/rcc_volume/RCC/HE/CLAM/TCGA_KIRC/eval_results/train_b16_lr2low_s1_TCGA_EVAL/")
+out <- list.files("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/HE/CLAM/TCGA_KIRC/eval_results/train_b16_lr2low_s1_TCGA_EVAL/")
 out <- out[str_detect(out, "fold")]
 
 results <- foreach(i = out, .combine = "rbind")%do%{
-  results <- read_csv(paste0("/mnt/central_nas/rcc_volume/RCC/HE/CLAM/TCGA_KIRC/eval_results/train_b16_lr2low_s1_TCGA_EVAL/", i))
+  results <- read_csv(paste0("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/HE/CLAM/TCGA_KIRC/eval_results/train_b16_lr2low_s1_TCGA_EVAL/", i))
   results$fold <- str_extract(i, "(\\d)+")
   return(results)
 }
@@ -61,6 +62,10 @@ results_folds <- results %>% group_by(TME_archetype, PID, fold) %>% mutate(prop 
 ```
 
 ```{r}
+results_out_folds <- results_folds %>% group_by(PID, TME_archetype) %>% mutate(mean = max(prop)) %>% dplyr::select(PID, TME_archetype, mean) %>% ungroup() %>% group_by(PID) %>% filter(mean == max(mean)) %>% unique()
+```
+
+```{r}
 results_out_folds <- results_folds %>% group_by(PID, TME_archetype) %>% mutate(mean = mean(prop)) %>% dplyr::select(PID, TME_archetype, mean) %>% ungroup() %>% group_by(PID) %>% filter(mean == max(mean)) %>% unique()
 ```
 
@@ -74,7 +79,7 @@ results_selected <- results %>% filter(fold == "7") %>% group_by(TME_archetype, 
 ```
 
 ```{r}
-results_out_selected <- results_selected %>% group_by(PID, TME_archetype) %>% mutate(mean = mean(prop)) %>% dplyr::select(PID, TME_archetype, mean) %>% ungroup() %>% group_by(PID) %>% filter(mean == max(mean)) %>% unique()
+results_out_selected <- results_selected %>% group_by(PID, TME_archetype) %>% mutate(mean = max(prop)) %>% dplyr::select(PID, TME_archetype, mean) %>% ungroup() %>% group_by(PID) %>% filter(mean == max(mean)) %>% unique()
 ```
 
 
@@ -118,7 +123,7 @@ library(survminer)
 fit <- survfit(Surv(OS_days, status_OS) ~ TME_archetype_selected, data = results_combined)
 print(fit)
 
-pdf("/mnt/central_nas/rcc_volume/RCC/figures/HE/TCGA_KIRC_Survival_ArchetypesPredict.pdf", width = 7, height = 5, onefile = FALSE)
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/HE/TCGA_KIRC_Survival_ArchetypesPredict.pdf", width = 7, height = 5, onefile = FALSE)
 ggsurvplot(fit,
           pval = TRUE,
           risk.table = TRUE, # Add risk table
@@ -128,7 +133,7 @@ ggsurvplot(fit,
           palette = c("#0571B0", "gold3", "#CA0020"),
           ggtheme = theme_classic(), 
           conf.int = FALSE)
-dev.off()
+#dev.off()
 
 #Plot survival curves
 fit <- survfit(Surv(OS_days, status_OS) ~ TME_archetype_folds, data = results_combined)
@@ -144,6 +149,7 @@ ggsurvplot(fit,
           ggtheme = theme_classic(), 
           conf.int = FALSE)
 ```
+
 ```{r}
 all <- results_combined %>% ungroup() %>% dplyr::select(TME_archetype_folds, TME_archetype_selected)
 alluvial_wide(all, 
@@ -160,6 +166,7 @@ jaccard(as.numeric(as.factor(results_combined$TME_archetype_folds)), as.numeric(
 
 ```{r}
 write_csv(results_combined, "/mnt/central_nas/rcc_volume/RCC/HE/CLAM/TCGA_KIRC/TCGA_KIRC_eval_out.csv")
+#write_csv(results_combined, "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/HE/CLAM/TCGA_KIRC/TCGA_KIRC_eval_out.csv")
 ```
 
 
