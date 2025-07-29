@@ -810,8 +810,8 @@ high_corr_pairs_df
 
 ```{r}
 # Remove specific pairs 
-removed_numeric <- c("IMC_MY_INT_MY_Neutro_MDSC__MY_M2_like", "IMC_MY_INT_MY_C_M__MY_M2_like", "IMC_MY_INT_MY_M1_like__MY_Ag_M", "IMC_MY_INT_MY_C_M__MY_Neutro_MDSC")
-#removed_numeric <- NULL 
+#removed_numeric <- c("IMC_MY_INT_MY_Neutro_MDSC__MY_M2_like", "IMC_MY_INT_MY_C_M__MY_M2_like", "IMC_MY_INT_MY_M1_like__MY_Ag_M", "IMC_MY_INT_MY_C_M__MY_Neutro_MDSC")
+removed_numeric <- NULL 
 
 myeloid_selected_fil <- myeloid_selected %>% select(-all_of(removed_numeric))
 

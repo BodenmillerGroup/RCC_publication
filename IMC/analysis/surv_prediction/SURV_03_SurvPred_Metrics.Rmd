@@ -644,32 +644,32 @@ ggplot(out_concordance, aes(x = reorder(model,concordance, FUN = median), y = co
 ### Read results from different models 
 
 ```{r}
-cv_results_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_old/BF_IMC_TU.rds")
+cv_results_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-28/BF_IMC_LcrossALL.rds")
 
-cv_results_2 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-25/BF_IMC_TU_countInt_all.rds")
+cv_results_2 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-28/BF_IMC_Lcross.rds")
 
-cv_results_3 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-25/BF_IMC_TU_Lcross_all.rds")
+cv_results_3 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-28/BF_IMC_INT_Lcross.rds")
 
-cv_results_4 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-28/BF_IMC_Lcross.rds")
+cv_results_4 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-28/BF_IMC_INT_LcrossALL.rds")
 
-cv_results_5 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-06-26/BF_IMC.rds")
+cv_results_5 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-28/BF_IMC_INT_LcrossALL_all.rds")
 
-cv_results_6 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_old/BF_IMC_noGEN.rds")
+cv_results_6 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-28/BF_IMC_INT_Lcross_all.rds")
 
-cv_results_7 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-28/BF_IMC_Lcross_noGEN.rds")
+cv_results_7 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_old/BF_IMC_noGEN.rds")
 ```
 
 ```{r}
 # Create list from results
 # Define the cross-validation results as a list
 cv_results_list <- list(
-  "TU_L_old" = cv_results_1,
-  "TU_INT" = cv_results_2,
-  "TU_L" = cv_results_3,
-  "IMC_L" = cv_results_4,
-  "IMC_Lother" = cv_results_5,
-  "IMC_old" = cv_results_6,
-  "IMC_L_noGEN" = cv_results_7
+  "Lall" = cv_results_1,
+  "L" = cv_results_2,
+  "Int_L" = cv_results_3,
+  "Int_Lall" = cv_results_4,
+  "Int_L_all" = cv_results_5,
+  "Int_Lall_all" = cv_results_6,
+  "L_old" = cv_results_7
   )
 ```
 
@@ -740,7 +740,7 @@ ggplot(out_ibs, aes(x = reorder(model,-IBS, FUN = median), y = IBS, fill = model
   geom_boxplot(outlier.colour = NA, alpha = 0.8)+
   theme_classic()+
   stat_compare_means(ref.group = "CLIN", paired = FALSE, method = "t.test", method.args = list(alternative = "less", label = "p.format"))+
-  stat_compare_means(ref.group = "TU_L", paired = FALSE, method = "t.test", method.args = list(alternative = "less", label = "p.format"), vjust = 1)+
+  stat_compare_means(ref.group = "Lall", paired = FALSE, method = "t.test", method.args = list(alternative = "less", label = "p.format"), vjust = 1)+
   stat_compare_means(vjust = 2, method = "anova")+
   #scale_fill_brewer(palette = "Paired")+
   #scale_fill_manual(values = col_cv)+

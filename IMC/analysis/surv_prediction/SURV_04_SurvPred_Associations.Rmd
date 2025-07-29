@@ -35,7 +35,7 @@ conflicts_prefer(base::setdiff)
 ### Kaplan-Meier and risk group definition
 
 ```{r}
-cv_results_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-28/BF_IMC_Lcross_noGEN.rds")
+cv_results_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-28/BF_IMC_LcrossALL.rds")
 dataset <- cv_results_1
 surv_plots <- list()
 data_out <- list()
@@ -224,10 +224,10 @@ ggplot(ordered_features, aes(x = reorder(feature,-mean), y = mean))+
 
 ```{r}
 # Extract features
-ordered_features_median <- ordered_features %>% filter(median > -0.1) %>% pull(feature)      
-ordered_features_mean <- ordered_features %>% filter(mean > 0) %>% pull(feature)      
+ordered_features_median <- ordered_features %>% filter(median > 0.3) %>% pull(feature)      
+ordered_features_mean <- ordered_features %>% filter(mean > 0.25) %>% pull(feature)      
 
-top_features <- ordered_features_median
+top_features <- ordered_features_mean
 
 # Option 1: median > 0.1 - k=3 - seed(22) - repeats: 1000
 # Option 2: median > -0.1 - k=3 - seed(22) - repeats: 1000
@@ -250,17 +250,17 @@ setdiff(ordered_features_mean, ordered_features_median)
 ```{r}
 heatmap <- plot %>% ungroup %>% select(feature, fold, scaled_importance) %>% pivot_wider(id_cols = "fold", names_from = "feature", values_from = "scaled_importance") %>% column_to_rownames("fold")
 
-# order by median
-heatmap <- heatmap[,match(ordered_features %>% arrange(desc(median)) %>% pull(feature), colnames(heatmap))]
+# order by mean
+heatmap <- heatmap[,match(ordered_features %>% arrange(desc(mean)) %>% pull(feature), colnames(heatmap))]
 
 anno <- plot %>% ungroup %>% select(feature, feature_origin, feature_type, feature_spatial) %>% unique()
 anno$top_feature <- anno$feature %in% top_features
 col_top <- setNames(c("black", "grey"),c(TRUE, FALSE))
 anno <- anno[match(colnames(heatmap), anno$feature),]
 
-median_diff <- plot %>% ungroup %>% select(feature) %>% unique()
-median_diff$diff_median <- ordered_features$diff_median[match(median_diff$feature, ordered_features$feature)]
-median_diff <- median_diff[match(colnames(heatmap), median_diff$feature),]
+mean_diff <- plot %>% ungroup %>% select(feature) %>% unique()
+mean_diff$diff_mean <- ordered_features$diff_mean[match(mean_diff$feature, ordered_features$feature)]
+mean_diff <- mean_diff[match(colnames(heatmap), mean_diff$feature),]
 
 
 #pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_FeatureImportance_Box.pdf", width = 13, height = 4.5, onefile = FALSE)
@@ -269,7 +269,7 @@ HeatmapAnnotation(
                          gp = gpar(fill = "white"), box_width = 0.75,
                          height = unit(4,"cm"), outline = FALSE,
                          show_row_names = FALSE),
-  median_diff = anno_lines(median_diff$diff_median, height = unit(1.5,"cm")),
+  mean_diff = anno_lines(mean_diff$diff_mean, height = unit(1.5,"cm")),
   top = anno$top_feature,
   origin = anno$feature_origin, 
   type = anno$feature_type, 
@@ -510,8 +510,8 @@ Heatmap(t(key_aggregated),
 metadata_selected$BF_PL_TME_archetypes <- unfactor(metadata_selected$PID_group_test)
 
 metadata_selected$BF_PL_TME_archetypes[metadata_selected$BF_PL_TME_archetypes == "1"] <- "TME_activated"
-metadata_selected$BF_PL_TME_archetypes[metadata_selected$BF_PL_TME_archetypes == "2"] <- "TME_suppressed"
-metadata_selected$BF_PL_TME_archetypes[metadata_selected$BF_PL_TME_archetypes == "3"] <- "TME_silent"
+metadata_selected$BF_PL_TME_archetypes[metadata_selected$BF_PL_TME_archetypes == "2"] <- "TME_silent"
+metadata_selected$BF_PL_TME_archetypes[metadata_selected$BF_PL_TME_archetypes == "3"] <- "TME_suppressed"
 metadata_selected$BF_PL_TME_archetypes <- factor(metadata_selected$BF_PL_TME_archetypes)
 ```
 
@@ -572,7 +572,7 @@ PL_level <- colnames(metadata_selected)[str_detect(colnames(metadata_selected), 
 
 metadata_PL <- metadata_selected %>% select(PID, TMA_id, OS_months, status_OS, CLIN_age, CLIN_gender, CLIN_pT_simple, all_of(PL_level))
 
-write_csv(metadata_PL, "/mnt/central_nas/rcc_volume/RCC/HE/data_analysis/metadata_key_HE.csv")
+#write_csv(metadata_PL, "/mnt/central_nas/rcc_volume/RCC/HE/data_analysis/metadata_key_HE.csv")
 ```
 
 ```{r}
@@ -595,7 +595,7 @@ library(caret)
 # PID group
 dummy_model <- dummyVars(~ PID_group_test, data = metadata_selected, fullRank = FALSE)
 encoded <- as.data.frame(predict(dummy_model, newdata = metadata_selected))
-colnames(encoded) <- c("TME_activated","TME_suppressed","TME_silent") #c("immune_activated", "immune_silent", "immune_suppressed", "immune_presenting")
+colnames(encoded) <- c("TME_activated","TME_silent","TME_suppressed") #c("immune_activated", "immune_silent", "immune_suppressed", "immune_presenting")
 metadata_selected <- cbind(metadata_selected, encoded)
 
 # Tumor groups

@@ -10,7 +10,7 @@ rmarkdown::render("~/GitHub/RCC/IMC/analysis/surv_prediction/SURV_02_SurvPred_Bl
                     add_PL_level = FALSE, # Add PL-info
                     add_GEN_level = FALSE, #Add GEN-info
                     favor_clinical = 0, #Favor specific block in BlockForest - 1 is CLIN (default; 0 would not favor)
-                    run_name = "BF_IMC_INT_LcrossALL.rds"),
+                    run_name = "BF_IMC_INT_countIntALL.rds"),
                   output_file = paste0("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/html/", run_name, ".html")
 )
 
@@ -23,7 +23,7 @@ rmarkdown::render("~/GitHub/RCC/IMC/analysis/surv_prediction/SURV_02_SurvPred_Bl
                     add_PL_level = FALSE, # Add PL-info
                     add_GEN_level = FALSE, #Add GEN-info
                     favor_clinical = 0, #Favor specific block in BlockForest - 1 is CLIN (default; 0 would not favor)
-                    run_name = "BF_IMC_INT_LcrossALL_all.rds"),
+                    run_name = "BF_IMC_INT_countIntALL_all.rds"),
                   output_file = paste0("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/html/", run_name, ".html")
 )
 
@@ -36,7 +36,7 @@ rmarkdown::render("~/GitHub/RCC/IMC/analysis/surv_prediction/SURV_02_SurvPred_Bl
                     add_PL_level = FALSE, # Add PL-info
                     add_GEN_level = FALSE, #Add GEN-info
                     favor_clinical = 0, #Favor specific block in BlockForest - 1 is CLIN (default; 0 would not favor)
-                    run_name = "BF_IMC_TU_LcrossALL.rds"),
+                    run_name = "BF_IMC_TU_countIntALL.rds"),
                   output_file = paste0("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/html/", run_name, ".html")
 )
 
@@ -49,6 +49,6 @@ rmarkdown::render("~/GitHub/RCC/IMC/analysis/surv_prediction/SURV_02_SurvPred_Bl
                     add_PL_level = FALSE, # Add PL-info
                     add_GEN_level = FALSE, #Add GEN-info
                     favor_clinical = 0, #Favor specific block in BlockForest - 1 is CLIN (default; 0 would not favor)
-                    run_name = "BF_IMC_LcrossALL.rds"),
+                    run_name = "BF_IMC_countIntALL.rds"),
                   output_file = paste0("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/html/", run_name, ".html")
 )
