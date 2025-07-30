@@ -644,6 +644,7 @@ ggplot(out_concordance, aes(x = reorder(model,concordance, FUN = median), y = co
 ### Read results from different models 
 
 ```{r}
+# L-cross
 cv_results_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-28/BF_IMC_LcrossALL.rds")
 
 cv_results_2 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-28/BF_IMC_Lcross.rds")
@@ -656,7 +657,21 @@ cv_results_5 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockFore
 
 cv_results_6 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-28/BF_IMC_INT_Lcross_all.rds")
 
-cv_results_7 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_old/BF_IMC_noGEN.rds")
+# countInt 
+cv_results_7 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-29/BF_IMC_countIntALL.rds")
+
+cv_results_8 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-29/BF_IMC_countInt.rds")
+
+cv_results_9 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-29/BF_IMC_INT_countInt.rds")
+
+cv_results_10 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-29/BF_IMC_INT_countIntALL.rds")
+
+cv_results_11 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-29/BF_IMC_INT_countIntALL_all.rds")
+
+cv_results_12 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-29/BF_IMC_INT_countInt_all.rds")
+
+# Old model
+cv_results_13 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_old/BF_IMC_noGEN.rds")
 ```
 
 ```{r}
@@ -669,7 +684,13 @@ cv_results_list <- list(
   "Int_Lall" = cv_results_4,
   "Int_L_all" = cv_results_5,
   "Int_Lall_all" = cv_results_6,
-  "L_old" = cv_results_7
+  "countIntall" = cv_results_7,
+  "countInt" = cv_results_8,
+  "Int_countInt" = cv_results_9,
+  "Int_countIntall" = cv_results_10,
+  "Int_countInt_all" = cv_results_11,
+  "Int_countIntall_all" = cv_results_12,
+  "L_old" = cv_results_13
   )
 ```
 

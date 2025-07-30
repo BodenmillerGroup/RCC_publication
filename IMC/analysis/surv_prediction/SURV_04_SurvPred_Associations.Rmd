@@ -35,7 +35,7 @@ conflicts_prefer(base::setdiff)
 ### Kaplan-Meier and risk group definition
 
 ```{r}
-cv_results_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-28/BF_IMC_LcrossALL.rds")
+cv_results_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-29/BF_IMC_countIntALL.rds")
 dataset <- cv_results_1
 surv_plots <- list()
 data_out <- list()
@@ -224,8 +224,8 @@ ggplot(ordered_features, aes(x = reorder(feature,-mean), y = mean))+
 
 ```{r}
 # Extract features
-ordered_features_median <- ordered_features %>% filter(median > 0.3) %>% pull(feature)      
-ordered_features_mean <- ordered_features %>% filter(mean > 0.25) %>% pull(feature)      
+ordered_features_median <- ordered_features %>% filter(median > 0.7) %>% pull(feature)      
+ordered_features_mean <- ordered_features %>% filter(mean > 0.3) %>% pull(feature)      
 
 top_features <- ordered_features_mean
 
@@ -315,13 +315,13 @@ plot(testCL)
 ```
 
 ```{r}
-set.seed(22)
+set.seed(2201)
 h_select <- Heatmap(key_out, 
         row_km = 3, #or3
         #row_split = 3,
         clustering_method_rows = "ward.D2",
         clustering_method_columns = "ward.D2",
-        row_km_repeats = 100)
+        row_km_repeats = 1000)
 
 h_select <- draw(h_select)
 
@@ -2081,7 +2081,7 @@ Survival
 fit <- survfit(Surv(OS_months, status_OS) ~ genomic_subtype, data = driver_mat_anno)
 print(fit)
 
-pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survival_GenomicSub_Archetypes.pdf", width = 6, height = 4, onefile = FALSE)
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survival_GenomicSub_Archetypes.pdf", width = 6, height = 4, onefile = FALSE)
 ggsurvplot(fit,
           pval = TRUE,
           risk.table = TRUE, # Add risk table
@@ -2092,7 +2092,7 @@ ggsurvplot(fit,
           palette = c("#046C9A", "#000000", "#D69C4E", "#ECCBAE", "#ABDDDE"),
           conf.int = FALSE
 )
-dev.off()
+#dev.off()
 ```
 
 Association
@@ -2180,7 +2180,7 @@ plot(hc)
 column_sorted <- hc$order
 fisher_full$gene <- factor(fisher_full$gene, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
 
-pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/GenomicSub_Archetypes_Bubble.pdf", width = 5, height = 3, onefile = FALSE)
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/GenomicSub_Archetypes_Bubble.pdf", width = 5, height = 3, onefile = FALSE)
 ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_adj)))+
   geom_point()+
   theme_classic()+
@@ -2191,7 +2191,7 @@ ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_a
   scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   coord_flip()
-dev.off()
+#dev.off()
 ```
 
 
