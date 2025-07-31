@@ -333,7 +333,7 @@ rownames(counts_norm)
 df_check <- counts_norm %>% 
   t() %>% 
   as.data.frame() %>% 
-  select("ICAM1", "CD44", "MYC", "MTOR", "VHL")
+  select("ICAM1", "CD44", "MTOR", "VHL")
 rownames(df_check) <- res$PID
 
 df_minmax <- as.data.frame(lapply(df_check, function(x) {
@@ -350,7 +350,7 @@ sce_minmax <- SingleCellExperiment(
 )
 
 # Step 3: Run PCA on subset of genes (e.g., MYC, ICAM1, CCND1)
-subset_genes <- c("ICAM1", "CD44", "MTOR", "VHL", "CCND1", "NFKB1")
+subset_genes <- c("ICAM1", "CD44", "MTOR", "VHL")
 sce_minmax <- runPCA(sce_minmax,
                      exprs_values = "min_max",
                      subset_row = rownames(sce_minmax) %in% subset_genes,
@@ -368,9 +368,6 @@ plotReducedDim(sce_minmax, dimred = "PCA_sub",
 
 plotReducedDim(sce_minmax, dimred = "PCA_sub", 
                colour_by = I(assay(sce_minmax, "min_max")["MTOR", ]))
-
-plotReducedDim(sce_minmax, dimred = "PCA_sub", 
-               colour_by = I(assay(sce_minmax, "min_max")["MYC", ]))
 ```
 
 
@@ -1625,40 +1622,13 @@ Heatmap(ht, name = "Mean signature Z-scores")
 
 
 
-## DEA - Combined
+## Differential expression analysis
 
-### ICAM1_driven vs. mTOR_driven 
+### ICAM1-mTOR groups
 
 ```{r}
 #kirc.clean <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_cleaned.rds")
 ```
-
-```{r}
-library(DESeq2)
-
-# Create DESeqDataset
-ddsSE_1 <- DESeqDataSet(kirc.clean, design = ~ PID_ICAM_mTOR_group)
-
-# Filter genes
-summary(rowSums(counts(ddsSE_1)) >= 10)
-keep <- rowSums(counts(ddsSE_1)) >= 10
-ddsSE_1 <- ddsSE_1[keep, ]
-
-# DESeq analysis includes count normalization based on size factors
-dds <- DESeq(ddsSE_1, )
-
-# Check which specific comparison for downstream analysis
-resultsNames(dds)
-rownames(dds) <- rowData(dds)$gene_name
-
-# Extract results - also performs independent filtering
-#res <- DESeq2::results(dds, name = "PID_ICAM_mTOR_group_mTOR_driven_vs_ICAM1_driven") #alpha = 0.05, 
-res <- DESeq2::results(dds, contrast = c("PID_ICAM_mTOR_group", "mTOR_driven", "ICAM1_driven"), alpha = 0.05, lfcThreshold = 1) #alpha = 0.05, 
-
-# Variance-stabilizing transformation
-vsd <- DESeq2::vst(dds)
-```
-
 
 ```{r}
 library(DESeq2)
@@ -1699,6 +1669,8 @@ rownames(dds) <- rowData(dds)$gene_name
 # Variance-stabilizing transformation
 vsd <- DESeq2::vst(dds)
 ```
+
+#### Select genes 
 
 ```{r}
 ## MTOR UP
@@ -1830,6 +1802,7 @@ Heatmap(scale(ht), name = "Scaled mean Z-scores")+
   rowAnnotation(anno = anno_text(anno$PID_ICAM_mTOR_group))
 ```
 
+#### NTP - Prediction
 
 ```{r}
 # Nearest template prediction
@@ -1906,6 +1879,273 @@ table(kirc.clean$PID_ICAM_mTOR_group_predict, kirc.clean$PID_ICAM_mTOR_group)
 library(caret)
 cm <- confusionMatrix(data = kirc.clean$PID_ICAM_mTOR_group_predict, 
                       reference = kirc.clean$PID_ICAM_mTOR_group, 
+                      mode = "everything")
+
+cm
+
+cm_stats <- as.data.frame(cm$byClass)
+mean(cm_stats$`Balanced Accuracy`) 
+mean(cm_stats$F1)
+```
+
+### TME archetypes
+
+```{r}
+#kirc.clean <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_cleaned.rds")
+#saveRDS(kirc.clean, "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_cleaned.rds")
+```
+
+```{r}
+library(DESeq2)
+
+kirc.clean <- kirc.clean[,!is.na(kirc.clean$TME_archetype)]
+
+# Create DESeqDataset
+ddsSE_1 <- DESeqDataSet(kirc.clean, design = ~ TME_archetype)
+
+# Filter genes
+## 1: Lowly expressed genes
+summary(rowSums(counts(ddsSE_1)) >= 10)
+keep <- rowSums(counts(ddsSE_1)) >= 10
+ddsSE_1 <- ddsSE_1[keep, ]
+
+## 2: Filter for protein-coding genes
+library(biomaRt)
+out <- data.frame(og = rownames(ddsSE_1),
+           sh = sub("\\..*", "", rownames(ddsSE_1)))
+ensembl <- useEnsembl(biomart = "genes", dataset = "hsapiens_gene_ensembl")
+gene_info <- getBM(attributes = c("ensembl_gene_id", "gene_biotype"),
+                   filters = "ensembl_gene_id",
+                   values = out$sh,
+                   mart = ensembl)
+out$gene_biotype <- gene_info$gene_biotype[match(out$sh, gene_info$ensembl_gene_id)]
+keep_protein_coding <- out %>% filter(gene_biotype == "protein_coding") %>% pull(og)
+ddsSE_1 <- ddsSE_1[keep_protein_coding, ]
+
+
+# Perform DESeq analysis 
+## includes count normalization based on size factors
+dds <- DESeq(ddsSE_1, )
+
+# Check which specific comparison for downstream analysis
+resultsNames(dds)
+rownames(dds) <- rowData(dds)$gene_name
+
+# Variance-stabilizing transformation
+vsd <- DESeq2::vst(dds)
+```
+
+#### Select genes 
+
+```{r}
+## MTOR UP
+res_mtor_vs_not_icam_vhl <- results(dds,
+  contrast = c("TME_archetype", "TME_activated", "TME_silent"),
+  alpha = 0.01,
+  lfcThreshold = 1
+)
+
+up_mtor_vs_not_icam <- res_mtor_vs_not_icam_vhl[
+  !is.na(res_mtor_vs_not_icam_vhl$padj) &
+  res_mtor_vs_not_icam_vhl$padj < 0.01 &
+  res_mtor_vs_not_icam_vhl$log2FoldChange > 1,
+]
+
+res_mtor_vs_icam <- results(dds,
+  contrast = c("TME_archetype", "TME_activated", "TME_suppressed"),
+  alpha = 0.01,
+  lfcThreshold = 1
+)
+
+up_res_mtor_vs_icam <- res_mtor_vs_icam[
+  !is.na(res_mtor_vs_icam$padj) &
+  res_mtor_vs_icam$padj < 0.01 &
+  res_mtor_vs_icam$log2FoldChange > 1,
+]
+
+#MTORUP <- intersect(rownames(up_mtor_vs_not_icam), rownames(up_res_mtor_vs_icam))
+#MTORUP <- unique(c(rownames(up_mtor_vs_not_icam), rownames(up_res_mtor_vs_icam)))
+MTORUP <- rownames(up_res_mtor_vs_icam)
+#MTORUP <- rownames(up_res_mtor_vs_icam %>% as.data.frame %>% arrange(desc(log2FoldChange)))[1:30]
+
+## ICAM UP
+res_ICAM_vs_not_icam_vhl <- results(dds,
+  contrast = c("TME_archetype", "TME_suppressed", "TME_silent"),
+  alpha = 0.01,
+  lfcThreshold = 1
+)
+
+up_ICAM_vs_not_icam <- res_ICAM_vs_not_icam_vhl[
+  !is.na(res_ICAM_vs_not_icam_vhl$padj) &
+  res_ICAM_vs_not_icam_vhl$padj < 0.01 &
+  res_ICAM_vs_not_icam_vhl$log2FoldChange > 1,
+]
+
+res_ICAM_vs_MTOR <- results(dds,
+  contrast = c("TME_archetype", "TME_suppressed", "TME_activated"),
+  alpha = 0.01,
+  lfcThreshold = 1
+)
+
+up_res_ICAM_vs_MTOR <- res_ICAM_vs_MTOR[
+  !is.na(res_ICAM_vs_MTOR$padj) &
+  res_ICAM_vs_MTOR$padj < 0.01 &
+  res_ICAM_vs_MTOR$log2FoldChange > 1,
+]
+
+#ICAMUP <- intersect(rownames(up_ICAM_vs_not_icam), rownames(up_res_ICAM_vs_MTOR))
+#ICAMUP <- unique(c(rownames(up_ICAM_vs_not_icam), rownames(up_res_ICAM_vs_MTOR)))
+ICAMUP <- rownames(up_res_ICAM_vs_MTOR)
+#ICAMUP <- rownames(up_res_ICAM_vs_MTOR %>% as.data.frame %>% arrange(desc(log2FoldChange)))[1:30]
+
+## NOTICAMMTOR UP
+res_not_icam_vhl_vs_ICAM <- results(dds,
+  contrast = c("TME_archetype", "TME_silent", "TME_suppressed"),
+  alpha = 0.01,
+  lfcThreshold = 1
+)
+
+up_not_icam_vs_icam <- res_not_icam_vhl_vs_ICAM[
+  !is.na(res_not_icam_vhl_vs_ICAM$padj) &
+  res_not_icam_vhl_vs_ICAM$padj < 0.01 &
+  res_not_icam_vhl_vs_ICAM$log2FoldChange > 1,
+]
+
+res_not_icam_vs_MTOR <- results(dds,
+  contrast = c("TME_archetype", "TME_silent", "TME_activated"),
+  alpha = 0.01,
+  lfcThreshold = 1
+)
+
+up_res_not_icam_vs_MTOR <- res_not_icam_vs_MTOR[
+  !is.na(res_not_icam_vs_MTOR$padj) &
+  res_not_icam_vs_MTOR$padj < 0.01 &
+  res_not_icam_vs_MTOR$log2FoldChange > 1,
+]
+
+up_ICAM_vs_not_icam %>% as.data.frame %>% arrange(desc(log2FoldChange)) 
+
+NOTUP <- unique(c(rownames(up_not_icam_vs_icam), rownames(up_res_not_icam_vs_MTOR)))
+#NOTUP <- intersect(rownames(up_not_icam_vs_icam), rownames(up_res_not_icam_vs_MTOR))
+
+## COMBINE ALL KEY GENES
+KEYUP <- unique(c(MTORUP, ICAMUP))
+
+unique(KEYUP)
+```
+
+```{r}
+# Define GOI of interest
+
+GOI_rel <- unique(KEYUP)
+
+#c("CA9", "KRT19", "GPX4", "HLA-DRA", "NFKB1", "CCND1", "HIF1A", "TP53", "MYC", "ICAM1", "PDK4", "NT5E", "SMARCA4", "PKM", "CD274", "MME", "IDH2", "EPAS1", "AURKA", "HAVCR2", "EGFR", "RPS6", "FLT1", "VHL", "RB1", "MTOR", "SLC2A1", "FH", "GLUD1", "CD44", "VIM")
+
+# Define heatmap based on normalized counts 
+## Option 1: size-factor normalized counts 
+#df <- t(counts(dds, normalized = TRUE)[GOI,]) %>% as.data.frame %>% rownames_to_column("PID")
+## Option 2: vst counts
+df <- t(assay(vsd)[GOI_rel,]) %>% as.data.frame 
+df <- df %>% rownames_to_column("PID")
+
+## Create heatmap body 
+df$TME_archetype <- vsd$TME_archetype[match(df$PID, colnames(vsd))]
+
+mat <- df %>% pivot_longer(cols = 2:(ncol(df)-1), names_to = "gene", values_to = "exprs") %>% group_by(TME_archetype, gene) %>% summarize(mean = mean(exprs)) %>% na.omit()
+
+ht <- mat %>% pivot_wider(names_from = "gene", values_from = "mean") %>% column_to_rownames("TME_archetype")
+
+## Create row annotation 
+anno <- df %>% dplyr::select(TME_archetype) %>% group_by(TME_archetype) %>% dplyr::count() %>% na.omit()
+anno <- anno[match(anno$TME_archetype, rownames(ht)),]
+
+## Print heatmap 
+Heatmap(ht, col = viridis(100), name = "Mean Z-scores")
+
+Heatmap(scale(ht), name = "Scaled mean Z-scores")+
+  rowAnnotation(n = anno_barplot(anno$n, gp = gpar(fill = "#440154FF")))+
+  rowAnnotation(anno = anno_text(anno$TME_archetype))
+```
+
+#### NTP - Prediction
+
+```{r}
+# Nearest template prediction
+library(CMScaller)
+
+# Step 1: Prepare expression matrix (genes x samples, log2 scale)
+expr_mat <- assay(vsd)  
+
+tpm_mat <- assays(kirc.clean)$tpm_unstrand 
+log2_tpm <- log2(tpm_mat + 1)
+expr_mat <- ematAdjust(log2_tpm, method = "RLE")
+rownames(expr_mat) <- rowData(kirc.clean)$gene_name
+
+# Step 2: Create subtype templates (Gene signatures)
+names(MTORUP) <- rep("MTOR", length(MTORUP))
+names(ICAMUP) <- rep("ICAM", length(ICAMUP))
+keyup <- c(MTORUP, ICAMUP)
+
+#names(NOTUP) <- rep("NOT", length(NOTUP))
+#keyup <- c(MTORUP, ICAMUP, NOTUP)
+
+template_mat <- data.frame(class = factor(names(keyup)), 
+           probe = unname(keyup))
+
+# Step 3: Run NTP classification with permutations
+ntp_result <- ntp(
+  emat = expr_mat,           
+  template = template_mat,
+  distance = "spearman",
+  nPerm = 1000,              
+  seed = 22,                 
+  nCores = 30,
+  doPlot = TRUE
+)
+
+ntp_result %>% group_by(prediction) %>% dplyr::count()
+```
+
+```{r}
+ntp_out <- ntp_result %>% rownames_to_column("PID") %>% mutate(group_predict = ifelse(FDR < 0.05, as.character(prediction), "NOT"))
+
+ntp_out$OS_months <- vsd$OS_days[match(ntp_out$PID, vsd$PID)]
+ntp_out$status_OS <- vsd$status_OS[match(ntp_out$PID, vsd$PID)]
+
+fit <- survfit(Surv(OS_months, status_OS) ~ group_predict, data = ntp_out)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme¨
+          #palette = c("#046C9A", "#000000", "#D69C4E", "#ECCBAE", "#ABDDDE"),
+          conf.int = FALSE
+)
+```
+
+
+```{r}
+kirc.clean$TME_archetype_predict <- ntp_out$group_predict[match(kirc.clean$PID, ntp_out$PID)]
+
+kirc.clean$TME_archetype_predict[kirc.clean$TME_archetype_predict == "ICAM"] <- "TME_suppressed"
+kirc.clean$TME_archetype_predict[kirc.clean$TME_archetype_predict == "NOT"] <- "TME_silent"
+kirc.clean$TME_archetype_predict[kirc.clean$TME_archetype_predict == "MTOR"] <- "TME_activated"
+
+kirc.clean$TME_archetype <- factor(kirc.clean$TME_archetype)
+kirc.clean$TME_archetype_predict <- factor(kirc.clean$TME_archetype_predict, levels = levels(kirc.clean$TME_archetype))
+
+table(kirc.clean$TME_archetype_predict, kirc.clean$TME_archetype)
+```
+
+```{r}
+# Performance
+library(caret)
+cm <- confusionMatrix(data = kirc.clean$TME_archetype_predict, 
+                      reference = kirc.clean$TME_archetype, 
                       mode = "everything")
 
 cm
