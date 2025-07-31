@@ -2372,18 +2372,18 @@ colnames(count_out) <- gsub("/", "_", colnames(count_out))
 count_out <- count_out %>% column_to_rownames("group_by")
 
 ## Select from "T" interactions - All
-selected_pairs_CD8 <- (str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,1], "CD8") |
-  (str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,1], "CD8"))) & (!str_detect(colnames(count_out), "Unknown"))
-
-selected_pairs_CD4 <- (str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,1], "CD4") |
-  (str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,1], "CD4"))) & (!str_detect(colnames(count_out), "Unknown"))
+# selected_pairs_CD8 <- (str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,1], "CD8") |
+#   (str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,1], "CD8"))) & (!str_detect(colnames(count_out), "Unknown"))
+# 
+# selected_pairs_CD4 <- (str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,1], "CD4") |
+#   (str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,1], "CD4"))) & (!str_detect(colnames(count_out), "Unknown"))
 
 ## Select from "T" interactions - heterotypic only
-# selected_pairs_CD8 <- (str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,1], "CD8") &
-#   (!str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,2], "CD8"))) & (!str_detect(colnames(count_out), "Unknown"))
-# 
-# selected_pairs_CD4 <- (str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,1], "CD4") &
-#   (!str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,2], "CD4"))) & (!str_detect(colnames(count_out), "Unknown"))
+selected_pairs_CD8 <- (str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,1], "CD8") &
+  (!str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,2], "CD8"))) & (!str_detect(colnames(count_out), "Unknown"))
+
+selected_pairs_CD4 <- (str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,1], "CD4") &
+  (!str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,2], "CD4"))) & (!str_detect(colnames(count_out), "Unknown"))
 
 count_out_selected <- cbind(count_out[,selected_pairs_CD8], count_out[,selected_pairs_CD4])
 
@@ -2467,18 +2467,18 @@ colnames(count_out) <- gsub("/", "_", colnames(count_out))
 count_out <- count_out %>% column_to_rownames("group_by")
 
 ## Select from "T" interactions - all
-selected_pairs_CD8 <- (str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,1], "CD8") |
-  (str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,1], "CD8"))) & (!str_detect(colnames(count_out), "Unknown"))
-
-selected_pairs_CD4 <- (str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,1], "CD4") |
-  (str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,1], "CD4"))) & (!str_detect(colnames(count_out), "Unknown"))
+# selected_pairs_CD8 <- (str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,1], "CD8") |
+#   (str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,1], "CD8"))) & (!str_detect(colnames(count_out), "Unknown"))
+# 
+# selected_pairs_CD4 <- (str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,1], "CD4") |
+#   (str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,1], "CD4"))) & (!str_detect(colnames(count_out), "Unknown"))
 
 ## Select from "T" interactions - heterotypic only
-# selected_pairs_CD8 <- (str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,1], "CD8") &
-#   (!str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,2], "CD8"))) & (!str_detect(colnames(count_out), "Unknown"))
-# 
-# selected_pairs_CD4 <- (str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,1], "CD4") &
-#   (!str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,2], "CD4"))) & (!str_detect(colnames(count_out), "Unknown"))
+selected_pairs_CD8 <- (str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,1], "CD8") &
+  (!str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,2], "CD8"))) & (!str_detect(colnames(count_out), "Unknown"))
+
+selected_pairs_CD4 <- (str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,1], "CD4") &
+  (!str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,2], "CD4"))) & (!str_detect(colnames(count_out), "Unknown"))
 
 count_out_selected <- cbind(count_out[,selected_pairs_CD8], count_out[,selected_pairs_CD4])
 
