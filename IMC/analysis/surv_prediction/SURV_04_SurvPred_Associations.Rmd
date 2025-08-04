@@ -1977,62 +1977,6 @@ ggplot(CNV_burden, aes(x = BF_PL_TME_archetypes, y = burden, fill = BF_PL_TME_ar
   ylab("CNV events")
 ```
 
-###### Tumor IMC expression
-
-```{r}
-sce_TU <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_05.rds")
-
-# Add archetypes
-sce_TU$BF_PL_TME_archetypes <- metadata_selected$BF_PL_TME_archetypes[match(sce_TU$PID, metadata_selected$PID)]
-
-sce_TU <- sce_TU[,!is.na(sce_TU$BF_PL_TME_archetypes)]
-```
-
-```{r, fig.height=20, fig.width=8}
-# Aggregate expression per PID
-archetype_mean_PID <- aggregateAcrossCells(sce_TU, ids = sce_TU$PID,
-                                 statistics = "mean",
-                                 use.assay.type = "min_max",
-                                 subset.row = rowData(sce_TU)$tumor_cluster_1)
-
-
-# Violin plot
-plotExpression(archetype_mean_PID,
-               features = rownames(sce_TU)[rowData(sce_TU)$tumor_cluster_1],
-               x = "BF_PL_TME_archetypes", exprs_values = "min_max",
-               colour_by = "BF_PL_TME_archetypes") +
-    theme(axis.text.x =  element_text(angle = 90))+
-    scale_color_manual(values = col_group)
-```
-```{r}
-# sce_T <- readRDS("/mnt/central_nas_full/users/marllu/T_panel/data_analysis/sce_ccRCC_T_07.rds")
-# 
-# # Add archetypes
-# sce_T$BF_PL_TME_archetypes <- metadata_selected$BF_PL_TME_archetypes[match(sce_T$PID, metadata_selected$PID)]
-# 
-# sce_T <- sce_T[,!is.na(sce_T$BF_PL_TME_archetypes) & sce_T$analysis_cat == "tumor"]
-# sce_T
-```
-
-```{r}
-# # Aggregate expression per PID 
-# archetype_mean_PID <- aggregateAcrossCells(sce_T, ids = sce_T$PID,
-#                                  statistics = "mean",
-#                                  use.assay.type = "min_max",
-#                                  subset.row = rownames(sce_T) %in% c("CD44", "CD38"))
-# 
-# 
-# # Violin plot
-# plotExpression(archetype_mean_PID, 
-#                features = c("CD44", "CD38"),
-#                x = "BF_PL_TME_archetypes", exprs_values = "min_max", 
-#                colour_by = "BF_PL_TME_archetypes") +
-#     theme(axis.text.x =  element_text(angle = 90))+
-#     scale_color_manual(values = col_group)
-# 
-# ### Add CD44 into model for tumor cells
-```
-
 ###### Genomic subtypes
 
 ```{r}
@@ -2202,7 +2146,120 @@ ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_a
 #dev.off()
 ```
 
+###### Tumor IMC expression
 
+```{r}
+sce_TU <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_05.rds")
+
+# Add archetypes
+sce_TU$BF_PL_TME_archetypes <- metadata_selected$BF_PL_TME_archetypes[match(sce_TU$PID, metadata_selected$PID)]
+
+sce_TU <- sce_TU[,!is.na(sce_TU$BF_PL_TME_archetypes)]
+```
+
+```{r, fig.height=20, fig.width=8}
+# Aggregate expression per PID
+archetype_mean_PID <- aggregateAcrossCells(sce_TU, ids = sce_TU$PID,
+                                 statistics = "mean",
+                                 use.assay.type = "min_max",
+                                 subset.row = rowData(sce_TU)$tumor_cluster_1)
+
+
+# Violin plot
+plotExpression(archetype_mean_PID,
+               features = rownames(sce_TU)[rowData(sce_TU)$tumor_cluster_1],
+               x = "BF_PL_TME_archetypes", exprs_values = "min_max",
+               colour_by = "BF_PL_TME_archetypes") +
+    theme(axis.text.x =  element_text(angle = 90))+
+    scale_color_manual(values = col_group)
+```
+
+```{r}
+# sce_T <- readRDS("/mnt/central_nas_full/users/marllu/T_panel/data_analysis/sce_ccRCC_T_07.rds")
+# 
+# # Add archetypes
+# sce_T$BF_PL_TME_archetypes <- metadata_selected$BF_PL_TME_archetypes[match(sce_T$PID, metadata_selected$PID)]
+# 
+# sce_T <- sce_T[,!is.na(sce_T$BF_PL_TME_archetypes) & sce_T$analysis_cat == "tumor"]
+# sce_T
+```
+
+```{r}
+# # Aggregate expression per PID 
+# archetype_mean_PID <- aggregateAcrossCells(sce_T, ids = sce_T$PID,
+#                                  statistics = "mean",
+#                                  use.assay.type = "min_max",
+#                                  subset.row = rownames(sce_T) %in% c("CD44", "CD38"))
+# 
+# 
+# # Violin plot
+# plotExpression(archetype_mean_PID, 
+#                features = c("CD44", "CD38"),
+#                x = "BF_PL_TME_archetypes", exprs_values = "min_max", 
+#                colour_by = "BF_PL_TME_archetypes") +
+#     theme(axis.text.x =  element_text(angle = 90))+
+#     scale_color_manual(values = col_group)
+# 
+# ### Add CD44 into model for tumor cells
+```
+
+###### Interaction plot
+
+```{r}
+#metadata_selected <- read_csv("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/HE/data_analysis/metadata_key_HE.csv")
+```
+
+```{r}
+# T cell panel
+#sce_T <- readRDS("/mnt/central_nas_full/users/marllu/T_panel/data_analysis/sce_ccRCC_T_07.rds")
+
+sce_T <- readRDS("/Volumes/G_DQBM_BB_Central$/users/marllu/T_panel/data_analysis/sce_ccRCC_T_07.rds")
+
+sce_T$PID %in% metadata_selected$PID
+```
+
+```{r}
+## TestInteractions
+# Activated
+sce_activated <- sce[,sce$TME_archetype == "TME_activated")]
+
+count_T <- testInteractions(sce_silent, 
+                  group_by = "sample_id", 
+                  label = "celltype_combined", 
+                  colPairName = "neighborhood", 
+                  method = "interaction")
+
+out_activated <- count_T
+
+# Suppressed
+sce_suppressed <- sce[,sce$TME_archetype == "TME_suppressed")]
+
+count_T <- testInteractions(sce_silent, 
+                  group_by = "sample_id", 
+                  label = "celltype_combined", 
+                  colPairName = "neighborhood", 
+                  method = "interaction")
+
+out_suppressed <- count_T
+
+# Silent
+sce_silent <- sce[,sce$TME_archetype == "TME_silent")]
+
+count_T <- testInteractions(sce_silent, 
+                  group_by = "sample_id", 
+                  label = "celltype_combined", 
+                  colPairName = "neighborhood", 
+                  method = "interaction")
+
+out_silent <- count_T
+```
+
+```{r}
+## PlotInteractions
+# Activated
+# Suppressed
+# Silent
+```
 
 ##### Metabolomics
 
