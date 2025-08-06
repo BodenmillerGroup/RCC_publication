@@ -14,18 +14,18 @@ CUDA_VISIBLE_DEVICES=0 python main.py \
     --data_root_dir /mnt/central_nas/rcc_volume/RCC/HE/CLAM/TME_archetypes/ \
     --results_dir /mnt/central_nas/rcc_volume/RCC/HE/CLAM/TME_archetypes/results/ \
     --split_dir /mnt/central_nas/rcc_volume/RCC/HE/CLAM/TME_archetypes/splits/ \
-    --exp_code train_b16_lr1low_svm \
+    --exp_code train_b8_lr1low_do375 \
     --seed 1 \
     --k 10 \
     --label_frac 1 \
     --max_epochs 100 \
     --early_stopping \
     --opt adam \
-    --drop_out 0.25 \
+    --drop_out 0.375 \
     --lr 1e-5 \
     --weighted_sample \
-    --B 16 \
-    --bag_loss svm \
+    --B 8 \
+    --bag_loss ce \
     --inst_loss svm \
     --model_type clam_sb \
     --subtyping \
@@ -39,18 +39,18 @@ CUDA_VISIBLE_DEVICES=0 python main.py \
     --data_root_dir /mnt/central_nas/rcc_volume/RCC/HE/CLAM/TME_archetypes/ \
     --results_dir /mnt/central_nas/rcc_volume/RCC/HE/CLAM/TME_archetypes/results/ \
     --split_dir /mnt/central_nas/rcc_volume/RCC/HE/CLAM/TME_archetypes/splits/ \
-    --exp_code train_b16_lr1low_svm \
+    --exp_code train_b8_lr1low_do325 \
     --seed 1 \
     --k 10 \
     --label_frac 1 \
     --max_epochs 100 \
     --early_stopping \
     --opt adam \
-    --drop_out 0.25 \
+    --drop_out 0.325 \
     --lr 1e-5 \
     --weighted_sample \
-    --B 32 \
-    --bag_loss svm \
+    --B 8 \
+    --bag_loss ce \
     --inst_loss svm \
     --model_type clam_sb \
     --subtyping \
