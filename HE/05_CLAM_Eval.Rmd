@@ -21,17 +21,17 @@ library(SingleCellExperiment)
 ## Read in data
 
 ```{r}
-TCGA_meta <- read_csv("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/HE/CLAM/TCGA_KIRC/TCGA_KIRC_metadata_cleaned.csv")
-#TCGA_meta <- read_csv("/mnt/central_nas/rcc_volume/RCC/HE/CLAM/TCGA_KIRC/TCGA_KIRC_metadata_cleaned.csv")
+#TCGA_meta <- read_csv("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/HE/CLAM/TCGA_KIRC/TCGA_KIRC_metadata_cleaned.csv")
+TCGA_meta <- read_csv("/mnt/central_nas/rcc_volume/RCC/HE/CLAM/TCGA_KIRC/TCGA_KIRC_metadata_cleaned.csv")
 ```
 
 
 ```{r}
-out <- list.files("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/HE/CLAM/TCGA_KIRC/eval_results/train_b16_lr2low_s1_TCGA_EVAL/")
+out <- list.files("/mnt/central_nas/rcc_volume/RCC/HE/CLAM/TCGA_KIRC/eval_results/train_b8_lr1low_do35_s1_TCGA_EVAL/")
 out <- out[str_detect(out, "fold")]
 
 results <- foreach(i = out, .combine = "rbind")%do%{
-  results <- read_csv(paste0("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/HE/CLAM/TCGA_KIRC/eval_results/train_b16_lr2low_s1_TCGA_EVAL/", i))
+  results <- read_csv(paste0("/mnt/central_nas/rcc_volume/RCC/HE/CLAM/TCGA_KIRC/eval_results/train_b8_lr1low_do35_s1_TCGA_EVAL/", i))
   results$fold <- str_extract(i, "(\\d)+")
   return(results)
 }
@@ -65,17 +65,13 @@ results_folds <- results %>% group_by(TME_archetype, PID, fold) %>% mutate(prop 
 results_out_folds <- results_folds %>% group_by(PID, TME_archetype) %>% mutate(mean = max(prop)) %>% dplyr::select(PID, TME_archetype, mean) %>% ungroup() %>% group_by(PID) %>% filter(mean == max(mean)) %>% unique()
 ```
 
-```{r}
-results_out_folds <- results_folds %>% group_by(PID, TME_archetype) %>% mutate(mean = mean(prop)) %>% dplyr::select(PID, TME_archetype, mean) %>% ungroup() %>% group_by(PID) %>% filter(mean == max(mean)) %>% unique()
-```
-
 ### Selected fold
 
-Here, we are selecting the best performing model fold (fold 0). 
+Here, we are selecting the best performing model fold (fold 8). 
 
 ```{r}
 # Mean proportions across images per patient
-results_selected <- results %>% filter(fold == "7") %>% group_by(TME_archetype, PID, fold) %>% mutate(prop = mean(prop)) %>% dplyr::select(PID, fold, TME_archetype, prop) %>% unique()
+results_selected <- results %>% filter(fold == "8") %>% group_by(TME_archetype, PID, fold) %>% mutate(prop = mean(prop)) %>% dplyr::select(PID, fold, TME_archetype, prop) %>% unique()
 ```
 
 ```{r}
@@ -150,6 +146,65 @@ ggsurvplot(fit,
           conf.int = FALSE)
 ```
 
+
+```{r}
+## Visualize results for all folds at once
+# Loop through folds 0 to 9
+for (fold_num in 0:9) {
+  
+    results_selected <- results %>%
+    filter(fold == as.character(fold_num)) %>%
+    group_by(TME_archetype, PID, fold) %>%
+    mutate(prop = mean(prop)) %>%
+    dplyr::select(PID, fold, TME_archetype, prop) %>%
+    unique()
+  
+  results_out_selected <- results_selected %>%
+    group_by(PID, TME_archetype) %>%
+    mutate(mean = max(prop)) %>%
+    dplyr::select(PID, TME_archetype, mean) %>%
+    ungroup() %>%
+    group_by(PID) %>%
+    filter(mean == max(mean)) %>%
+    unique()
+  
+    col_name <- paste0("TME_archetype_", fold_num)
+  
+   results_combined[[col_name]] <- results_out_selected$TME_archetype[match(results_combined$PID, results_out_selected$PID)]
+}
+
+
+surv_plots <- list()
+
+for (fold_num in 0:9) {
+  col_name <- paste0("TME_archetype_", fold_num)
+  formula <- as.formula(paste0("Surv(OS_days, status_OS) ~", col_name))
+  fit <- survfit(formula, data = results_combined)
+  fit$call$formula <- formula 
+  surv_plots[[fold_num+1]] <- fit
+  
+  
+}
+
+ggsurvplot_list(surv_plots, 
+                data = results_combined,
+                pval = TRUE,
+                risk.table = TRUE,
+                risk.table.col = "strata",
+                linetype = "strata",
+                surv.median.line = "hv",
+                palette = c("#0571B0", "gold3", "#CA0020"),
+                ggtheme = theme_classic(),
+                conf.int = FALSE)
+```
+
+
+
+
+
+
+
+
 ```{r}
 all <- results_combined %>% ungroup() %>% dplyr::select(TME_archetype_folds, TME_archetype_selected)
 alluvial_wide(all, 
@@ -175,16 +230,17 @@ write_csv(results_combined, "/mnt/central_nas/rcc_volume/RCC/HE/CLAM/TCGA_KIRC/T
 ## Read in data
 
 ```{r}
+library(readxl)
 CPTAC_meta <- read_excel("/mnt/central_nas/rcc_volume/RCC/HE/CLAM/CPTAC/CPTAC_meta_clean.xlsx")
 ```
 
 
 ```{r}
-out <- list.files("/mnt/central_nas/rcc_volume/RCC/HE/CLAM/CPTAC/eval_results/train_b16_lr2low_s1_CPTAC_EVAL/")
+out <- list.files("/mnt/central_nas/rcc_volume/RCC/HE/CLAM/CPTAC/eval_results/train_b8_lr1low_do35_s1_CPTAC_EVAL/")
 out <- out[str_detect(out, "fold")]
 
 results <- foreach(i = out, .combine = "rbind")%do%{
-  results <- read_csv(paste0("/mnt/central_nas/rcc_volume/RCC/HE/CLAM/CPTAC/eval_results/train_b16_lr2low_s1_CPTAC_EVAL/", i))
+  results <- read_csv(paste0("/mnt/central_nas/rcc_volume/RCC/HE/CLAM/CPTAC/eval_results/train_b8_lr1low_do35_s1_CPTAC_EVAL/", i))
   results$fold <- str_extract(i, "(\\d)+")
   return(results)
 }

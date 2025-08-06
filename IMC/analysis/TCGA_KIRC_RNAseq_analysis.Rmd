@@ -1101,12 +1101,12 @@ kirc.clean <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA
 ### Read in group information
 
 ```{r}
-results_combined <- read_csv("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/HE/CLAM/TCGA_KIRC/TCGA_KIRC_eval_out.csv")
-#results_combined <- read_csv("/mnt/central_nas/rcc_volume/RCC/HE/CLAM/TCGA_KIRC/TCGA_KIRC_eval_out.csv")
+#results_combined <- read_csv("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/HE/CLAM/TCGA_KIRC/TCGA_KIRC_eval_out.csv")
+results_combined <- read_csv("/mnt/central_nas/rcc_volume/RCC/HE/CLAM/TCGA_KIRC/TCGA_KIRC_eval_out.csv")
 ```
 
 ```{r}
-vsd$TME_archetype <- results_combined$TME_archetype_selected[match(vsd$PID, results_combined$PID)]
+vsd$TME_archetype <- results_combined$TME_archetype_folds[match(vsd$PID, results_combined$PID)]
 kirc.clean$TME_archetype <- results_combined$TME_archetype_folds[match(kirc.clean$PID, results_combined$PID)]
 ```
 
@@ -1912,7 +1912,7 @@ ddsSE_1 <- ddsSE_1[keep, ]
 ## 2: Filter for protein-coding genes
 library(biomaRt)
 out <- data.frame(og = rownames(ddsSE_1),
-           sh = sub("\\..*", "", rownames(ddsSE_1)))
+           sh = sub("\\..*", "", rownames(ddsSE_1)))devtools::install_github("Lothelab/CMScaller")
 ensembl <- useEnsembl(biomart = "genes", dataset = "hsapiens_gene_ensembl")
 gene_info <- getBM(attributes = c("ensembl_gene_id", "gene_biotype"),
                    filters = "ensembl_gene_id",
@@ -1941,95 +1941,95 @@ vsd <- DESeq2::vst(dds)
 ## MTOR UP
 res_mtor_vs_not_icam_vhl <- results(dds,
   contrast = c("TME_archetype", "TME_activated", "TME_silent"),
-  alpha = 0.01,
+  alpha = 0.05,
   lfcThreshold = 1
 )
 
 up_mtor_vs_not_icam <- res_mtor_vs_not_icam_vhl[
   !is.na(res_mtor_vs_not_icam_vhl$padj) &
-  res_mtor_vs_not_icam_vhl$padj < 0.01 &
+  res_mtor_vs_not_icam_vhl$padj < 0.05 &
   res_mtor_vs_not_icam_vhl$log2FoldChange > 1,
 ]
 
 res_mtor_vs_icam <- results(dds,
   contrast = c("TME_archetype", "TME_activated", "TME_suppressed"),
-  alpha = 0.01,
+  alpha = 0.05,
   lfcThreshold = 1
 )
 
 up_res_mtor_vs_icam <- res_mtor_vs_icam[
   !is.na(res_mtor_vs_icam$padj) &
-  res_mtor_vs_icam$padj < 0.01 &
+  res_mtor_vs_icam$padj < 0.05 &
   res_mtor_vs_icam$log2FoldChange > 1,
 ]
 
-#MTORUP <- intersect(rownames(up_mtor_vs_not_icam), rownames(up_res_mtor_vs_icam))
+MTORUP <- intersect(rownames(up_mtor_vs_not_icam), rownames(up_res_mtor_vs_icam))
 #MTORUP <- unique(c(rownames(up_mtor_vs_not_icam), rownames(up_res_mtor_vs_icam)))
-MTORUP <- rownames(up_res_mtor_vs_icam)
+#MTORUP <- rownames(up_res_mtor_vs_icam)
 #MTORUP <- rownames(up_res_mtor_vs_icam %>% as.data.frame %>% arrange(desc(log2FoldChange)))[1:30]
 
 ## ICAM UP
 res_ICAM_vs_not_icam_vhl <- results(dds,
   contrast = c("TME_archetype", "TME_suppressed", "TME_silent"),
-  alpha = 0.01,
+  alpha = 0.05,
   lfcThreshold = 1
 )
 
 up_ICAM_vs_not_icam <- res_ICAM_vs_not_icam_vhl[
   !is.na(res_ICAM_vs_not_icam_vhl$padj) &
-  res_ICAM_vs_not_icam_vhl$padj < 0.01 &
+  res_ICAM_vs_not_icam_vhl$padj < 0.05 &
   res_ICAM_vs_not_icam_vhl$log2FoldChange > 1,
 ]
 
 res_ICAM_vs_MTOR <- results(dds,
   contrast = c("TME_archetype", "TME_suppressed", "TME_activated"),
-  alpha = 0.01,
+  alpha = 0.05,
   lfcThreshold = 1
 )
 
 up_res_ICAM_vs_MTOR <- res_ICAM_vs_MTOR[
   !is.na(res_ICAM_vs_MTOR$padj) &
-  res_ICAM_vs_MTOR$padj < 0.01 &
+  res_ICAM_vs_MTOR$padj < 0.05 &
   res_ICAM_vs_MTOR$log2FoldChange > 1,
 ]
 
-#ICAMUP <- intersect(rownames(up_ICAM_vs_not_icam), rownames(up_res_ICAM_vs_MTOR))
+ICAMUP <- intersect(rownames(up_ICAM_vs_not_icam), rownames(up_res_ICAM_vs_MTOR))
 #ICAMUP <- unique(c(rownames(up_ICAM_vs_not_icam), rownames(up_res_ICAM_vs_MTOR)))
-ICAMUP <- rownames(up_res_ICAM_vs_MTOR)
+#ICAMUP <- rownames(up_res_ICAM_vs_MTOR)
 #ICAMUP <- rownames(up_res_ICAM_vs_MTOR %>% as.data.frame %>% arrange(desc(log2FoldChange)))[1:30]
 
 ## NOTICAMMTOR UP
 res_not_icam_vhl_vs_ICAM <- results(dds,
   contrast = c("TME_archetype", "TME_silent", "TME_suppressed"),
-  alpha = 0.01,
+  alpha = 0.05,
   lfcThreshold = 1
 )
 
 up_not_icam_vs_icam <- res_not_icam_vhl_vs_ICAM[
   !is.na(res_not_icam_vhl_vs_ICAM$padj) &
-  res_not_icam_vhl_vs_ICAM$padj < 0.01 &
+  res_not_icam_vhl_vs_ICAM$padj < 0.05 &
   res_not_icam_vhl_vs_ICAM$log2FoldChange > 1,
 ]
 
 res_not_icam_vs_MTOR <- results(dds,
   contrast = c("TME_archetype", "TME_silent", "TME_activated"),
-  alpha = 0.01,
+  alpha = 0.05,
   lfcThreshold = 1
 )
 
 up_res_not_icam_vs_MTOR <- res_not_icam_vs_MTOR[
   !is.na(res_not_icam_vs_MTOR$padj) &
-  res_not_icam_vs_MTOR$padj < 0.01 &
+  res_not_icam_vs_MTOR$padj < 0.05 &
   res_not_icam_vs_MTOR$log2FoldChange > 1,
 ]
 
-up_ICAM_vs_not_icam %>% as.data.frame %>% arrange(desc(log2FoldChange)) 
+#up_ICAM_vs_not_icam %>% as.data.frame %>% arrange(desc(log2FoldChange)) 
 
-NOTUP <- unique(c(rownames(up_not_icam_vs_icam), rownames(up_res_not_icam_vs_MTOR)))
+#NOTUP <- unique(c(rownames(up_not_icam_vs_icam), rownames(up_res_not_icam_vs_MTOR)))
 #NOTUP <- intersect(rownames(up_not_icam_vs_icam), rownames(up_res_not_icam_vs_MTOR))
 
 ## COMBINE ALL KEY GENES
-KEYUP <- unique(c(MTORUP, ICAMUP))
+KEYUP <- unique(c(MTORUP, ICAMUP, NOTUP))
 
 unique(KEYUP)
 ```
@@ -2107,7 +2107,14 @@ ntp_result %>% group_by(prediction) %>% dplyr::count()
 ```
 
 ```{r}
-ntp_out <- ntp_result %>% rownames_to_column("PID") %>% mutate(group_predict = ifelse(FDR < 0.05, as.character(prediction), "NOT"))
+# TO DO - make nice heatmap from predictions
+```
+
+
+
+
+```{r}
+ntp_out <- ntp_result %>% rownames_to_column("PID") %>% mutate(group_predict = ifelse(FDR < 0.01, as.character(prediction), "NOT"))
 
 ntp_out$OS_months <- vsd$OS_days[match(ntp_out$PID, vsd$PID)]
 ntp_out$status_OS <- vsd$status_OS[match(ntp_out$PID, vsd$PID)]

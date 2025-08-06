@@ -520,8 +520,3 @@ slides_dest <- "/mnt/central_nas/rcc_volume/RCC/HE/CLAM/CPTAC/raw/"
 #file.copy(from = slides_move_full, to = slides_dest)
 ```
 
-
-```{r}
-
-```
-

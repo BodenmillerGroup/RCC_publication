@@ -26,11 +26,14 @@ library(scuttle)
 library(scater)
 library(dittoSeq)
 library(circlize)
+library(imcRtools)
+library(BiocParallel)
 conflicts_prefer(dplyr::count)
 conflicts_prefer(dplyr::filter)
 conflicts_prefer(dplyr::select)
 conflicts_prefer(dplyr::slice)
 conflicts_prefer(dplyr::mutate)
+conflicts_prefer(dplyr::desc)
 conflicts_prefer(base::setdiff)
 ```
 
@@ -2203,63 +2206,362 @@ plotExpression(archetype_mean_PID,
 # ### Add CD44 into model for tumor cells
 ```
 
-###### Interaction plot
-
 ```{r}
-#metadata_selected <- read_csv("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/HE/data_analysis/metadata_key_HE.csv")
+sce_MY <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_07.rds")
+
+# Add archetypes
+sce_MY$BF_PL_TME_archetypes <- metadata_selected$BF_PL_TME_archetypes[match(sce_MY$PID, metadata_selected$PID)]
+
+sce_MY <- sce_MY[,!is.na(sce_MY$BF_PL_TME_archetypes) & sce_MY$analysis_cat == "tumor"]
+sce_MY
 ```
 
 ```{r}
+# Aggregate expression per PID
+archetype_mean_PID <- aggregateAcrossCells(sce_MY, ids = sce_MY$PID,
+                                 statistics = "mean",
+                                 use.assay.type = "exprs",
+                                 subset.row = rownames(sce_MY) %in% c("MMP9", "IDO1"))
+
+
+# Violin plot
+plotExpression(archetype_mean_PID,
+               features = c("MMP9", "IDO1"),
+               x = "BF_PL_TME_archetypes", exprs_values = "exprs",
+               colour_by = "BF_PL_TME_archetypes") +
+    theme(axis.text.x =  element_text(angle = 90))+
+    scale_color_manual(values = col_group)
+
+## slight increase of MMP9 in suppressed
+```
+
+###### Interaction plot
+
+
+```{r}
 # T cell panel
-#sce_T <- readRDS("/mnt/central_nas_full/users/marllu/T_panel/data_analysis/sce_ccRCC_T_07.rds")
+sce_T <- readRDS("/mnt/central_nas_full/users/marllu/T_panel/data_analysis/sce_ccRCC_T_07.rds")
+#sce_T <- readRDS("/Volumes/G_DQBM_BB_Central$/users/marllu/T_panel/data_analysis/sce_ccRCC_T_07.rds")
 
-sce_T <- readRDS("/Volumes/G_DQBM_BB_Central$/users/marllu/T_panel/data_analysis/sce_ccRCC_T_07.rds")
+# Add archetypes
+sce_T$BF_PL_TME_archetypes <- metadata_selected$BF_PL_TME_archetypes[match(sce_T$PID, metadata_selected$PID)]
 
-sce_T$PID %in% metadata_selected$PID
+sce_T <- sce_T[,!is.na(sce_T$BF_PL_TME_archetypes)]
+sce_T
 ```
 
 ```{r}
 ## TestInteractions
 # Activated
-sce_activated <- sce[,sce$TME_archetype == "TME_activated")]
+sce_activated <- sce_T[,sce_T$BF_PL_TME_archetypes == "TME_activated"]
 
-count_T <- testInteractions(sce_silent, 
+set.seed(22)
+count_T <- testInteractions(sce_activated, 
                   group_by = "sample_id", 
                   label = "celltype_combined", 
                   colPairName = "neighborhood", 
-                  method = "interaction")
+                  method = "interaction", 
+                  BPPARAM = MulticoreParam(workers = 10, RNGseed = 22))
 
 out_activated <- count_T
 
-# Suppressed
-sce_suppressed <- sce[,sce$TME_archetype == "TME_suppressed")]
+gc()
 
-count_T <- testInteractions(sce_silent, 
+# Suppressed
+sce_suppressed <- sce_T[,sce_T$BF_PL_TME_archetypes == "TME_suppressed"]
+
+set.seed(22)
+count_T <- testInteractions(sce_suppressed, 
                   group_by = "sample_id", 
                   label = "celltype_combined", 
                   colPairName = "neighborhood", 
-                  method = "interaction")
+                  method = "interaction",
+                  MulticoreParam(workers = 10, RNGseed = 22))
 
 out_suppressed <- count_T
 
-# Silent
-sce_silent <- sce[,sce$TME_archetype == "TME_silent")]
+gc()
 
+# Silent
+sce_silent <- sce_T[,sce_T$BF_PL_TME_archetypes == "TME_silent"]
+
+set.seed(22)
 count_T <- testInteractions(sce_silent, 
                   group_by = "sample_id", 
                   label = "celltype_combined", 
                   colPairName = "neighborhood", 
-                  method = "interaction")
+                  method = "interaction",
+                  MulticoreParam(workers = 10, RNGseed = 22))
 
 out_silent <- count_T
+
+gc()
 ```
 
 ```{r}
 ## PlotInteractions
 # Activated
+library(dplyr)
+
+out <- out_activated %>% as.data.frame() %>% mutate(pair_id = paste(from_label, to_label, sep = "__"),
+                                          is_sig = !is.na(sig))
+
+summary_df <- out %>%
+  group_by(pair_id) %>%
+  summarise(
+    sum_sigval = sum(sigval, na.rm = TRUE),
+    total_count = sum(is_sig),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    fraction_sig = sum_sigval / total_count,
+    int_type = case_when(
+      fraction_sig > 0.2 ~ "attraction",
+      fraction_sig < -0.2 ~ "repulsion",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  filter(!is.na(int_type))
+
+subset_out <- out %>%
+  semi_join(summary_df, by = "pair_id") %>%
+  left_join(summary_df %>% select(pair_id, int_type), by = "pair_id")
+
+# Now we can visualise only these filtered edges
+plotInteractions(subset_out,
+                 sce_T,
+                 group_by = "sample_id",
+                 label = "celltype_combined",
+                 node_color_by = "name",
+                 edge_color_by = "int_type",
+                 edge_width_by = "sigval")
+
 # Suppressed
+
+library(dplyr)
+
+out <- out_suppressed %>% as.data.frame() %>% mutate(pair_id = paste(from_label, to_label, sep = "__"),
+                                          is_sig = !is.na(sig))
+
+summary_df <- out %>%
+  group_by(pair_id) %>%
+  summarise(
+    sum_sigval = sum(sigval, na.rm = TRUE),
+    total_count = sum(is_sig),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    fraction_sig = sum_sigval / total_count,
+    int_type = case_when(
+      fraction_sig > 0.2 ~ "attraction",
+      fraction_sig < -0.2 ~ "repulsion",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  filter(!is.na(int_type))
+
+subset_out <- out %>%
+  semi_join(summary_df, by = "pair_id") %>%
+  left_join(summary_df %>% select(pair_id, int_type), by = "pair_id")
+
+# Now we can visualise only these filtered edges
+plotInteractions(subset_out,
+                 sce_T,
+                 group_by = "sample_id",
+                 label = "celltype_combined",
+                 node_color_by = "name",
+                 edge_color_by = "int_type",
+                 edge_width_by = "sigval")
+
+
 # Silent
+library(dplyr)
+
+out <- out_silent %>% as.data.frame() %>% mutate(pair_id = paste(from_label, to_label, sep = "__"),
+                                          is_sig = !is.na(sig))
+
+summary_df <- out %>%
+  group_by(pair_id) %>%
+  summarise(
+    sum_sigval = sum(sigval, na.rm = TRUE),
+    total_count = sum(is_sig),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    fraction_sig = sum_sigval / total_count,
+    int_type = case_when(
+      fraction_sig > 0.2 ~ "attraction",
+      fraction_sig < -0.2 ~ "repulsion",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  filter(!is.na(int_type))
+
+subset_out <- out %>%
+  semi_join(summary_df, by = "pair_id") %>%
+  left_join(summary_df %>% select(pair_id, int_type), by = "pair_id")
+
+# Now we can visualise only these filtered edges
+plotInteractions(subset_out,
+                 sce_T,
+                 group_by = "sample_id",
+                 label = "celltype_combined",
+                 node_color_by = "name",
+                 edge_color_by = "int_type", 
+                 edge_width_by = "sigval")
 ```
+```{r}
+out_activated %>% as_tibble() %>%
+    group_by(from_label, to_label) %>%
+    summarize(sum_sigval = sum(sigval, na.rm = TRUE)) %>%
+    ggplot() +
+        geom_tile(aes(from_label, to_label, fill = sum_sigval)) +
+        scale_fill_gradient2(low = "blue", mid = "white", high = "red") +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+out_suppressed %>% as_tibble() %>%
+    group_by(from_label, to_label) %>%
+    summarize(sum_sigval = sum(sigval, na.rm = TRUE)) %>%
+    ggplot() +
+        geom_tile(aes(from_label, to_label, fill = sum_sigval)) +
+        scale_fill_gradient2(low = "blue", mid = "white", high = "red") +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+out_silent %>% as_tibble() %>%
+    group_by(from_label, to_label) %>%
+    summarize(sum_sigval = sum(sigval, na.rm = TRUE)) %>%
+    ggplot() +
+        geom_tile(aes(from_label, to_label, fill = sum_sigval)) +
+        scale_fill_gradient2(low = "blue", mid = "white", high = "red") +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+```{r}
+out_all$PID <- sce_T$PID[match(out_all$group_by, sce_T$sample_id)]
+
+out_all <- out_all %>% as.data.frame() %>% mutate(pair_id = paste(from_label, to_label, sep = "__"))
+
+ht_all <- out_all %>% group_by(PID, pair_id) %>% mutate(mean_ct_PID = mean(ct, na.rm = TRUE)) %>% ungroup() %>% group_by(pair_id) %>% mutate(mean_ct = mean(mean_ct_PID, na.rm = TRUE)) %>% ungroup() %>% select(mean_ct, from_label, to_label) %>% unique() %>% ungroup() %>% pivot_wider(names_from = to_label, values_from = mean_ct) %>% column_to_rownames("from_label")
+  
+Heatmap(ht_all, col = viridis(100))
+```
+
+
+
+```{r}
+#Activated
+out_activated$PID <- sce_T$PID[match(out_activated$group_by, sce_T$sample_id)]
+
+out_activated <- out_activated %>% as.data.frame() %>% mutate(pair_id = paste(from_label, to_label, sep = "__"))
+
+ht_activated <- out_activated %>% group_by(PID, pair_id) %>% mutate(mean_ct_PID = mean(ct, na.rm = TRUE)) %>% ungroup() %>% group_by(pair_id) %>% mutate(mean_ct = mean(mean_ct_PID, na.rm = TRUE)) %>% ungroup() %>% select(mean_ct, from_label, to_label) %>% unique() %>% ungroup() %>% pivot_wider(names_from = to_label, values_from = mean_ct) %>% column_to_rownames("from_label")
+
+anno <- ht_activated %>% rownames_to_column("celltype_combined") %>% select(celltype_combined)
+anno$group <- ifelse(str_detect(anno$celltype_combined, "CD8")|str_detect(anno$celltype_combined, "CD4"), "T", "Not_T")
+
+Heatmap(ht_activated, col = viridis(100), 
+        row_split = anno$group, 
+        column_split = anno$group, 
+        cluster_column_slices = FALSE, 
+        cluster_row_slices = FALSE, 
+        show_column_dend = FALSE, 
+        show_row_dend = FALSE, 
+        cluster_rows = FALSE,
+        cluster_columns = FALSE,
+        clustering_method_rows = "ward.D2", 
+        clustering_method_columns = "ward.D2", 
+        show_row_names = FALSE)+
+  Heatmap(ht_activated - ht_all,
+        row_split = anno$group, 
+        column_split = anno$group, 
+        cluster_column_slices = FALSE, 
+        cluster_row_slices = FALSE, 
+        show_column_dend = FALSE, 
+        show_row_dend = FALSE, 
+        cluster_rows = FALSE,
+        cluster_columns = FALSE,
+        clustering_method_rows = "ward.D2", 
+        clustering_method_columns = "ward.D2"
+        )
+
+#Suppressed
+out_suppressed$PID <- sce_T$PID[match(out_suppressed$group_by, sce_T$sample_id)]
+
+out_suppressed <- out_suppressed %>% as.data.frame() %>% mutate(pair_id = paste(from_label, to_label, sep = "__"))
+
+ht_suppressed <- out_suppressed %>% group_by(PID, pair_id) %>% mutate(mean_ct_PID = mean(ct, na.rm = TRUE)) %>% ungroup() %>% group_by(pair_id) %>% mutate(mean_ct = mean(mean_ct_PID, na.rm = TRUE)) %>% ungroup() %>% select(mean_ct, from_label, to_label) %>% unique() %>% ungroup() %>% pivot_wider(names_from = to_label, values_from = mean_ct) %>% column_to_rownames("from_label")
+
+anno <- ht_suppressed %>% rownames_to_column("celltype_combined") %>% select(celltype_combined)
+anno$group <- ifelse(str_detect(anno$celltype_combined, "CD8")|str_detect(anno$celltype_combined, "CD4"), "T", "Not_T")
+
+Heatmap(ht_suppressed, col = viridis(100), 
+        row_split = anno$group, 
+        column_split = anno$group, 
+        cluster_column_slices = FALSE, 
+        cluster_row_slices = FALSE, 
+        show_column_dend = FALSE, 
+        show_row_dend = FALSE, 
+        cluster_rows = FALSE,
+        cluster_columns = FALSE,
+        clustering_method_rows = "ward.D2", 
+        clustering_method_columns = "ward.D2", 
+        show_row_names = FALSE)+
+  Heatmap(ht_suppressed - ht_all,
+        row_split = anno$group, 
+        column_split = anno$group, 
+        cluster_column_slices = FALSE, 
+        cluster_row_slices = FALSE, 
+        show_column_dend = FALSE, 
+        show_row_dend = FALSE, 
+        cluster_rows = FALSE,
+        cluster_columns = FALSE,
+        clustering_method_rows = "ward.D2", 
+        clustering_method_columns = "ward.D2"
+        )
+
+#Silent
+out_silent$PID <- sce_T$PID[match(out_silent$group_by, sce_T$sample_id)]
+
+out_silent <- out_silent %>% as.data.frame() %>% mutate(pair_id = paste(from_label, to_label, sep = "__"))
+
+ht_silent <- out_silent %>% group_by(PID, pair_id) %>% mutate(mean_ct_PID = mean(ct, na.rm = TRUE)) %>% ungroup() %>% group_by(pair_id) %>% mutate(mean_ct = mean(mean_ct_PID, na.rm = TRUE)) %>% ungroup() %>% select(mean_ct, from_label, to_label) %>% unique() %>% ungroup() %>% pivot_wider(names_from = to_label, values_from = mean_ct) %>% column_to_rownames("from_label")
+
+anno <- ht_silent %>% rownames_to_column("celltype_combined") %>% select(celltype_combined)
+anno$group <- ifelse(str_detect(anno$celltype_combined, "CD8")|str_detect(anno$celltype_combined, "CD4"), "T", "Not_T")
+
+Heatmap(ht_silent, col = viridis(100), 
+        row_split = anno$group, 
+        column_split = anno$group, 
+        cluster_column_slices = FALSE, 
+        cluster_row_slices = FALSE, 
+        show_column_dend = FALSE, 
+        show_row_dend = FALSE, 
+        clustering_method_rows = "ward.D2", 
+        clustering_method_columns = "ward.D2", 
+        cluster_rows = FALSE,
+        cluster_columns = FALSE,
+        show_row_names = FALSE)+
+  Heatmap(ht_silent - ht_all,
+        row_split = anno$group, 
+        column_split = anno$group, 
+        cluster_column_slices = FALSE, 
+        cluster_row_slices = FALSE, 
+        show_column_dend = FALSE, 
+        show_row_dend = FALSE, 
+        cluster_rows = FALSE,
+        cluster_columns = FALSE,
+        clustering_method_rows = "ward.D2", 
+        clustering_method_columns = "ward.D2"
+        )
+```
+```{r}
+
+
+```
+
+
+
+
 
 ##### Metabolomics
 
