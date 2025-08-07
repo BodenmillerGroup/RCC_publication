@@ -2029,7 +2029,7 @@ up_res_not_icam_vs_MTOR <- res_not_icam_vs_MTOR[
 #NOTUP <- intersect(rownames(up_not_icam_vs_icam), rownames(up_res_not_icam_vs_MTOR))
 
 ## COMBINE ALL KEY GENES
-KEYUP <- unique(c(MTORUP, ICAMUP, NOTUP))
+KEYUP <- unique(c(MTORUP, ICAMUP))
 
 unique(KEYUP)
 ```
@@ -2074,8 +2074,6 @@ Heatmap(scale(ht), name = "Scaled mean Z-scores")+
 library(CMScaller)
 
 # Step 1: Prepare expression matrix (genes x samples, log2 scale)
-expr_mat <- assay(vsd)  
-
 tpm_mat <- assays(kirc.clean)$tpm_unstrand 
 log2_tpm <- log2(tpm_mat + 1)
 expr_mat <- ematAdjust(log2_tpm, method = "RLE")
@@ -2096,21 +2094,52 @@ template_mat <- data.frame(class = factor(names(keyup)),
 ntp_result <- ntp(
   emat = expr_mat,           
   template = template_mat,
-  distance = "spearman",
+  distance = "cosine",
   nPerm = 1000,              
   seed = 22,                 
   nCores = 30,
   doPlot = TRUE
 )
-
-ntp_result %>% group_by(prediction) %>% dplyr::count()
 ```
 
 ```{r}
-# TO DO - make nice heatmap from predictions
+library(dplyr)
+library(caret)
+
+# Store results
+results <- data.frame(FDR_cutoff = numeric(), Mean_Balanced_Accuracy = numeric())
+
+# Loop through FDR cutoffs from 0.05 to 0.01 (step -0.005)
+for (fdr_cutoff in c(seq(0.05, 0.001, by = -0.005), 0.0001)) {
+  
+  # Generate predictions based on current cutoff
+  ntp_out <- ntp_result %>%
+    tibble::rownames_to_column("PID") %>%
+    mutate(group_predict = ifelse(FDR < fdr_cutoff, as.character(prediction), "NOT"))
+  
+  # Map predictions to kirc.clean
+  kirc.clean$TME_archetype_predict <- ntp_out$group_predict[match(kirc.clean$PID, ntp_out$PID)]
+  
+  # Rename groups
+  kirc.clean$TME_archetype_predict[kirc.clean$TME_archetype_predict == "ICAM"] <- "TME_suppressed"
+  kirc.clean$TME_archetype_predict[kirc.clean$TME_archetype_predict == "NOT"] <- "TME_silent"
+  kirc.clean$TME_archetype_predict[kirc.clean$TME_archetype_predict == "MTOR"] <- "TME_activated"
+  
+  # Factor levels
+  kirc.clean$TME_archetype_predict <- factor(kirc.clean$TME_archetype_predict, levels = levels(kirc.clean$TME_archetype))
+  
+  # Generate confusion matrix
+  cm <- confusionMatrix(data = kirc.clean$TME_archetype_predict, 
+                        reference = kirc.clean$TME_archetype, 
+                        mode = "everything")
+  
+  # Extract and store mean balanced accuracy
+  cm_stats <- as.data.frame(cm$byClass)
+  mean_ba <- mean(cm_stats$`Balanced Accuracy`, na.rm = TRUE)
+  
+  results <- rbind(results, data.frame(FDR_cutoff = fdr_cutoff, Mean_Balanced_Accuracy = mean_ba))
+}
 ```
-
-
 
 
 ```{r}
@@ -2163,7 +2192,53 @@ mean(cm_stats$F1)
 ```
 
 
+```{r}
+ntp_out <- ntp_result %>% rownames_to_column("PID") %>% mutate(group_predict = ifelse(FDR < 0.01, as.character(prediction), "NOT"))
 
+kirc.clean$TME_archetype_predict <- ntp_out$group_predict[match(kirc.clean$PID, ntp_out$PID)]
+
+kirc.clean$TME_archetype_predict[kirc.clean$TME_archetype_predict == "ICAM"] <- "TME_suppressed"
+kirc.clean$TME_archetype_predict[kirc.clean$TME_archetype_predict == "NOT"] <- "TME_silent"
+kirc.clean$TME_archetype_predict[kirc.clean$TME_archetype_predict == "MTOR"] <- "TME_activated"
+
+kirc.clean$TME_archetype <- factor(kirc.clean$TME_archetype)
+kirc.clean$TME_archetype_predict <- factor(kirc.clean$TME_archetype_predict, levels = levels(kirc.clean$TME_archetype))
+
+library(caret)
+cm <- confusionMatrix(data = kirc.clean$TME_archetype_predict, 
+                      reference = kirc.clean$TME_archetype, 
+                      mode = "everything")
+
+cm
+
+cm_stats <- as.data.frame(cm$byClass)
+mean(cm_stats$`Balanced Accuracy`) 
+```
+
+```{r}
+# TO DO - make nice heatmap from predictions
+
+# Matrix
+gen_mat <- expr_mat[template_mat$probe,]
+
+# Row-Anno
+row_anno <- data.frame(gene = rownames(gen_mat))
+row_anno$cat <- template_mat$class[match(row_anno$gene, template_mat$probe)]
+ra <- rowAnnotation(cat = row_anno$cat)
+
+# Col-Anno
+col_anno <- data.frame(PID = colnames(gen_mat))
+col_anno$group <- kirc.clean$TME_archetype_predict[match(col_anno$PID, kirc.clean$PID)]
+col_anno_ob <- columnAnnotation(group = col_anno$group, col = ) 
+
+Heatmap(gen_mat, 
+        row_split = row_anno$cat,
+        column_split = col_anno$group,
+        top_annotation = col_anno_ob, 
+        show_column_names = FALSE
+        )+
+  rowAnnotation(cat = row_anno$cat)
+```
 
 # CONTINUE HERE
 
