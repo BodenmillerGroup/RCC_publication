@@ -1106,6 +1106,7 @@ results_combined <- read_csv("/mnt/central_nas/rcc_volume/RCC/HE/CLAM/TCGA_KIRC/
 ```
 
 ```{r}
+# TME_archetype 7 or selected or folds
 vsd$TME_archetype <- results_combined$TME_archetype_folds[match(vsd$PID, results_combined$PID)]
 kirc.clean$TME_archetype <- results_combined$TME_archetype_folds[match(kirc.clean$PID, results_combined$PID)]
 ```
@@ -1259,16 +1260,29 @@ dittoBarPlot(vsd, var = "ISUP_combined", group.by = "TME_archetype",retain.facto
   scale_fill_manual(values = metadata(vsd)$colors$ISUP_combined)+
   ggtitle("")
 
+# BAP1
 dittoBarPlot(vsd[,!is.na(vsd$BAP1)], var = "BAP1", group.by = "TME_archetype",retain.factor.levels = FALSE)+
   ggtitle("")
+df <- as.data.frame(colData(vsd)[!is.na(vsd$BAP1), c("BAP1", "TME_archetype")])
+fisher.test(table(df$BAP1, df$TME_archetype))
+vsd$TME_archetype_comb <- ifelse(vsd$TME_archetype == "TME_suppressed", "TME_suppressed", "Other")
+dittoBarPlot(vsd[,!is.na(vsd$BAP1)], var = "BAP1", group.by = "TME_archetype_comb",retain.factor.levels = FALSE)+
+  ggtitle("")
+df <- as.data.frame(colData(vsd)[!is.na(vsd$BAP1), c("BAP1", "TME_archetype_comb")])
+fisher.test(table(df$BAP1, df$TME_archetype_comb))
+
+# PBRM1
 dittoBarPlot(vsd[,!is.na(vsd$PBRM1)], var = "PBRM1", group.by = "TME_archetype",retain.factor.levels = FALSE)+
   ggtitle("")
-
-dittoBarPlot(vsd[,!is.na(vsd$SETD2)], var = "SETD2", group.by = "TME_archetype",retain.factor.levels = FALSE)+
+df <- as.data.frame(colData(vsd)[!is.na(vsd$PBRM1), c("PBRM1", "TME_archetype")])
+fisher.test(table(df$PBRM1, df$TME_archetype))
+vsd$TME_archetype_comb <- ifelse(vsd$TME_archetype == "TME_silent", "TME_silent", "Other")
+dittoBarPlot(vsd[,!is.na(vsd$PBRM1)], var = "PBRM1", group.by = "TME_archetype_comb",retain.factor.levels = FALSE)+
   ggtitle("")
-dittoBarPlot(vsd[,!is.na(vsd$VHL)], var = "VHL", group.by = "TME_archetype",retain.factor.levels = FALSE)+
-  ggtitle("")
+df <- as.data.frame(colData(vsd)[!is.na(vsd$PBRM1), c("PBRM1", "TME_archetype_comb")])
+fisher.test(table(df$PBRM1, df$TME_archetype_comb))
 ```
+
 
 ### Marker expression comparison for PID groups 
 
@@ -1278,7 +1292,7 @@ dittoBarPlot(vsd[,!is.na(vsd$VHL)], var = "VHL", group.by = "TME_archetype",reta
 # Define GOI of interest
 #GOI <- c("ICAM1", "VHL")
 #GOI <- c("VHL","CA9", "KRT19", "GPX4", "HLA-DRA", "NFKB1", "CCND1", "HIF1A", "TP53", "MYC", "ICAM1", "PDK4", "NT5E", "SMARCA4", "PKM", "CD274", "MME", "IDH2", "EPAS1", "AURKA", "HAVCR2", "EGFR", "RPS6", "FLT1", "MTOR", "RB1", "SLC2A1", "FH", "GLUD1", "CD44", "VIM")
-GOI <- c("VHL", "NFKB1", "CCND1", "ICAM1", "EGFR", "FLT1", "RB1")
+GOI <- c("VHL", "NFKB1", "CCND1", "ICAM1", "EGFR", "FLT1", "CD44", "MTOR")
 GOI_rel <- GOI[GOI %in% rownames(vsd)]
 
 # Define heatmap based on normalized counts 
@@ -1459,8 +1473,8 @@ Heatmap(scale(ht), name = "Scaled mean Z-scores")+
 
 ```{r}
 library(readxl)
-#HU_SIG <- read_excel("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/data/DCCD_SubTables_NatureGenetics.xlsx",sheet = 8, col_names = TRUE)
-HU_SIG <- read_excel("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/IMC/tumor_panel/data_analysis/data/DCCD_SubTables_NatureGenetics.xlsx",sheet = 8, col_names = TRUE)
+HU_SIG <- read_excel("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/data/DCCD_SubTables_NatureGenetics.xlsx",sheet = 8, col_names = TRUE)
+#HU_SIG <- read_excel("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/IMC/tumor_panel/data_analysis/data/DCCD_SubTables_NatureGenetics.xlsx",sheet = 8, col_names = TRUE)
 
 # Extract unique signatures genes for each immune subtype
 IM4 <- HU_SIG %>% filter(Immune_subtype == "IM4") %>% pull(Symbol) #De-clear differentiated ccRCC
@@ -1533,6 +1547,43 @@ ggplot(df, aes(x = TME_archetype, y = signature_sum))+
   stat_compare_means()
 
 mat <- df %>% pivot_longer(cols = 1:(ncol(df)-2), names_to = "gene", values_to = "exprs") %>% group_by(TME_archetype, gene) %>% summarize(mean = mean(exprs))
+mat <- mat %>% filter(!is.na(mean))
+ht <- mat %>% pivot_wider(names_from = "gene", values_from = "mean") %>% column_to_rownames("TME_archetype")
+
+Heatmap(ht, name = "Mean signature Z-scores")
+```
+
+### Genomic dedifferentiation signature (Salgia et al., Cancer Cell, 25)
+
+```{r}
+genom_sig <- c("CD44", "COL6A1", "DCBLD2", "GFPT2", "L1CAM", "PLAU", "PLTP", "SEMA3C", "TFAP2A", "TRNP1")
+
+## 1. pan AV signature per PID group 
+genom_sig_rel <- genom_sig[genom_sig %in% rownames(assay(vsd))]
+# Filter for available genes
+#TNBC_PID <- colnames(vsd[,vsd$TNBC == "TNBC"])
+#vsd_TNBC <- vsd[, colnames(vsd) %in% TNBC_PID]
+#df <- t(assay(vsd_TNBC)[genom_sig_rel ,]) %>% as.data.frame
+df <- t(assay(vsd)[genom_sig_rel ,]) %>% as.data.frame
+
+# Z-score gene expression 
+df <- as.data.frame(scale(df))
+
+df$signature_sum <- rowSums(df,na.rm = TRUE)
+df$TME_archetype <- vsd$TME_archetype[match(rownames(df), colnames(vsd))]
+
+compare_means(signature_sum ~ TME_archetype,df) #pairwise comparisons
+compare_means(signature_sum ~ TME_archetype,df, method = "kruskal.test") #global comparison
+
+ggplot(df, aes(x = TME_archetype, y = signature_sum))+
+  geom_jitter(aes(color = TME_archetype), size = 3, position=position_jitter(w=0.1,h=0.1))+
+  geom_boxplot(outlier.color = NA)+
+  scale_color_brewer(palette = "Paired")+
+  theme_classic()+
+  ylab("genom_sig signature (Salgia et al.)")+
+  stat_compare_means()
+
+mat <- df %>% pivot_longer(cols = 1:(ncol(df)-2), names_to = "gene", values_to = "exprs") %>% group_by(TME_archetype, gene) %>% summarize(mean = mean(exprs)) %>% na.omit()
 mat <- mat %>% filter(!is.na(mean))
 ht <- mat %>% pivot_wider(names_from = "gene", values_from = "mean") %>% column_to_rownames("TME_archetype")
 

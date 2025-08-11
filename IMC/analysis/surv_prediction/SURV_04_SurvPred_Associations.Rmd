@@ -2221,18 +2221,18 @@ sce_MY
 archetype_mean_PID <- aggregateAcrossCells(sce_MY, ids = sce_MY$PID,
                                  statistics = "mean",
                                  use.assay.type = "exprs",
-                                 subset.row = rownames(sce_MY) %in% c("MMP9", "IDO1"))
+                                 subset.row = rownames(sce_MY) %in% c("MMP9", "IDO1", "Vimentin"))
 
 
 # Violin plot
 plotExpression(archetype_mean_PID,
-               features = c("MMP9", "IDO1"),
+               features = c("MMP9", "IDO1", "Vimentin"),
                x = "BF_PL_TME_archetypes", exprs_values = "exprs",
                colour_by = "BF_PL_TME_archetypes") +
     theme(axis.text.x =  element_text(angle = 90))+
     scale_color_manual(values = col_group)
 
-## slight increase of MMP9 in suppressed
+## slight increase of MMP9 in suppressed, Vimentin in activated
 ```
 
 ###### Interaction plot
@@ -2554,6 +2554,7 @@ Heatmap(ht_silent, col = viridis(100),
         clustering_method_columns = "ward.D2"
         )
 ```
+
 ```{r}
 
 

@@ -111,7 +111,7 @@ ntp_result <- ntp(
 ```
 
 ```{r}
-ntp_out <- ntp_result %>% rownames_to_column("PID") %>% mutate(group_predict = ifelse(FDR < 0.01, as.character(prediction), "NOT"))
+ntp_out <- ntp_result %>% rownames_to_column("PID") %>% mutate(group_predict = ifelse(FDR < 0.05, as.character(prediction), "NOT"))
 
 ntp_out$OS_months <- se$OS[match(ntp_out$PID, se$UUID)]
 ntp_out$status_OS <- se$OS_CNSR[match(ntp_out$PID, se$UUID)]
@@ -443,6 +443,7 @@ dittoBarPlot(se, var = "PBRM1_mut", group.by = "TME_archetype")
 # CHECKMATE-214
 
 TO DO: Check details of inclusion criteria / treatments (PDL1+VEGFi vs. Sunitib) / tumor location etc. / pretreatment samples? 
+
 ```{r}
 # Expression matrix (Combat corrected values)
 exp_mat <- read_excel("/mnt/central_nas/rcc_volume/RCC/validation/CTcohorts/Checkmate_Braun_NatMed_2020.xlsx", sheet = 5)
@@ -803,6 +804,117 @@ dittoBarPlot(se_sub, var = "ExtremeResponder", split.by = "Arm", group.by = "TME
 
 # IMmotion 151
 
+# HCRN-GU16-260
+
+```{r}
+# Expression matrix (Combat corrected values)
+exp_mat <- read_excel("/mnt/central_nas/rcc_volume/RCC/validation/CTcohorts/HCRN_RNAexp.xlsx", sheet = 1)
+
+# Correct duplicate gene names
+exp_mat_fil <- exp_mat %>% dplyr::select(-Name) %>% 
+  group_by(Description) %>%
+  summarise(across(where(is.numeric), mean))
+
+exp_mat_fil <- exp_mat_fil %>% column_to_rownames("Description")
+
+
+# Clinical data
+clin <- read_excel("/mnt/central_nas/rcc_volume/RCC/validation/CTcohorts/HCRN_clinical.xlsx", sheet = 1)
+
+clin_sub <- clin[clin$SUBJECT_ID %in% colnames(exp_mat_fil),]
+
+rownames(clin_sub) <- clin_sub$SUBJECT_ID
+
+exp_mat_fil <- exp_mat_fil[, rownames(clin_sub)]
+```
+
+```{r}
+# Create SummarizedExperiment
+se <- SummarizedExperiment(
+  assays = list(exp = as.matrix(exp_mat_fil)),
+  colData = clin_sub,
+  rowData = DataFrame(gene = rownames(exp_mat_fil), row.names = rownames(exp_mat_fil))
+)
+
+se <- se[,se$Histology_type == "cc"]
+```
+
+```{r}
+# Nearest template prediction
+library(CMScaller)
+
+# Step 1: Prepare expression matrix (genes x samples, log2 scale)
+exp_mat <- assays(se)$exp
+log2_exp <- log2(exp_mat + 1)
+expr_mat <- ematAdjust(log2_exp, method = "RLE")
+rownames(expr_mat) <- rowData(se)$gene
+
+# Step 2: Create subtype templates (Gene signatures)
+names(MTORUP) <- rep("MTOR", length(MTORUP))
+names(ICAMUP) <- rep("ICAM", length(ICAMUP))
+keyup <- c(MTORUP, ICAMUP)
+
+template_mat <- data.frame(class = factor(names(keyup)), 
+           probe = unname(keyup))
+
+# Step 3: Run NTP classification with permutations
+ntp_result <- ntp(
+  emat = expr_mat,           
+  template = template_mat,
+  distance = "cosine",
+  nPerm = 1000,              
+  seed = 22,                 
+  nCores = 30,
+  doPlot = TRUE
+)
+```
+
+
+```{r}
+ntp_out <- ntp_result %>% rownames_to_column("PID") %>% mutate(group_predict = ifelse(FDR < 0.05, as.character(prediction), "NOT"))
+
+ntp_out$OS_months <- se$OS[match(ntp_out$PID, se$SUBJECT_ID)]
+ntp_out$status_OS <- se$OS_CNSR[match(ntp_out$PID, se$SUBJECT_ID)]
+ntp_out$PFS_months <- se$PFS[match(ntp_out$PID, se$SUBJECT_ID)]
+ntp_out$status_PFS <- se$PFS_CNSR[match(ntp_out$PID, se$SUBJECT_ID)]
+ntp_out$Response <- se$Response[match(ntp_out$PID, se$SUBJECT_ID)]
+
+
+# Combined
+fit <- survfit(Surv(OS_months, status_OS) ~ group_predict, data = ntp_out)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme¨
+          #palette = c("#046C9A", "#000000", "#D69C4E", "#ECCBAE", "#ABDDDE"),
+          conf.int = FALSE
+)
+
+fit <- survfit(Surv(PFS_months, status_PFS) ~ group_predict, data = ntp_out)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme¨
+          #palette = c("#046C9A", "#000000", "#D69C4E", "#ECCBAE", "#ABDDDE"),
+          conf.int = FALSE
+)
+```
+
+
+
+
+
+
 # CPTAC 
 
 ```{r}
@@ -850,7 +962,7 @@ ntp_result <- ntp(
 ```
 
 ```{r}
-ntp_out <- ntp_result %>% rownames_to_column("PID") %>% mutate(group_predict = ifelse(FDR < 0.01, as.character(prediction), "NOT"))
+ntp_out <- ntp_result %>% rownames_to_column("PID") %>% mutate(group_predict = ifelse(FDR < 0.05, as.character(prediction), "NOT"))
 
 ntp_out$OS_days <- CPTAC.clean$OS_days[match(ntp_out$PID, CPTAC.clean$PID)]
 ntp_out$status_OS <- CPTAC.clean$status_OS[match(ntp_out$PID, CPTAC.clean$PID)]
