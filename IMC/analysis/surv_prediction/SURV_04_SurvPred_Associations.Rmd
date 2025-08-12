@@ -2253,50 +2253,74 @@ sce_T
 ```{r}
 ## TestInteractions
 # Activated
-sce_activated <- sce_T[,sce_T$BF_PL_TME_archetypes == "TME_activated"]
-
-set.seed(22)
-count_T <- testInteractions(sce_activated, 
-                  group_by = "sample_id", 
-                  label = "celltype_combined", 
-                  colPairName = "neighborhood", 
-                  method = "interaction", 
-                  BPPARAM = MulticoreParam(workers = 10, RNGseed = 22))
-
-out_activated <- count_T
-
-gc()
-
-# Suppressed
-sce_suppressed <- sce_T[,sce_T$BF_PL_TME_archetypes == "TME_suppressed"]
-
-set.seed(22)
-count_T <- testInteractions(sce_suppressed, 
-                  group_by = "sample_id", 
-                  label = "celltype_combined", 
-                  colPairName = "neighborhood", 
-                  method = "interaction",
-                  MulticoreParam(workers = 10, RNGseed = 22))
-
-out_suppressed <- count_T
-
-gc()
-
-# Silent
-sce_silent <- sce_T[,sce_T$BF_PL_TME_archetypes == "TME_silent"]
-
-set.seed(22)
-count_T <- testInteractions(sce_silent, 
-                  group_by = "sample_id", 
-                  label = "celltype_combined", 
-                  colPairName = "neighborhood", 
-                  method = "interaction",
-                  MulticoreParam(workers = 10, RNGseed = 22))
-
-out_silent <- count_T
-
-gc()
+# sce_activated <- sce_T[,sce_T$BF_PL_TME_archetypes == "TME_activated"]
+# 
+# set.seed(22)
+# count_T <- testInteractions(sce_activated, 
+#                   group_by = "sample_id", 
+#                   label = "celltype_combined", 
+#                   colPairName = "neighborhood", 
+#                   method = "interaction", 
+#                   BPPARAM = MulticoreParam(workers = 10, RNGseed = 22))
+# 
+# out_activated <- count_T
+# 
+# gc()
+# 
+# # Suppressed
+# sce_suppressed <- sce_T[,sce_T$BF_PL_TME_archetypes == "TME_suppressed"]
+# 
+# set.seed(22)
+# count_T <- testInteractions(sce_suppressed, 
+#                   group_by = "sample_id", 
+#                   label = "celltype_combined", 
+#                   colPairName = "neighborhood", 
+#                   method = "interaction",
+#                   MulticoreParam(workers = 10, RNGseed = 22))
+# 
+# out_suppressed <- count_T
+# 
+# gc()
+# 
+# # Silent
+# sce_silent <- sce_T[,sce_T$BF_PL_TME_archetypes == "TME_silent"]
+# 
+# set.seed(22)
+# count_T <- testInteractions(sce_silent, 
+#                   group_by = "sample_id", 
+#                   label = "celltype_combined", 
+#                   colPairName = "neighborhood", 
+#                   method = "interaction",
+#                   MulticoreParam(workers = 10, RNGseed = 22))
+# 
+# out_silent <- count_T
+# 
+# gc()
+# 
+# # ALL together
+# set.seed(22)
+# count_all <- testInteractions(sce_T, 
+#                   group_by = "sample_id", 
+#                   label = "celltype_combined", 
+#                   colPairName = "neighborhood", 
+#                   method = "interaction",
+#                   MulticoreParam(workers = 10, RNGseed = 22))
+# 
+# out_all <- count_all
 ```
+
+```{r}
+# saveRDS(out_silent, "/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/testInt_T_silent.rds")
+# saveRDS(out_suppressed, "/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/testInt_T_suppressed.rds")
+# saveRDS(out_activated, "/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/testInt_T_activated.rds")
+# saveRDS(out_all, "/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/testInt_T_all.rds")
+
+out_silent <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/testInt_T_silent.rds")
+out_suppressed <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/testInt_T_suppressed.rds")
+out_activated <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/testInt_T_activated.rds")
+out_all <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/testInt_T_all.rds")
+```
+
 
 ```{r}
 ## PlotInteractions
@@ -2305,27 +2329,29 @@ library(dplyr)
 
 out <- out_activated %>% as.data.frame() %>% mutate(pair_id = paste(from_label, to_label, sep = "__"),
                                           is_sig = !is.na(sig))
-
-summary_df <- out %>%
+summary_df <- out %>% 
+  filter(!str_detect(out$from_label,"Unknown/Other_") & !str_detect(out$to_label,"Unknown/Other_") & (str_detect(out$pair_id, "CD4") | str_detect(out$pair_id, "CD8"))) %>%
   group_by(pair_id) %>%
   summarise(
     sum_sigval = sum(sigval, na.rm = TRUE),
-    total_count = sum(is_sig),
-    .groups = "drop"
+    total_count = sum(is_sig)) %>%
+  mutate(abs_sum_sigval = abs(sum_sigval), int_type = ifelse(sum_sigval > 0, "attraction", "avoidance")) %>%
+  filter(abs_sum_sigval > 10) 
+
+
+df_top_bottom <- summary_df %>%
+  arrange(desc(sum_sigval)) %>%                
+  slice_head(n = 10) %>%                  
+  bind_rows(
+   summary_df %>%
+      arrange(sum_sigval) %>%                  
+      slice_head(n = 10)                  
   ) %>%
-  mutate(
-    fraction_sig = sum_sigval / total_count,
-    int_type = case_when(
-      fraction_sig > 0.2 ~ "attraction",
-      fraction_sig < -0.2 ~ "repulsion",
-      TRUE ~ NA_character_
-    )
-  ) %>%
-  filter(!is.na(int_type))
+  distinct()
 
 subset_out <- out %>%
-  semi_join(summary_df, by = "pair_id") %>%
-  left_join(summary_df %>% select(pair_id, int_type), by = "pair_id")
+  semi_join(df_top_bottom, by = "pair_id") %>%
+  left_join(df_top_bottom %>% select(pair_id, sum_sigval, int_type), by = "pair_id")
 
 # Now we can visualise only these filtered edges
 plotInteractions(subset_out,
@@ -2333,36 +2359,41 @@ plotInteractions(subset_out,
                  group_by = "sample_id",
                  label = "celltype_combined",
                  node_color_by = "name",
+                 node_size_by = "n_group",
                  edge_color_by = "int_type",
-                 edge_width_by = "sigval")
+                 edge_width_by = "sum_sigval", 
+                 graph_layout = "chord")+
+  scale_edge_color_brewer(palette = "Set1")
 
 # Suppressed
-
 library(dplyr)
 
 out <- out_suppressed %>% as.data.frame() %>% mutate(pair_id = paste(from_label, to_label, sep = "__"),
                                           is_sig = !is.na(sig))
 
-summary_df <- out %>%
+summary_df <- out %>% 
+  filter(!str_detect(out$from_label,"Unknown/Other_") & !str_detect(out$to_label,"Unknown/Other_") & (str_detect(out$pair_id, "CD4") | str_detect(out$pair_id, "CD8"))) %>%
   group_by(pair_id) %>%
   summarise(
     sum_sigval = sum(sigval, na.rm = TRUE),
-    total_count = sum(is_sig),
-    .groups = "drop"
+    total_count = sum(is_sig)) %>%
+  mutate(abs_sum_sigval = abs(sum_sigval), int_type = ifelse(sum_sigval > 0, "attraction", "avoidance")) %>%
+  filter(abs_sum_sigval > 10) 
+
+
+df_top_bottom <- summary_df %>%
+  arrange(desc(sum_sigval)) %>%                
+  slice_head(n = 10) %>%                  
+  bind_rows(
+   summary_df %>%
+      arrange(sum_sigval) %>%                  
+      slice_head(n = 10)                  
   ) %>%
-  mutate(
-    fraction_sig = sum_sigval / total_count,
-    int_type = case_when(
-      fraction_sig > 0.2 ~ "attraction",
-      fraction_sig < -0.2 ~ "repulsion",
-      TRUE ~ NA_character_
-    )
-  ) %>%
-  filter(!is.na(int_type))
+  distinct()
 
 subset_out <- out %>%
-  semi_join(summary_df, by = "pair_id") %>%
-  left_join(summary_df %>% select(pair_id, int_type), by = "pair_id")
+  semi_join(df_top_bottom, by = "pair_id") %>%
+  left_join(df_top_bottom %>% select(pair_id, sum_sigval, int_type), by = "pair_id")
 
 # Now we can visualise only these filtered edges
 plotInteractions(subset_out,
@@ -2370,8 +2401,11 @@ plotInteractions(subset_out,
                  group_by = "sample_id",
                  label = "celltype_combined",
                  node_color_by = "name",
+                 node_size_by = "n_group",
                  edge_color_by = "int_type",
-                 edge_width_by = "sigval")
+                 edge_width_by = "sum_sigval", 
+                 graph_layout = "chord")+
+  scale_edge_color_brewer(palette = "Set1")
 
 
 # Silent
@@ -2380,26 +2414,29 @@ library(dplyr)
 out <- out_silent %>% as.data.frame() %>% mutate(pair_id = paste(from_label, to_label, sep = "__"),
                                           is_sig = !is.na(sig))
 
-summary_df <- out %>%
+summary_df <- out %>% 
+  filter(!str_detect(out$from_label,"Unknown/Other_") & !str_detect(out$to_label,"Unknown/Other_") & (str_detect(out$pair_id, "CD4") | str_detect(out$pair_id, "CD8"))) %>%
   group_by(pair_id) %>%
   summarise(
     sum_sigval = sum(sigval, na.rm = TRUE),
-    total_count = sum(is_sig),
-    .groups = "drop"
+    total_count = sum(is_sig)) %>%
+  mutate(abs_sum_sigval = abs(sum_sigval), int_type = ifelse(sum_sigval > 0, "attraction", "avoidance")) %>%
+  filter(abs_sum_sigval > 10) 
+
+
+df_top_bottom <- summary_df %>%
+  arrange(desc(sum_sigval)) %>%                
+  slice_head(n = 10) %>%                  
+  bind_rows(
+   summary_df %>%
+      arrange(sum_sigval) %>%                  
+      slice_head(n = 10)                  
   ) %>%
-  mutate(
-    fraction_sig = sum_sigval / total_count,
-    int_type = case_when(
-      fraction_sig > 0.2 ~ "attraction",
-      fraction_sig < -0.2 ~ "repulsion",
-      TRUE ~ NA_character_
-    )
-  ) %>%
-  filter(!is.na(int_type))
+  distinct()
 
 subset_out <- out %>%
-  semi_join(summary_df, by = "pair_id") %>%
-  left_join(summary_df %>% select(pair_id, int_type), by = "pair_id")
+  semi_join(df_top_bottom, by = "pair_id") %>%
+  left_join(df_top_bottom %>% select(pair_id, sum_sigval, int_type), by = "pair_id")
 
 # Now we can visualise only these filtered edges
 plotInteractions(subset_out,
@@ -2407,39 +2444,18 @@ plotInteractions(subset_out,
                  group_by = "sample_id",
                  label = "celltype_combined",
                  node_color_by = "name",
-                 edge_color_by = "int_type", 
-                 edge_width_by = "sigval")
-```
-```{r}
-out_activated %>% as_tibble() %>%
-    group_by(from_label, to_label) %>%
-    summarize(sum_sigval = sum(sigval, na.rm = TRUE)) %>%
-    ggplot() +
-        geom_tile(aes(from_label, to_label, fill = sum_sigval)) +
-        scale_fill_gradient2(low = "blue", mid = "white", high = "red") +
-        theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-out_suppressed %>% as_tibble() %>%
-    group_by(from_label, to_label) %>%
-    summarize(sum_sigval = sum(sigval, na.rm = TRUE)) %>%
-    ggplot() +
-        geom_tile(aes(from_label, to_label, fill = sum_sigval)) +
-        scale_fill_gradient2(low = "blue", mid = "white", high = "red") +
-        theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-out_silent %>% as_tibble() %>%
-    group_by(from_label, to_label) %>%
-    summarize(sum_sigval = sum(sigval, na.rm = TRUE)) %>%
-    ggplot() +
-        geom_tile(aes(from_label, to_label, fill = sum_sigval)) +
-        scale_fill_gradient2(low = "blue", mid = "white", high = "red") +
-        theme(axis.text.x = element_text(angle = 45, hjust = 1))
+                 node_size_by = "n_group",
+                 edge_color_by = "int_type",
+                 edge_width_by = "sum_sigval", 
+                 graph_layout = "chord")+
+  scale_edge_color_brewer(palette = "Set1")
 ```
 
 ```{r}
 out_all$PID <- sce_T$PID[match(out_all$group_by, sce_T$sample_id)]
 
-out_all <- out_all %>% as.data.frame() %>% mutate(pair_id = paste(from_label, to_label, sep = "__"))
+out_all <- out_all %>% as.data.frame() %>% mutate(pair_id = paste(from_label, to_label, sep = "__")) %>% 
+  filter(!str_detect(out_all$from_label,"Unknown") & !str_detect(out_all$to_label,"Unknown"))
 
 ht_all <- out_all %>% group_by(PID, pair_id) %>% mutate(mean_ct_PID = mean(ct, na.rm = TRUE)) %>% ungroup() %>% group_by(pair_id) %>% mutate(mean_ct = mean(mean_ct_PID, na.rm = TRUE)) %>% ungroup() %>% select(mean_ct, from_label, to_label) %>% unique() %>% ungroup() %>% pivot_wider(names_from = to_label, values_from = mean_ct) %>% column_to_rownames("from_label")
   
@@ -2447,12 +2463,12 @@ Heatmap(ht_all, col = viridis(100))
 ```
 
 
-
 ```{r}
 #Activated
 out_activated$PID <- sce_T$PID[match(out_activated$group_by, sce_T$sample_id)]
 
-out_activated <- out_activated %>% as.data.frame() %>% mutate(pair_id = paste(from_label, to_label, sep = "__"))
+out_activated <- out_activated %>% as.data.frame() %>% mutate(pair_id = paste(from_label, to_label, sep = "__")) %>% 
+  filter(!str_detect(out_activated$from_label,"Unknown") & !str_detect(out_activated$to_label,"Unknown"))
 
 ht_activated <- out_activated %>% group_by(PID, pair_id) %>% mutate(mean_ct_PID = mean(ct, na.rm = TRUE)) %>% ungroup() %>% group_by(pair_id) %>% mutate(mean_ct = mean(mean_ct_PID, na.rm = TRUE)) %>% ungroup() %>% select(mean_ct, from_label, to_label) %>% unique() %>% ungroup() %>% pivot_wider(names_from = to_label, values_from = mean_ct) %>% column_to_rownames("from_label")
 
@@ -2487,7 +2503,8 @@ Heatmap(ht_activated, col = viridis(100),
 #Suppressed
 out_suppressed$PID <- sce_T$PID[match(out_suppressed$group_by, sce_T$sample_id)]
 
-out_suppressed <- out_suppressed %>% as.data.frame() %>% mutate(pair_id = paste(from_label, to_label, sep = "__"))
+out_suppressed <- out_suppressed %>% as.data.frame() %>% mutate(pair_id = paste(from_label, to_label, sep = "__")) %>% 
+  filter(!str_detect(out_suppressed$from_label,"Unknown") & !str_detect(out_suppressed$to_label,"Unknown"))
 
 ht_suppressed <- out_suppressed %>% group_by(PID, pair_id) %>% mutate(mean_ct_PID = mean(ct, na.rm = TRUE)) %>% ungroup() %>% group_by(pair_id) %>% mutate(mean_ct = mean(mean_ct_PID, na.rm = TRUE)) %>% ungroup() %>% select(mean_ct, from_label, to_label) %>% unique() %>% ungroup() %>% pivot_wider(names_from = to_label, values_from = mean_ct) %>% column_to_rownames("from_label")
 
@@ -2522,7 +2539,8 @@ Heatmap(ht_suppressed, col = viridis(100),
 #Silent
 out_silent$PID <- sce_T$PID[match(out_silent$group_by, sce_T$sample_id)]
 
-out_silent <- out_silent %>% as.data.frame() %>% mutate(pair_id = paste(from_label, to_label, sep = "__"))
+out_silent <- out_silent %>% as.data.frame() %>% mutate(pair_id = paste(from_label, to_label, sep = "__")) %>% 
+  filter(!str_detect(out_silent$from_label,"Unknown") & !str_detect(out_silent$to_label,"Unknown"))
 
 ht_silent <- out_silent %>% group_by(PID, pair_id) %>% mutate(mean_ct_PID = mean(ct, na.rm = TRUE)) %>% ungroup() %>% group_by(pair_id) %>% mutate(mean_ct = mean(mean_ct_PID, na.rm = TRUE)) %>% ungroup() %>% select(mean_ct, from_label, to_label) %>% unique() %>% ungroup() %>% pivot_wider(names_from = to_label, values_from = mean_ct) %>% column_to_rownames("from_label")
 
@@ -2555,13 +2573,340 @@ Heatmap(ht_silent, col = viridis(100),
         )
 ```
 
+
 ```{r}
+# MY cell panel
+sce_MY <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_07.rds")
 
+# Add archetypes
+sce_MY$BF_PL_TME_archetypes <- metadata_selected$BF_PL_TME_archetypes[match(sce_MY$PID, metadata_selected$PID)]
 
+sce_MY <- sce_MY[,!is.na(sce_MY$BF_PL_TME_archetypes)]
+sce_MY
+```
+
+```{r}
+## TestInteractions
+# Activated
+sce_activated <- sce_MY[,sce_MY$BF_PL_TME_archetypes == "TME_activated"]
+
+set.seed(22)
+count_MY <- testInteractions(sce_activated, 
+                  group_by = "sample_id", 
+                  label = "celltype_combined", 
+                  colPairName = "neighborhood", 
+                  method = "interaction", 
+                  BPPARAM = MulticoreParam(workers = 8, RNGseed = 22))
+
+out_activated <- count_MY
+
+gc()
+
+# Suppressed
+sce_suppressed <- sce_MY[,sce_MY$BF_PL_TME_archetypes == "TME_suppressed"]
+
+set.seed(22)
+count_MY <- testInteractions(sce_suppressed, 
+                  group_by = "sample_id", 
+                  label = "celltype_combined", 
+                  colPairName = "neighborhood", 
+                  method = "interaction",
+                  MulticoreParam(workers = 8, RNGseed = 22))
+
+out_suppressed <- count_MY
+
+gc()
+
+# Silent
+sce_silent <- sce_MY[,sce_MY$BF_PL_TME_archetypes == "TME_silent"]
+
+set.seed(22)
+count_MY <- testInteractions(sce_silent, 
+                  group_by = "sample_id", 
+                  label = "celltype_combined", 
+                  colPairName = "neighborhood", 
+                  method = "interaction",
+                  MulticoreParam(workers = 8, RNGseed = 22))
+
+out_silent <- count_MY
+
+gc()
+
+# ALL together
+set.seed(22)
+count_all <- testInteractions(sce_MY, 
+                  group_by = "sample_id", 
+                  label = "celltype_combined", 
+                  colPairName = "neighborhood", 
+                  method = "interaction",
+                  MulticoreParam(workers = 8, RNGseed = 22))
+
+out_all <- count_all
+```
+
+```{r}
+saveRDS(out_silent, "/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/testInt_MY_silent.rds")
+saveRDS(out_suppressed, "/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/testInt_MY_suppressed.rds")
+saveRDS(out_activated, "/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/testInt_MY_activated.rds")
+saveRDS(out_all, "/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/testInt_MY_all.rds")
+
+out_silent <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/testInt_MY_silent.rds")
+out_suppressed <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/testInt_MY_suppressed.rds")
+out_activated <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/testInt_MY_activated.rds")
+out_all <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/testInt_MY_all.rds")
 ```
 
 
+```{r}
+## PlotInteractions
+# Activated
+library(dplyr)
 
+out <- out_activated %>% as.data.frame() %>% mutate(pair_id = paste(from_label, to_label, sep = "__"),
+                                          is_sig = !is.na(sig))
+summary_df <- out %>% 
+  filter(!str_detect(out$from_label,"Unknown/Other_") & !str_detect(out$to_label,"Unknown/Other_") & (str_detect(out$pair_id, "MY"))) %>%
+  group_by(pair_id) %>%
+  summarise(
+    sum_sigval = sum(sigval, na.rm = TRUE),
+    total_count = sum(is_sig)) %>%
+  mutate(abs_sum_sigval = abs(sum_sigval), int_type = ifelse(sum_sigval > 0, "attraction", "avoidance")) %>%
+  filter(abs_sum_sigval > 10) 
+
+
+df_top_bottom <- summary_df %>%
+  arrange(desc(sum_sigval)) %>%                
+  slice_head(n = 10) %>%                  
+  bind_rows(
+   summary_df %>%
+      arrange(sum_sigval) %>%                  
+      slice_head(n = 10)                  
+  ) %>%
+  distinct()
+
+subset_out <- out %>%
+  semi_join(df_top_bottom, by = "pair_id") %>%
+  left_join(df_top_bottom %>% select(pair_id, sum_sigval, int_type), by = "pair_id")
+
+# Now we can visualise only these filtered edges
+plotInteractions(subset_out,
+                 sce_MY,
+                 group_by = "sample_id",
+                 label = "celltype_combined",
+                 node_color_by = "name",
+                 node_size_by = "n_group",
+                 edge_color_by = "int_type",
+                 edge_width_by = "sum_sigval", 
+                 graph_layout = "chord")+
+  scale_edge_color_brewer(palette = "Set1")
+
+# Suppressed
+library(dplyr)
+
+out <- out_suppressed %>% as.data.frame() %>% mutate(pair_id = paste(from_label, to_label, sep = "__"),
+                                          is_sig = !is.na(sig))
+
+summary_df <- out %>% 
+  filter(!str_detect(out$from_label,"Unknown/Other_") & !str_detect(out$to_label,"Unknown/Other_") & (str_detect(out$pair_id, "MY"))) %>%
+  group_by(pair_id) %>%
+  summarise(
+    sum_sigval = sum(sigval, na.rm = TRUE),
+    total_count = sum(is_sig)) %>%
+  mutate(abs_sum_sigval = abs(sum_sigval), int_type = ifelse(sum_sigval > 0, "attraction", "avoidance")) %>%
+  filter(abs_sum_sigval > 10) 
+
+
+df_top_bottom <- summary_df %>%
+  arrange(desc(sum_sigval)) %>%                
+  slice_head(n = 10) %>%                  
+  bind_rows(
+   summary_df %>%
+      arrange(sum_sigval) %>%                  
+      slice_head(n = 10)                  
+  ) %>%
+  distinct()
+
+subset_out <- out %>%
+  semi_join(df_top_bottom, by = "pair_id") %>%
+  left_join(df_top_bottom %>% select(pair_id, sum_sigval, int_type), by = "pair_id")
+
+# Now we can visualise only these filtered edges
+plotInteractions(subset_out,
+                 sce_MY,
+                 group_by = "sample_id",
+                 label = "celltype_combined",
+                 node_color_by = "name",
+                 node_size_by = "n_group",
+                 edge_color_by = "int_type",
+                 edge_width_by = "sum_sigval", 
+                 graph_layout = "chord")+
+  scale_edge_color_brewer(palette = "Set1")
+
+
+# Silent
+library(dplyr)
+
+out <- out_silent %>% as.data.frame() %>% mutate(pair_id = paste(from_label, to_label, sep = "__"),
+                                          is_sig = !is.na(sig))
+
+summary_df <- out %>% 
+  filter(!str_detect(out$from_label,"Unknown/Other_") & !str_detect(out$to_label,"Unknown/Other_") & (str_detect(out$pair_id, "MY"))) %>%
+  group_by(pair_id) %>%
+  summarise(
+    sum_sigval = sum(sigval, na.rm = TRUE),
+    total_count = sum(is_sig)) %>%
+  mutate(abs_sum_sigval = abs(sum_sigval), int_type = ifelse(sum_sigval > 0, "attraction", "avoidance")) %>%
+  filter(abs_sum_sigval > 10) 
+
+
+df_top_bottom <- summary_df %>%
+  arrange(desc(sum_sigval)) %>%                
+  slice_head(n = 10) %>%                  
+  bind_rows(
+   summary_df %>%
+      arrange(sum_sigval) %>%                  
+      slice_head(n = 10)                  
+  ) %>%
+  distinct()
+
+subset_out <- out %>%
+  semi_join(df_top_bottom, by = "pair_id") %>%
+  left_join(df_top_bottom %>% select(pair_id, sum_sigval, int_type), by = "pair_id")
+
+# Now we can visualise only these filtered edges
+plotInteractions(subset_out,
+                 sce_MY,
+                 group_by = "sample_id",
+                 label = "celltype_combined",
+                 node_color_by = "name",
+                 node_size_by = "n_group",
+                 edge_color_by = "int_type",
+                 edge_width_by = "sum_sigval", 
+                 graph_layout = "chord")+
+  scale_edge_color_brewer(palette = "Set1")
+```
+
+```{r}
+out_all$PID <- sce_MY$PID[match(out_all$group_by, sce_MY$sample_id)]
+
+out_all <- out_all %>% as.data.frame() %>% mutate(pair_id = paste(from_label, to_label, sep = "__")) %>% 
+  filter(!str_detect(out_all$from_label,"Unknown") & !str_detect(out_all$to_label,"Unknown"))
+
+ht_all <- out_all %>% group_by(PID, pair_id) %>% mutate(mean_ct_PID = mean(ct, na.rm = TRUE)) %>% ungroup() %>% group_by(pair_id) %>% mutate(mean_ct = mean(mean_ct_PID, na.rm = TRUE)) %>% ungroup() %>% select(mean_ct, from_label, to_label) %>% unique() %>% ungroup() %>% pivot_wider(names_from = to_label, values_from = mean_ct) %>% column_to_rownames("from_label")
+  
+Heatmap(ht_all, col = viridis(100))
+```
+
+
+```{r}
+#Activated
+out_activated$PID <- sce_MY$PID[match(out_activated$group_by, sce_MY$sample_id)]
+
+out_activated <- out_activated %>% as.data.frame() %>% mutate(pair_id = paste(from_label, to_label, sep = "__")) %>% 
+  filter(!str_detect(out_activated$from_label,"Unknown") & !str_detect(out_activated$to_label,"Unknown"))
+
+ht_activated <- out_activated %>% group_by(PID, pair_id) %>% mutate(mean_ct_PID = mean(ct, na.rm = TRUE)) %>% ungroup() %>% group_by(pair_id) %>% mutate(mean_ct = mean(mean_ct_PID, na.rm = TRUE)) %>% ungroup() %>% select(mean_ct, from_label, to_label) %>% unique() %>% ungroup() %>% pivot_wider(names_from = to_label, values_from = mean_ct) %>% column_to_rownames("from_label")
+
+anno <- ht_activated %>% rownames_to_column("celltype_combined") %>% select(celltype_combined)
+anno$group <- ifelse(str_detect(anno$celltype_combined, "MY"), "MY", "Not_MY")
+
+Heatmap(ht_activated, col = viridis(100), 
+        row_split = anno$group, 
+        column_split = anno$group, 
+        cluster_column_slices = FALSE, 
+        cluster_row_slices = FALSE, 
+        show_column_dend = FALSE, 
+        show_row_dend = FALSE, 
+        cluster_rows = FALSE,
+        cluster_columns = FALSE,
+        clustering_method_rows = "ward.D2", 
+        clustering_method_columns = "ward.D2", 
+        show_row_names = FALSE)+
+  Heatmap(ht_activated - ht_all,
+        row_split = anno$group, 
+        column_split = anno$group, 
+        cluster_column_slices = FALSE, 
+        cluster_row_slices = FALSE, 
+        show_column_dend = FALSE, 
+        show_row_dend = FALSE, 
+        cluster_rows = FALSE,
+        cluster_columns = FALSE,
+        clustering_method_rows = "ward.D2", 
+        clustering_method_columns = "ward.D2"
+        )
+
+#Suppressed
+out_suppressed$PID <- sce_T$PID[match(out_suppressed$group_by, sce_T$sample_id)]
+
+out_suppressed <- out_suppressed %>% as.data.frame() %>% mutate(pair_id = paste(from_label, to_label, sep = "__")) %>% 
+  filter(!str_detect(out_suppressed$from_label,"Unknown") & !str_detect(out_suppressed$to_label,"Unknown"))
+
+ht_suppressed <- out_suppressed %>% group_by(PID, pair_id) %>% mutate(mean_ct_PID = mean(ct, na.rm = TRUE)) %>% ungroup() %>% group_by(pair_id) %>% mutate(mean_ct = mean(mean_ct_PID, na.rm = TRUE)) %>% ungroup() %>% select(mean_ct, from_label, to_label) %>% unique() %>% ungroup() %>% pivot_wider(names_from = to_label, values_from = mean_ct) %>% column_to_rownames("from_label")
+
+anno <- ht_suppressed %>% rownames_to_column("celltype_combined") %>% select(celltype_combined)
+anno$group <- ifelse(str_detect(anno$celltype_combined, "MY"), "MY", "Not_MY")
+
+Heatmap(ht_suppressed, col = viridis(100), 
+        row_split = anno$group, 
+        column_split = anno$group, 
+        cluster_column_slices = FALSE, 
+        cluster_row_slices = FALSE, 
+        show_column_dend = FALSE, 
+        show_row_dend = FALSE, 
+        cluster_rows = FALSE,
+        cluster_columns = FALSE,
+        clustering_method_rows = "ward.D2", 
+        clustering_method_columns = "ward.D2", 
+        show_row_names = FALSE)+
+  Heatmap(ht_suppressed - ht_all,
+        row_split = anno$group, 
+        column_split = anno$group, 
+        cluster_column_slices = FALSE, 
+        cluster_row_slices = FALSE, 
+        show_column_dend = FALSE, 
+        show_row_dend = FALSE, 
+        cluster_rows = FALSE,
+        cluster_columns = FALSE,
+        clustering_method_rows = "ward.D2", 
+        clustering_method_columns = "ward.D2"
+        )
+
+#Silent
+out_silent$PID <- sce_T$PID[match(out_silent$group_by, sce_T$sample_id)]
+
+out_silent <- out_silent %>% as.data.frame() %>% mutate(pair_id = paste(from_label, to_label, sep = "__")) %>% 
+  filter(!str_detect(out_silent$from_label,"Unknown") & !str_detect(out_silent$to_label,"Unknown"))
+
+ht_silent <- out_silent %>% group_by(PID, pair_id) %>% mutate(mean_ct_PID = mean(ct, na.rm = TRUE)) %>% ungroup() %>% group_by(pair_id) %>% mutate(mean_ct = mean(mean_ct_PID, na.rm = TRUE)) %>% ungroup() %>% select(mean_ct, from_label, to_label) %>% unique() %>% ungroup() %>% pivot_wider(names_from = to_label, values_from = mean_ct) %>% column_to_rownames("from_label")
+
+anno <- ht_silent %>% rownames_to_column("celltype_combined") %>% select(celltype_combined)
+anno$group <- ifelse(str_detect(anno$celltype_combined, "MY"), "MY", "Not_MY")
+
+Heatmap(ht_silent, col = viridis(100), 
+        row_split = anno$group, 
+        column_split = anno$group, 
+        cluster_column_slices = FALSE, 
+        cluster_row_slices = FALSE, 
+        show_column_dend = FALSE, 
+        show_row_dend = FALSE, 
+        clustering_method_rows = "ward.D2", 
+        clustering_method_columns = "ward.D2", 
+        cluster_rows = FALSE,
+        cluster_columns = FALSE,
+        show_row_names = FALSE)+
+  Heatmap(ht_silent - ht_all,
+        row_split = anno$group, 
+        column_split = anno$group, 
+        cluster_column_slices = FALSE, 
+        cluster_row_slices = FALSE, 
+        show_column_dend = FALSE, 
+        show_row_dend = FALSE, 
+        cluster_rows = FALSE,
+        cluster_columns = FALSE,
+        clustering_method_rows = "ward.D2", 
+        clustering_method_columns = "ward.D2"
+        )
+```
 
 
 ##### Metabolomics

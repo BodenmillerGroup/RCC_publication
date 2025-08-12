@@ -133,9 +133,9 @@ GOI <- GOI_IntOGen$Symbol
 
 mutation_xena <- mutation_xena %>% filter(gene %in% GOI) %>% pivot_wider(names_from = "gene", values_from = "mutation") %>% select(-TGFBR2, -ARHGEF10L, -PTPRK, -RAP1GDS1)
 
-mutation_xena_filtered <- mutation_xena %>% select(PID, VHL, BAP1, PBRM1, SETD2, PTEN) %>% as.data.frame
+mutation_xena_filtered <- mutation_xena %>% select(PID, VHL, BAP1, PBRM1, SETD2, PTEN, NF2) %>% as.data.frame
 
-for (entry in colnames(mutation_xena_filtered)[colnames(mutation_xena_filtered) %in% c("VHL", "BAP1", "PBRM1", "SETD2", "PTEN")]) {
+for (entry in colnames(mutation_xena_filtered)[colnames(mutation_xena_filtered) %in% c("VHL", "BAP1", "PBRM1", "SETD2", "PTEN", "NF2")]) {
   colData(kirc.clean)[,entry] <- mutation_xena_filtered[,entry][match(colData(kirc.clean)[,"PID"],mutation_xena_filtered$PID)]
 }
 ```
@@ -1259,30 +1259,33 @@ dittoBarPlot(vsd, var = "pT_combined", group.by = "TME_archetype",retain.factor.
 dittoBarPlot(vsd, var = "ISUP_combined", group.by = "TME_archetype",retain.factor.levels = FALSE)+
   scale_fill_manual(values = metadata(vsd)$colors$ISUP_combined)+
   ggtitle("")
+```
 
+```{r}
 # BAP1
 dittoBarPlot(vsd[,!is.na(vsd$BAP1)], var = "BAP1", group.by = "TME_archetype",retain.factor.levels = FALSE)+
   ggtitle("")
 df <- as.data.frame(colData(vsd)[!is.na(vsd$BAP1), c("BAP1", "TME_archetype")])
-fisher.test(table(df$BAP1, df$TME_archetype))
+print(fisher.test(table(df$BAP1, df$TME_archetype)))
 vsd$TME_archetype_comb <- ifelse(vsd$TME_archetype == "TME_suppressed", "TME_suppressed", "Other")
 dittoBarPlot(vsd[,!is.na(vsd$BAP1)], var = "BAP1", group.by = "TME_archetype_comb",retain.factor.levels = FALSE)+
   ggtitle("")
 df <- as.data.frame(colData(vsd)[!is.na(vsd$BAP1), c("BAP1", "TME_archetype_comb")])
-fisher.test(table(df$BAP1, df$TME_archetype_comb))
+print(fisher.test(table(df$BAP1, df$TME_archetype_comb)))
+```
 
+```{r}
 # PBRM1
 dittoBarPlot(vsd[,!is.na(vsd$PBRM1)], var = "PBRM1", group.by = "TME_archetype",retain.factor.levels = FALSE)+
   ggtitle("")
 df <- as.data.frame(colData(vsd)[!is.na(vsd$PBRM1), c("PBRM1", "TME_archetype")])
-fisher.test(table(df$PBRM1, df$TME_archetype))
+print(fisher.test(table(df$PBRM1, df$TME_archetype)))
 vsd$TME_archetype_comb <- ifelse(vsd$TME_archetype == "TME_silent", "TME_silent", "Other")
 dittoBarPlot(vsd[,!is.na(vsd$PBRM1)], var = "PBRM1", group.by = "TME_archetype_comb",retain.factor.levels = FALSE)+
   ggtitle("")
 df <- as.data.frame(colData(vsd)[!is.na(vsd$PBRM1), c("PBRM1", "TME_archetype_comb")])
-fisher.test(table(df$PBRM1, df$TME_archetype_comb))
+print(fisher.test(table(df$PBRM1, df$TME_archetype_comb)))
 ```
-
 
 ### Marker expression comparison for PID groups 
 
@@ -1292,7 +1295,7 @@ fisher.test(table(df$PBRM1, df$TME_archetype_comb))
 # Define GOI of interest
 #GOI <- c("ICAM1", "VHL")
 #GOI <- c("VHL","CA9", "KRT19", "GPX4", "HLA-DRA", "NFKB1", "CCND1", "HIF1A", "TP53", "MYC", "ICAM1", "PDK4", "NT5E", "SMARCA4", "PKM", "CD274", "MME", "IDH2", "EPAS1", "AURKA", "HAVCR2", "EGFR", "RPS6", "FLT1", "MTOR", "RB1", "SLC2A1", "FH", "GLUD1", "CD44", "VIM")
-GOI <- c("VHL", "NFKB1", "CCND1", "ICAM1", "EGFR", "FLT1", "CD44", "MTOR")
+GOI <- c("VHL", "NFKB1", "ICAM1", "CD44", "MTOR")
 GOI_rel <- GOI[GOI %in% rownames(vsd)]
 
 # Define heatmap based on normalized counts 
@@ -1963,7 +1966,7 @@ ddsSE_1 <- ddsSE_1[keep, ]
 ## 2: Filter for protein-coding genes
 library(biomaRt)
 out <- data.frame(og = rownames(ddsSE_1),
-           sh = sub("\\..*", "", rownames(ddsSE_1)))devtools::install_github("Lothelab/CMScaller")
+           sh = sub("\\..*", "", rownames(ddsSE_1)))
 ensembl <- useEnsembl(biomart = "genes", dataset = "hsapiens_gene_ensembl")
 gene_info <- getBM(attributes = c("ensembl_gene_id", "gene_biotype"),
                    filters = "ensembl_gene_id",
@@ -2157,6 +2160,8 @@ ntp_result <- ntp(
 library(dplyr)
 library(caret)
 
+kirc.clean$TME_archetype <- factor(kirc.clean$TME_archetype)
+
 # Store results
 results <- data.frame(FDR_cutoff = numeric(), Mean_Balanced_Accuracy = numeric())
 
@@ -2187,8 +2192,11 @@ for (fdr_cutoff in c(seq(0.05, 0.001, by = -0.005), 0.0001)) {
   # Extract and store mean balanced accuracy
   cm_stats <- as.data.frame(cm$byClass)
   mean_ba <- mean(cm_stats$`Balanced Accuracy`, na.rm = TRUE)
+  mean_f1 <- mean(cm_stats$F1, na.rm = TRUE)
   
-  results <- rbind(results, data.frame(FDR_cutoff = fdr_cutoff, Mean_Balanced_Accuracy = mean_ba))
+  results <- rbind(results, data.frame(FDR_cutoff = fdr_cutoff, 
+                                       Mean_Balanced_Accuracy = mean_ba, 
+                                       mean_f1 = mean_f1))
 }
 ```
 
@@ -2213,8 +2221,6 @@ ggsurvplot(fit,
           conf.int = FALSE
 )
 ```
-
-
 ```{r}
 kirc.clean$TME_archetype_predict <- ntp_out$group_predict[match(kirc.clean$PID, ntp_out$PID)]
 
@@ -2227,6 +2233,7 @@ kirc.clean$TME_archetype_predict <- factor(kirc.clean$TME_archetype_predict, lev
 
 table(kirc.clean$TME_archetype_predict, kirc.clean$TME_archetype)
 ```
+
 
 ```{r}
 # Performance
@@ -2290,8 +2297,6 @@ Heatmap(gen_mat,
         )+
   rowAnnotation(cat = row_anno$cat)
 ```
-
-# CONTINUE HERE
 
 ### Save
 
@@ -2455,8 +2460,38 @@ rownames(TPM_mat) <- rowData(kirc.clean)$gene_name
 ### MCP-counter 
 
 ```{r}
-#res_MCP <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_MCP.rds") 
-res_MCP <- immunedeconv::deconvolute(TPM_mat, method = "mcp_counter")
+res_MCP <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_MCP.rds") 
+
+#Z-scoring of MCP results by cell type
+res_MCP_1 <- res_MCP %>% dplyr::select(-cell_type)
+rownames(res_MCP_1) <- res_MCP$cell_type
+res_MCP_z <- as.data.frame(t(scale(t(res_MCP_1), center=TRUE, scale=TRUE)))
+res_MCP_z <- res_MCP_z %>% rownames_to_column("cell_type")
+
+res_MCP_plot <- res_MCP_z %>% pivot_longer(2:ncol(res_MCP_z), names_to = "PID", values_to = "score")
+
+res_MCP_plot$TME_archetype <- kirc.clean$TME_archetype[match(res_MCP_plot$PID, colnames(kirc.clean))]
+
+ggplot(res_MCP_plot, aes(x = TME_archetype, y = score))+
+  geom_boxplot(outlier.colour = NA)+
+  geom_jitter(aes(color = TME_archetype), size = 3, position=position_jitter(w=0.1,h=0.1))+
+  facet_wrap(~cell_type, scales = "free_y")+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90))+
+  scale_color_brewer(palette = "Set1")+
+  guides(color = "none")
+  #stat_compare_means(method = "t.test")
+  
+# Heatmap visualization  
+ht_MCP <- res_MCP_plot %>% group_by(TME_archetype, cell_type) %>% dplyr::summarize(mean = mean(score)) %>% na.omit() %>% pivot_wider(names_from = TME_archetype, values_from = mean) %>% column_to_rownames("cell_type") 
+
+Heatmap(ht_MCP, name = "mean MCP-Z-score")
+```
+
+
+```{r}
+res_MCP <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_MCP.rds") 
+#res_MCP <- immunedeconv::deconvolute(TPM_mat, method = "mcp_counter")
 ```
 
 ```{r}
@@ -2523,8 +2558,10 @@ Heatmap(ht_MCP, name = "mean MCP-Z-score")
 ### Quanti-Seq 
 
 ```{r}
-#res_quanti <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_quantiseq.rds") 
-res_quanti <- immunedeconv::deconvolute(TPM_mat, method = "quantiseq")
+#res_quanti <- immunedeconv::deconvolute(TPM_mat, method = "quantiseq")
+#saveRDS(res_quanti, "/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_quantiseq.rds") 
+
+res_quanti <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_quantiseq.rds") 
 ```
 
 ```{r}
@@ -2595,8 +2632,10 @@ saveRDS(res_quanti, "/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_K
 ### xCell
 
 ```{r}
-res_xcell <- immunedeconv::deconvolute(TPM_mat, method = "xcell")
-saveRDS(res_xcell, "/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_xcell.rds") 
+#res_xcell <- immunedeconv::deconvolute(TPM_mat, method = "xcell")
+#saveRDS(res_xcell, "/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_xcell.rds") 
+
+res_xcell <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_xcell.rds") 
 ```
 
 
@@ -2682,7 +2721,7 @@ ht_mut <- draw(ht_mut)
 col_order_ht <- column_order(ht_mut)
 driver_mat_ordered <- driver_mat[col_order_ht,]
 
-write_csv(driver_mat_ordered, "/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_genomic_subtype_anno.csv")
+#write_csv(driver_mat_ordered, "/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_genomic_subtype_anno.csv")
 ```
 
 ### Visualization
@@ -2776,11 +2815,12 @@ ggsurvplot(fit,
 library(caret)
 
 # Groups
-vsd$ICAM1_driven <- ifelse(vsd$PID_ICAM_mTOR_group == "ICAM1_driven", "1", "0")
-vsd$MTOR_driven <- ifelse(vsd$PID_ICAM_mTOR_group == "MTOR_driven", "1", "0")
-vsd$Not_ICAM_mTOR_driven <- ifelse(vsd$PID_ICAM_mTOR_group == "Not_ICAM_mTOR_driven", "1", "0")
+vsd$ICAM1_driven <- ifelse(vsd$TME_archetype == "TME_suppressed", "1", "0")
+vsd$MTOR_driven <- ifelse(vsd$TME_archetype == "TME_activated", "1", "0")
+vsd$Not_ICAM_mTOR_driven <- ifelse(vsd$TME_archetype == "TME_silent", "1", "0")
 
 # Genomic subtype
+vsd$genomic_subtype <- driver_mat_anno$genomic_subtype[match(vsd$PID, driver_mat_anno$PID)]
 vsd$VHL_wildtype <- ifelse(vsd$genomic_subtype == "VHL_wildtype", "1", "0")
 vsd$PBRM1_driven <- ifelse(vsd$genomic_subtype == "PBRM1_driven", "1", "0")
 vsd$BAP1_driven <- ifelse(vsd$genomic_subtype == "BAP1_driven", "1", "0")
@@ -2789,9 +2829,7 @@ vsd$multiple_drivers <- ifelse(vsd$genomic_subtype == "multiple_drivers", "1", "
 ```
 
 ```{r}
-vsd$genomic_subtype <- driver_mat_anno$genomic_subtype[match(vsd$PID, driver_mat_anno$PID)]
-
-dittoBarPlot(vsd[,!is.na(vsd$genomic_subtype)], var = "genomic_subtype", group.by = "PID_ICAM_mTOR_group",retain.factor.levels = FALSE)+
+dittoBarPlot(vsd[,!is.na(vsd$genomic_subtype)], var = "genomic_subtype", group.by = "TME_archetype",retain.factor.levels = FALSE)+
   ggtitle("")
 ```
 
@@ -2804,7 +2842,9 @@ Not_ICAM_mTOR_driven) %>% unique()
 
 # Binary mutation matrix
 ## Here GOI clonal 
-cur_mut_clonal <- colData(vsd) %>% as.data.frame %>% select(PID, VHL_wildtype, VHL_monodriver, BAP1_driven, PBRM1_driven, multiple_drivers) %>% unique() %>% remove_rownames %>% column_to_rownames("PID") %>% t()
+cur_mut_clonal <- colData(vsd) %>% as.data.frame %>% select(PID, VHL_wildtype, VHL_monodriver, BAP1_driven, PBRM1_driven, multiple_drivers) %>% unique() %>% remove_rownames %>% column_to_rownames("PID") %>% filter(complete.cases(.)) %>% t()
+
+cur_groups <- cur_groups[cur_groups$PID %in% colnames(cur_mut_clonal),]
 
 # Function to perform Fisher exact test for each gene
 perform_fisher_test <- function(gene_row, group1_cols, group2_cols) {
