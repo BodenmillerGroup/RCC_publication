@@ -127,7 +127,7 @@ ibs_scores_list <- lapply(cv_results_list, function(res_obj) {
 out_ibs <- data.frame(fold = 1:10, t(do.call("rbind", ibs_scores_list))[1:10,]) %>% pivot_longer(2:ncol(.), names_to = "model", values_to = "IBS")
 
 # Plot
-#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_IBS_GENvsOthers.pdf", width = 6, height = 3.5, onefile = FALSE)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_IBS_GENvsOthers.pdf", width = 6, height = 3.5, onefile = FALSE)
 library(ggpubr)
 ggplot(out_ibs, aes(x = reorder(model,-IBS, FUN = median), y = IBS, fill = model))+
   geom_point(aes(color = model))+
@@ -143,7 +143,7 @@ ggplot(out_ibs, aes(x = reorder(model,-IBS, FUN = median), y = IBS, fill = model
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   xlab("Models")+
   ylab("Integrated Brier Score")
-#dev.off()
+dev.off()
 ```
 
 ### Concordance (Uno)
@@ -166,7 +166,7 @@ out_concordance <- data.frame(fold = 1:10, t(do.call("rbind", concordance_scores
 #out_concordance <- rbind(out_concordance, fit_cox_out)
 
 library(ggpubr)
-#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_Conc_GENvsOthers.pdf", width = 6, height = 3.5, onefile = FALSE)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_Conc_GENvsOthers.pdf", width = 6, height = 3.5, onefile = FALSE)
 ggplot(out_concordance, aes(x = reorder(model,concordance, FUN = median), y = concordance, fill = model))+
   geom_point(aes(color = model))+
   geom_boxplot(outlier.colour = NA, alpha = 0.8)+
@@ -180,7 +180,7 @@ ggplot(out_concordance, aes(x = reorder(model,concordance, FUN = median), y = co
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   xlab("Models")+
   ylab("Concordance (Uno)")
-#dev.off()
+dev.off()
 ```
 
 ## Test 2: All vs selected
@@ -289,7 +289,7 @@ out_ibs$type <- str_split(out_ibs$model, "_", simplify = TRUE)[,1]
 
 # Plot
 library(ggpubr)
-#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_IBS_ALLvsSELECTED.pdf", width = 3.5, height = 3.5, onefile = FALSE)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_IBS_ALLvsSELECTED.pdf", width = 3.5, height = 3.5, onefile = FALSE)
 ggplot(out_ibs, aes(x = cat, y = IBS, fill = cat))+
   #facet_wrap(~type)+
   geom_point(aes(color = cat))+
@@ -303,7 +303,7 @@ ggplot(out_ibs, aes(x = cat, y = IBS, fill = cat))+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   xlab("Models")+
   ylab("Integrated Brier Score")
-#dev.off()
+dev.off()
 ```
 
 
@@ -328,7 +328,7 @@ out_concordance$cat <- ifelse(str_detect(out_concordance$model, "all"), "ALL", "
 out_concordance$type <- str_split(out_concordance$model, "_", simplify = TRUE)[,1]
 
 library(ggpubr)
-#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_Conc_ALLvsSELECTED.pdf", width = 3.5, height = 3.5, onefile = FALSE)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_Conc_ALLvsSELECTED.pdf", width = 3.5, height = 3.5, onefile = FALSE)
 ggplot(out_concordance, aes(x = cat, y = concordance, fill = cat))+
   #facet_wrap(~type)+
   geom_point(aes(color = cat))+
@@ -342,7 +342,7 @@ ggplot(out_concordance, aes(x = cat, y = concordance, fill = cat))+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   xlab("Models")+
   ylab("Concordance (Uno)")
-#dev.off()
+dev.off()
 ```
 
 
@@ -442,7 +442,7 @@ out_ibs <- data.frame(fold = 1:10, t(do.call("rbind", ibs_scores_list))[1:10,]) 
 # Plot
 library(ggpubr)
 
-#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_IBS_CLINvsIMC.pdf", width = 4.5, height = 3.5, onefile = FALSE)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_IBS_CLINvsIMC.pdf", width = 4.5, height = 3.5, onefile = FALSE)
 ggplot(out_ibs, aes(x = reorder(model,-IBS, FUN = median), y = IBS, fill = model))+
   geom_point(aes(color = model))+
   geom_boxplot(outlier.colour = NA, alpha = 0.8)+
@@ -456,7 +456,7 @@ ggplot(out_ibs, aes(x = reorder(model,-IBS, FUN = median), y = IBS, fill = model
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   xlab("Models")+
   ylab("Integrated Brier Score")
-#dev.off()
+dev.off()
 ```
 
 ### Concordance (Uno)
@@ -477,7 +477,7 @@ concordance_scores_list <- lapply(cv_results_list, function(res_obj) {
 out_concordance <- data.frame(fold = 1:10, t(do.call("rbind", concordance_scores_list))[1:10,]) %>% pivot_longer(2:ncol(.), names_to = "model", values_to = "concordance")
 
 library(ggpubr)
-#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_Conc_CLINvsIMC.pdf", width = 4.5, height = 3.5, onefile = FALSE)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_Conc_CLINvsIMC.pdf", width = 4.5, height = 3.5, onefile = FALSE)
 ggplot(out_concordance, aes(x = reorder(model,concordance, FUN = median), y = concordance, fill = model))+
   geom_point(aes(color = model))+
   geom_boxplot(outlier.colour = NA, alpha = 0.8)+
@@ -490,7 +490,7 @@ ggplot(out_concordance, aes(x = reorder(model,concordance, FUN = median), y = co
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   xlab("Models")+
   ylab("Concordance (Uno)")
-#dev.off()
+dev.off()
 ```
 
 

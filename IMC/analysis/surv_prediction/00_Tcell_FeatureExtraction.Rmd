@@ -322,6 +322,7 @@ theme(axis.text.x = element_text(angle = 90))
 
 hr_median
 ```
+
 ```{r}
 ## KM estimate 
 
@@ -339,7 +340,7 @@ plot_exp_combined_fil <- plot_exp_combined %>% group_by(group, category) %>% ref
                                                                                      ratio = mean(ratio),
                                                                                      direction = direction) %>% unique()
 
-#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/T_CD8_Cox_expression_bubble.pdf", width = 6, height = 5)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/T_CD8_cox_expression_bubble.pdf", width = 3, height = 3)
 ggplot(plot_exp_combined_fil, aes(x=reorder(group,ratio), y = type, shape = category, col = ratio, size= -log10(p)))+
   geom_point()+
   theme_classic()+
@@ -354,6 +355,7 @@ ggplot(plot_exp_combined_fil, aes(x=reorder(group,ratio), y = type, shape = cate
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   ylab("Cox model")+
   coord_flip()
+dev.off()
 ```
 
 ```{r}
@@ -1203,7 +1205,7 @@ plot_exp_combined_fil <- plot_exp_combined %>% group_by(group, category) %>% ref
                                                                                      ratio = mean(ratio),
                                                                                      direction = direction) %>% unique()
 
-#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/T_CD4_Cox_expression_bubble.pdf", width = 6, height = 5)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/T_CD4_cox_expression_bubble.pdf", width = 3, height = 3)
 ggplot(plot_exp_combined_fil, aes(x=reorder(group,ratio), y = type, shape = category, col = ratio, size= -log10(p)))+
   geom_point()+
   theme_classic()+
@@ -1218,6 +1220,7 @@ ggplot(plot_exp_combined_fil, aes(x=reorder(group,ratio), y = type, shape = cate
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   ylab("Cox model")+
   coord_flip()
+dev.off()
 ```
 
 
@@ -1253,7 +1256,7 @@ both <- plot_cox_combined_fil %>% group_by(group,result) %>% count() %>% filter(
 plot_cox_combined_fil$category <- ifelse(plot_cox_combined_fil$group %in% both, "both", plot_cox_combined_fil$category)
 plot_cox_combined_fil <- plot_cox_combined_fil %>% group_by(group, category) %>% reframe(HR = mean(HR), p_value = mean(p_value), result = result, type = type) %>% unique()
 
-pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/T_CD4_cox_expression_bubble.pdf", width = 3, height = 3)
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/T_CD4_cox_expression_bubble.pdf", width = 3, height = 3)
 ggplot(plot_cox_combined_fil, aes(x=reorder(group,HR), y = type, shape = category, col = HR, size= -log10(p_value)))+
   geom_point()+
   theme_classic()+
@@ -1268,7 +1271,7 @@ ggplot(plot_cox_combined_fil, aes(x=reorder(group,HR), y = type, shape = categor
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   ylab("Cox model")+
   coord_flip()
-dev.off()
+#dev.off()
 ```
 
 #### Extract survival relevant features
@@ -2567,11 +2570,11 @@ plot_int_combined_fil <- plot_int_combined %>% group_by(group, category) %>% ref
                                                                                      #int_type = int_type, 
                                                                                      direction = direction) %>% unique()
 
-#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/MY_Cox_interaction_bubble.pdf", width = 6, height = 5)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/T_CD4_CD8_KM_interaction_bubble.pdf", width = 5.5, height = 6)
 ggplot(plot_int_combined_fil, aes(x=reorder(group,ratio), y = type, shape = category, col = ratio, size= -log10(p)))+
   geom_point()+
   theme_classic()+
-  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+ #limits = c(0.5,2), oob = scales::squish)+
   scale_size(range = c(2,10))+
   scale_shape_manual(values = c(16,15,17))+
   new_scale(new_aes = "shape")+
@@ -2582,7 +2585,7 @@ ggplot(plot_int_combined_fil, aes(x=reorder(group,ratio), y = type, shape = cate
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   ylab("Cox model")+
   coord_flip()
-#dev.off()
+dev.off()
 
 #priority_order <- c("DOWN" = 1, "DOWN_trend" = 2, "UP" = 1, "UP_trend" = 2)
 #plot_int_combined_fil <- plot_int_combined_fil %>%
