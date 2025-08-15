@@ -49,6 +49,15 @@ library(psych)
 library(readxl)
 ```
 
+# Load gene signature
+
+```{r}
+MTORUP <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/MTORUP_geneset_NTP.rds")
+ICAMUP <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/ICAMUP_geneset_NTP.rds")
+
+col_group <- setNames(c("#0571B0", "gold3", "#CA0020"),c("MTOR","NOT","ICAM"))
+```
+
 # Clinical trial cohort analysis 
 
 # JAVELIN-101 
@@ -83,7 +92,7 @@ se
 ```{r}
 # Nearest template prediction
 library(CMScaller)
-
+set.seed(22)
 # Step 1: Prepare expression matrix (genes x samples, log2 scale)
 tpm_mat <- assays(se)$tpm
 log2_tpm <- log2(tpm_mat + 1)
@@ -105,7 +114,7 @@ ntp_result <- ntp(
   distance = "cosine",
   nPerm = 1000,              
   seed = 22,                 
-  nCores = 30,
+  #nCores = 30,
   doPlot = TRUE
 )
 ```
@@ -124,6 +133,7 @@ ntp_out$location <- se$Tumor_Location[match(ntp_out$PID, se$UUID)]
 fit <- survfit(Surv(OS_months, status_OS) ~ group_predict, data = ntp_out)
 print(fit)
 
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/CT_cohorts/JAVELIN_Survival_Archetypes_OS.pdf", width = 5, height = 6, onefile = FALSE)
 ggsurvplot(fit,
           pval = TRUE,
           risk.table = TRUE, # Add risk table
@@ -131,9 +141,10 @@ ggsurvplot(fit,
           linetype = "strata", # Change line type by groups
           surv.median.line = "hv", # Specify median survival
           ggtheme = theme_classic(), # Change ggplot2 theme¨
-          #palette = c("#046C9A", "#000000", "#D69C4E", "#ECCBAE", "#ABDDDE"),
+          palette = c("#CA0020","#0571B0", "gold3"),
           conf.int = FALSE
 )
+dev.off()
 
 fit <- survfit(Surv(PFS_months, status_PFS) ~ group_predict, data = ntp_out)
 print(fit)
@@ -145,7 +156,7 @@ ggsurvplot(fit,
           linetype = "strata", # Change line type by groups
           surv.median.line = "hv", # Specify median survival
           ggtheme = theme_classic(), # Change ggplot2 theme¨
-          #palette = c("#046C9A", "#000000", "#D69C4E", "#ECCBAE", "#ABDDDE"),
+          palette = c("#CA0020","#0571B0", "gold3"),
           conf.int = FALSE
 )
 
@@ -153,16 +164,18 @@ ggsurvplot(fit,
 fit <- survfit(Surv(OS_months, status_OS) ~ group_predict, data = ntp_out %>% filter(treatment == "IO+VEGF"))
 print(fit)
 
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/CT_cohorts/JAVELIN_Survival_Archetypes_OS_IOVEGF.pdf", width = 4, height = 3, onefile = FALSE)
 ggsurvplot(fit,
           pval = TRUE,
-          risk.table = TRUE, # Add risk table
+          risk.table = FALSE, # Add risk table
           risk.table.col = "strata", # Change risk table color by groups
           linetype = "strata", # Change line type by groups
           surv.median.line = "hv", # Specify median survival
           ggtheme = theme_classic(), # Change ggplot2 theme¨
-          #palette = c("#046C9A", "#000000", "#D69C4E", "#ECCBAE", "#ABDDDE"),
+          palette = c("#CA0020","#0571B0", "gold3"),
           conf.int = FALSE
 )
+dev.off()
 
 fit <- survfit(Surv(PFS_months, status_PFS) ~ group_predict, data = ntp_out %>% filter(treatment == "IO+VEGF"))
 print(fit)
@@ -174,24 +187,26 @@ ggsurvplot(fit,
           linetype = "strata", # Change line type by groups
           surv.median.line = "hv", # Specify median survival
           ggtheme = theme_classic(), # Change ggplot2 theme¨
-          #palette = c("#046C9A", "#000000", "#D69C4E", "#ECCBAE", "#ABDDDE"),
+          palette = c("#CA0020","#0571B0", "gold3"),
           conf.int = FALSE
 )
 
 # TKI
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/CT_cohorts/JAVELIN_Survival_Archetypes_OS_TKI.pdf", width = 4, height = 3, onefile = FALSE)
 fit <- survfit(Surv(OS_months, status_OS) ~ group_predict, data = ntp_out %>% filter(treatment == "TKI"))
 print(fit)
 
 ggsurvplot(fit,
           pval = TRUE,
-          risk.table = TRUE, # Add risk table
+          risk.table = FALSE, # Add risk table
           risk.table.col = "strata", # Change risk table color by groups
           linetype = "strata", # Change line type by groups
           surv.median.line = "hv", # Specify median survival
           ggtheme = theme_classic(), # Change ggplot2 theme¨
-          #palette = c("#046C9A", "#000000", "#D69C4E", "#ECCBAE", "#ABDDDE"),
+          palette = c("#CA0020","#0571B0", "gold3"),
           conf.int = FALSE
 )
+dev.off()
 
 fit <- survfit(Surv(PFS_months, status_PFS) ~ group_predict, data = ntp_out %>% filter(treatment == "TKI"))
 print(fit)
@@ -203,7 +218,7 @@ ggsurvplot(fit,
           linetype = "strata", # Change line type by groups
           surv.median.line = "hv", # Specify median survival
           ggtheme = theme_classic(), # Change ggplot2 theme¨
-          #palette = c("#046C9A", "#000000", "#D69C4E", "#ECCBAE", "#ABDDDE"),
+          palette = c("#CA0020","#0571B0", "gold3"),
           conf.int = FALSE
 )
 ```
@@ -375,6 +390,70 @@ theme(axis.text.x = element_text(angle = 90))
 hr_prop
 ```
 
+```{r}
+library(survival)
+library(dplyr)
+
+# Prepare the survival dataframe
+Cox_df <- as.data.frame(colData(se)) %>%
+  dplyr::select(UUID, TME_archetype, Treatment, Tumor_Location) %>% 
+  #filter(Tumor_Location == "METASTATIC") %>%
+  mutate(
+    Treatment = factor(Treatment, levels = c("TKI", "IO+VEGF")),
+    OS_months = se$OS[match(UUID, se$UUID)],
+    status_OS = se$OS_CNSR[match(UUID, se$UUID)]
+  )
+
+# List of TME groups (e.g., ICAM, MTOR, NOT)
+tme_groups <- unique(Cox_df$TME_archetype)
+
+# Run Cox model per TME group
+cox_results <- lapply(tme_groups, function(group) {
+  df_group <- Cox_df %>% filter(TME_archetype == group & !is.na(Treatment))
+  model <- coxph(Surv(OS_months, status_OS) ~ Treatment, data = df_group)
+  summary(model)
+  })
+
+names(cox_results) <- tme_groups
+
+plot_df_prop <- rbind(data.frame(group = rownames(cox_results[[1]]$coefficients),
+                      p_value = signif(cox_results[[1]]$coefficients[,"Pr(>|z|)"],3),
+                      HR = signif(cox_results[[1]]$coefficients[,"exp(coef)"],3),
+                      CI_low = signif(cox_results[[1]]$conf.int[,"lower .95"],3),
+                      CI_high = signif(cox_results[[1]]$conf.int[,"upper .95"],3),
+                      wald_test = signif(cox_results[[1]]$waldtest["pvalue"],3), 
+                      type = names(cox_results[1])),
+      data.frame(group = rownames(cox_results[[2]]$coefficients),
+                      p_value = signif(cox_results[[2]]$coefficients[,"Pr(>|z|)"],3),
+                      HR = signif(cox_results[[2]]$coefficients[,"exp(coef)"],3),
+                      CI_low = signif(cox_results[[2]]$conf.int[,"lower .95"],3),
+                      CI_high = signif(cox_results[[2]]$conf.int[,"upper .95"],3),
+                      wald_test = signif(cox_results[[2]]$waldtest["pvalue"],3),
+                      type = names(cox_results[2])),
+      data.frame(group = rownames(cox_results[[3]]$coefficients),
+                      p_value = signif(cox_results[[3]]$coefficients[,"Pr(>|z|)"],3),
+                      HR = signif(cox_results[[3]]$coefficients[,"exp(coef)"],3),
+                      CI_low = signif(cox_results[[3]]$conf.int[,"lower .95"],3),
+                      CI_high = signif(cox_results[[3]]$conf.int[,"upper .95"],3),
+                      wald_test = signif(cox_results[[3]]$waldtest["pvalue"],3),
+                      type = names(cox_results[3]))
+)
+
+
+hr_prop <- ggplot(plot_df_prop, aes(x = reorder(type,dplyr::desc(HR)), y = HR, color = p_value < 0.05))+
+geom_point(size = 4)+
+geom_errorbar(aes(ymax = CI_high, ymin = CI_low))+
+#coord_cartesian(ylim=c(0,20))+
+geom_hline(yintercept = 1,color = "black",linetype = "dashed")+
+scale_color_brewer(palette = "Set1")+
+xlab("Covariates")+
+ylab("HR for PID groups")+
+theme_classic()+
+scale_y_log10()+
+theme(axis.text.x = element_text(angle = 90))
+
+hr_prop
+```
 
 ```{r}
 dittoBarPlot(se, var = "ORR", split.by = "Treatment", group.by = "TME_archetype")+
@@ -401,6 +480,18 @@ dittoBarPlot(se_sub, var = "ORR_comb", group.by = "Treatment", split.by = "TME_a
 dittoBarPlot(se_sub, var = "ORR_comb", split.by = "Treatment", group.by = "TME_archetype")+
   ggtitle("ORR")
 
+df <- as.data.frame(colDatase_sub)[!is.na(se_sub$BAP1), c("Treatment", "TME_archetype")])
+print(fisher.test(table(df$Treatment, df$TME_archetype)))
+
+pdf("/mnt/central_nas/rcc_volume/RCCfigures/TCGA_KIRC/TCGA_KIRC_archetype_BAP1mut.pdf", width = 3, height = 4)
+dittoBarPlot(vsd[,!is.na(vsd$BAP1)], var = "BAP1", group.by = "TME_archetype_predict",retain.factor.levels = FALSE)+
+  ggtitle("")+
+  scale_fill_brewer(palette = "Set1", direction = -1)+
+  ggtitle(print(fisher.test(table(df$BAP1, df$TME_archetype_predict))))
+dev.off()
+```
+
+```{r}
 #ER
 se_sub <- se[, !is.na(se$Response)]
 
@@ -409,7 +500,6 @@ dittoBarPlot(se_sub, var = "Response", group.by = "Treatment", split.by = "TME_a
 dittoBarPlot(se_sub, var = "Response", split.by = "Treatment", group.by = "TME_archetype")+
   ggtitle("ORR")
 ```
-
 
 
 
@@ -442,7 +532,7 @@ dittoBarPlot(se, var = "PBRM1_mut", group.by = "TME_archetype")
 
 # CHECKMATE-214
 
-TO DO: Check details of inclusion criteria / treatments (PDL1+VEGFi vs. Sunitib) / tumor location etc. / pretreatment samples? 
+TO DO: Check details of inclusion criteria / treatments (Nivolumab vs. Everolimus) / tumor location etc. / pretreatment samples? 
 
 ```{r}
 # Expression matrix (Combat corrected values)
@@ -482,6 +572,8 @@ se
 # Nearest template prediction
 library(CMScaller)
 
+set.seed(22)
+
 # Step 1: Prepare expression matrix (genes x samples, log2 scale)
 exp_mat <- assays(se)$exp
 log2_exp <- log2(exp_mat + 1)
@@ -503,7 +595,7 @@ ntp_result <- ntp(
   distance = "cosine",
   nPerm = 1000,              
   seed = 22,                 
-  nCores = 30,
+  #nCores = 30,
   doPlot = TRUE
 )
 ```
@@ -932,6 +1024,8 @@ CPTAC_meta <- colData(CPTAC.clean) %>% as.data.frame()
 # Nearest template prediction
 library(CMScaller)
 
+set.seed(22)
+
 # Step 1: Prepare expression matrix (genes x samples, log2 scale)
 tpm_mat <- assays(CPTAC.clean)$tpm_unstrand 
 log2_tpm <- log2(tpm_mat + 1)
@@ -956,13 +1050,13 @@ ntp_result <- ntp(
   distance = "cosine",
   nPerm = 1000,              
   seed = 22,                 
-  nCores = 30,
+  #nCores = 30,
   doPlot = TRUE
 )
 ```
 
 ```{r}
-ntp_out <- ntp_result %>% rownames_to_column("PID") %>% mutate(group_predict = ifelse(FDR < 0.05, as.character(prediction), "NOT"))
+ntp_out <- ntp_result %>% rownames_to_column("PID") %>% mutate(group_predict = ifelse(FDR < 0.01, as.character(prediction), "NOT"))
 
 ntp_out$OS_days <- CPTAC.clean$OS_days[match(ntp_out$PID, CPTAC.clean$PID)]
 ntp_out$status_OS <- CPTAC.clean$status_OS[match(ntp_out$PID, CPTAC.clean$PID)]
