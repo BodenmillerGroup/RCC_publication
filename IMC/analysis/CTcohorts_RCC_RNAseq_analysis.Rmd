@@ -452,7 +452,9 @@ theme_classic()+
 scale_y_log10()+
 theme(axis.text.x = element_text(angle = 90))
 
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/CT_cohorts/JAVELIN_archetype_OS_Treatment_Cox.pdf", width = 5.5, height = 3)
 hr_prop
+dev.off()
 ```
 
 ```{r}
@@ -477,17 +479,19 @@ se_sub$ORR_comb <- ifelse(se_sub$ORR == "PD", "PD", "PR/CR")
 
 dittoBarPlot(se_sub, var = "ORR_comb", group.by = "Treatment", split.by = "TME_archetype")+
   ggtitle("ORR")
+
 dittoBarPlot(se_sub, var = "ORR_comb", split.by = "Treatment", group.by = "TME_archetype")+
   ggtitle("ORR")
 
-df <- as.data.frame(colDatase_sub)[!is.na(se_sub$BAP1), c("Treatment", "TME_archetype")])
-print(fisher.test(table(df$Treatment, df$TME_archetype)))
 
-pdf("/mnt/central_nas/rcc_volume/RCCfigures/TCGA_KIRC/TCGA_KIRC_archetype_BAP1mut.pdf", width = 3, height = 4)
-dittoBarPlot(vsd[,!is.na(vsd$BAP1)], var = "BAP1", group.by = "TME_archetype_predict",retain.factor.levels = FALSE)+
-  ggtitle("")+
-  scale_fill_brewer(palette = "Set1", direction = -1)+
-  ggtitle(print(fisher.test(table(df$BAP1, df$TME_archetype_predict))))
+df <- as.data.frame(colData(se_sub)[!is.na(se_sub$TME_archetype), c("Treatment", "ORR_comb", "TME_archetype")])
+fisher_out <- c(paste0("NOT p = ",fisher.test(table(df[df$TME_archetype == "NOT",]$Treatment, df[df$TME_archetype == "NOT",]$ORR_comb))$p, "ICAM p = ",fisher.test(table(df[df$TME_archetype == "ICAM",]$Treatment, df[df$TME_archetype == "ICAM",]$ORR_comb))$p, "MTOR p = ",fisher.test(table(df[df$TME_archetype == "MTOR",]$Treatment, df[df$TME_archetype == "MTOR",]$ORR_comb))$p))
+
+
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/CT_cohorts/JAVELIN_archetype_ORR_Treatment_Bar.pdf", width = 5.5, height = 3)
+dittoBarPlot(se_sub, var = "ORR_comb", group.by = "Treatment", split.by = "TME_archetype")+
+  ggtitle(fisher_out)+
+  scale_fill_brewer(palette = "Set1")
 dev.off()
 ```
 
@@ -614,6 +618,7 @@ ntp_out$arm <- se$Arm[match(ntp_out$PID, se$RNA_ID)]
 fit <- survfit(Surv(OS_months, status_OS) ~ group_predict, data = ntp_out)
 print(fit)
 
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/CT_cohorts/Checkmate_Survival_Archetypes_OS.pdf", width = 5, height = 6, onefile = FALSE)
 ggsurvplot(fit,
           pval = TRUE,
           risk.table = TRUE, # Add risk table
@@ -621,9 +626,10 @@ ggsurvplot(fit,
           linetype = "strata", # Change line type by groups
           surv.median.line = "hv", # Specify median survival
           ggtheme = theme_classic(), # Change ggplot2 theme¨
-          #palette = c("#046C9A", "#000000", "#D69C4E", "#ECCBAE", "#ABDDDE"),
+          palette = c("#CA0020","#0571B0", "gold3"),
           conf.int = FALSE
 )
+dev.off()
 
 fit <- survfit(Surv(PFS_months, status_PFS) ~ group_predict, data = ntp_out)
 print(fit)
@@ -635,7 +641,7 @@ ggsurvplot(fit,
           linetype = "strata", # Change line type by groups
           surv.median.line = "hv", # Specify median survival
           ggtheme = theme_classic(), # Change ggplot2 theme¨
-          #palette = c("#046C9A", "#000000", "#D69C4E", "#ECCBAE", "#ABDDDE"),
+          palette = c("#CA0020","#0571B0", "gold3"),
           conf.int = FALSE
 )
 
@@ -643,16 +649,18 @@ ggsurvplot(fit,
 fit <- survfit(Surv(OS_months, status_OS) ~ group_predict, data = ntp_out %>% filter(arm == "NIVOLUMAB"))
 print(fit)
 
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/CT_cohorts/Checkmate_Survival_Archetypes_OS_IO.pdf", width = 4, height = 3, onefile = FALSE)
 ggsurvplot(fit,
           pval = TRUE,
-          risk.table = TRUE, # Add risk table
+          risk.table = FALSE, # Add risk table
           risk.table.col = "strata", # Change risk table color by groups
           linetype = "strata", # Change line type by groups
           surv.median.line = "hv", # Specify median survival
           ggtheme = theme_classic(), # Change ggplot2 theme¨
-          #palette = c("#046C9A", "#000000", "#D69C4E", "#ECCBAE", "#ABDDDE"),
+          palette = c("#CA0020","#0571B0", "gold3"),
           conf.int = FALSE
 )
+dev.off()
 
 fit <- survfit(Surv(PFS_months, status_PFS) ~ group_predict, data = ntp_out %>% filter(arm == "NIVOLUMAB"))
 print(fit)
@@ -664,7 +672,7 @@ ggsurvplot(fit,
           linetype = "strata", # Change line type by groups
           surv.median.line = "hv", # Specify median survival
           ggtheme = theme_classic(), # Change ggplot2 theme¨
-          #palette = c("#046C9A", "#000000", "#D69C4E", "#ECCBAE", "#ABDDDE"),
+          palette = c("#CA0020","#0571B0", "gold3"),
           conf.int = FALSE
 )
 
@@ -672,16 +680,18 @@ ggsurvplot(fit,
 fit <- survfit(Surv(OS_months, status_OS) ~ group_predict, data = ntp_out %>% filter(arm == "EVEROLIMUS"))
 print(fit)
 
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/CT_cohorts/Checkmate_Survival_Archetypes_OS_EVERO.pdf", width = 4, height = 3, onefile = FALSE)
 ggsurvplot(fit,
           pval = TRUE,
-          risk.table = TRUE, # Add risk table
+          risk.table = FALSE, # Add risk table
           risk.table.col = "strata", # Change risk table color by groups
           linetype = "strata", # Change line type by groups
           surv.median.line = "hv", # Specify median survival
           ggtheme = theme_classic(), # Change ggplot2 theme¨
-          #palette = c("#046C9A", "#000000", "#D69C4E", "#ECCBAE", "#ABDDDE"),
+          palette = c("#CA0020","#0571B0", "gold3"),
           conf.int = FALSE
 )
+dev.off()
 
 fit <- survfit(Surv(PFS_months, status_PFS) ~ group_predict, data = ntp_out %>% filter(arm == "EVEROLIMUS"))
 print(fit)
@@ -693,7 +703,7 @@ ggsurvplot(fit,
           linetype = "strata", # Change line type by groups
           surv.median.line = "hv", # Specify median survival
           ggtheme = theme_classic(), # Change ggplot2 theme¨
-          #palette = c("#046C9A", "#000000", "#D69C4E", "#ECCBAE", "#ABDDDE"),
+          palette = c("#CA0020","#0571B0", "gold3"),
           conf.int = FALSE
 )
 
@@ -858,7 +868,9 @@ theme_classic()+
 scale_y_log10()+
 theme(axis.text.x = element_text(angle = 90))
 
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/CT_cohorts/Checkmate_archetype_OS_Treatment_Cox.pdf", width = 5.5, height = 3)
 hr_prop
+dev.off()
 ```
 
 ```{r}
@@ -873,6 +885,19 @@ dittoBarPlot(se_sub, var = "ORR_comb", group.by = "Arm", split.by = "TME_archety
   ggtitle("ORR")+
 dittoBarPlot(se_sub, var = "ORR_comb", split.by = "Arm", group.by = "TME_archetype")+
   ggtitle("ORR")
+```
+```{r}
+df <- as.data.frame(colData(se_sub)[!is.na(se_sub$TME_archetype), c("Arm", "ORR_comb", "TME_archetype")])
+fisher_out <- c(paste0("NOT p = ",fisher.test(table(df[df$TME_archetype == "NOT",]$Arm, df[df$TME_archetype == "NOT",]$ORR_comb))$p, "ICAM p = ",fisher.test(table(df[df$TME_archetype == "ICAM",]$Arm, df[df$TME_archetype == "ICAM",]$ORR_comb))$p, "MTOR p = ",fisher.test(table(df[df$TME_archetype == "MTOR",]$Arm, df[df$TME_archetype == "MTOR",]$ORR_comb))$p))
+
+dittoBarPlot(se_sub, var = "ORR_comb", split.by = "Arm", group.by = "TME_archetype")+
+  ggtitle("ORR")
+
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/CT_cohorts/Checkmate_archetype_ORR_Arm_Bar.pdf", width = 5.5, height = 3)
+dittoBarPlot(se_sub, var = "ORR_comb", group.by = "Arm", split.by = "TME_archetype")+
+  ggtitle(fisher_out)+
+  scale_fill_brewer(palette = "Set1")
+dev.off()
 ```
 
 
