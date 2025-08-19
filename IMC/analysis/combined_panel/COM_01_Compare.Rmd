@@ -64,6 +64,270 @@ library(batchelor)
 
 # Panel comparison 
 
+## Density comparison
+
+### Tumor/Non-tumor 
+
+```{r}
+# IMC - ccRCC data only
+sce_TU <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_07.rds")
+
+sce_T <- readRDS("/mnt/central_nas_full/users/marllu/T_panel/data_analysis/sce_ccRCC_T_07.rds")
+
+sce_MY <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_07.rds")
+```
+
+
+```{r}
+# Adjust T cell panel tissue area to CP pipeline from Lasse
+Tpanel_area <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/T_panel/tissue_area/Tcell_TissueSegmentation.csv")
+Tpanel_area$sample_id <- str_remove(Tpanel_area$FileName_glass, "_Probabilities.tiff")
+Tpanel_area$PID <- sce_T$PID[match(Tpanel_area$sample_id, sce_T$sample_id)]
+Tpanel_area$tissue_area <- Tpanel_area$AreaShape_Area
+Tpanel_area <- Tpanel_area %>% select(PID, sample_id, tissue_area) %>% filter(!is.na(PID))
+
+Tpanel_area_1 <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/T_panel/tissue_area/Tcell_TissueSegmentation_missing.csv")
+Tpanel_area_1$sample_id <- str_remove(Tpanel_area_1$FileName_glass, "_Probabilities.tiff")
+Tpanel_area_1$PID <- sce_T$PID[match(Tpanel_area_1$sample_id, sce_T$sample_id)]
+Tpanel_area_1$tissue_area <- Tpanel_area_1$AreaShape_Area
+Tpanel_area_1 <- Tpanel_area_1 %>% select(PID, sample_id, tissue_area) %>% filter(!is.na(PID))
+
+T_panel_area_full <- rbind(Tpanel_area, Tpanel_area_1)
+
+# Full info
+T_panel_area_full <- T_panel_area_full %>% group_by(sample_id) %>% mutate(tissue_area_sum = sum(tissue_area)) %>% select(PID, sample_id, tissue_area_sum) %>% unique()
+T_panel_area_full <- T_panel_area_full %>% group_by(PID) %>% mutate(mean_tissue_area = mean(tissue_area_sum))
+
+# Add to sce_T
+sce_T$tissue_area <- T_panel_area_full$mean_tissue_area[match(sce_T$PID, T_panel_area_full$PID)] #Changes the tissue area of the original object
+```
+
+
+
+```{r}
+# Myeloid
+PID_analysis_cat <- colData(sce_MY) %>% as.data.frame() %>% select(analysis_cat,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_area <- colData(sce_MY) %>% as.data.frame() %>% select(tissue_area,PID) %>% unique() %>% group_by(PID) %>% mutate(mean_tissue_area = mean(tissue_area))
+PID_analysis_cat$mean_tissue_area <- PID_area$mean_tissue_area[match(PID_analysis_cat$PID, PID_area$PID)]
+MY_analysis_cat <- PID_analysis_cat %>% group_by(PID) %>% mutate(density_tumor_MY = Freq/(mean_tissue_area/1000000)) %>% filter(analysis_cat == "tumor") %>% select(PID, density_tumor_MY)
+
+# Add others
+## T cell
+PID_analysis_cat <- colData(sce_T) %>% as.data.frame() %>% select(analysis_cat,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_area <- colData(sce_T) %>% as.data.frame() %>% select(tissue_area,PID) %>% unique() %>% group_by(PID) %>% mutate(mean_tissue_area = mean(tissue_area))
+PID_analysis_cat$mean_tissue_area <- PID_area$mean_tissue_area[match(PID_analysis_cat$PID, PID_area$PID)]
+T_analysis_cat <- PID_analysis_cat %>% group_by(PID) %>% mutate(density_tumor_T = Freq/(mean_tissue_area/1000000)) %>% filter(analysis_cat == "tumor") %>% select(PID, density_tumor_T)
+
+## Tumor
+PID_analysis_cat <- colData(sce_TU) %>% as.data.frame() %>% select(analysis_cat,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_area <- colData(sce_TU) %>% as.data.frame() %>% select(tissue_area,PID) %>% unique() %>% group_by(PID) %>% mutate(mean_tissue_area = mean(tissue_area))
+PID_analysis_cat$mean_tissue_area <- PID_area$mean_tissue_area[match(PID_analysis_cat$PID, PID_area$PID)]
+TU_analysis_cat <- PID_analysis_cat %>% group_by(PID) %>% mutate(density_tumor_TU = Freq/(mean_tissue_area/1000000)) %>% filter(analysis_cat == "tumor") %>% select(PID, density_tumor_TU)
+
+MY_analysis_cat$density_tumor_T <- T_analysis_cat$density_tumor_T[match(MY_analysis_cat$PID, T_analysis_cat$PID)]
+MY_analysis_cat$density_tumor_TU <- TU_analysis_cat$density_tumor_TU[match(MY_analysis_cat$PID, TU_analysis_cat$PID)]
+MY_analysis_cat <- MY_analysis_cat[complete.cases(MY_analysis_cat),]
+```
+
+```{r}
+# Cluster channel marker correlation (all markers - does not show distribution which is usually recommended)
+cor_sce <- MY_analysis_cat %>% column_to_rownames("PID") %>% as.data.frame
+
+corrplot(cor(cor_sce,method = "spearman"), method="color", col=brewer.pal(n=8, name="RdBu"),  
+         type="upper", order="hclust",hclust.method = "ward.D2", 
+         addCoef.col = "black", addCoefasPercent = F,# Add coefficient of correlation
+         tl.col="black", tl.srt=40, #Text label color and rotation
+         # Combine with significance
+         #p.mat = , sig.level = 0.01, insig = "blank", 
+         # hide correlation coefficient on the principal diagonal
+         diag=F
+)
+```
+
+```{r}
+cor_test <- cor.test(x = MY_analysis_cat$density_tumor_MY, MY_analysis_cat$density_tumor_T, method = "spearman")
+
+#cor_test <- cor.mtest(fraction_combined %>% select(fra_my, fra_T, fra_tu), method = "pearson")
+cor_test
+
+ggplot(MY_analysis_cat, aes(x = density_tumor_T, y = density_tumor_MY))+  
+  geom_point(aes(color = PID),size = 3)+
+  geom_smooth(method='lm', formula= y~x, se = TRUE, color = "black")+
+  scale_color_manual(values=metadata(sce)$colors$PID)+
+  guides(color = "none")+
+  ylab("Tumor fraction (T cell)")+
+  xlab("Tumor fraction (Myeloid)")+
+  theme_classic()+
+  ggtitle(paste("Spearman = ",round(cor_test$estimate, digits = 2)))
+```
+
+
+### General immune cell types
+
+#### Per celltype 
+
+```{r}
+## Read in data
+general_dens_combined <- read_csv("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/general_densities_allpanels.csv")
+
+general_dens_combined <- general_dens_combined %>% filter(!celltype_combined_broad %in% c("Unknown_Other", "tumor"))
+
+out_cor <- foreach(i = unique(general_dens_combined$celltype_combined_broad), .combine = "rbind")%do%{
+
+cor_sce <- general_dens_combined %>% filter(celltype_combined_broad == i) %>% pivot_wider(id_cols = 2,names_from = panel, values_from = density) %>% column_to_rownames("PID") %>% as.data.frame
+
+cor_sce <- cor_sce[complete.cases(cor_sce),]
+
+cor_out <- cor(cor_sce,method = "spearman")
+
+cor_out[cor_out !=1] %>% as.numeric() %>% unique()
+
+data.frame(immune_metacluster = i, 
+           cor = cor_out[cor_out !=1] %>% as.numeric() %>% unique(), 
+           category = "celltype")
+}
+
+# Add general density
+general_dens_out <- general_dens_combined %>% group_by(celltype_combined_broad) %>% summarise(density = mean(density, na.rm = TRUE))
+
+out_cor$density_general <- general_dens_out$density[match(out_cor$immune_metacluster, general_dens_out$celltype_combined_broad)]
+
+ggplot(out_cor, aes(x = reorder(immune_metacluster,-cor), y = cor))+  
+  geom_point(aes(color = immune_metacluster, size = density_general))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
+  scale_color_manual(values=metadata(sce)$colors$immune_metacluster)+
+  ylab("SCC")+
+  xlab("Per celltype")+
+  theme_classic()+
+  coord_cartesian(ylim = c(0,1))+
+  ggtitle(paste("Mean SCC = ",round(mean(out_cor$cor), digits = 3)))
+```
+
+#### Per patient
+
+```{r}
+
+PID_cor <- foreach(i = unique(general_dens_combined$PID), .combine = "rbind")%do%{
+
+cor_sce <- general_dens_combined %>% filter(PID == i) %>% pivot_wider(id_cols = 1, names_from = panel, values_from = density) %>% column_to_rownames("celltype_combined_broad") %>% as.data.frame
+
+cor_sce <- cor_sce[complete.cases(cor_sce),]
+
+cor_out <- cor(cor_sce,method = "spearman")
+
+diag(cor_out) <- NA
+
+data.frame(PID = i, 
+           cor = cor_out[upper.tri(cor_out)] %>% as.numeric() %>% unique(), 
+           category = "PID")
+}
+
+PID_cor_out <- PID_cor %>% group_by(PID) %>% summarize(cor_mean = mean(cor, na.rm = TRUE), category = "PID")
+```
+
+
+```{r}
+ggplot(PID_cor_out, aes(x = category, y = cor_mean))+  
+  geom_point(aes(color = PID))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
+  scale_color_manual(values=metadata(sce)$colors$PID)+
+  guides(color = "none")+
+  ylab("PCC")+
+  xlab("Per PID")+
+  theme_classic()+
+  coord_cartesian(ylim = c(0,1))+
+  ggtitle(paste("Mean PCC = ",round(mean(PID_cor$cor, na.rm = TRUE), digits = 2)))
+```
+
+### Extract images 
+
+```{r}
+sce_TU$celltype_combined_broad <- ifelse(str_detect(sce_TU$celltype_combined, "TU"), "Tumor", sce_TU$celltype_combined)
+
+#sce_T$celltype_combined_broad
+
+sce_MY$celltype_combined_broad <- ifelse(str_detect(sce_MY$celltype_combined, "MY"), unfactor(sce_MY$immune_metacluster), sce_MY$celltype_combined)
+```
+
+
+```{r}
+# Extract images - MYELOID
+#PID_select <- (PID_cor_out %>% arrange(desc(cor_mean)) %>% pull(PID))[10:20]
+#sample_id_rel <- colData(sce_MY) %>% as.data.frame %>% filter(PID %in% PID_select) %>% pull(sample_id) %>% unique()
+sample_id_rel <- "202207_TMA224.1_BlockA_SE_054"
+
+images <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/images.rds")
+masks <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/masks.rds")
+
+cur_images <- images[mcols(images)$sample_id %in% sample_id_rel]
+cur_masks <- masks[mcols(masks)$sample_id %in% sample_id_rel]
+cur_sce_MY <- sce_MY[,sce_MY$sample_id %in% sample_id_rel]
+
+library(cytoviewer)
+cytoviewer(image = cur_images, mask = cur_masks, object = cur_sce_MY, img_id = "sample_id", cell_id = "ObjectNumber")
+```
+
+```{r}
+# Extract images - TUMOR
+PID_select <- (PID_cor_out %>% arrange(desc(cor_mean)) %>% pull(PID))[10:20]
+sample_id_rel <- colData(sce_TU) %>% as.data.frame %>% filter(PID %in% PID_select) %>% pull(sample_id) %>% unique()
+
+
+sample_id_rel <- "ZTMA224.1_AX4Y6_54_054"
+
+images <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/images.rds")
+masks <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/masks.rds")
+
+cur_images <- images[mcols(images)$sample_id %in% sample_id_rel]
+cur_masks <- masks[mcols(masks)$sample_id %in% sample_id_rel]
+cur_sce_TU <- sce_TU[,sce_TU$sample_id %in% sample_id_rel]
+
+library(cytoviewer)
+cytoviewer(image = cur_images, mask = cur_masks, object = cur_sce_TU, img_id = "sample_id", cell_id = "ObjectNumber")
+```
+
+```{r}
+# RUN IN TERMINAL: sudo mount --bind /mnt/central_nas_full /mnt/central_nas
+# AFTER RUN IN TERMINAL: sudo umount /mnt/central_nas
+
+# Extract images - T
+#PID_select <- (PID_cor_out %>% arrange(desc(cor_mean)) %>% pull(PID))[10:20]
+#sample_id_rel <- colData(sce_T) %>% as.data.frame %>% filter(PID %in% PID_select) %>% pull(sample_id) %>% unique()
+sample_id_rel <- "ZTMA224.1_BlockA_SE_054"
+
+images <- readRDS("/mnt/central_nas_full/users/marllu/T_panel/data_analysis/images.rds")
+masks <- readRDS("/mnt/central_nas_full/users/marllu/T_panel/data_analysis/masks.rds")
+
+cur_images <- images[mcols(images)$sample_id %in% sample_id_rel]
+cur_masks <- masks[mcols(masks)$sample_id %in% sample_id_rel]
+cur_sce_T <- sce_T[,sce_T$sample_id %in% sample_id_rel]
+
+library(cytoviewer)
+cytoviewer(image = getChannels(cur_images, rownames(cur_sce_T)), mask = cur_masks, object = cur_sce_T, img_id = "sample_id", cell_id = "ObjectNumber")
+```
+
+#### Extra: PDL1 score
+
+```{r}
+# Select images
+cur_PID <- colData(sce_MY) %>% as.data.frame() %>% select(PDL1_score_cells,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+cur_PID <- unfactor(cur_PID %>% group_by(PID) %>% mutate(fra = Freq/sum(Freq)) %>% filter(PDL1_score_cells == "CD274+" & fra > 0.1) %>% arrange(desc(fra)) %>% pull(PID))[1:15]
+  
+cur_sample <- (colData(sce_MY) %>% as.data.frame %>% select(PID, sample_id) %>% filter(PID %in%cur_PID) %>% pull(sample_id) %>% unique())
+
+images <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/images.rds")
+masks <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/masks.rds")
+
+cur_images <- images[mcols(images)$sample_id %in% cur_sample]
+cur_masks <- masks[mcols(masks)$sample_id %in% cur_sample]
+cur_sce_MY <- sce_MY[,sce_MY$sample_id %in% cur_sample]
+
+library(cytoviewer)
+cytoviewer(image = cur_images, mask = cur_masks, object = cur_sce_MY, img_id = "sample_id", cell_id = "ObjectNumber")
+```
+
+
+
 ## Fraction comparison 
 
 ### Tumor / Non-tumor 
@@ -112,7 +376,7 @@ corrplot(cor(cor_sce,method = "pearson"), method="color", col=brewer.pal(n=8, na
 ```{r}
 cor_test <- cor.test(x = fraction_combined$fra_my, fraction_combined$fra_tu, method = "pearson")
 
-cor_test <- cor.mtest(fraction_combined %>% select(fra_my, fra_T, fra_tu), method = "pearson")
+#cor_test <- cor.mtest(fraction_combined %>% select(fra_my, fra_T, fra_tu), method = "pearson")
 cor_test
 
 ggplot(fraction_combined, aes(x = fra_my, y = fra_tu))+  

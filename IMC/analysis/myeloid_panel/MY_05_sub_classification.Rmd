@@ -1253,7 +1253,7 @@ sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/
 # Aggregrate across cells with the mean
 mean_sce <- aggregateAcrossCells(sce, ids = sce$immune_metacluster,
                                  statistics = "mean",
-                                 use.assay.type = "exprs",
+                                 use.assay.type = "min_max",
                                  subset.row = rowData(sce)$sub_cluster)
 
 # Heatmap body color 
@@ -1337,10 +1337,10 @@ PDL1_score <- PDL1_score %>% group_by(immune_metacluster) %>% mutate(fra = Freq/
 PDL1_score <- PDL1_score %>% select(-Freq) %>% pivot_wider(id_cols = immune_metacluster,names_from = PDL1_score,values_from = fra) %>% column_to_rownames("immune_metacluster")
 
 
-ha_meta <- HeatmapAnnotation(ISUP_combined = anno_barplot(ISUP_combined, width = unit(12, "mm"),gp = gpar(fill = metadata(sce)$colors$ISUP_combined)),
-                              pT_combined = anno_barplot(pT, width = unit(12, "mm"),gp = gpar(fill = metadata(sce)$colors$pT_combined)),
-                            necrose = anno_barplot(necrose, width = unit(12, "mm"),gp = gpar(fill = metadata(sce)$colors$necrose)),
-                            PDL1_score = anno_barplot(PDL1_score, width = unit(12, "mm"),gp = gpar(fill = metadata(sce)$colors$PDL1_score)),
+ha_meta <- HeatmapAnnotation(#ISUP_combined = anno_barplot(ISUP_combined, width = unit(12, "mm"),gp = gpar(fill = metadata(sce)$colors$ISUP_combined)),
+                              #pT_combined = anno_barplot(pT, width = unit(12, "mm"),gp = gpar(fill = metadata(sce)$colors$pT_combined)),
+                            #necrose = anno_barplot(necrose, width = unit(12, "mm"),gp = gpar(fill = metadata(sce)$colors$necrose)),
+                            #PDL1_score = anno_barplot(PDL1_score, width = unit(12, "mm"),gp = gpar(fill = metadata(sce)$colors$PDL1_score)),
                             n_cells = anno_barplot(n_cells$ncells, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),                        n_PID = anno_barplot(n_PID$n_PID, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),
 
                             border = TRUE, 
@@ -1359,9 +1359,9 @@ anno$immune_cat <- ifelse(anno$immune_metacluster %in% c("Stromal","Endothelial"
 
 
 ### 4. Plot combined Heatmap
-h <- Heatmap(t(assay(mean_sce, "exprs")),
+h <- Heatmap(t(assay(mean_sce, "min_max")),
         col = col_main,
-        name = "exprs",
+        name = "min_max",
         show_row_names = T, 
         row_names_side = "left",
         show_column_names =  T, 
@@ -1371,7 +1371,7 @@ h <- Heatmap(t(assay(mean_sce, "exprs")),
         clustering_method_rows = "ward.D2",
         clustering_method_columns = "ward.D2"
         )+
-  #Heatmap(scale(t(assay(mean_sce, "exprs"))))+
+  #Heatmap(scale(t(assay(mean_sce, "min_max"))))+
   ha_astir_GMM+
   ha_spatial+
   ha_meta
