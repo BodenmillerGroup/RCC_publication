@@ -1127,7 +1127,7 @@ h <- Heatmap(t(assay(mean_sce, "min_max")),
         clustering_method_columns = "ward.D2",
         cluster_row_slices = TRUE)+
   #Heatmap(scale(t(assay(mean_sce, "min_max"))))+
-  Heatmap(t(assay(state_sce, "min_max")), col = col_main)+
+  #Heatmap(t(assay(state_sce, "min_max")), col = col_main)+
   rowAnnotation(metacluster = anno_simple(unfactor(anno$tumor_metacluster), col = metadata(sce)$colors$tumor_metacluster, border = TRUE))+
   rowAnnotation(names = anno_text(anno$tumor_metacluster_names))+
   ha_spatial+
@@ -1138,7 +1138,9 @@ lgd <- Legend(title = "metacluster", at = names(metadata(sce)$colors$tumor_metac
                legend_gp = gpar(fill = metadata(sce)$colors$tumor_metacluster))
 
 # Draw heatmap
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/tumor_panel/TU_metacluster_heatmap.pdf", width = 10.5, height = 3.5)
 draw(h, annotation_legend_list = list(lgd))
+dev.off()
 ```
 
 ### Visualization 

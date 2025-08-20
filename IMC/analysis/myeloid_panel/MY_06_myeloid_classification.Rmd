@@ -2333,25 +2333,32 @@ Heatmap(for_district, col = viridis(100), row_names_side = "left", row_labels = 
 cur_sample <- colData(sce) %>% as.data.frame %>% group_by(myeloid_district_names) %>% filter(myeloid_district_names == "MDSC_M2_mix") %>% count(sample_id) %>% arrange(desc(n)) %>% slice(1:6) %>% pull(sample_id)
 
 cur_sample <- cur_sample[1]
+
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/myeloid_panel/MY_example_metacluster_spatialplot.pdf", width = 5, height = 4)
 plotSpatial(sce[,sce$sample_id %in% cur_sample], 
             node_color_by = "myeloid_metacluster", 
             img_id = "sample_id", 
             node_size_fix = 2)+
   scale_color_manual(values = metadata(sce)$colors$myeloid_metacluster)
+dev.off()
 
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/myeloid_panel/MY_example_community_spatialplot.pdf", width = 4, height = 4)
 plotSpatial(sce[,sce$sample_id %in% cur_sample], 
             node_color_by = "myeloid_community_lv", 
             img_id = "sample_id", 
             node_size_fix = 2, colPairName = "neighborhood", 
-            draw_edges = TRUE, nodes_first = FALSE, 
+            draw_edges = TRUE, nodes_first = TRUE, 
             directed = FALSE)+
   guides(color = "none")
+dev.off()
 
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/myeloid_panel/MY_example_district_spatialplot.pdf", width = 5, height = 4)
 plotSpatial(sce[,sce$sample_id %in% cur_sample], 
             node_color_by = "myeloid_district_names", 
             img_id = "sample_id", 
             node_size_fix = 2)+
   scale_color_manual(values = c("#fc9d24","pink2","#f96968"))
+dev.off()
 ```
 
 ```{r}
