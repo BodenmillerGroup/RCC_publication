@@ -959,7 +959,7 @@ colData(sce) %>% as.data.frame %>% group_by(tumor_metacluster) %>% count()
 
 ```{r}
 #Read sce after clustering, astir and GMM
-#sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_05.rds")
+sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_05.rds")
 
 ### 1. Heatmap body ###
 
@@ -1827,6 +1827,7 @@ anno$district_names[anno$district_names == "D_9"] <- "MYC_PKM2_mix"
 anno$district_names[anno$district_names == "D_10"] <- "ICAM1_MYC_dom"
 anno$district_names[anno$district_names == "D_11"] <- "CD10lo_dom"
 anno$district_names[anno$district_names == "D_12"] <- "mTORlo_dom"
+anno$district_names[anno$district_names == "D_13"] <- "PKM2_dom"
 
 ## Add names to sce
 sce$tumor_district_names <- factor(anno$district_names[match(sce$tumor_district, anno$district)])

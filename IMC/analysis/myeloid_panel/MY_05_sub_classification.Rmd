@@ -1381,7 +1381,9 @@ lgd <- Legend(title = "Immune metacluster", at = names(metadata(sce)$colors$immu
               legend_gp = gpar(fill = metadata(sce)$colors$immune_metacluster))
 
 # Draw heatmap
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/myeloid_panel/MY_immuneclass_heatmap.pdf", width = 10, height = 5)
 draw(h, annotation_legend_list = list(lgd))
+dev.off()
 ```
 
 

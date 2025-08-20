@@ -1115,10 +1115,10 @@ PDL1_score <- PDL1_score %>% group_by(my_cluster_selected) %>% mutate(fra = Freq
 PDL1_score <- PDL1_score %>% select(-Freq) %>% pivot_wider(id_cols = my_cluster_selected,names_from = PDL1_score,values_from = fra) %>% column_to_rownames("my_cluster_selected")
 
 
-ha_meta <- HeatmapAnnotation(ISUP_combined = anno_barplot(ISUP_combined, width = unit(12, "mm"),gp = gpar(fill = metadata(sce)$colors$ISUP_combined)),
-                            pT_combined = anno_barplot(pT_combined, width = unit(12, "mm"),gp = gpar(fill = metadata(sce)$colors$pT_combined)),
-                            necrose = anno_barplot(necrose, width = unit(12, "mm"),gp = gpar(fill = metadata(sce)$colors$necrose)),
-                            PDL1_score = anno_barplot(PDL1_score, width = unit(12, "mm"),gp = gpar(fill = rev(metadata(sce)$colors$PDL1_score))),
+ha_meta <- HeatmapAnnotation(#ISUP_combined = anno_barplot(ISUP_combined, width = unit(12, "mm"),gp = gpar(fill = metadata(sce)$colors$ISUP_combined)),
+                            #pT_combined = anno_barplot(pT_combined, width = unit(12, "mm"),gp = gpar(fill = metadata(sce)$colors$pT_combined)),
+                            #necrose = anno_barplot(necrose, width = unit(12, "mm"),gp = gpar(fill = metadata(sce)$colors$necrose)),
+                            #PDL1_score = anno_barplot(PDL1_score, width = unit(12, "mm"),gp = gpar(fill = rev(metadata(sce)$colors$PDL1_score))),
                             n_cells = anno_barplot(n_cells$ncells, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),                        n_PID = anno_barplot(n_PID$n_PID, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),
 
                             border = TRUE, 
@@ -1202,24 +1202,24 @@ lgd_1 <- Legend(title = "astir/GMM", at = names(metadata(sce)$colors$my_astir_co
 draw(h, annotation_legend_list = list(lgd, lgd_1))
 
 ## Add myeloid_metacluster to SCE 
-sce$myeloid_metacluster <- anno$my_metacluster[match(sce$my_cluster_selected, anno$my_cluster_selected)]
-sce$my_cluster_names <- as.factor(anno$my_cluster_names[match(sce$my_cluster_selected, anno$my_cluster_selected)])
+#sce$myeloid_metacluster <- anno$my_metacluster[match(sce$my_cluster_selected, anno$my_cluster_selected)]
+#sce$my_cluster_names <- as.factor(anno$my_cluster_names[match(sce$my_cluster_selected, anno$my_cluster_selected)])
 
-colData(sce) %>% as.data.frame %>% group_by(myeloid_metacluster) %>% count()
+#colData(sce) %>% as.data.frame %>% group_by(myeloid_metacluster) %>% count()
 ```
 
 #### Aggregated 
 
 ```{r}
 #Read sce after clustering, astir and GMM
-sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_06.rds")
+#sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_06.rds")
 
 ### 1. Heatmap body ###
 
 # Aggregrate across cells with the mean
 mean_sce <- aggregateAcrossCells(sce, ids = sce$myeloid_metacluster,
                                  statistics = "mean",
-                                 use.assay.type = "exprs",
+                                 use.assay.type = "min_max",
                                  subset.row = rowData(sce)$myeloid_cluster_1)
 
 
@@ -1323,9 +1323,9 @@ meta_col <- setNames(c("#E31A1C","#A6CEE3","#FB9A99","#FDBF6F","#33A02C"),
 metadata(sce)$colors$myeloid_metacluster <- meta_col
 
 ### 4. Plot combined Heatmap
-h <- Heatmap(t(assay(mean_sce, "exprs")),
+h <- Heatmap(t(assay(mean_sce, "min_max")),
         col = col_main,
-        name = "exprs",
+        name = "min_max",
         row_title = NULL,
         show_row_names = TRUE, 
         show_row_dend = TRUE,
@@ -1335,7 +1335,7 @@ h <- Heatmap(t(assay(mean_sce, "exprs")),
         clustering_method_rows = "ward.D2",
         clustering_method_columns = "ward.D2",
         cluster_row_slices = TRUE)+
-  Heatmap(scale(t(assay(mean_sce, "exprs"))))+
+  #Heatmap(scale(t(assay(mean_sce, "min_max"))))+
   rowAnnotation(metacluster = anno_simple(unfactor(anno$myeloid_metacluster), col = metadata(sce)$colors$myeloid_metacluster, border = TRUE))+
   ha_GMM_astir+
   ha_spatial+
@@ -2330,7 +2330,7 @@ Heatmap(for_district, col = viridis(100), row_names_side = "left", row_labels = 
 
 ```{r}
 ## Specifically spatial metacommunity 3
-cur_sample <- colData(sce) %>% as.data.frame %>% group_by(sce$myeloid_district_names) %>% filter(sce$myeloid_district_names == "MDSC_M2_mix") %>% count(sample_id) %>% arrange(desc(n)) %>% slice(1:6) %>% pull(sample_id)
+cur_sample <- colData(sce) %>% as.data.frame %>% group_by(myeloid_district_names) %>% filter(myeloid_district_names == "MDSC_M2_mix") %>% count(sample_id) %>% arrange(desc(n)) %>% slice(1:6) %>% pull(sample_id)
 
 cur_sample <- cur_sample[1]
 plotSpatial(sce[,sce$sample_id %in% cur_sample], 
@@ -2348,7 +2348,7 @@ plotSpatial(sce[,sce$sample_id %in% cur_sample],
   guides(color = "none")
 
 plotSpatial(sce[,sce$sample_id %in% cur_sample], 
-            node_color_by = "sce$myeloid_district_names", 
+            node_color_by = "myeloid_district_names", 
             img_id = "sample_id", 
             node_size_fix = 2)+
   scale_color_manual(values = c("#fc9d24","pink2","#f96968"))

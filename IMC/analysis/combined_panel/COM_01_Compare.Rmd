@@ -58,6 +58,9 @@ library(psych)
 
 #Batch correction
 library(batchelor)
+
+conflicts_prefer(dplyr::select)
+conflicts_prefer(dplyr::filter)
 ```
 
 
@@ -133,6 +136,7 @@ MY_analysis_cat <- MY_analysis_cat[complete.cases(MY_analysis_cat),]
 # Cluster channel marker correlation (all markers - does not show distribution which is usually recommended)
 cor_sce <- MY_analysis_cat %>% column_to_rownames("PID") %>% as.data.frame
 
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/compare_panels/corr_tumor_panels.pdf", width = 7, height = 5)
 corrplot(cor(cor_sce,method = "spearman"), method="color", col=brewer.pal(n=8, name="RdBu"),  
          type="upper", order="hclust",hclust.method = "ward.D2", 
          addCoef.col = "black", addCoefasPercent = F,# Add coefficient of correlation
@@ -142,6 +146,7 @@ corrplot(cor(cor_sce,method = "spearman"), method="color", col=brewer.pal(n=8, n
          # hide correlation coefficient on the principal diagonal
          diag=F
 )
+dev.off()
 ```
 
 ```{r}
@@ -192,6 +197,7 @@ general_dens_out <- general_dens_combined %>% group_by(celltype_combined_broad) 
 
 out_cor$density_general <- general_dens_out$density[match(out_cor$immune_metacluster, general_dens_out$celltype_combined_broad)]
 
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/compare_panels/corr_immune_panels.pdf", width = 5, height = 5)
 ggplot(out_cor, aes(x = reorder(immune_metacluster,-cor), y = cor))+  
   geom_point(aes(color = immune_metacluster, size = density_general))+
   geom_boxplot(outlier.colour = NA, alpha = 0.8)+
@@ -201,6 +207,7 @@ ggplot(out_cor, aes(x = reorder(immune_metacluster,-cor), y = cor))+
   theme_classic()+
   coord_cartesian(ylim = c(0,1))+
   ggtitle(paste("Mean SCC = ",round(mean(out_cor$cor), digits = 3)))
+dev.off()
 ```
 
 #### Per patient
@@ -227,16 +234,18 @@ PID_cor_out <- PID_cor %>% group_by(PID) %>% summarize(cor_mean = mean(cor, na.r
 
 
 ```{r}
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/compare_panels/corr_immune_panels_perPID.pdf", width = 3, height = 5)
 ggplot(PID_cor_out, aes(x = category, y = cor_mean))+  
   geom_point(aes(color = PID))+
   geom_boxplot(outlier.colour = NA, alpha = 0.8)+
   scale_color_manual(values=metadata(sce)$colors$PID)+
   guides(color = "none")+
-  ylab("PCC")+
+  ylab("SCC")+
   xlab("Per PID")+
   theme_classic()+
   coord_cartesian(ylim = c(0,1))+
-  ggtitle(paste("Mean PCC = ",round(mean(PID_cor$cor, na.rm = TRUE), digits = 2)))
+  ggtitle(paste("Mean SCC = ",round(mean(PID_cor$cor, na.rm = TRUE), digits = 2)))
+dev.off()
 ```
 
 ### Extract images 

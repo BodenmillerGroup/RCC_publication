@@ -1526,7 +1526,9 @@ h <- Heatmap(t(assay(mean_sce, "min_max")),
   ha_meta#+
   #ha_cluscat
 
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/myeloid_panel/MY_broadclass_tumornontumor_heatmap.pdf", width = 8, height = 3)
 draw(h)
+dev.off()
 ```
 
 #### cytoviewer
