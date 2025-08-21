@@ -1212,7 +1212,7 @@ draw(h, annotation_legend_list = list(lgd, lgd_1))
 
 ```{r}
 #Read sce after clustering, astir and GMM
-#sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_06.rds")
+sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_06.rds")
 
 ### 1. Heatmap body ###
 
@@ -1288,8 +1288,8 @@ metadata(sce)$colors$my_GMM_col <- GMM_col
 metadata(sce)$colors$my_GMM_col <- metadata(sce)$colors$my_GMM_col[match(colnames(GMM_anno),names(metadata(sce)$colors$my_GMM_col))]
 
 ha_GMM_astir <- HeatmapAnnotation(
-  astir_myeloid = anno_barplot(astir_anno, width = unit(20, "mm"), gp = gpar(fill = metadata(sce)$colors$my_astir_col)),
-  GMM_myeloid = anno_barplot(GMM_anno, width = unit(20, "mm"), gp = gpar(fill = metadata(sce)$colors$my_GMM_col)),
+  astir_myeloid = anno_barplot(astir_anno, width = unit(10, "mm"), gp = gpar(fill = metadata(sce)$colors$my_astir_col)),
+  GMM_myeloid = anno_barplot(GMM_anno, width = unit(10, "mm"), gp = gpar(fill = metadata(sce)$colors$my_GMM_col)),
                             border = TRUE, 
                             annotation_name_rot = 90,
                             gap = unit(3,"mm"),
@@ -1349,7 +1349,9 @@ lgd_1 <- Legend(title = "astir/GMM", at = names(metadata(sce)$colors$my_astir_co
                legend_gp = gpar(fill = metadata(sce)$colors$my_astir_col))
 
 # Draw heatmap
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/myeloid_panel/MY_metacluster_heatmap.pdf", width = 9.5, height = 3)
 draw(h, annotation_legend_list = list(lgd, lgd_1))
+dev.off()
 ```
 
 ### Visualization 
@@ -2279,7 +2281,7 @@ myeloid_metacluster <- myeloid_metacluster %>% select(-Freq) %>% pivot_wider(id_
 col <- metadata(sce)$colors$myeloid_metacluster[match(colnames(myeloid_metacluster), names(metadata(sce)$colors$myeloid_metacluster))]
 
 ha_my <- HeatmapAnnotation(
-  myeloid_metacluster = anno_barplot(myeloid_metacluster, width = unit(20, "mm"), gp = gpar(fill = col)),
+  myeloid_metacluster = anno_barplot(myeloid_metacluster, width = unit(10, "mm"), gp = gpar(fill = col)),
                             border = TRUE, 
                             annotation_name_rot = 90,
                             gap = unit(3,"mm"),
@@ -2290,7 +2292,7 @@ n_PID <- colData(sce) %>% as.data.frame() %>% select(myeloid_district,PID) %>% g
 
 n_cell_id <- colData(sce) %>% as.data.frame() %>% select(myeloid_district,cell_id) %>% group_by(myeloid_district) %>% table() %>% as.data.frame %>% filter(Freq != 0) %>% group_by(myeloid_district) %>% count()
 
-ha_meta <- HeatmapAnnotation(n_cells = anno_barplot(n_cell_id$n, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),                        
+ha_meta <- HeatmapAnnotation(#n_cells = anno_barplot(n_cell_id$n, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),                        
                              n_PID = anno_barplot(n_PID$n, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),
                              border = TRUE, 
                              annotation_name_rot = 90,
@@ -2318,11 +2320,13 @@ anno$district_names[anno$district_names == "D_10"] <- "M1_dom"
 sce$myeloid_district_names <- factor(anno$district_names[match(sce$myeloid_district, anno$district)])
 
 # Plot heatmap 
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/myeloid_panel/MY_district_heatmap.pdf", width = 7, height = 4.5)
 Heatmap(for_district, col = viridis(100), row_names_side = "left", row_labels = anno$district_names)+
   ha_my+
   #Heatmap(for_district_fine, col = viridis(100))+
   ha_meta
-  
+dev.off()
+
 #Heatmap(t(scale(t(for_district))))
 ```
 
