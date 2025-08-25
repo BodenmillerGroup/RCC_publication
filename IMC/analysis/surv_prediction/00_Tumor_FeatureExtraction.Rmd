@@ -1194,7 +1194,7 @@ ggplot(DA_out, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
 
 DA_out_fil <- DA_out[DA_out$cluster %in% D_diff_abun, ] 
 
-#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/TU_diffabun_districts.pdf", width = 6, height = 4)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/TU_diffabun_districts.pdf", width = 6, height = 4)
 ggplot(DA_out_fil, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
   geom_point()+
   theme_classic()+
@@ -1204,7 +1204,7 @@ ggplot(DA_out_fil, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
   geom_point(data = DA_out_fil,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
   scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))
-#dev.off()
+dev.off()
 ```
 
 ```{r}
