@@ -161,32 +161,92 @@ ggplot(plot, aes(x = reorder(feature,-scaled_importance_total), y = scaled_impor
   scale_fill_manual(values = col_origin)+
   ylab("Scaled importance")+
   xlab("Feature")
+```
 
-ggplot(plot, aes(x = reorder(feature_type,-scaled_importance), y = scaled_importance, fill = feature_type))+
-  geom_jitter(color = "darkgrey", position=position_jitter(w=0.1,h=0.1))+
+```{r}
+ggplot(plot, aes(x = reorder(feature_origin,-scaled_importance, FUN = median), y = scaled_importance, fill = feature_origin))+
+  #facet_grid(~feature_spatial, scales = "free")+
+  geom_point()+
   geom_boxplot(outlier.colour = NA)+
   theme_classic()+
-  facet_grid(~feature_origin, scales = "free")+
-  scale_fill_manual(values = col_type)+
-  stat_compare_means(method = "anova")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  scale_fill_manual(values = col_origin)+
+  stat_compare_means(method = "anova")+
   #guides(fill = "none")+
   ylab("Scaled importance")+
-  xlab("Feature")
+  xlab("Feature")+
 
-ggplot(plot, aes(x = reorder(feature_spatial,-scaled_importance), y = scaled_importance, fill = feature_spatial))+
-  facet_grid(~feature_origin, scales = "free")+
-  geom_jitter(color = "darkgrey", position=position_jitter(w=0.1,h=0.1))+
+ggplot(plot, aes(x = reorder(feature_type,-scaled_importance, FUN = median), y = scaled_importance, fill = feature_type))+
+  #facet_grid(~feature_spatial, scales = "free")+
+  geom_point()+
+  geom_boxplot(outlier.colour = NA)+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  scale_fill_manual(values = col_type)+
+  stat_compare_means(method = "anova")+
+  #guides(fill = "none")+
+  ylab("Scaled importance")+
+  xlab("Feature")+
+  
+ggplot(plot, aes(x = reorder(feature_spatial,-scaled_importance, FUN = median), y = scaled_importance, fill = feature_spatial))+
+  #facet_grid(~feature_spatial, scales = "free")+
+  geom_point()+
   geom_boxplot(outlier.colour = NA)+
   theme_classic()+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   scale_fill_manual(values = col_spatial)+
-  stat_compare_means(method = "t.test")+
+  stat_compare_means(method = "anova")+
   #guides(fill = "none")+
   ylab("Scaled importance")+
   xlab("Feature")
-```
 
+
+## Mean per feature (not 10 values per feature across folds)
+plot_sum <- plot %>% group_by(feature) %>% reframe(mean_scaled = mean(scaled_importance), feature_origin = feature_origin, feature_type = feature_type, feature_spatial = feature_spatial) %>% unique()
+
+g_out <- ggplot(plot_sum, aes(x = reorder(feature_origin,-mean_scaled, FUN = median), y = mean_scaled, fill = feature_origin))+
+  #facet_grid(~feature_spatial, scales = "free")+
+  geom_point(aes(col = feature_origin))+
+  geom_boxplot(outlier.colour = NA)+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  scale_fill_manual(values = col_origin)+
+  scale_color_manual(values = col_origin)+
+  stat_compare_means(method = "anova")+
+  #guides(fill = "none")+
+  ylab("Mean scaled importance")+
+  xlab("Feature")+
+
+ggplot(plot_sum, aes(x = reorder(feature_type,-mean_scaled, FUN = median), y = mean_scaled, fill = feature_type))+
+  #facet_grid(~feature_spatial, scales = "free")+
+  geom_point(aes(col = feature_type))+
+  geom_boxplot(outlier.colour = NA)+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  scale_fill_manual(values = col_type)+
+  scale_color_manual(values = col_type)+
+  stat_compare_means(method = "anova")+
+  #guides(fill = "none")+
+  ylab("Mean scaled importance")+
+  xlab("Feature")+
+
+ggplot(plot_sum, aes(x = reorder(feature_spatial,-mean_scaled, FUN = median), y = mean_scaled, fill = feature_spatial))+
+  #facet_grid(~feature_spatial, scales = "free")+
+  geom_point(aes(col = feature_spatial))+
+  geom_boxplot(outlier.colour = NA)+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  scale_fill_manual(values = col_spatial)+
+  scale_color_manual(values = col_spatial)+
+  stat_compare_means(method = "anova")+
+  #guides(fill = "none")+
+  ylab("Mean scaled importance")+
+  xlab("Feature")
+
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_Importance_COMP.pdf", width = 10.5, height = 3.5, onefile = FALSE)
+g_out
+dev.off()
+```
 
 ```{r}
 # Order features by median importance
@@ -353,9 +413,12 @@ Heatmap(key_out)
 library(clValid)
 #Internal measures
 set.seed(22)
-testCL<- clValid(key_out,nClust = 3:10,clMethods = c("kmeans" ),validation="internal",metric="euclidean", method = "ward")
+testCL<- clValid(key_out,nClust = 3:10,clMethods = c("kmeans", "agnes", "hierarchical"),validation="internal",metric="euclidean", method = "ward")
 summary(testCL)
-plot(testCL)
+
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_Ecotype_clValidSil.pdf", width = 4.5, height = 3.5, onefile = FALSE)
+plot(testCL)[3]
+dev.off()
 
 #Stability measures 
 #testCL_1<- clValid(key_out,nClust = 3:15,clMethods = c("hierarchical","agnes","kmeans"),validation="stability",metric="euclidean", method = "ward")
@@ -390,6 +453,11 @@ anno$PID_group_final <- unfactor(anno$PID_group)
 
 ## Add to sce
 metadata_selected$PID_group_test <- factor(anno$PID_group_final[match(metadata_selected$PID, anno$PID)])
+```
+```{r}
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_Ecotype_HeatmapPID.pdf", width = 7, height = 5, onefile = FALSE)
+h_select <- draw(h_select)
+dev.off()
 ```
 
 ### Survival testing
