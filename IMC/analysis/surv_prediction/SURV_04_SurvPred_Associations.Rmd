@@ -455,10 +455,46 @@ anno$PID_group_final <- unfactor(anno$PID_group)
 metadata_selected$PID_group_test <- factor(anno$PID_group_final[match(metadata_selected$PID, anno$PID)])
 ```
 ```{r}
-pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_Ecotype_HeatmapPID.pdf", width = 7, height = 5, onefile = FALSE)
+set.seed(22)
+h_select <- Heatmap(key_out, 
+        row_km = 3, #or3
+        #row_split = 3,
+        clustering_method_rows = "ward.D2",
+        clustering_method_columns = "ward.D2",
+        row_km_repeats = 1000)
+
 h_select <- draw(h_select)
+
+# Add col anno
+col_anno <- plot %>% ungroup %>% filter(feature %in% top_features) %>% select(feature, feature_origin, feature_type, feature_spatial) %>% unique()
+col_anno$hazard <- hazard_surv_out$direction[match(col_anno$feature, hazard_surv_out$group)]
+col_anno <- col_anno[match(colnames(key_out), col_anno$feature),]
+
+col_anno <- HeatmapAnnotation(
+    hazard = col_anno$hazard,
+    origin = col_anno$feature_origin,
+    type = col_anno$feature_type,
+    spatial = col_anno$feature_spatial, 
+    col = list(hazard = col_hazard, 
+               origin = col_origin,
+               type = col_type,
+               spatial = col_spatial),
+    border = TRUE,
+    which = "column")
+
+
+h_select_anno <- Heatmap(key_out, 
+        row_km = 3,
+        clustering_method_rows = "ward.D2",
+        clustering_method_columns = "ward.D2",
+        row_km_repeats = 1000, 
+        bottom_annotation = col_anno)
+
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_Ecotype_HeatmapPID.pdf", width = 9, height = 7, onefile = FALSE)
+h_select_anno <- draw(h_select_anno)
 dev.off()
 ```
+
 
 ### Survival testing
 
@@ -536,7 +572,9 @@ multi_model_full <- coxph(multi_formula_full, data = cur_surv)
 #cur_surv is.na(cur_surv$PID_metagroups)
 
 # Log-likelihood ratio test
+out_anova <- anova(multi_model_null, multi_model_full)
 anova(multi_model_null, multi_model_full)
+write.xlsx(out_anova, "/mnt/central_nas/rcc_volume/RCC/figures/supp_tables/anova_discovery_ecotypes.xlsx")
 ```
 
 
@@ -738,9 +776,109 @@ metadata_selected <- cbind(metadata_selected, encoded)
 ```
 
 
+##### Disease progression 
 
 
+```{r}
+sce_prog <- readRDS("/mnt/central_nas_full/users/marllu/T_panel/data_analysis/sce_ccRCC_T_07.rds")
 
+metadata_selected$CLIN_pT_combined <- sce_prog$pT_combined[match(metadata_selected$PID, sce_prog$PID)]
+metadata_selected$CLIN_pT_combined[metadata_selected$CLIN_pT_combined == "1/2"] <- "0"
+metadata_selected$CLIN_pT_combined[metadata_selected$CLIN_pT_combined == "3/4"] <- "1"
+metadata_selected$CLIN_ISUP_combined <- sce_prog$ISUP_combined[match(metadata_selected$PID, sce_prog$PID)]
+metadata_selected$CLIN_ISUP_combined[metadata_selected$CLIN_ISUP_combined == "1/2"] <- "0"
+metadata_selected$CLIN_ISUP_combined[metadata_selected$CLIN_ISUP_combined == "3/4"] <- "1"
+metadata_selected$CLIN_necrose <- sce_prog$necrose[match(metadata_selected$PID, sce_prog$PID)]
+metadata_selected$CLIN_PDL1_score <- sce_prog$PDL1_score[match(metadata_selected$PID, sce_prog$PID)]
+```
+
+
+```{r}
+# Patient group info 
+cur_groups <- metadata_selected %>% select(PID,TME_suppressed,TME_silent,TME_activated) %>% unique()
+
+# Other groups
+cur_test <- metadata_selected %>% select(PID, CLIN_pT_combined, CLIN_ISUP_combined, CLIN_necrose, CLIN_PDL1_score) %>% unique() %>% remove_rownames %>% column_to_rownames("PID") %>% filter(complete.cases(.)) %>% t()
+
+cur_groups <- cur_groups[cur_groups$PID %in% colnames(cur_test),]
+
+# Function to perform Fisher exact test for each gene
+perform_fisher_test <- function(gene_row, group1_cols, group2_cols) {
+    contingency_table <- matrix(0, nrow = 2, ncol = 2)
+    contingency_table[1, 1] <- sum(gene_row[group1_cols] == 1)
+    contingency_table[1, 2] <- sum(gene_row[group2_cols] == 1)
+    contingency_table[2, 1] <- sum(gene_row[group1_cols] == 0)
+    contingency_table[2, 2] <- sum(gene_row[group2_cols] == 0)
+    test_result <- fisher.test(contingency_table)
+    return(c(odds_ratio = test_result$estimate, p_value = test_result$p.value))
+  }
+  
+fisher_full <- foreach(i = c("TME_activated", "TME_silent","TME_suppressed"), .combine = "rbind")%do%{
+
+  PID_high <- unique(cur_groups[cur_groups[, i] == "1",]$PID)
+  PID_low <- unique(cur_groups[cur_groups[, i] == "0",]$PID)
+  
+  PID_high <- PID_high[!is.na(PID_high)]
+  PID_low <- PID_low[!is.na(PID_low)]
+  
+  fisher_results <- apply(cur_test, 1, perform_fisher_test, group1_cols = PID_high, group2_cols = PID_low)
+  
+  fisher_results <- as.data.frame(fisher_results)
+  fisher_results <- as.data.frame(t(fisher_results)) %>% rownames_to_column("gene")
+  fisher_results$p_adj <- p.adjust(fisher_results$p_value, method = "BH")
+  fisher_results$category <- i
+  
+  return(fisher_results)
+  }
+
+isGreater <- fisher_full$odds_ratio > 1
+pVal <- log10(fisher_full$p_value)
+pVal[isGreater] <- abs(pVal[isGreater])
+fisher_full$p_out <- pVal
+colnames(fisher_full) <- c("gene", "odds_ratio", "p_value", "p_adj", "category", "p_out")
+```
+
+```{r}
+# FDR at 0.1 with trends
+fisher_full$result <- ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_adj < 0.05, "UP",
+                             ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_value < 0.05, "UP_trend", 
+                                    ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_adj < 0.05, "DOWN", 
+                                           ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_value < 0.05, "DOWN_trend","NOTSIG"))))
+
+## hierarchical clustering on odds_ratio
+cur_df <- fisher_full %>% select(gene, category, odds_ratio) %>% pivot_wider(values_from = odds_ratio, names_from = gene)
+
+# rows 
+dd <- dist(cur_df[2:ncol(cur_df)], method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+row_sorted <- hc$order
+fisher_full$category <- factor(fisher_full$category, levels = cur_df$category)
+fisher_full$category <- factor(fisher_full$category, levels = c("TME_suppressed", "TME_silent", "TME_activated"))
+
+# columns 
+dd <- dist(t(cur_df[2:ncol(cur_df)]), method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+column_sorted <- hc$order
+fisher_full$gene <- factor(fisher_full$gene, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
+fisher_full$gene <- factor(fisher_full$gene, levels = c("CLIN_ISUP_combined", "CLIN_pT_combined", "CLIN_necrose", "CLIN_PDL1_score"))
+
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_SurvArchetypes_DiseaseProg_Fisher.pdf", width = 5, height = 4)
+ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_adj)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = fisher_full,shape = 1,aes(size = -log10(p_adj), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  coord_flip()
+dev.off()
+```
+
+##### ICAM1/MTOR groups
 
 ```{r}
 # Patient group info 
@@ -822,6 +960,7 @@ ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_a
   theme(axis.text.x = element_text(angle = 90, hjust = 1))
 ```
 
+##### Myeloid groups 
 
 ```{r}
 # Patient group info 
@@ -903,8 +1042,7 @@ ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_a
   theme(axis.text.x = element_text(angle = 90, hjust = 1))
 ```
 
-
-##### Spatial groups
+##### Spatial CD8+ groups
 
 ```{r}
 surv_out <- metadata_selected %>% select(PID, OS_months, status_OS, IMC_T_PL_spatial_CD8_pheno) %>% unique()
