@@ -1380,7 +1380,7 @@ dev.off()
 # Read in genomics data 
 ## 1A: Mutations 
 mut_anno <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/SNV_CNV_combined_full_withmeta.csv")
-mut_per_PID <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/mutation_per_PID_binary.csv")
+#mut_per_PID <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/mutation_per_PID_binary.csv")
   
 ## 1B: Genomic subtypes 
 genomic_sub <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/genomic_subtype_anno_final.csv")
@@ -1402,6 +1402,8 @@ Oncoprint
 GOI_IntOGen <- read_tsv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/data/IntOGen_DriverGenes_CCRCC.tsv")
 GOI <- GOI_IntOGen$Symbol #n = 44
 ```
+
+
 
 ```{r}
 #Load processed data file and select columns of interest
@@ -1527,7 +1529,7 @@ fun_alter = list(
 test_alter_fun(fun_alter)
 
 ## Step 2: Column Annotation
-c_anno <- data.frame(PID = colnames(mut_list_full[1]$frameshift_variant))
+c_anno <- data.frame(PID = colnames(mut_list_full[1]$missense_variant))
 c_anno$cohort <- mut_anno$cohort[match(c_anno$PID, mut_anno$PID)]
 c_anno$BF_PL_TME_archetypes <- metadata_selected$BF_PL_TME_archetypes[match(c_anno$PID, metadata_selected$PID)]
 
@@ -1546,7 +1548,7 @@ ca <- columnAnnotation(
                    )
 
 ## Step 3: Row Annotation 
-r_anno <- data.frame(genes = rownames(mut_list_full[1]$frameshift_variant))
+r_anno <- data.frame(genes = rownames(mut_list_full[1]$missense_variant))
 r_anno$key_genes <- ifelse(r_anno$genes %in% c("VHL","PBRM1","BAP1","SETD2"), "key_driver", "other_driver")
 
   
@@ -1584,12 +1586,20 @@ ggsurvplot(fit,
           linetype = "strata", # Change line type by groups
           surv.median.line = "hv", # Specify median survival
           ggtheme = theme_classic(), # Change ggplot2 theme
-          #palette = c("#0571B0", "black", "#CA0020","#0571B0","grey"),
+          palette = c("gold3", "#CA0020","#0571B0"),
           conf.int = FALSE
 )
 ```
 
 Associations 
+
+```{r}
+sum_matrix <- Reduce(`+`, mut_list_full)
+sum_matrix <- as.matrix(ifelse(sum_matrix >= 1, 1,0))
+sum_matrix[mut_list_full$subclonal == 1] <- 0.5
+
+mut_per_PID <- as.data.frame(t(sum_matrix)) %>% rownames_to_column("PID")
+```
 
 ```{r}
 # Add relevant metadata to sce 
@@ -1854,7 +1864,7 @@ MUT_burden <- MUT_burden %>% filter(!is.na(BF_PL_TME_archetypes))
 
 col_group <- setNames(c("#0571B0", "gold3", "#CA0020"),c("TME_activated","TME_silent","TME_suppressed"))
 
-ggplot(MUT_burden, aes(x = BF_PL_TME_archetypes, y = burden, fill = BF_PL_TME_archetypes))+
+MUT_burden_gg <- ggplot(MUT_burden, aes(x = BF_PL_TME_archetypes, y = burden, fill = BF_PL_TME_archetypes))+
   geom_point(aes(color = BF_PL_TME_archetypes))+
   geom_boxplot(outlier.colour = NA, alpha = 0.8)+
   theme_classic()+
@@ -1863,9 +1873,31 @@ ggplot(MUT_burden, aes(x = BF_PL_TME_archetypes, y = burden, fill = BF_PL_TME_ar
   scale_color_manual(values = col_group)+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   xlab("Models")+
-  ylab("MUT events")
+  ylab("MUT events")+
+  guides(fill = "none", color = "none")
+
+MUT_burden_gg
 ```
 
+```{r}
+MUT_burden$status_OS <- metadata_selected$status_OS[match(MUT_burden$PID, metadata_selected$PID)]
+MUT_burden$OS_months <- metadata_selected$OS_months[match(MUT_burden$PID, metadata_selected$PID)]
+
+MUT_burden$burden_class <- ifelse(MUT_burden$burden > mean(MUT_burden$burden), "high", "low")
+
+fit <- survfit(Surv(OS_months, status_OS) ~ burden_class, data = MUT_burden)
+
+ggsurvplot(fit, 
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), 
+          palette = "Set1", # Change ggplot2 theme 
+          conf.int = FALSE
+)
+```
 
 ```{r}
 # OPTION 2: Selected impact variants across GOI genes
@@ -2215,7 +2247,7 @@ ggsurvplot(fit,
           linetype = "strata", # Change line type by groups
           surv.median.line = "hv", # Specify median survival
           ggtheme = theme_classic(), # Change ggplot2 theme
-          #palette = c("#0571B0", "black", "#CA0020","#0571B0","grey"),
+          palette = c("gold3", "#CA0020","#0571B0"),
           conf.int = FALSE
 )
 ```
@@ -2437,19 +2469,12 @@ ggplot(CNV_burden, aes(x = BF_PL_TME_archetypes, y = burden, fill = BF_PL_TME_ar
 ```
 
 
+
+
+
 ```{r}
 pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Mut_CNVburden_Archetypes_Bubble.pdf", width = 7, height = 3.5, onefile = FALSE)
-ggplot(MUT_burden, aes(x = BF_PL_TME_archetypes, y = burden, fill = BF_PL_TME_archetypes))+
-  geom_point(aes(color = BF_PL_TME_archetypes))+
-  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
-  theme_classic()+
-  stat_compare_means(vjust = 1)+
-  scale_fill_manual(values = col_group)+
-  scale_color_manual(values = col_group)+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
-  xlab("Models")+
-  ylab("MUT events")+
-  guides(fill = "none", color = "none")+
+MUT_burden_gg+
 ggplot(CNV_burden, aes(x = BF_PL_TME_archetypes, y = burden, fill = BF_PL_TME_archetypes))+
   geom_point(aes(color = BF_PL_TME_archetypes))+
   geom_boxplot(outlier.colour = NA, alpha = 0.8)+
@@ -2464,6 +2489,25 @@ ggplot(CNV_burden, aes(x = BF_PL_TME_archetypes, y = burden, fill = BF_PL_TME_ar
 dev.off()
 ```
 
+```{r}
+CNV_burden$status_OS <- metadata_selected$status_OS[match(CNV_burden$PID, metadata_selected$PID)]
+CNV_burden$OS_months <- metadata_selected$OS_months[match(CNV_burden$PID, metadata_selected$PID)]
+
+CNV_burden$burden_class <- ifelse(CNV_burden$burden > mean(CNV_burden$burden), "high", "low")
+
+fit <- survfit(Surv(OS_months, status_OS) ~ burden_class, data = CNV_burden)
+
+ggsurvplot(fit, 
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), 
+          palette = "Set1", # Change ggplot2 theme 
+          conf.int = FALSE
+)
+```
 
 ###### Genomic subtypes
 
@@ -2481,6 +2525,8 @@ mut_mat <- genomic_sub %>% column_to_rownames("PID") %>% select(VHL, BAP1, PBRM1
 driver_mat_anno <- genomic_sub
 driver_mat_anno <- driver_mat_anno[match(rownames(mut_mat), driver_mat_anno$PID),]
 driver_mat_anno$BF_PL_TME_archetypes <- metadata_selected$BF_PL_TME_archetypes[match(driver_mat_anno$PID, metadata_selected$PID)]
+driver_mat_anno$status_OS <- metadata_selected$status_OS[match(driver_mat_anno$PID, metadata_selected$PID)]
+driver_mat_anno$OS_months <- metadata_selected$OS_months[match(driver_mat_anno$PID, metadata_selected$PID)]
 
 
 # Column Annotation
@@ -2509,9 +2555,9 @@ ht_mut_anno <- Heatmap(t(mut_mat), name = "Mutation status",
                        column_title = "Genomic subtypes", 
                        cluster_column_slices = FALSE, show_column_names = FALSE)%v%ca
 
-pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Oncoprint_GenomicSub_Archetypes.pdf", width = 7, height = 2.5, onefile = FALSE)
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Oncoprint_GenomicSub_Archetypes.pdf", width = 7, height = 2.5, onefile = FALSE)
 ht_mut_anno <- draw(ht_mut_anno)
-dev.off()
+#dev.off()
 ```
 
 Survival
@@ -2521,7 +2567,7 @@ Survival
 fit <- survfit(Surv(OS_months, status_OS) ~ genomic_subtype, data = driver_mat_anno)
 print(fit)
 
-pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survival_GenomicSub_Archetypes.pdf", width = 6, height = 4, onefile = FALSE)
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survival_GenomicSub_Archetypes.pdf", width = 6, height = 4, onefile = FALSE)
 ggsurvplot(fit,
           pval = TRUE,
           risk.table = TRUE, # Add risk table
@@ -2532,7 +2578,7 @@ ggsurvplot(fit,
           palette = c("#046C9A", "#000000", "#D69C4E", "#ECCBAE", "#ABDDDE"),
           conf.int = FALSE
 )
-dev.off()
+#dev.off()
 ```
 
 Association
@@ -2620,7 +2666,7 @@ plot(hc)
 column_sorted <- hc$order
 fisher_full$gene <- factor(fisher_full$gene, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
 
-pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/GenomicSub_Archetypes_Bubble.pdf", width = 5, height = 3, onefile = FALSE)
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/GenomicSub_Archetypes_Bubble.pdf", width = 5, height = 3, onefile = FALSE)
 ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_adj)))+
   geom_point()+
   theme_classic()+
@@ -2631,7 +2677,7 @@ ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_a
   scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   coord_flip()
-dev.off()
+#dev.off()
 ```
 
 ###### Tumor IMC expression
