@@ -1579,6 +1579,7 @@ surv_out <- metadata_genome %>% select(PID, OS_months, status_OS, PID_group_test
 
 fit <- survfit(Surv(OS_months, status_OS) ~ PID_group_test, data = surv_out)
 
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_Kaplan_SurvArchetypes_Mutations.pdf", width = 8, height = 5, onefile = FALSE)
 ggsurvplot(fit, 
           pval = TRUE,
           risk.table = TRUE, # Add risk table
@@ -1589,6 +1590,7 @@ ggsurvplot(fit,
           palette = c("gold3", "#CA0020","#0571B0"),
           conf.int = FALSE
 )
+dev.off()
 ```
 
 Associations 
@@ -1679,9 +1681,9 @@ colnames(fisher_full) <- c("gene", "odds_ratio", "p_value", "p_adj", "category",
 ```{r}
 # FDR at 0.1 with trends
 fisher_full$result <- ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_adj < 0.1, "UP",
-                             ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_value < 0.1, "UP_trend", 
+                             ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_value < 0.05, "UP_trend", 
                                     ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_adj < 0.1, "DOWN", 
-                                           ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_value < 0.1, "DOWN_trend","NOTSIG"))))
+                                           ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_value < 0.05, "DOWN_trend","NOTSIG"))))
 
 
 # Replace INF values with max
@@ -1733,7 +1735,7 @@ ggplot(fisher_full_selected, aes(x=category, y = gene,col = odds_ratio, size = -
   coord_flip()
 dev.off()
 ```
-
+Association with survival
 
 ```{r}
 ## Test assocation of mutations with survival 
@@ -1743,13 +1745,13 @@ sum_matrix <- as.matrix(ifelse(sum_matrix >= 1, 1,0))
 sum_matrix[mut_list_full$subclonal == 1] <- 0.5
 
 # Only clonal
-#mut_matrix <- as.data.frame(t(ifelse(sum_matrix == 1, TRUE, FALSE))) %>% rownames_to_column("PID") 
+mut_matrix <- as.data.frame(t(ifelse(sum_matrix == 1, TRUE, FALSE))) %>% rownames_to_column("PID") 
 
 # Clonal + subclonal
-mut_matrix <- as.data.frame(t(ifelse(sum_matrix > 0, TRUE, FALSE))) %>% rownames_to_column("PID") 
+#mut_matrix <- as.data.frame(t(ifelse(sum_matrix > 0, TRUE, FALSE))) %>% rownames_to_column("PID") 
 
-mut_matrix$status_OS <- variant_combined_full$status_OS[match(mut_matrix$PID, variant_combined_full$PID)]
-mut_matrix$OS_months <- variant_combined_full$OS_months[match(mut_matrix$PID, variant_combined_full$PID)]
+mut_matrix$status_OS <- metadata_selected$status_OS[match(mut_matrix$PID, metadata_selected$PID)]
+mut_matrix$OS_months <- metadata_selected$OS_months[match(mut_matrix$PID, metadata_selected$PID)]
 
 #Assess survival impact across categories
 library(survival)
@@ -1774,10 +1776,9 @@ cur_surv_plot$result <- ifelse(cur_surv_plot$direction == "high" & cur_surv_plot
                                            ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p < 0.05, "DOWN_trend",NA))))
 
 
-
 cur_surv_plot$type <- "mutation"
 
-#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/MY_km_expression_bubble.pdf", width = 3, height = 5)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Mutations_Survival_Bubble.pdf", width = 3, height = 4)
 ggplot(cur_surv_plot, aes(x=reorder(group,ratio), y = type, col = ratio, size= -log10(p)))+
   geom_point()+
   theme_classic()+
@@ -1792,7 +1793,7 @@ ggplot(cur_surv_plot, aes(x=reorder(group,ratio), y = type, col = ratio, size= -
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   ylab("Cox model")+
   coord_flip()
-#dev.off()
+dev.off()
 ```
 
 ```{r}
@@ -1817,9 +1818,11 @@ ggsurvplot(fit,
 )
 ```
 
+Association with progression
+
 ```{r}
 # Patient group info 
-cur_groups <- metadata_genome %>% select(PID,all_of(GOI_all)) %>% unique()
+cur_groups <- metadata_genome %>% select(PID,all_of(GOI_clonal)) %>% unique()
 
 # Other groups
 cur_test <- metadata_genome %>% select(PID, CLIN_pT_combined, CLIN_ISUP_combined, CLIN_necrose, CLIN_PDL1_score) %>% unique() %>% remove_rownames %>% column_to_rownames("PID") %>% filter(complete.cases(.)) %>% t()
@@ -1837,7 +1840,7 @@ perform_fisher_test <- function(gene_row, group1_cols, group2_cols) {
     return(c(odds_ratio = test_result$estimate, p_value = test_result$p.value))
   }
   
-fisher_full <- foreach(i = GOI_all, .combine = "rbind")%do%{
+fisher_full <- foreach(i = GOI_clonal, .combine = "rbind")%do%{
 
   PID_high <- unique(cur_groups[cur_groups[, i] == "1",]$PID)
   PID_low <- unique(cur_groups[cur_groups[, i] == "0",]$PID)
@@ -1909,7 +1912,7 @@ mut_selected <- fisher_full %>% filter(result != "NOTSIG") %>% pull(category) %>
 
 fisher_full_selected <- fisher_full %>% filter(category %in% mut_selected)
 
-#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Mutations_Archetypes_Bubble.pdf", width = 6, height = 3, onefile = FALSE)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Mutations_Progression_Bubble.pdf", width = 4, height = 4)
 ggplot(fisher_full_selected, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_adj)))+
   geom_point()+
   theme_classic()+
@@ -1920,7 +1923,7 @@ ggplot(fisher_full_selected, aes(x=category, y = gene,col = odds_ratio, size = -
   scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   coord_flip()
-#dev.off()
+dev.off()
 ```
 
 
@@ -2080,6 +2083,7 @@ MUT_burden$burden_class <- ifelse(MUT_burden$burden > mean(MUT_burden$burden), "
 
 fit <- survfit(Surv(OS_months, status_OS) ~ burden_class, data = MUT_burden)
 
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_Kaplan_MutBurden.pdf", width = 8, height = 5, onefile = FALSE)
 ggsurvplot(fit, 
           pval = TRUE,
           risk.table = TRUE, # Add risk table
@@ -2090,6 +2094,7 @@ ggsurvplot(fit,
           palette = "Set1", # Change ggplot2 theme 
           conf.int = FALSE
 )
+dev.off()
 ```
 
 ```{r}
@@ -2433,6 +2438,7 @@ surv_out <- metadata_CNV %>% select(PID, OS_months, status_OS, PID_group_test) %
 
 fit <- survfit(Surv(OS_months, status_OS) ~ PID_group_test, data = surv_out)
 
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_Kaplan_SurvArchetypes_Mutations_CNV.pdf", width = 8, height = 5, onefile = FALSE)
 ggsurvplot(fit, 
           pval = TRUE,
           risk.table = TRUE, # Add risk table
@@ -2443,6 +2449,7 @@ ggsurvplot(fit,
           palette = c("gold3", "#CA0020","#0571B0"),
           conf.int = FALSE
 )
+dev.off()
 ```
 
 ```{r}
@@ -2509,9 +2516,9 @@ colnames(fisher_full) <- c("gene", "odds_ratio", "p_value", "p_adj", "category",
 ```{r}
 # FDR at 0.1 with trends
 fisher_full$result <- ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_adj < 0.1, "UP",
-                             ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_value < 0.1, "UP_trend", 
+                             ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_value < 0.05, "UP_trend", 
                                     ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_adj < 0.1, "DOWN", 
-                                           ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_value < 0.1, "DOWN_trend","NOTSIG"))))
+                                           ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_value < 0.05, "DOWN_trend","NOTSIG"))))
 
 # Replace INF values with max
 fisher_full$odds_ratio[fisher_full$odds_ratio == Inf] <- max(fisher_full$odds_ratio[!fisher_full$odds_ratio == Inf])
@@ -2562,7 +2569,7 @@ ggplot(fisher_full_selected, aes(x=category, y = gene,col = odds_ratio, size = -
   coord_flip()
 dev.off()
 ```
-
+Association with survival
 
 ```{r}
 ## Test assocation of mutations with survival 
@@ -2586,13 +2593,13 @@ new_names <- sapply(rownames(sum_matrix), function(rn) {
 rownames(sum_matrix) <- new_names
 
 # Only clonal
-#mut_matrix <- as.data.frame(t(ifelse(sum_matrix == 1, TRUE, FALSE))) %>% rownames_to_column("PID") 
+mut_matrix <- as.data.frame(t(ifelse(sum_matrix == 1, TRUE, FALSE))) %>% rownames_to_column("PID") 
 
 # Clonal + subclonal
-mut_matrix <- as.data.frame(t(ifelse(sum_matrix > 0, TRUE, FALSE))) %>% rownames_to_column("PID") 
+#mut_matrix <- as.data.frame(t(ifelse(sum_matrix > 0, TRUE, FALSE))) %>% rownames_to_column("PID") 
 
-mut_matrix$status_OS <- variant_combined_full$status_OS[match(mut_matrix$PID, variant_combined_full$PID)]
-mut_matrix$OS_months <- variant_combined_full$OS_months[match(mut_matrix$PID, variant_combined_full$PID)]
+mut_matrix$status_OS <- metadata_selected$status_OS[match(mut_matrix$PID, metadata_selected$PID)]
+mut_matrix$OS_months <- metadata_selected$OS_months[match(mut_matrix$PID, metadata_selected$PID)]
 
 #Assess survival impact across categories
 library(survival)
@@ -2620,7 +2627,7 @@ cur_surv_plot$result <- ifelse(cur_surv_plot$direction == "high" & cur_surv_plot
 
 cur_surv_plot$type <- "mutation"
 
-#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/MY_km_expression_bubble.pdf", width = 3, height = 5)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/CNV_Survival_Bubble.pdf", width = 3, height = 4)
 ggplot(cur_surv_plot, aes(x=reorder(group,ratio), y = type, col = ratio, size= -log10(p)))+
   geom_point()+
   theme_classic()+
@@ -2635,13 +2642,15 @@ ggplot(cur_surv_plot, aes(x=reorder(group,ratio), y = type, col = ratio, size= -
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   ylab("Cox model")+
   coord_flip()
-#dev.off()
+dev.off()
 ```
 
 
 ```{r}
 sum_matrix <- Reduce(`+`, mut_list_full)
 sum_matrix <- as.matrix(ifelse(sum_matrix >= 1, 1, 0))
+sum_matrix[mut_list_full$subclonal == 1] <- 0.5
+
 # Build new rownames with suffix depending on which entry has the 1
 new_names <- sapply(rownames(sum_matrix), function(rn) {
   if (any(mut_list_full[[1]][rn, ] == 1)) {
@@ -2654,10 +2663,11 @@ new_names <- sapply(rownames(sum_matrix), function(rn) {
 })
 
 rownames(sum_matrix) <- new_names
-test_out <- t(sum_matrix)
+CNV_clonal <- as.character(rownames(sum_matrix))
+test_out <- as.data.frame(t(ifelse(sum_matrix == 1, 1, 0)))
+#test_out <- t(sum_matrix)
 
-CNV_all <- as.character(rownames(sum_matrix))
-for (entry in CNV_all) {
+for (entry in CNV_clonal) {
   metadata_CNV[,entry] <- test_out[,entry][match(metadata_CNV[,"PID"],rownames(test_out))]
 }
 
@@ -2665,9 +2675,11 @@ for (entry in CNV_all) {
 
 
 
+Association with progression
+
 ```{r}
 # Patient group info 
-cur_groups <- metadata_CNV %>% select(PID,all_of(CNV_all)) %>% unique()
+cur_groups <- metadata_CNV %>% select(PID,all_of(CNV_clonal)) %>% unique()
 
 # Other groups
 cur_test <- metadata_CNV %>% select(PID, CLIN_pT_combined, CLIN_ISUP_combined, CLIN_necrose, CLIN_PDL1_score) %>% unique() %>% remove_rownames %>% column_to_rownames("PID") %>% filter(complete.cases(.)) %>% t()
@@ -2685,7 +2697,7 @@ perform_fisher_test <- function(gene_row, group1_cols, group2_cols) {
     return(c(odds_ratio = test_result$estimate, p_value = test_result$p.value))
   }
   
-fisher_full <- foreach(i = CNV_all, .combine = "rbind")%do%{
+fisher_full <- foreach(i = CNV_clonal, .combine = "rbind")%do%{
 
   PID_high <- unique(cur_groups[cur_groups[, i] == "1",]$PID)
   PID_low <- unique(cur_groups[cur_groups[, i] == "0",]$PID)
@@ -2757,7 +2769,7 @@ mut_selected <- fisher_full %>% filter(result != "NOTSIG") %>% pull(category) %>
 
 fisher_full_selected <- fisher_full %>% filter(category %in% mut_selected)
 
-#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Mutations_Archetypes_Bubble.pdf", width = 6, height = 3, onefile = FALSE)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/CNV_Progression_Bubble.pdf", width = 4, height = 4)
 ggplot(fisher_full_selected, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_adj)))+
   geom_point()+
   theme_classic()+
@@ -2768,7 +2780,7 @@ ggplot(fisher_full_selected, aes(x=category, y = gene,col = odds_ratio, size = -
   scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   coord_flip()
-#dev.off()
+dev.off()
 ```
 
 ###### CNV burden 
@@ -2898,6 +2910,7 @@ CNV_burden$burden_class <- ifelse(CNV_burden$burden > mean(CNV_burden$burden), "
 
 fit <- survfit(Surv(OS_months, status_OS) ~ burden_class, data = CNV_burden)
 
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_Kaplan_SurvArchetypes_CNVburden.pdf", width = 8, height = 5, onefile = FALSE)
 ggsurvplot(fit, 
           pval = TRUE,
           risk.table = TRUE, # Add risk table
@@ -2908,6 +2921,7 @@ ggsurvplot(fit,
           palette = "Set1", # Change ggplot2 theme 
           conf.int = FALSE
 )
+dev.off()
 ```
 
 ###### Genomic subtypes
@@ -2956,9 +2970,9 @@ ht_mut_anno <- Heatmap(t(mut_mat), name = "Mutation status",
                        column_title = "Genomic subtypes", 
                        cluster_column_slices = FALSE, show_column_names = FALSE)%v%ca
 
-#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Oncoprint_GenomicSub_Archetypes.pdf", width = 7, height = 2.5, onefile = FALSE)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Oncoprint_GenomicSub_Archetypes.pdf", width = 7, height = 4, onefile = FALSE)
 ht_mut_anno <- draw(ht_mut_anno)
-#dev.off()
+dev.off()
 ```
 
 Survival
@@ -2968,7 +2982,7 @@ Survival
 fit <- survfit(Surv(OS_months, status_OS) ~ genomic_subtype, data = driver_mat_anno)
 print(fit)
 
-#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survival_GenomicSub_Archetypes.pdf", width = 6, height = 4, onefile = FALSE)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survival_GenomicSub_Archetypes.pdf", width = 8, height = 5, onefile = FALSE)
 ggsurvplot(fit,
           pval = TRUE,
           risk.table = TRUE, # Add risk table
@@ -2979,7 +2993,7 @@ ggsurvplot(fit,
           palette = c("#046C9A", "#000000", "#D69C4E", "#ECCBAE", "#ABDDDE"),
           conf.int = FALSE
 )
-#dev.off()
+dev.off()
 ```
 
 Association
@@ -3042,9 +3056,9 @@ colnames(fisher_full) <- c("gene", "odds_ratio", "p_value", "p_adj", "category",
 ```{r}
 # FDR at 0.1 with trends
 fisher_full$result <- ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_adj < 0.1, "UP",
-                             ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_value < 0.1, "UP_trend", 
+                             ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_value < 0.05, "UP_trend", 
                                     ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_adj < 0.1, "DOWN", 
-                                           ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_value < 0.1, "DOWN_trend","NOTSIG"))))
+                                           ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_value < 0.05, "DOWN_trend","NOTSIG"))))
 
 # Replace INF values with max
 fisher_full$odds_ratio[fisher_full$odds_ratio == Inf] <- max(fisher_full$odds_ratio[!fisher_full$odds_ratio == Inf])
@@ -3067,7 +3081,7 @@ plot(hc)
 column_sorted <- hc$order
 fisher_full$gene <- factor(fisher_full$gene, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
 
-#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/GenomicSub_Archetypes_Bubble.pdf", width = 5, height = 3, onefile = FALSE)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/GenomicSub_Archetypes_Bubble.pdf", width = 5, height = 3, onefile = FALSE)
 ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_adj)))+
   geom_point()+
   theme_classic()+
@@ -3078,7 +3092,7 @@ ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_a
   scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   coord_flip()
-#dev.off()
+dev.off()
 ```
 
 ###### Tumor IMC expression
