@@ -128,7 +128,44 @@ ntp_out$PFS_months <- se$PFS[match(ntp_out$PID, se$UUID)]
 ntp_out$status_PFS <- se$PFS_CNSR[match(ntp_out$PID, se$UUID)]
 ntp_out$treatment <- se$Treatment[match(ntp_out$PID, se$UUID)]
 ntp_out$location <- se$Tumor_Location[match(ntp_out$PID, se$UUID)]
+```
 
+
+
+```{r}
+# Heatmap from predictions
+
+# Matrix
+probes_val <- template_mat$probe[template_mat$probe %in% rownames(expr_mat)]
+gen_mat <- expr_mat[probes_val,]
+
+# Row-Anno
+row_anno <- data.frame(gene = rownames(gen_mat))
+row_anno$cat <- template_mat$class[match(row_anno$gene, template_mat$probe)]
+gene_col <- setNames(brewer.pal(3,"Set1")[1:2], rev(unfactor(unique(row_anno$cat))))
+
+ra <- columnAnnotation(cat = row_anno$cat, col = list(cat = gene_col))
+
+# Col-Anno
+col_anno <- data.frame(PID = colnames(gen_mat))
+col_anno$group <- ntp_out$group_predict[match(col_anno$PID, ntp_out$PID)]
+col_anno_ob <- rowAnnotation(group = col_anno$group, 
+                                col = list(group = col_group)) 
+
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/CT_cohorts/JAVELIN_NTPprediction_heat.pdf", width = 5, height = 4, onefile = FALSE)
+Heatmap(t(gen_mat), 
+        column_split = row_anno$cat,
+        row_split = col_anno$group,
+        right_annotation = col_anno_ob, 
+        show_row_names = FALSE, 
+        show_row_dend = TRUE, 
+        show_column_dend = TRUE
+        )%v%
+  ra
+dev.off()
+```
+
+```{r}
 # Combined
 fit <- survfit(Surv(OS_months, status_OS) ~ group_predict, data = ntp_out)
 print(fit)
@@ -149,6 +186,7 @@ dev.off()
 fit <- survfit(Surv(PFS_months, status_PFS) ~ group_predict, data = ntp_out)
 print(fit)
 
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/CT_cohorts/JAVELIN_Survival_Archetypes_PFS.pdf", width = 5, height = 3.5, onefile = FALSE)
 ggsurvplot(fit,
           pval = TRUE,
           risk.table = TRUE, # Add risk table
@@ -159,6 +197,7 @@ ggsurvplot(fit,
           palette = c("#CA0020","#0571B0", "gold3"),
           conf.int = FALSE
 )
+dev.off()
 
 # IO+VEGF
 fit <- survfit(Surv(OS_months, status_OS) ~ group_predict, data = ntp_out %>% filter(treatment == "IO+VEGF"))
@@ -387,7 +426,9 @@ theme_classic()+
 scale_y_log10()+
 theme(axis.text.x = element_text(angle = 90))
 
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/CT_cohorts/JAVELIN_archetype_PFS_Treatment_Cox.pdf", width = 5.5, height = 3)
 hr_prop
+dev.off()
 ```
 
 ```{r}
@@ -536,9 +577,11 @@ anno <- anno[match(anno$TME_archetype, rownames(ht)),]
 ## Print heatmap 
 Heatmap(ht, name = "Mean Z-scores")
 
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/CT_cohorts/JAVELIN_archetype_keymarkers_heat.pdf", width = 6.5, height = 3)
 Heatmap(scale(ht), name = "Scaled mean Z-scores")+
   rowAnnotation(n = anno_barplot(anno$n, gp = gpar(fill = "#440154FF")))+
   rowAnnotation(anno = anno_text(anno$TME_archetype))
+dev.off()
 ```
 
 
@@ -647,8 +690,43 @@ ntp_out$status_OS <- se$OS_CNSR[match(ntp_out$PID, se$RNA_ID)]
 ntp_out$PFS_months <- se$PFS[match(ntp_out$PID, se$RNA_ID)]
 ntp_out$status_PFS <- se$PFS_CNSR[match(ntp_out$PID, se$RNA_ID)]
 ntp_out$arm <- se$Arm[match(ntp_out$PID, se$RNA_ID)]
+```
 
 
+```{r}
+# Heatmap from predictions
+
+# Matrix
+probes_val <- template_mat$probe[template_mat$probe %in% rownames(expr_mat)]
+gen_mat <- expr_mat[probes_val,]
+
+# Row-Anno
+row_anno <- data.frame(gene = rownames(gen_mat))
+row_anno$cat <- template_mat$class[match(row_anno$gene, template_mat$probe)]
+gene_col <- setNames(brewer.pal(3,"Set1")[1:2], rev(unfactor(unique(row_anno$cat))))
+
+ra <- columnAnnotation(cat = row_anno$cat, col = list(cat = gene_col))
+
+# Col-Anno
+col_anno <- data.frame(PID = colnames(gen_mat))
+col_anno$group <- ntp_out$group_predict[match(col_anno$PID, ntp_out$PID)]
+col_anno_ob <- rowAnnotation(group = col_anno$group, 
+                                col = list(group = col_group)) 
+
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/CT_cohorts/Checkmate_NTPprediction_heat.pdf", width = 5, height = 4, onefile = FALSE)
+Heatmap(t(gen_mat), 
+        column_split = row_anno$cat,
+        row_split = col_anno$group,
+        right_annotation = col_anno_ob, 
+        show_row_names = FALSE, 
+        show_row_dend = TRUE, 
+        show_column_dend = TRUE
+        )%v%
+  ra
+dev.off()
+```
+
+```{r}
 # Combined
 fit <- survfit(Surv(OS_months, status_OS) ~ group_predict, data = ntp_out)
 print(fit)
@@ -669,6 +747,7 @@ dev.off()
 fit <- survfit(Surv(PFS_months, status_PFS) ~ group_predict, data = ntp_out)
 print(fit)
 
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/CT_cohorts/Checkmate_Survival_Archetypes_PFS.pdf", width = 5, height = 3.5, onefile = FALSE)
 ggsurvplot(fit,
           pval = TRUE,
           risk.table = TRUE, # Add risk table
@@ -679,6 +758,7 @@ ggsurvplot(fit,
           palette = c("#CA0020","#0571B0", "gold3"),
           conf.int = FALSE
 )
+dev.off()
 
 # NIVOLUMAB
 fit <- survfit(Surv(OS_months, status_OS) ~ group_predict, data = ntp_out %>% filter(arm == "NIVOLUMAB"))
@@ -908,6 +988,75 @@ hr_prop
 dev.off()
 ```
 
+
+```{r}
+library(survival)
+library(dplyr)
+
+# Prepare the survival dataframe
+Cox_df <- as.data.frame(colData(se)) %>%
+  dplyr::select(RNA_ID, TME_archetype, Arm) %>% 
+  mutate(
+    arm = factor(Arm, levels = c("EVEROLISMUS", "NIVOLUMAB")),
+    PFS_months = se$PFS[match(RNA_ID, se$RNA_ID)],
+    status_PFS = se$PFS_CNSR[match(RNA_ID, se$RNA_ID)]
+  )
+
+# List of TME groups (e.g., ICAM, MTOR, NOT)
+tme_groups <- unique(Cox_df$TME_archetype)
+
+# Run Cox model per TME group
+cox_results <- lapply(tme_groups, function(group) {
+  df_group <- Cox_df %>% filter(TME_archetype == group & !is.na(Arm))
+  model <- coxph(Surv(PFS_months, status_PFS) ~ Arm, data = df_group)
+  summary(model)
+  })
+
+names(cox_results) <- tme_groups
+
+plot_df_prop <- rbind(data.frame(group = rownames(cox_results[[1]]$coefficients),
+                      p_value = signif(cox_results[[1]]$coefficients[,"Pr(>|z|)"],3),
+                      HR = signif(cox_results[[1]]$coefficients[,"exp(coef)"],3),
+                      CI_low = signif(cox_results[[1]]$conf.int[,"lower .95"],3),
+                      CI_high = signif(cox_results[[1]]$conf.int[,"upper .95"],3),
+                      wald_test = signif(cox_results[[1]]$waldtest["pvalue"],3), 
+                      type = names(cox_results[1])),
+      data.frame(group = rownames(cox_results[[2]]$coefficients),
+                      p_value = signif(cox_results[[2]]$coefficients[,"Pr(>|z|)"],3),
+                      HR = signif(cox_results[[2]]$coefficients[,"exp(coef)"],3),
+                      CI_low = signif(cox_results[[2]]$conf.int[,"lower .95"],3),
+                      CI_high = signif(cox_results[[2]]$conf.int[,"upper .95"],3),
+                      wald_test = signif(cox_results[[2]]$waldtest["pvalue"],3),
+                      type = names(cox_results[2])),
+      data.frame(group = rownames(cox_results[[3]]$coefficients),
+                      p_value = signif(cox_results[[3]]$coefficients[,"Pr(>|z|)"],3),
+                      HR = signif(cox_results[[3]]$coefficients[,"exp(coef)"],3),
+                      CI_low = signif(cox_results[[3]]$conf.int[,"lower .95"],3),
+                      CI_high = signif(cox_results[[3]]$conf.int[,"upper .95"],3),
+                      wald_test = signif(cox_results[[3]]$waldtest["pvalue"],3),
+                      type = names(cox_results[3]))
+)
+
+
+hr_prop <- ggplot(plot_df_prop, aes(x = reorder(type,dplyr::desc(HR)), y = HR, color = p_value < 0.05))+
+geom_point(size = 4)+
+geom_errorbar(aes(ymax = CI_high, ymin = CI_low))+
+#coord_cartesian(ylim=c(0,20))+
+geom_hline(yintercept = 1,color = "black",linetype = "dashed")+
+scale_color_brewer(palette = "Set1")+
+xlab("Covariates")+
+ylab("HR for PID groups")+
+theme_classic()+
+scale_y_log10()+
+theme(axis.text.x = element_text(angle = 90))
+
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/CT_cohorts/Checkmate_archetype_PFS_Treatment_Cox.pdf", width = 5.5, height = 3)
+hr_prop
+dev.off()
+```
+
+
+
 ```{r}
 dittoBarPlot(se, var = "ORR", split.by = "Arm", group.by = "TME_archetype")+
   ggtitle("ORR")
@@ -981,9 +1130,11 @@ anno <- anno[match(anno$TME_archetype, rownames(ht)),]
 ## Print heatmap 
 Heatmap(ht, name = "Mean Z-scores")
 
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/CT_cohorts/Checkmate_archetype_keymarkers_heat.pdf", width = 6.5, height = 3)
 Heatmap(scale(ht), name = "Scaled mean Z-scores")+
   rowAnnotation(n = anno_barplot(anno$n, gp = gpar(fill = "#440154FF")))+
   rowAnnotation(anno = anno_text(anno$TME_archetype))
+dev.off()
 ```
 
 
@@ -1149,7 +1300,6 @@ ntp_result <- ntp(
   doPlot = TRUE
 )
 ```
-
 ```{r}
 ntp_out <- ntp_result %>% rownames_to_column("PID") %>% mutate(group_predict = ifelse(FDR < 0.01, as.character(prediction), "NOT"))
 
@@ -1157,11 +1307,50 @@ ntp_out$OS_days <- CPTAC.clean$OS_days[match(ntp_out$PID, CPTAC.clean$PID)]
 ntp_out$status_OS <- CPTAC.clean$status_OS[match(ntp_out$PID, CPTAC.clean$PID)]
 ntp_out$DFS_days <- CPTAC.clean$DFS_days[match(ntp_out$PID, CPTAC.clean$PID)]
 ntp_out$status_DFS <- CPTAC.clean$status_DFS[match(ntp_out$PID, CPTAC.clean$PID)]
+```
 
+
+```{r}
+# Heatmap from predictions
+
+# Matrix
+probes_val <- template_mat$probe[template_mat$probe %in% rownames(expr_mat)]
+gen_mat <- expr_mat[probes_val,]
+gen_mat <- gen_mat[complete.cases(gen_mat),]
+
+# Row-Anno
+row_anno <- data.frame(gene = rownames(gen_mat))
+row_anno$cat <- template_mat$class[match(row_anno$gene, template_mat$probe)]
+gene_col <- setNames(brewer.pal(3,"Set1")[1:2], rev(unfactor(unique(row_anno$cat))))
+
+ra <- columnAnnotation(cat = row_anno$cat, col = list(cat = gene_col))
+
+# Col-Anno
+col_anno <- data.frame(PID = colnames(gen_mat))
+col_anno$group <- ntp_out$group_predict[match(col_anno$PID, ntp_out$PID)]
+col_anno_ob <- rowAnnotation(group = col_anno$group, 
+                                col = list(group = col_group)) 
+
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/CT_cohorts/CPTAC_NTPprediction_heat.pdf", width = 5, height = 4, onefile = FALSE)
+Heatmap(t(gen_mat), 
+        column_split = row_anno$cat,
+        row_split = col_anno$group,
+        right_annotation = col_anno_ob, 
+        show_row_names = FALSE, 
+        show_row_dend = TRUE, 
+        show_column_dend = TRUE
+        )%v%
+  ra
+dev.off()
+```
+
+
+```{r}
 # Combined
 fit <- survfit(Surv(OS_days, status_OS) ~ group_predict, data = ntp_out)
 print(fit)
 
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/CT_cohorts/CPTAC_Survival_Archetypes_OS.pdf", width = 5, height = 3.5, onefile = FALSE)
 ggsurvplot(fit,
           pval = TRUE,
           risk.table = TRUE, # Add risk table
@@ -1169,9 +1358,10 @@ ggsurvplot(fit,
           linetype = "strata", # Change line type by groups
           surv.median.line = "hv", # Specify median survival
           ggtheme = theme_classic(), # Change ggplot2 theme¨
-          #palette = c("#046C9A", "#000000", "#D69C4E", "#ECCBAE", "#ABDDDE"),
+          palette = c("#CA0020","#0571B0", "gold3"),
           conf.int = FALSE
 )
+dev.off()
 
 fit <- survfit(Surv(DFS_days, status_DFS) ~ group_predict, data = ntp_out)
 print(fit)
@@ -1226,9 +1416,11 @@ anno <- anno[match(anno$group_predict, rownames(ht)),]
 ## Print heatmap 
 Heatmap(ht, name = "Mean Z-scores")
 
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/CT_cohorts/CPTAC_archetype_keymarkers_heat.pdf", width = 6.5, height = 3)
 Heatmap(scale(ht), name = "Scaled mean Z-scores")+
   rowAnnotation(n = anno_barplot(anno$n, gp = gpar(fill = "#440154FF")))+
   rowAnnotation(anno = anno_text(anno$group_predict))
+dev.off()
 ```
 
 ```{r}

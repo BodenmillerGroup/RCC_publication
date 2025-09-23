@@ -2324,7 +2324,7 @@ mean(cm_stats$`Balanced Accuracy`)
 ```
 
 ```{r}
-# TO DO - make nice heatmap from predictions
+# Heatmap from predictions
 
 # Matrix
 gen_mat <- expr_mat[template_mat$probe,]
