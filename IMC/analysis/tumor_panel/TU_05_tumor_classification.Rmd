@@ -959,7 +959,7 @@ colData(sce) %>% as.data.frame %>% group_by(tumor_metacluster) %>% count()
 
 ```{r}
 #Read sce after clustering, astir and GMM
-#sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_05.rds")
+sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_05.rds")
 
 ### 1. Heatmap body ###
 
@@ -1127,7 +1127,7 @@ h <- Heatmap(t(assay(mean_sce, "min_max")),
         clustering_method_columns = "ward.D2",
         cluster_row_slices = TRUE)+
   #Heatmap(scale(t(assay(mean_sce, "min_max"))))+
-  Heatmap(t(assay(state_sce, "min_max")), col = col_main)+
+  #Heatmap(t(assay(state_sce, "min_max")), col = col_main)+
   rowAnnotation(metacluster = anno_simple(unfactor(anno$tumor_metacluster), col = metadata(sce)$colors$tumor_metacluster, border = TRUE))+
   rowAnnotation(names = anno_text(anno$tumor_metacluster_names))+
   ha_spatial+
@@ -1138,7 +1138,9 @@ lgd <- Legend(title = "metacluster", at = names(metadata(sce)$colors$tumor_metac
                legend_gp = gpar(fill = metadata(sce)$colors$tumor_metacluster))
 
 # Draw heatmap
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/tumor_panel/TU_metacluster_heatmap.pdf", width = 10.5, height = 3.5)
 draw(h, annotation_legend_list = list(lgd))
+dev.off()
 ```
 
 ### Visualization 
@@ -1791,7 +1793,7 @@ tumor_metacluster <- tumor_metacluster %>% select(-Freq) %>% pivot_wider(id_cols
 col <- metadata(sce)$colors$tumor_metacluster[match(colnames(tumor_metacluster), names(metadata(sce)$colors$tumor_metacluster))]
 
 ha_my <- HeatmapAnnotation(
-  tumor_metacluster = anno_barplot(tumor_metacluster, width = unit(20, "mm"), gp = gpar(fill = col)),
+  tumor_metacluster = anno_barplot(tumor_metacluster, width = unit(10, "mm"), gp = gpar(fill = col)),
                             border = TRUE, 
                             annotation_name_rot = 90,
                             gap = unit(3,"mm"),
@@ -1802,7 +1804,7 @@ n_PID <- colData(sce) %>% as.data.frame() %>% select(tumor_district,PID) %>% gro
 
 n_cell_id <- colData(sce) %>% as.data.frame() %>% select(tumor_district,cell_id) %>% group_by(tumor_district) %>% table() %>% as.data.frame %>% filter(Freq != 0) %>% group_by(tumor_district) %>% dplyr::count()
 
-ha_meta <- HeatmapAnnotation(n_cells = anno_barplot(n_cell_id$n, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),                        
+ha_meta <- HeatmapAnnotation(#n_cells = anno_barplot(n_cell_id$n, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),                        
                              n_PID = anno_barplot(n_PID$n, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),
                              border = TRUE, 
                              annotation_name_rot = 90,
@@ -1827,17 +1829,19 @@ anno$district_names[anno$district_names == "D_9"] <- "MYC_PKM2_mix"
 anno$district_names[anno$district_names == "D_10"] <- "ICAM1_MYC_dom"
 anno$district_names[anno$district_names == "D_11"] <- "CD10lo_dom"
 anno$district_names[anno$district_names == "D_12"] <- "mTORlo_dom"
+anno$district_names[anno$district_names == "D_13"] <- "PKM2_dom"
 
 ## Add names to sce
 sce$tumor_district_names <- factor(anno$district_names[match(sce$tumor_district, anno$district)])
 
 # Plot heatmap 
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/tumor_panel/TU_district_heatmap.pdf", width = 7, height = 4.5)
 Heatmap(for_district, col = viridis(100), row_names_side = "left")+
   ha_my+
   #Heatmap(for_district_fine, col = viridis(100))+
   ha_meta+
   rowAnnotation(names = anno_text(anno$district_names))
-  
+dev.off()
 #Heatmap(t(scale(t(for_district))))
 ```
 

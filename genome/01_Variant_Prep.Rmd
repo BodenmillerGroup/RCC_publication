@@ -440,8 +440,8 @@ variant_combined <- foreach(i = seq_along(files), .combine = "rbind")%do%{
 ```
 
 ```{r}
-#write_csv(variant_combined, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_cohort1.csv")
-variant_combined <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_cohort1.csv")
+write_csv(variant_combined, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_cohort1.csv")
+#variant_combined <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_cohort1.csv")
 ```
 
 #### Match identifiers
@@ -1003,13 +1003,16 @@ GOI <- c(GOI, "ELOC") # Add ELOC (TCEB1)
 variant_check <- variant_combined_full %>% filter(PID_old %in% PID_kick_out, Genes %in% GOI)
 ```
 
+```{r}
+variant_combined_full <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_full_withmeta.csv")
+```
 
 
 ### Add CNV focal gene data 
 
 ```{r}
 ## Filter for GOI
-variant_combined_GOI <- variant_combined_full %>% filter(Genes %in% GOI)
+variant_combined_GOI <- variant_combined_full #%>% filter(Genes %in% GOI)
 
 colnames(variant_combined_GOI)
 
@@ -1058,6 +1061,10 @@ full_consensus_GOI$PDL1_score <- sce$PDL1_score[match(full_consensus_GOI$PID, sc
 
 ```{r}
 write_csv(full_consensus_GOI, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/SNV_CNV_combined_full_withmeta.csv")
+
+full_consensus_GOI_fil <- full_consensus_GOI %>% filter(Genes %in% GOI)
+
+write_csv(full_consensus_GOI_fil, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/SNV_CNV_combined_full_GOI_withmeta.csv")
 ```
 
 

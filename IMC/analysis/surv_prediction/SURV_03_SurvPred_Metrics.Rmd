@@ -36,15 +36,15 @@ conflicts_prefer(base::setdiff)
 ### Read results from different models 
 
 ```{r}
-cv_results_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-30/BF_IMC_GEN.rds")
+cv_results_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-31/BF_IMC_GEN.rds")
 
-cv_results_2 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-30/BF_IMC_MY.rds")
+cv_results_2 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-31/BF_IMC_MY.rds")
 
-cv_results_3 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-30/BF_IMC_T.rds")
+cv_results_3 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-31/BF_IMC_T.rds")
 
-cv_results_4 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-30/BF_IMC_TU.rds")
+cv_results_4 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-31/BF_IMC_TU.rds")
 
-cv_results_5 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-30/BF_IMC_noGEN.rds")
+cv_results_5 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-31/BF_IMC_noGEN.rds")
 
 #cv_results_6 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_IMC.rds")
 ```
@@ -127,7 +127,7 @@ ibs_scores_list <- lapply(cv_results_list, function(res_obj) {
 out_ibs <- data.frame(fold = 1:10, t(do.call("rbind", ibs_scores_list))[1:10,]) %>% pivot_longer(2:ncol(.), names_to = "model", values_to = "IBS")
 
 # Plot
-#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_IBS_GENvsOthers.pdf", width = 6, height = 3.5, onefile = FALSE)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_IBS_GENvsOthers.pdf", width = 6, height = 3.5, onefile = FALSE)
 library(ggpubr)
 ggplot(out_ibs, aes(x = reorder(model,-IBS, FUN = median), y = IBS, fill = model))+
   geom_point(aes(color = model))+
@@ -143,7 +143,7 @@ ggplot(out_ibs, aes(x = reorder(model,-IBS, FUN = median), y = IBS, fill = model
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   xlab("Models")+
   ylab("Integrated Brier Score")
-#dev.off()
+dev.off()
 ```
 
 ### Concordance (Uno)
@@ -166,7 +166,7 @@ out_concordance <- data.frame(fold = 1:10, t(do.call("rbind", concordance_scores
 #out_concordance <- rbind(out_concordance, fit_cox_out)
 
 library(ggpubr)
-#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_Conc_GENvsOthers.pdf", width = 6, height = 3.5, onefile = FALSE)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_Conc_GENvsOthers.pdf", width = 6, height = 3.5, onefile = FALSE)
 ggplot(out_concordance, aes(x = reorder(model,concordance, FUN = median), y = concordance, fill = model))+
   geom_point(aes(color = model))+
   geom_boxplot(outlier.colour = NA, alpha = 0.8)+
@@ -180,7 +180,7 @@ ggplot(out_concordance, aes(x = reorder(model,concordance, FUN = median), y = co
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   xlab("Models")+
   ylab("Concordance (Uno)")
-#dev.off()
+dev.off()
 ```
 
 ## Test 2: All vs selected
@@ -188,21 +188,21 @@ ggplot(out_concordance, aes(x = reorder(model,concordance, FUN = median), y = co
 ### Read results from different models 
 
 ```{r}
-cv_results_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-30/BF_IMC_MY.rds")
+cv_results_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-31/BF_IMC_MY.rds")
 
-cv_results_2 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-30/BF_IMC_T.rds")
+cv_results_2 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-31/BF_IMC_T.rds")
 
-cv_results_3 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-30/BF_IMC_TU.rds")
+cv_results_3 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-31/BF_IMC_TU.rds")
 
-cv_results_4 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-30/BF_IMC_noGEN.rds")
+cv_results_4 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-31/BF_IMC_noGEN.rds")
 
-cv_results_5 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-30/BF_IMC_MY_all.rds")
+cv_results_5 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-31/BF_IMC_MY_all.rds")
 
-cv_results_6 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-30/BF_IMC_T_all.rds")
+cv_results_6 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-31/BF_IMC_T_all.rds")
 
-cv_results_7 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-30/BF_IMC_TU_all.rds")
+cv_results_7 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-31/BF_IMC_TU_all.rds")
 
-cv_results_8 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-30/BF_IMC_noGEN_all.rds")
+cv_results_8 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-31/BF_IMC_noGEN_all.rds")
 ```
 
 ```{r}
@@ -289,7 +289,7 @@ out_ibs$type <- str_split(out_ibs$model, "_", simplify = TRUE)[,1]
 
 # Plot
 library(ggpubr)
-#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_IBS_ALLvsSELECTED.pdf", width = 3.5, height = 3.5, onefile = FALSE)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_IBS_ALLvsSELECTED.pdf", width = 3.5, height = 3.5, onefile = FALSE)
 ggplot(out_ibs, aes(x = cat, y = IBS, fill = cat))+
   #facet_wrap(~type)+
   geom_point(aes(color = cat))+
@@ -303,7 +303,7 @@ ggplot(out_ibs, aes(x = cat, y = IBS, fill = cat))+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   xlab("Models")+
   ylab("Integrated Brier Score")
-#dev.off()
+dev.off()
 ```
 
 
@@ -328,7 +328,7 @@ out_concordance$cat <- ifelse(str_detect(out_concordance$model, "all"), "ALL", "
 out_concordance$type <- str_split(out_concordance$model, "_", simplify = TRUE)[,1]
 
 library(ggpubr)
-#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_Conc_ALLvsSELECTED.pdf", width = 3.5, height = 3.5, onefile = FALSE)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_Conc_ALLvsSELECTED.pdf", width = 3.5, height = 3.5, onefile = FALSE)
 ggplot(out_concordance, aes(x = cat, y = concordance, fill = cat))+
   #facet_wrap(~type)+
   geom_point(aes(color = cat))+
@@ -342,7 +342,7 @@ ggplot(out_concordance, aes(x = cat, y = concordance, fill = cat))+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   xlab("Models")+
   ylab("Concordance (Uno)")
-#dev.off()
+dev.off()
 ```
 
 
@@ -351,13 +351,13 @@ ggplot(out_concordance, aes(x = cat, y = concordance, fill = cat))+
 ### Read results from different models 
 
 ```{r}
-cv_results_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-30/BF_IMC_noGEN.rds")
+cv_results_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-31/BF_IMC_noGEN.rds")
 
-cv_results_2 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-30/BF_CLIN.rds")
+cv_results_2 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-31/BF_CLIN.rds")
 
 #cv_results_3 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_CLIN_IMC_nofav.rds")
 
-cv_results_4 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-30/BF_CLIN_IMC.rds")
+cv_results_4 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-31/BF_CLIN_IMC.rds")
 
 #cv_results_5 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models/BF_CLIN_IMCfav.rds")
 
@@ -442,7 +442,7 @@ out_ibs <- data.frame(fold = 1:10, t(do.call("rbind", ibs_scores_list))[1:10,]) 
 # Plot
 library(ggpubr)
 
-#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_IBS_CLINvsIMC.pdf", width = 4.5, height = 3.5, onefile = FALSE)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_IBS_CLINvsIMC.pdf", width = 4.5, height = 3.5, onefile = FALSE)
 ggplot(out_ibs, aes(x = reorder(model,-IBS, FUN = median), y = IBS, fill = model))+
   geom_point(aes(color = model))+
   geom_boxplot(outlier.colour = NA, alpha = 0.8)+
@@ -456,7 +456,7 @@ ggplot(out_ibs, aes(x = reorder(model,-IBS, FUN = median), y = IBS, fill = model
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   xlab("Models")+
   ylab("Integrated Brier Score")
-#dev.off()
+dev.off()
 ```
 
 ### Concordance (Uno)
@@ -477,7 +477,7 @@ concordance_scores_list <- lapply(cv_results_list, function(res_obj) {
 out_concordance <- data.frame(fold = 1:10, t(do.call("rbind", concordance_scores_list))[1:10,]) %>% pivot_longer(2:ncol(.), names_to = "model", values_to = "concordance")
 
 library(ggpubr)
-#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_Conc_CLINvsIMC.pdf", width = 4.5, height = 3.5, onefile = FALSE)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_Conc_CLINvsIMC.pdf", width = 4.5, height = 3.5, onefile = FALSE)
 ggplot(out_concordance, aes(x = reorder(model,concordance, FUN = median), y = concordance, fill = model))+
   geom_point(aes(color = model))+
   geom_boxplot(outlier.colour = NA, alpha = 0.8)+
@@ -490,8 +490,174 @@ ggplot(out_concordance, aes(x = reorder(model,concordance, FUN = median), y = co
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   xlab("Models")+
   ylab("Concordance (Uno)")
-#dev.off()
+dev.off()
 ```
+
+## Test 4: Include time
+
+### Read results from different models 
+
+```{r}
+cv_results_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-08-25/BF_IMC_noGEN_addSURV.rds")
+
+cv_results_2 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-07-31/BF_IMC_noGEN.rds")
+```
+
+```{r}
+# Create list from results
+# Define the cross-validation results as a list
+cv_results_list <- list(
+  "IMC_noGEN_time" = cv_results_1,
+  "IMC_noGEN" = cv_results_2
+)
+```
+
+```{r}
+# Define colors 
+col_cv <- setNames(c("grey", "firebrick1"),
+c("IMC_noGEN_time", "IMC_noGEN"))
+```
+
+### Integrated Brier Score
+
+```{r}
+# Initialize list to store IBS scores for each cross-validation result
+ibs_scores_list <- list()
+
+# Loop over each cross-validation result object using lapply
+ibs_scores_list <- lapply(cv_results_list, function(res_obj) {
+  # Apply function over each element in the result object (each fold in cross-validation)
+  sapply(res_obj, function(res) {
+    # Check if row counts match between actual_surv and actual_test
+    if (nrow(res$actual_surv) != nrow(res$actual_test)) {
+      stop("Row count mismatch between actual_surv and actual_test")
+    }
+    
+    # Define test data
+    test_data <- cbind(res$actual_surv, res$actual_test)
+    
+    # Time points in test data
+    times_test <- sort(unique(test_data$OS_months))
+    if(!0 %in% times_test){
+    times_test <- c(0, times_test) # Add timepoint 0 as baseline (if not included)
+    }
+    
+    # Time points in prediction
+    times_pred <- res$predictions$unique.death.times
+    
+    # Find the nearest indices for each desired time in the unique death times
+    time_indices <- sapply(times_test, function(t) which.min(abs(times_pred - t)))
+    
+    # Extract predicted survival probabilities at the specified times
+    aligned_surv_probs <- res$predictions$survival[, time_indices, drop = FALSE]
+    
+    # Calculate prediction error curve (PEC)
+    pec_obj <- pec(
+      object = list("BlockForest" = aligned_surv_probs),
+      formula = Surv(OS_months, status_OS) ~ 1,
+      cens.model = "marginal",
+      exact = TRUE,
+      data = test_data
+    )
+    
+    # Define the time range of interest for IBS
+    IBSrange <- quantile(test_data$OS_months, 0.9)
+    #IBSrange <- median(test_data$OS_months)
+    #IBSrange <- max(test_data$OS_months)
+    
+    # Calculate the CRPS and extract the IBS score
+    crps_val <- crps(pec_obj, start = 0, times = IBSrange)
+    ibs_score <- crps_val[2] # Adjust if necessary based on your specific data structure
+    
+    return(ibs_score)
+  })
+})
+
+# Convert scores to dataframe
+out_ibs <- data.frame(fold = 1:10, t(do.call("rbind", ibs_scores_list))[1:10,]) %>% pivot_longer(2:ncol(.), names_to = "model", values_to = "IBS")
+
+# Plot
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_IBS_TIMEvsSELECTED.pdf", width = 3.5, height = 3.5, onefile = FALSE)
+library(ggpubr)
+ggplot(out_ibs, aes(x = reorder(model,-IBS, FUN = median), y = IBS, fill = model))+
+  geom_point(aes(color = model))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
+  #coord_cartesian(ylim = c(0.5,1))+
+  theme_classic()+
+  stat_compare_means(ref.group = "IMC_noGEN", paired = FALSE, method = "t.test", method.args = list(alternative = "less", label = "p.format"))+
+  scale_fill_manual(values = col_cv)+
+  scale_color_manual(values = col_cv)+
+  #scale_fill_brewer(palette = "Paired")+
+  #scale_color_brewer(palette = "Paired")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  xlab("Models")+
+  ylab("Integrated Brier Score")
+dev.off()
+```
+
+### Concordance (Uno)
+
+```{r}
+# Initialize list to store concordance scores for each cross-validation result
+concordance_scores_list <- list()
+
+# Loop over each cross-validation result object using lapply
+concordance_scores_list <- lapply(cv_results_list, function(res_obj) {
+  # Apply function over each element in the result object (each fold in cross-validation)
+  sapply(res_obj, function(res) {
+    out <- concordance(Surv(res$actual_surv[, 1], res$actual_surv[, 2]) ~ rowSums(res$predictions$survival), timewt = "n/G2")
+    return(out$concordance)
+  })
+})
+
+out_concordance <- data.frame(fold = 1:10, t(do.call("rbind", concordance_scores_list))[1:10,]) %>% pivot_longer(2:ncol(.), names_to = "model", values_to = "concordance")
+
+#out_concordance <- rbind(out_concordance, fit_cox_out)
+
+library(ggpubr)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_Concordance_TIMEvsSELECTED.pdf", width = 3.5, height = 3.5, onefile = FALSE)
+ggplot(out_concordance, aes(x = reorder(model,concordance, FUN = median), y = concordance, fill = model))+
+  geom_point(aes(color = model))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
+  #coord_cartesian(ylim = c(0.5,1))+
+  theme_classic()+
+  stat_compare_means(ref.group = "IMC_noGEN", paired = FALSE, method = "t.test", method.args = list(alternative = "greater", label = "p.format"))+
+  scale_fill_manual(values = col_cv)+
+  scale_color_manual(values = col_cv)+
+  #scale_fill_brewer(palette = "Paired")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  xlab("Models")+
+  ylab("Concordance (Uno)")
+dev.off()
+```
+
+### Check importance 
+
+```{r}
+variable_importance <- sapply(cv_results_1, function(res) {
+  res$variable_importance
+})
+
+# Scaled importance per fold
+plot <- variable_importance %>% as.data.frame %>% rownames_to_column("feature") %>% pivot_longer(2:ncol(.),names_to = "fold", values_to = "importance") %>% group_by(fold) %>% mutate(scaled_importance = scale(importance))
+plot$scaled_importance_total <- as.vector(scale(plot$importance))
+
+# Add feature information
+plot$feature_origin <- ifelse(str_detect(plot$feature, "CLIN"), "CLIN_OS_months", "IMC_features")
+
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_ScaledImp_TIMEvsSELECTED.pdf", width = 3.5, height = 3.5, onefile = FALSE)
+ggplot(plot, aes(x = reorder(feature_origin,-scaled_importance), y = scaled_importance, fill = feature_origin))+
+  geom_boxplot()+
+  geom_point()+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  guides(fill = "none")+
+  scale_fill_brewer(palette = "Paired")+
+  ylab("Scaled importance")+
+  xlab("Feature")
+dev.off()
+```
+
 
 
 ## OTHER TESTS

@@ -305,7 +305,7 @@ plot_exp_combined_fil <- plot_exp_combined %>% group_by(group, category) %>% ref
                                                                                      ratio = mean(ratio),
                                                                                      direction = direction) %>% unique()
 
-#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/TU_Cox_experaction_bubble.pdf", width = 6, height = 5)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/TU_cox_expression_bubble.pdf", width = 3, height = 5)
 ggplot(plot_exp_combined_fil, aes(x=reorder(group,ratio), y = type, shape = category, col = ratio, size= -log10(p)))+
   geom_point()+
   theme_classic()+
@@ -320,6 +320,7 @@ ggplot(plot_exp_combined_fil, aes(x=reorder(group,ratio), y = type, shape = cate
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   ylab("Cox model")+
   coord_flip()
+dev.off()
 ```
 
 ```{r}
@@ -1193,7 +1194,7 @@ ggplot(DA_out, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
 
 DA_out_fil <- DA_out[DA_out$cluster %in% D_diff_abun, ] 
 
-#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/TU_diffabun_districts.pdf", width = 6, height = 4)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/TU_diffabun_districts.pdf", width = 6, height = 4)
 ggplot(DA_out_fil, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
   geom_point()+
   theme_classic()+
@@ -1203,7 +1204,7 @@ ggplot(DA_out_fil, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
   geom_point(data = DA_out_fil,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
   scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))
-#dev.off()
+dev.off()
 ```
 
 ```{r}
@@ -1277,7 +1278,6 @@ write_csv(tumor_all_features, "/mnt/central_nas/rcc_volume/RCC/survival_pred/Blo
 
 ```{r}
 sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_07.rds")
-spicyTest <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/07_comb/spicyTest_ISUP_includeOFF.rds")
 ```
 
 # Proximity - countInteractions 
@@ -1492,22 +1492,22 @@ plot_int_combined_fil <- plot_int_combined %>% group_by(group, category) %>% ref
                                                                                      int_type = int_type, 
                                                                                      direction = direction) %>% unique()
 
-#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/TU_Cox_interaction_bubble.pdf", width = 6, height = 5)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/TU_KM_interaction_bubble.pdf", width = 6, height = 5)
 ggplot(plot_int_combined_fil, aes(x=reorder(group,ratio), y = type, shape = category, col = ratio, size= -log10(p)))+
   geom_point()+
   theme_classic()+
   scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
   scale_size(range = c(2,10))+
-  scale_shape_manual(values = c(16,15,17))+
+  scale_shape_manual(values = c(16,17))+
   new_scale(new_aes = "shape")+
   new_scale(new_aes = "color") +
   geom_point(data = plot_int_combined_fil,aes(size = -log10(p), shape = category, col = result), stroke =1.5)+
-  scale_shape_manual(values = c(1,0,2))+
+  scale_shape_manual(values = c(1,2))+
   scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   ylab("Cox model")+
   coord_flip()
-#dev.off()
+dev.off()
 
 #priority_order <- c("DOWN" = 1, "DOWN_trend" = 2, "UP" = 1, "UP_trend" = 2)
 #plot_int_combined_fil <- plot_int_combined_fil %>%
@@ -1944,7 +1944,8 @@ Show examples
 
 
 ```{r}
-sample_id_rel <- sample(sce$sample_id, 30)
+#sample_id_rel <- sample(sce$sample_id, 30)
+sample_id_rel <- (colData(sce) %>% as.data.frame %>% select(sample_id, tumor_metacluster_names) %>% group_by(sample_id) %>% filter(tumor_metacluster_names == "TU_ICAM1hi_CD73") %>% count() %>% arrange(desc(n)) %>% pull(sample_id))[1:10]
 
 images <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/images.rds")
 masks <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/masks.rds")
@@ -1954,9 +1955,25 @@ cur_masks <- masks[mcols(masks)$sample_id %in% sample_id_rel]
 cur_sce <- sce[,sce$sample_id %in% sample_id_rel]
 
 library(cytoviewer)
-#cytoviewer(image = cur_images, mask = cur_masks, object = cur_sce, img_id = "sample_id", cell_id = "ObjectNumber")
+cytoviewer(image = cur_images, mask = cur_masks, object = cur_sce, img_id = "sample_id", cell_id = "ObjectNumber")
 ```
 
+```{r}
+# Specific
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/TU_images_interaction_ICAM_Macro.pdf", width = 6, height = 10, onefile = FALSE)
+plotSpatial(sce[,sce$sample_id %in% sample_id_rel[8] & sce$celltype_combined %in% c("TU_ICAM1hi_CD73","Macrophage")],
+            node_color_by = "celltype_combined",
+            #node_shape_by = "celltype_combined",
+            img_id = "sample_id",
+            node_size_fix = 1.5, 
+            draw_edges = TRUE, 
+            colPairName = "neighborhood", 
+            nodes_first = FALSE)+
+  scale_color_manual(values = c("#377EB8", "#FFFF33"))+
+  ggtitle("")
+  #guides(color = "none")+
+dev.off()
+```
 
 
 

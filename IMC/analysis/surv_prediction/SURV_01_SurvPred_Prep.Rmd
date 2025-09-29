@@ -1219,3 +1219,31 @@ paste0("Number of IMC (Myeloid) features after preprocessing: ", sum(str_count(c
 paste0("Number of IMC (T cell) features after preprocessing: ", sum(str_count(colnames(metadata_selected_fil_cc), "IMC_T_")))
 ```
 
+## Correlation final features
+
+```{r}
+metadata_selected_fil_cc <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/key_features_processed_complete.rds")
+```
+
+```{r,fig.width=30, fig.height=30}
+# 1. Check statistical association of numerical variables
+cor_test <- metadata_selected_fil_cc %>% select(where(is.numeric), -status_OS,-OS_months)
+
+cor_matrix <- cor(cor_test, method = "pearson")
+
+corrplot(
+    cor_matrix,
+    method = "shade",
+    col = brewer.pal(n = 8, name = "RdBu"),
+    type = "upper",
+    #order = "hclust",
+    #hclust.method = "ward.D2",
+    addCoef.col = "black",
+    addCoefasPercent = F,
+    tl.col = "black",
+    tl.srt = 40,
+    diag = FALSE
+  )
+
+```
+
