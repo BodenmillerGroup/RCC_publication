@@ -1,0 +1,116 @@
+---
+title: "08_Metabolome_Prep"
+output: html_document
+date: "2024-10-27"
+editor_options: 
+  chunk_output_type: inline
+---
+# MALDI-MSI data preparation 
+
+## Software requirments 
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(RColorBrewer)
+library(foreach)
+library(circlize)
+library(ComplexHeatmap)
+library(scater)
+library(BiocParallel)
+library(viridis)
+library(survival)
+library(survminer)
+```
+
+
+## 1. Read in data 
+
+```{r}
+SE <- readRDS("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/SE_MALDI_01.rds")
+peak_anno_updated <- read.csv("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/RCC_Annotated_Mass_Filtered_LM.csv")
+```
+
+
+## 2. Clustering
+
+```{r}
+library(clValid)
+
+data <- t(assay(SE, "min_max")) %>% as.matrix()
+
+set.seed(25)
+testCL<- clValid(data,
+                 nClust = 4:20,
+                 #clMethods = c("kmeans"),
+                 clMethods = c("hierarchical","agnes","kmeans"),
+                 validation="internal", # The internal measures include the connectivity, and Silhouette Width, and Dunn Index.
+                 metric="euclidean", 
+                 method = "ward", 
+                 maxitems = 5000)
+summary(testCL)
+plot(testCL, legend = FALSE)
+```
+
+
+```{r}
+data <- t(assay(SE, "min_max")) %>% as.matrix()
+
+set.seed(22)
+h_com <- Heatmap(data, 
+        col = viridis(100), 
+        clustering_method_columns = "ward.D2", 
+        clustering_method_rows = "ward.D2",
+        row_km = 8, 
+        row_km_repeats = 1000,
+        name = "min_max",
+        show_row_names=FALSE)+
+  Heatmap(scale(data), name = "scaled",
+          clustering_method_columns = "ward.D2", clustering_method_rows = "ward.D2",
+          show_row_names = FALSE)
+
+h_com <- draw(h_com)
+
+
+## Selection 
+row_order_h_ag <- row_order(h_com)
+anno <- data %>% as.data.frame %>% rownames_to_column("ID") %>% select(ID)
+anno$cluster_mz <- NA
+
+library(foreach)
+foreach(i = seq_along(row_order_h_ag))%do%{
+anno$cluster_mz <- as.factor((ifelse(rownames(anno) %in% row_order_h_ag[[i]], i, anno$cluster_mz)))
+}
+anno$cluster_mz <- unfactor(anno$cluster_mz)
+
+## Add to SE
+SE$cluster_mz <- anno$cluster_mz[match(SE$ID, anno$ID)]
+```
+
+```{r}
+saveRDS(SE, "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/SE_MALDI_02.rds")
+```
+
+
+
+### Survival testing
+
+```{r}
+surv_out <- colData(SE) %>% as.data.frame %>% select(PID, OS_months, status_OS, cluster_mz) %>% unique()
+
+fit <- survfit(Surv(OS_months, status_OS) ~ cluster_mz, data = surv_out)
+
+ggsurvplot(fit, 
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          conf.int = FALSE
+)
+```
+
+
+
+

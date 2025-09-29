@@ -1,0 +1,837 @@
+---
+title: "08_Metabolome_Prep"
+output: html_document
+date: "2024-10-27"
+editor_options: 
+  chunk_output_type: console
+---
+# MALDI-MSI data preparation 
+
+## Software requirments 
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(RColorBrewer)
+library(foreach)
+library(circlize)
+library(ComplexHeatmap)
+library(scater)
+library(BiocParallel)
+```
+
+
+## 1. Read in data 
+
+General patient metadata 
+
+```{r}
+metadata_all <- read_csv("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/data/Metadata_combined_RCC_onlyPT.csv")
+
+# Add TMA ID
+metadata_all$TMA_id <- str_replace(paste0(metadata_all$grid,"x",metadata_all$x,"y",metadata_all$y),"NA","")
+metadata_all$TMA_id <- str_replace(metadata_all$TMA_id, "x","X")
+metadata_all$TMA_id <- str_replace(metadata_all$TMA_id, "y","Y")
+metadata_all[is.na(metadata_all$x),]$TMA_id <- "CX7Y8" #was missing in data
+
+metadata_all$subtype_combined <- ifelse(metadata_all$subtype %in% c("clear_cell_RCC", "papillary_RCC", "chromophobe_RCC"), metadata_all$subtype, "other")
+metadata_all$subtype_combined[metadata_all$subtype_combined == "clear_cell_RCC"] <- "ccRCC"
+metadata_all$subtype_combined[metadata_all$subtype_combined == "papillary_RCC"] <- "pRCC"
+metadata_all$subtype_combined[metadata_all$subtype_combined == "chromophobe_RCC"] <- "chrRCC"
+
+## Update survival censoring
+metadata_all$status_OS <- ifelse(metadata_all$censor_dead_0_alive_1 == 1, 0, 
+       ifelse(metadata_all$censor_dead_0_alive_1 == 0, 1, metadata_all$censor_dead_0_alive_1))
+
+metadata_all$OS_months <- metadata_all$survival_months
+
+## Combine relevant disease progression categories
+metadata_all$pT_combined <- ifelse(metadata_all$pT_simple %in% c("1","2"),"1/2", ifelse(metadata_all$pT_simple %in% c("3","4"), "3/4", metadata_all$pT_simple))
+
+metadata_all$ISUP_simple <- metadata_all$ISUP
+metadata_all$ISUP_combined <- ifelse(metadata_all$ISUP %in% c("1","2"),"1/2", ifelse(metadata_all$ISUP %in% c("3","4"), "3/4", metadata_all$ISUP))
+metadata_all$lymphocytes_combined <- ifelse(metadata_all$lymphocytes %in% c("1","2"),"1/2", metadata_all$lymphocytes)
+
+# Make sure stage, grade and necrose are encoded as characters
+metadata_all$pT_simple <- as.character(paste0("T",metadata_all$pT_simple))
+metadata_all$pT_combined <- as.character(paste0("T",metadata_all$pT_combined))
+
+metadata_all$ISUP_simple <- as.character(paste0("G",metadata_all$ISUP_simple))
+metadata_all$ISUP_combined <- as.character(paste0("G",metadata_all$ISUP_combined))
+
+metadata_all$necrose <- as.character(paste0("NE",metadata_all$necrose))
+
+# Revert NAs
+metadata_all$necrose[metadata_all$necrose == "NENA"] <- NA
+
+metadata_all$ISUP_simple[metadata_all$ISUP_simple == "GNA"] <- NA
+metadata_all$ISUP_combined[metadata_all$ISUP_combined == "GNA"] <- NA
+
+metadata_all$pT_simple[metadata_all$pT_simple == "TNA"] <- NA
+metadata_all$pT_combined[metadata_all$pT_combined == "TNA"] <- NA
+
+metadata_selected <- metadata_all %>% select(PID, TMA_id, subtype_combined, gender, age, age_bin, type, status_OS, OS_months, pT_simple, pT_combined, ISUP_simple, ISUP_combined, necrose) %>% as.data.frame
+
+metadata_ccRCC <- metadata_selected %>% filter(subtype_combined == "ccRCC")
+```
+
+
+### MALDI-MSI data
+
+### Match identifiers 
+
+```{r}
+# Raw data 
+raw_data <- read_excel("/Volumes/G_DQBM_BB_Central$/datasharing/Lasse/Marlene/metabolome/data_analysis/MALDI_RCC_Data_LM.xlsx")
+
+raw_out <- raw_data %>% pivot_longer(2:676, names_to = "ID", values_to = "intensity")
+
+# Add Identifiers
+raw_out$TMA <- ifelse(str_detect(raw_out$ID, "Z1"), "20", "224")
+raw_out$spot_ID <- str_split(raw_out$ID, "_", simplify = TRUE)[,2]
+raw_out$tissue_type <- str_split(raw_out$ID, "_", simplify = TRUE)[,3]
+```
+
+```{r}
+TMA20_anno <- read_excel("/Volumes/G_DQBM_BB_Central$/datasharing/Lasse/Marlene/metabolome/data_analysis/ZTMA20punchfile_LM.xls")
+TMA20_anno$PID <- str_replace(TMA20_anno$`SP Number`, " ", "")
+names(TMA20_anno)[names(TMA20_anno) == "# spots"] <- "spot_ID"
+names(TMA20_anno)[names(TMA20_anno) == "DX name"] <- "subtype"
+names(TMA20_anno)[names(TMA20_anno) == "Block ID"] <- "Block_ID"
+names(TMA20_anno)[names(TMA20_anno) == "x localisation"] <- "x_localisation"
+names(TMA20_anno)[names(TMA20_anno) == "y localisation"] <- "y_localisation"
+
+TMA224_anno <- read_excel("/Volumes/G_DQBM_BB_Central$/datasharing/Lasse/Marlene/metabolome/data_analysis/ZTMA224punchfile_LM.xlsx")
+TMA224_anno$PID <- str_replace(TMA224_anno$`SP Number`, "B", "B20")
+names(TMA224_anno)[names(TMA224_anno) == "# spots"] <- "spot_ID"
+names(TMA224_anno)[names(TMA224_anno) == "DX name"] <- "subtype"
+names(TMA224_anno)[names(TMA224_anno) == "Block ID"] <- "Block_ID"
+names(TMA224_anno)[names(TMA224_anno) == "x localisation"] <- "x_localisation"
+names(TMA224_anno)[names(TMA224_anno) == "y localisation"] <- "y_localisation"
+```
+
+#### QC
+
+675 samples
+
+```{r}
+raw_out$ID %>% unique %>% length # 675
+```
+
+information from 772 unique patients
+```{r}
+TMA20_anno$spot_ID %>% length() # 384 samples (these are unique)
+# from
+pid_20 <- TMA20_anno$PID %>% unique # 352 patients
+
+TMA224_anno$spot_ID %>% length() # 384 samples (these are unique)
+# from
+pid_224 <- TMA224_anno$PID %>% unique # 370
+
+# no PID ocurring in both
+intersect(pid_20, pid_224)
+intersect(pid_224, pid_20)
+```
+
+
+There are PID occurring > 1 with different subtype assignment
+```{r}
+# patients occuring more than once in TMA20_anno
+duplicated_pid_20 <- TMA20_anno$PID[TMA20_anno$PID %>% duplicated()]
+TMA20_anno %>% filter(PID %in% duplicated_pid_20) %>% select(PID, "subtype", spot_ID) %>% arrange(PID)
+
+# patients occuring more than once in TMA224_anno
+duplicated_pid_244 <- TMA224_anno$PID[TMA224_anno$PID %>% duplicated()]
+TMA224_anno %>% filter(PID %in% duplicated_pid_244) %>% select(PID, "subtype", spot_ID) %>% arrange(PID)
+```
+
+combine TMA anno
+```{r}
+TMA20_anno <- TMA20_anno %>%
+  dplyr::select(-GNr) %>%
+  mutate(TMA = 20)
+
+TMA224_anno <- TMA224_anno %>%
+  mutate(TMA = 224)
+
+# Combine the two data frames
+TMA_anno <- rbind(TMA20_anno, TMA224_anno)
+```
+
+Store information about PID with multiple subtype assignments
+
+```{r}
+TMA_anno$subtype_IMC <- metadata_all$subtype[match(TMA_anno$PID, metadata_all$PID)]
+TMA_anno$subtype_combined <- metadata_selected$subtype_combined[match(TMA_anno$PID, metadata_selected$PID)]
+
+# match subtypes names 
+TMA_anno$subtype_matched <- ifelse(TMA_anno$subtype == "clear cell", "clear_cell_RCC",
+                            ifelse(TMA_anno$subtype == "chromophobe", "chromophobe_RCC",
+                            ifelse(TMA_anno$subtype == "chromophob", "chromophobe_RCC",
+                            ifelse(TMA_anno$subtype == "other", "unclassified_RCC",
+                            ifelse(TMA_anno$subtype == "undefined", "unclassified_RCC",
+                            ifelse(TMA_anno$subtype == "papillary", "papillary_RCC",
+                            ifelse(TMA_anno$subtype == "unklassifiziert", "unclassified_RCC",
+                            ifelse(TMA_anno$subtype == "papillary", "papillary_RCC",
+                            ifelse(TMA_anno$subtype == "papillary type I", "papillary_RCC",
+                            ifelse(TMA_anno$subtype == "papillary type II", "papillary_RCC",
+                            ifelse(TMA_anno$subtype == "papillary Typ1", "papillary_RCC",
+                            ifelse(TMA_anno$subtype == "papillary Typ2", "papillary_RCC",
+                            ifelse(TMA_anno$subtype == "tubulo-papillary Typ2", "papillary_RCC",
+                            ifelse(TMA_anno$subtype == "clear cell, multifocal", "clear_cell_RCC",
+                            ifelse(TMA_anno$subtype == "clear cell +Metastase", "clear_cell_RCC",
+                            ifelse(TMA_anno$subtype == "clear cell, eosinophil", "clear_cell_RCC",
+                            ifelse(TMA_anno$subtype == "clear cell, cystic", "clear_cell_RCC",
+                            ifelse(TMA_anno$subtype == "clear cell + papillary Typ1", "clear_cell_RCC",
+                            ifelse(TMA_anno$subtype == "clear cell, sarcomatoid", "clear_cell_RCC",
+                            ifelse(TMA_anno$subtype == "clear cell, spindle cell", "clear_cell_RCC",
+                            ifelse(TMA_anno$subtype == "clear cell + papillary Typ1", "clear_cell_RCC",
+                            ifelse(TMA_anno$subtype == "oncocytomar", "oncocytoma",
+                            ifelse(TMA_anno$subtype == "oncozytoma", "oncocytoma", TMA_anno$subtype)))))))))))))))))))))))
+
+# kick out normal samples
+
+
+# All PID with double assignments ccRCC deleted manually
+df_subtype_anno <- TMA_anno %>% filter(PID %in% (metadata_selected$PID %>% unique)) %>% filter(subtype_matched != subtype_IMC, subtype != "normal") %>% select(PID, subtype, subtype_IMC)
+
+colnames(df_subtype_anno) <- c("PID", "subtype_from_mz", "subtype_from_IMC") #to be saved - we will use the subtype assignments from IMC
+```
+
+### Match raw data
+
+```{r}
+TMA20_anno$subtype_combined <- TMA_anno$subtype_combined[match(TMA20_anno$PID, TMA_anno$PID)]
+TMA224_anno$subtype_combined <- TMA_anno$subtype_combined[match(TMA224_anno$PID, TMA_anno$PID)]
+
+# Matching function
+match_col <- function(x) {
+  raw_out[[x]] <- ifelse(raw_out$TMA == 20,
+                          TMA20_anno[[x]][match(raw_out$spot_ID, TMA20_anno$spot_ID)],
+                          TMA224_anno[[x]][match(raw_out$spot_ID, TMA224_anno$spot_ID)])
+  return(raw_out)
+}
+
+# columns to add
+to_add <- c("PID", "subtype","subtype_combined", "Block_ID", "Grid")
+
+# function call
+for (col in to_add){
+  raw_out <- match_col(col)
+}
+
+TMA_anno$ID <- raw_out$ID[match(TMA_anno$PID, raw_out$PID)]
+```
+
+from how many PID of the whole cohort do we have m/z data?
+
+data missing for 109 PID.
+
+```{r}
+raw_out$PID %>% unique %>% length() # 675 PID
+
+sce_pid <- metadata_all$PID %>% unique # 721
+data_pid <- raw_out$PID %>% unique # 675
+intersect(sce_pid, data_pid) %>% length # 612
+
+# with only one sample per patient
+raw_out %>% select(spot_ID, PID) %>% unique %>% group_by(PID) %>% duplicated() %>% unique
+```
+
+specific to ccRCC cohort.
+
+data missing for 52 PID.
+
+```{r}
+ccrcc_pid <- metadata_ccRCC$PID %>% unique # 494
+data_pid <- raw_out$PID %>% unique # 675
+
+intersect(ccrcc_pid, data_pid) %>% length # 444 PID
+```
+
+
+### Subset to ccRCC
+
+```{r}
+# Subset to only ccRCC cases - NOTE: this is distinct from Marlenes approach
+raw_out <- raw_out %>% filter(subtype_combined == "ccRCC")
+TMA_anno <- TMA_anno %>% filter(subtype_combined == "ccRCC")
+```
+
+
+
+## 2. Match annotations 
+
+```{r}
+peak_anno <- read_excel("/Volumes/G_DQBM_BB_Central$/datasharing/Lasse/Marlene/metabolome/data_analysis/RCC_Annotated_Mass_LM.xlsx")
+
+peak_anno$KEGG.pathway[peak_anno$KEGG.pathway == "NA"] <- NA
+peak_anno$KEGG.map[peak_anno$KEGG.map == "NA"] <- NA
+
+anno_mass <- peak_anno$Mass %>% unique # 444 Masses annotated
+raw_mass <- raw_data$`m/z` %>% unique # 1258 m/z observed
+
+setdiff(raw_mass, anno_mass) %>% length() # 909 m/z unannotated
+setdiff(anno_mass, raw_mass) %>% length() # 95 m/z annotated but not observed
+# 1258-909 = 349 m/z available for analysis
+```
+
+
+```{r}
+df_1 <- read.csv("/Volumes/G_DQBM_BB_Central$/users/marllu/T_panel/data_analysis/KEGG_anno_M_H.csv")
+df_2 <- read.csv("/Volumes/G_DQBM_BB_Central$/users/marllu/T_panel/data_analysis/KEGG_anno_M_H2O.csv")
+df_3 <- read.csv("/Volumes/G_DQBM_BB_Central$/users/marllu/T_panel/data_analysis/KEGG_anno_M_H2O_H.csv")
+df_4 <- read.csv("/Volumes/G_DQBM_BB_Central$/users/marllu/T_panel/data_analysis/KEGG_anno_M_K_2H.csv")
+df_5 <- read.csv("/Volumes/G_DQBM_BB_Central$/users/marllu/T_panel/data_analysis/KEGG_anno_M_Na_2H.csv")
+df_6 <- read.csv("/Volumes/G_DQBM_BB_Central$/users/marllu/T_panel/data_analysis/KEGG_anno_M_Cl.csv")
+
+# subset to new metabolites
+kegg_existing <- peak_anno$kegg_id %>% unique
+df_1 <- df_1 %>% filter(!kegg_id %in% kegg_existing)
+df_2 <- df_2 %>% filter(!kegg_id %in% kegg_existing)
+df_3 <- df_3 %>% filter(!kegg_id %in% kegg_existing)
+df_4 <- df_4 %>% filter(!kegg_id %in% kegg_existing)
+df_5 <- df_5 %>% filter(!kegg_id %in% kegg_existing)
+df_6 <- df_6 %>% filter(!kegg_id %in% kegg_existing)
+
+# identifier
+peak_anno$given <-rep("TRUE", nrow(peak_anno))
+df_1$given <- rep("FALSE", nrow(df_1))
+df_2$given <- rep("FALSE", nrow(df_2))
+df_3$given <- rep("FALSE", nrow(df_3))
+df_4$given <- rep("FALSE", nrow(df_4))
+df_5$given <- rep("FALSE", nrow(df_5))
+df_6$given <- rep("FALSE", nrow(df_6))
+
+# add adduct
+df_1$adduct <- rep("M-H", nrow(df_1))
+df_2$adduct <- rep("M-H20", nrow(df_2))
+df_3$adduct <- rep("M-H20-H", nrow(df_3))
+df_4$adduct <- rep("M+K-2H", nrow(df_4))
+df_5$adduct <- rep("M+Na-2H", nrow(df_5))
+df_6$adduct <- rep("M+Cl", nrow(df_6))
+
+# match colnames
+colnames(df_1) <- c("Mass", "mass_adduct", "query", "kegg_id", "name", "result_mass", "KEGG.map", "hmdb_id", "given","adduct")
+colnames(df_2) <- c("Mass", "mass_adduct", "query", "kegg_id", "name", "result_mass", "KEGG.map", "hmdb_id", "given","adduct")
+colnames(df_3) <- c("Mass", "mass_adduct", "query", "kegg_id", "name", "result_mass", "KEGG.map", "hmdb_id", "given","adduct")
+colnames(df_4) <- c("Mass", "mass_adduct", "query", "kegg_id", "name", "result_mass", "KEGG.map", "hmdb_id", "given","adduct")
+colnames(df_5) <- c("Mass", "mass_adduct", "query", "kegg_id", "name", "result_mass", "KEGG.map", "hmdb_id", "given","adduct")
+colnames(df_6) <- c("Mass", "mass_adduct", "query", "kegg_id", "name", "result_mass", "KEGG.map", "hmdb_id", "given","adduct")
+
+
+# add to peak_anno
+peak_anno_updated <- bind_rows(peak_anno %>% dplyr::select(Mass, kegg_id, accession, name, chemical_formula, adduct, adduct.mz, ppm, KEGG.pathway, KEGG.map, given), 
+                               df_1 %>% dplyr::select(Mass, kegg_id, name, KEGG.map, given, adduct),
+                               df_2 %>% dplyr::select(Mass, kegg_id, name, KEGG.map, given, adduct),
+                               df_3 %>% dplyr::select(Mass, kegg_id, name, KEGG.map, given, adduct),
+                               df_4 %>% dplyr::select(Mass, kegg_id, name, KEGG.map, given, adduct),
+                               df_5 %>% dplyr::select(Mass, kegg_id, name, KEGG.map, given, adduct),
+                               df_6 %>% dplyr::select(Mass, kegg_id, name, KEGG.map, given, adduct)) %>% arrange(Mass)
+
+peak_anno_updated
+```
+
+### Subset peak annotation to hsa annotated compounds
+
+```{r}
+hsa_to_compound_df <- read.csv("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/cpd_in_hsa_pathways")
+
+hsa_cpd <- hsa_to_compound_df$CompoundID %>% unique
+
+peak_anno_updated <- peak_anno_updated %>% filter(kegg_id %in% hsa_cpd)
+
+merged_df <- merge(peak_anno_updated, hsa_to_compound_df, 
+                   by.x = "kegg_id", by.y = "CompoundID", 
+                   all.x = TRUE)
+
+names(merged_df)[names(merged_df) == "PathwayID"] <- "hsa_id"
+names(merged_df)[names(merged_df) == "Name"] <- "hsa_name"
+names(merged_df)[names(merged_df) == "Class"] <- "hsa_class"
+
+peak_anno_updated <- merged_df %>% arrange(Mass)
+```
+
+
+
+#### save updated peak_anno
+
+```{r}
+write.csv(peak_anno_updated, file = "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/RCC_Annotated_Mass_Updated_LM.csv", row.names = FALSE, col.names = TRUE)
+
+peak_anno_updated <- read.csv("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/RCC_Annotated_Mass_Updated_LM.csv")
+```
+
+
+### Subset to annotated KEGG Pathways
+
+Only Keep Metabolites that are found in human KEGG pathways
+
+```{r}
+# make sure to round before comparing m/z
+data <- raw_out %>% mutate(`m/z` = round(`m/z`, 6)) # 443 PID, 1258 m/z
+data$`m/z` %>% unique %>% length
+data$PID %>% unique %>% length
+
+# subset to compounds found in human KEGG pathways
+mass_annotated <- round(peak_anno_updated$Mass, 6)
+data <- data %>% filter(`m/z` %in% mass_annotated) # 125 m/z
+data$`m/z` %>% unique %>% length
+
+# remove 64 mz
+
+df_20 <- data[data$TMA == "20",]
+df_224 <- data[data$TMA == "224",]
+mz_20 <- df_20 %>% group_by(`m/z`) %>% summarise(sum = sum(intensity)) %>% filter(sum == 0) %>% pull(`m/z`) # mz with intensity = 0 in all patients
+mz_224 <- df_224 %>% group_by(`m/z`) %>% summarise(sum = sum(intensity)) %>% filter(sum == 0) %>% pull(`m/z`) # mz with intensity = 0 in all patients
+data <- data %>% filter(!`m/z`%in% union(mz_20, mz_224)) # 32 m/z
+
+# eliminate m/z not found in any PID
+cur_mz <- data %>% filter(intensity != 0) %>% pull(`m/z`) %>% unique() 
+data <- data %>% filter(`m/z`%in% cur_mz) 
+```
+
+#### Save prepared data
+
+```{r}
+write.table(data, file = "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/MSI_data_prepared.csv",
+            sep = ",", row.names = FALSE, col.names = TRUE)
+```
+
+#### Load Data and Prepare assay
+
+```{r}
+peak_anno_updated <- read.csv("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/RCC_Annotated_Mass_Updated_LM.csv")
+
+data <- read.csv("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/MSI_data_prepared.csv")
+
+
+colnames(data) <- c("m/z", colnames(data)[2:length(colnames(data))])
+
+assay <- data %>% dplyr::select(`m/z`, intensity, ID) %>% pivot_wider(names_from = ID, values_from = intensity, values_fill = 0) %>% column_to_rownames("m/z") %>% as.matrix()
+```
+
+
+#### Visualization
+
+```{r}
+library(reshape2)
+
+long_data <- melt(assay, id.vars = "mz", variable.name = "Sample", value.name = "Intensity")
+
+# Plot
+p <- ggplot(long_data, aes(x = Intensity)) +
+  geom_density(fill = "#E07A5F", alpha = 0.5) +
+  labs(title = "",
+       x = "Intensity",
+       y = "Density") +
+  xlim(0,1000)+
+  # ylim(0,5)+
+  theme_classic()
+
+p
+```
+
+```{r}
+df <- assay%>% t() %>% as.data.frame()
+df$TMA <- raw_out$TMA[match(rownames(df), raw_out$ID)]
+df_long <- df %>% pivot_longer(cols = -TMA, names_to = "mz", values_to = "intensity")
+
+p <- ggplot(df_long, aes(x = mz, y = intensity)) +
+  geom_boxplot(fill = "#E07A5F") +
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 5))
+p
+```
+
+```{r}
+set.seed(22)
+
+umap_df <- calculateUMAP(assay, n_neighbors = 50, pca = 50, external_neighbors=TRUE, BPPARAM = MulticoreParam())
+umap_df <- umap_df %>% as.data.frame()
+
+
+umap_df$TMA <- TMA_anno$TMA[match(rownames(umap_df), TMA_anno$ID)]
+umap_df$TMA <- as.factor(umap_df$TMA)
+
+ggplot(data=umap_df, aes(x=UMAP1, y=UMAP2, color = TMA)) +
+  geom_point() +
+  scale_color_manual(values = c("20" = "#027A9F", "224" = "#FFAA01")) +
+  theme(
+    plot.title = element_text(size = 20),       
+    axis.title.x = element_text(size = 15), 
+    axis.title.y = element_text(size = 15), 
+    legend.title = element_text(size = 15), 
+    legend.text = element_text(size = 12),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12) 
+  )+
+  theme_classic()
+
+metadata_ccRCC$ID <- TMA_anno$ID[match(metadata_ccRCC$PID, TMA_anno$PID)]
+umap_df$subtype_IMC <- metadata_ccRCC$subtype_combined[match(rownames(umap_df), metadata_ccRCC$ID)]
+umap_df$pT_combined <- metadata_ccRCC$pT_combined[match(rownames(umap_df), metadata_ccRCC$ID)]
+umap_df$ISUP_combined <- metadata_ccRCC$ISUP_combined[match(rownames(umap_df), metadata_ccRCC$ID)]
+
+ggplot(data=umap_df, aes(x=UMAP1, y=UMAP2, color = ISUP_combined)) +
+  geom_point() +
+  theme(
+    plot.title = element_text(size = 20),       
+    axis.title.x = element_text(size = 15), 
+    axis.title.y = element_text(size = 15), 
+    legend.title = element_text(size = 15), 
+    legend.text = element_text(size = 12),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12) 
+  )+
+  theme_classic()
+```
+
+
+
+## 3. Zero Value Imputation
+
+```{r}
+assay <- data %>% dplyr::select(`m/z`, intensity, ID) %>% pivot_wider(names_from = ID, values_from = intensity, values_fill = 0) %>% column_to_rownames("m/z") %>% as.matrix()
+assay <- assay %>% t() %>% as.data.frame()
+
+# function to impute 0 values by 1/5 min per feature
+replace_zeros <- function(column) {
+  min_val <- min(column[column != 0], na.rm = TRUE)
+  imp_val <- min_val / 5
+  column[column == 0] <- imp_val
+  #print(imp_val)
+  return(column)
+}
+
+# Apply the function to columns
+assay_imputed <- assay %>%
+  mutate(across(everything(), replace_zeros))
+
+assay_imputed <- assay_imputed %>% t()
+```
+
+### Visualization
+
+```{r}
+long_data <- melt(assay_imputed, id.vars = "mz", variable.name = "Sample", value.name = "Intensity")
+
+# Plot
+ggplot(long_data, aes(x = Intensity)) +
+  geom_density(fill = "#E07A5F", alpha = 0.5) +
+  labs(title = "",
+       x = "Intensity",
+       y = "Density") +
+  theme_classic()+
+  xlim(c(0, 1000))
+```
+
+```{r}
+df <- assay_imputed%>% t() %>% as.data.frame()
+df$TMA <- raw_out$TMA[match(rownames(df), raw_out$ID)]
+df_long <- df %>% pivot_longer(cols = -TMA, names_to = "mz", values_to = "intensity")
+
+ggplot(df_long, aes(x = mz, y = intensity)) +
+  geom_boxplot() +
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 5))
+```
+
+
+## 4. Log transformation
+
+```{r}
+# lop1 transformation
+assay_log <- log1p(assay_imputed)
+```
+
+### Visualization
+
+```{r}
+long_data <- melt(assay_log, id.vars = "mz", variable.name = "Sample", value.name = "Intensity")
+
+# Plot
+p <- ggplot(long_data, aes(x = Intensity)) +
+  geom_density(fill = "#E07A5F", alpha = 0.7) +
+  labs(title = "",
+       x = "Intensity",
+       y = "Density") +
+  theme_classic()
+p
+```
+
+```{r}
+df <- assay_log %>% t() %>% as.data.frame()
+df$TMA <- raw_out$TMA[match(rownames(df), raw_out$ID)]
+df_long <- df %>% pivot_longer(cols = -TMA, names_to = "mz", values_to = "intensity")
+
+p <- ggplot(df_long, aes(x = mz, y = intensity)) +
+  geom_boxplot(fill = "#E07A5F", alpha = 0.7) +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 5))
+  #facet_wrap(~TMA)
+p
+```
+
+```{r}
+set.seed(22)
+
+umap_df <- calculateUMAP(assay_log, n_neighbors = 50, pca = 50, external_neighbors=TRUE, BPPARAM = MulticoreParam())
+umap_df <- umap_df %>% as.data.frame()
+
+umap_df$TMA <- TMA_anno$TMA[match(rownames(umap_df), TMA_anno$ID)]
+umap_df$TMA <- as.factor(umap_df$TMA)
+umap_df$subtype_IMC <- metadata_ccRCC$subtype[match(rownames(umap_df), metadata_ccRCC$ID)]
+
+ggplot(data=umap_df, aes(x=UMAP1, y=UMAP2, color = TMA)) +
+  geom_point() +
+  scale_color_manual(values = c("20" = "#027A9F", "224" = "#FFAA01")) +
+  theme(
+    plot.title = element_text(size = 20),       
+    axis.title.x = element_text(size = 15), 
+    axis.title.y = element_text(size = 15), 
+    legend.title = element_text(size = 15), 
+    legend.text = element_text(size = 12),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12) 
+  )+
+  theme_classic()
+
+ggplot(data=umap_df, aes(x=UMAP1, y=UMAP2, color = subtype_IMC)) +
+  geom_point() +
+  theme(
+    plot.title = element_text(size = 20),       
+    axis.title.x = element_text(size = 15), 
+    axis.title.y = element_text(size = 15), 
+    legend.title = element_text(size = 15), 
+    legend.text = element_text(size = 12),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12) 
+  )+
+  theme_classic()
+```
+
+## 4. Batch effect correction
+
+### Mutual Nearest Neighbor Correction
+
+Decided for mnn correction.
+
+```{r}
+library(batchelor)
+library(BiocNeighbors)
+
+batch <- TMA_anno$TMA[match(colnames(assay_log), TMA_anno$ID)]
+available_cores <- parallel::detectCores()
+workers <- (available_cores - 2) / 2
+mnn_corrected <- mnnCorrect(assay_log, batch = batch,  # SE$TMA
+                            auto.merge = TRUE,
+                            #assay.type = "expression",
+                            BNPARAM = HnswParam(),
+                            BPPARAM = MulticoreParam(workers = workers, RNGseed = 22))
+
+mnn_data <- assay(mnn_corrected)
+```
+
+#### Visualization
+
+```{r}
+long_data <- melt(mnn_data, id.vars = "mz", variable.name = "Sample", value.name = "Intensity")
+
+# Plot
+p <- ggplot(long_data, aes(x = Intensity)) +
+  geom_density(fill = "#E07A5F", alpha = 0.7) +
+  labs(title = "",
+       x = "Intensity",
+       y = "Density") +
+  theme_classic()
+p
+```
+
+
+```{r}
+df <- mnn_data%>% t() %>% as.data.frame()
+df$TMA <- raw_out$TMA[match(rownames(df), raw_out$ID)]
+df_long <- df %>% pivot_longer(cols = -TMA, names_to = "mz", values_to = "intensity")
+
+p <- ggplot(df_long, aes(x = mz, y = intensity)) +
+  geom_boxplot(fill = "#E07A5F", alpha = 0.7) +
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 5))
+  # facet_wrap(~TMA)
+p
+```
+
+After Batch correction
+
+```{r}
+set.seed(22)
+
+umap_df <- calculateUMAP(mnn_data, n_neighbors = 50, pca = 50, external_neighbors=TRUE, BPPARAM = MulticoreParam())
+umap_df <- umap_df %>% as.data.frame()
+
+# based on sce
+umap_df$TMA <- TMA_anno$TMA[match(rownames(umap_df), TMA_anno$ID)]
+umap_df$TMA <- factor(umap_df$TMA)
+umap_df$subtype_IMC <- metadata_ccRCC$subtype[match(rownames(umap_df), metadata_ccRCC$ID)]
+
+
+p <- ggplot(data=umap_df, aes(x=UMAP1, y=UMAP2, color = TMA)) +
+  geom_point() +
+  scale_color_manual(values = c("20" = "#027A9F", "224" = "#FFAA01")) +
+  theme(
+    plot.title = element_text(size = 20),       
+    axis.title.x = element_text(size = 15), 
+    axis.title.y = element_text(size = 15), 
+    legend.title = element_text(size = 15), 
+    legend.text = element_text(size = 12),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12)
+  )+
+  theme_classic()
+
+
+p2 <- ggplot(data=umap_df, aes(x=UMAP1, y=UMAP2, color = subtype_IMC)) +
+  geom_point() +
+  theme(
+    plot.title = element_text(size = 20),       
+    axis.title.x = element_text(size = 15), 
+    axis.title.y = element_text(size = 15), 
+    legend.title = element_text(size = 15), 
+    legend.text = element_text(size = 12),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12),
+  )+
+  theme_classic()
+  #scale_color_manual(values = metadata(sce)$colors$subtype)
+
+
+p
+p2
+```
+
+
+## 5. Prepare SummarizedExperiment
+
+Construct SummarizedExperiment
+
+```{r}
+assay <- mnn_data
+
+colData <- data %>% dplyr::select(PID, ID, TMA, spot_ID, subtype_combined, Block_ID, Grid) %>% unique
+
+SE <- SummarizedExperiment(assays=list(exprs=assay %>% as.matrix), colData=colData)
+SE
+# 443 patients 
+# 93 metabolites
+```
+
+```{r}
+to_add <- c("gender", "age", "age_bin", "type", "status_OS", "OS_months", "pT_simple", "pT_combined", 
+"ISUP_simple", "ISUP_combined", "necrose")
+
+add_to_SE <- function(x){
+  SE[[x]] <<- metadata_selected[[x]][match(SE$PID, metadata_selected$PID)]
+}
+
+for (col_name in to_add){
+  add_to_SE(col_name)
+}
+
+# Save sce
+saveRDS(SE, "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/SE_MALDI_01.rds")
+```
+
+```{r}
+# read in
+SE <- readRDS("/Volumes/G_DQBM_BB_Central$/users/marllu/T_panel/data_analysis/SE_metabol_08.rds")
+```
+
+
+```{r}
+# Update peak annotation
+peak_anno_updated <- peak_anno_updated %>% filter(Mass %in% (assay(SE) %>% rownames))
+
+write.csv(peak_anno_updated, file = "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/RCC_Annotated_Mass_Filtered_LM.csv", row.names = FALSE, col.names = TRUE)
+```
+
+
+### Global min-max scaling
+
+Across all channels
+
+```{r}
+min_val <- min(assay(SE))
+max_val <- max(assay(SE))
+
+assay(SE, "min_max") <- (assay(SE) - min_val) / (max_val - min_val)
+
+# save
+saveRDS(SE, "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/SE_MALDI_01.rds")
+```
+
+### Visualization
+
+```{r}
+long_data <- melt(assay(SE, "min_max"), id.vars = "mz", variable.name = "Sample", value.name = "Intensity")
+
+# Plot
+ggplot(long_data, aes(x = Intensity)) +
+  geom_density(fill = "#E07A5F", alpha = 0.7) +
+  labs(title = "",
+       x = "Intensity",
+       y = "Density") +
+  theme_classic()
+```
+
+```{r}
+df <- assay(SE, "min_max") %>% t() %>% as.data.frame()
+df$TMA <- raw_out$TMA[match(rownames(df), raw_out$ID)]
+df_long <- df %>% pivot_longer(cols = -TMA, names_to = "mz", values_to = "intensity")
+
+ggplot(df_long, aes(x = mz, y = intensity)) +
+  geom_boxplot(fill = "#E07A5F", alpha = 0.7) +
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 5))
+```
+
+```{r}
+set.seed(22)
+
+umap_df <- calculateUMAP(assay(SE, "min_max"), n_neighbors = 50, pca = 50, external_neighbors=TRUE, BPPARAM = MulticoreParam())
+umap_df <- umap_df %>% as.data.frame()
+
+umap_df$TMA <- TMA_anno$TMA[match(rownames(umap_df), TMA_anno$ID)]
+umap_df$TMA <- as.factor(umap_df$TMA)
+umap_df$subtype_IMC <- metadata_ccRCC$subtype[match(rownames(umap_df), metadata_ccRCC$ID)]
+
+ggplot(data=umap_df, aes(x=UMAP1, y=UMAP2, color = TMA)) +
+  geom_point() +
+  scale_color_manual(values = c("20" = "#027A9F", "224" = "#FFAA01")) +
+  theme(
+    plot.title = element_text(size = 20),       
+    axis.title.x = element_text(size = 15), 
+    axis.title.y = element_text(size = 15), 
+    legend.title = element_text(size = 15), 
+    legend.text = element_text(size = 12),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12) 
+  )+
+  theme_classic()
+
+ggplot(data=umap_df, aes(x=UMAP1, y=UMAP2, color = subtype_IMC)) +
+  geom_point() +
+  theme(
+    plot.title = element_text(size = 20),       
+    axis.title.x = element_text(size = 15), 
+    axis.title.y = element_text(size = 15), 
+    legend.title = element_text(size = 15), 
+    legend.text = element_text(size = 12),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12) 
+  )+
+  theme_classic()
+```
+
+
+
