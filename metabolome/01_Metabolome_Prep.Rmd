@@ -378,17 +378,10 @@ mass_annotated <- round(peak_anno_updated$Mass, 6)
 data <- data %>% filter(`m/z` %in% mass_annotated) # 125 m/z
 data$`m/z` %>% unique %>% length
 
-# remove 64 mz
-
-df_20 <- data[data$TMA == "20",]
-df_224 <- data[data$TMA == "224",]
-mz_20 <- df_20 %>% group_by(`m/z`) %>% summarise(sum = sum(intensity)) %>% filter(sum == 0) %>% pull(`m/z`) # mz with intensity = 0 in all patients
-mz_224 <- df_224 %>% group_by(`m/z`) %>% summarise(sum = sum(intensity)) %>% filter(sum == 0) %>% pull(`m/z`) # mz with intensity = 0 in all patients
-data <- data %>% filter(!`m/z`%in% union(mz_20, mz_224)) # 32 m/z
-
-# eliminate m/z not found in any PID
-cur_mz <- data %>% filter(intensity != 0) %>% pull(`m/z`) %>% unique() 
-data <- data %>% filter(`m/z`%in% cur_mz) 
+# remove mz with 0 intensity across all patients
+null_mz <- data %>% group_by(`m/z`) %>% summarise(sum = sum(intensity)) %>% filter(sum == 0) %>% pull(`m/z`)
+data <- data %>% filter(!`m/z`%in% null_mz) # 4 m/z
+data$`m/z` %>% unique %>% length # 121 m/z remaining
 ```
 
 #### Save prepared data
@@ -744,7 +737,7 @@ saveRDS(SE, "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/
 
 ```{r}
 # read in
-SE <- readRDS("/Volumes/G_DQBM_BB_Central$/users/marllu/T_panel/data_analysis/SE_metabol_08.rds")
+SE <- readRDS("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/SE_MALDI_01.rds")
 ```
 
 

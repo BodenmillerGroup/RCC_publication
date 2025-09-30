@@ -29,6 +29,7 @@ library(survminer)
 ```{r}
 SE <- readRDS("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/SE_MALDI_01.rds")
 peak_anno_updated <- read.csv("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/RCC_Annotated_Mass_Filtered_LM.csv")
+SE
 ```
 
 
@@ -41,7 +42,7 @@ data <- t(assay(SE, "min_max")) %>% as.matrix()
 
 set.seed(25)
 testCL<- clValid(data,
-                 nClust = 4:20,
+                 nClust = 7:20,
                  #clMethods = c("kmeans"),
                  clMethods = c("hierarchical","agnes","kmeans"),
                  validation="internal", # The internal measures include the connectivity, and Silhouette Width, and Dunn Index.
@@ -61,8 +62,9 @@ h_com <- Heatmap(data,
         col = viridis(100), 
         clustering_method_columns = "ward.D2", 
         clustering_method_rows = "ward.D2",
-        row_km = 8, 
+        row_km = 11, 
         row_km_repeats = 1000,
+        #row_split = 11,
         name = "min_max",
         show_row_names=FALSE)+
   Heatmap(scale(data), name = "scaled",
@@ -112,5 +114,276 @@ ggsurvplot(fit,
 ```
 
 
+### Prepare MetaboAnalyst
+
+```{r}
+library(EnhancedVolcano)
+
+# FUNCTION 1: Perform logFC/p-value and t-score estimation
+log_FC_analysis <- function(SE, x, group) {
+  
+  category_name <- paste0(x, "_other")
+  
+  # 1. Create the new category variable based on the input x
+  SE[[category_name]] <- ifelse(SE[[group]] == x, x, "Other")
+  
+  # 2. Aggregate expression per category
+  mean_SE <- aggregateAcrossCells(SE,
+                                  ids = SE[[category_name]],
+                                  statistics = "mean",
+                                  use.assay.type = "min_max")
+  
+  # 3. Calculate log-fold change (logFC)
+  logFC <- log2(assay(mean_SE, "min_max")[, mean_SE[[category_name]] == x] /
+                assay(mean_SE, "min_max")[, mean_SE[[category_name]] == "Other"])
+  
+  # 4. Calculate p-value (based on t-test)
+  min_max <- as.data.frame(t(assay(SE, "min_max")))
+  min_max[[category_name]] <- SE[[category_name]]
+  
+  p_value <- c()
+  t_score <- c()
+  for (i in 1:(ncol(min_max) - 1)) {
+    t <- t.test(min_max[min_max[[category_name]] == x, i], 
+                min_max[min_max[[category_name]] == "Other", i])
+    p_value[i] <- t$p.value
+    t_score[i] <- t$statistic
+  }
+  
+  names(t_score) <- colnames(min_max)[1:(ncol(min_max) - 1)]
+  names(p_value) <- colnames(min_max)[1:(ncol(min_max) - 1)]
+  
+  # 5. Adjust p-values for multiple testing (Optional)
+  #p_value_adj <- p.adjust(p_value, method = "BH")
+  #names(p_value_adj) <- colnames(min_max)[1:(ncol(min_max) - 1)]
+  
+  # 6. Prepare data for the volcano plot
+  data <- as.data.frame(cbind(logFC, p_value))
+  data$t_score <- t_score[match(rownames(data), names(t_score))]
+  
+  ## Custom Color
+  keyvals <- ifelse(
+    data$logFC < -0.2, "#377EB8",
+    ifelse(data$logFC > 0.2, "#E41A1C", 'black')
+  )
+  keyvals[is.na(keyvals)] <- 'black'
+  names(keyvals)[keyvals == "#E41A1C"] <- paste("High", x)
+  names(keyvals)[keyvals == 'black'] <- 'Not Sig'
+  names(keyvals)[keyvals == "#377EB8"] <- 'High Other'
+  
+  # 7. Plot VolcanoPlot
+  p <- EnhancedVolcano(data,
+                  lab = rownames(data),
+                  x = 'logFC',
+                  y = 'p_value',
+                  title = '',
+                  boxedLabels =FALSE,
+                  pCutoff = 0.05,
+                  FCcutoff = 0.2,
+                  drawConnectors = FALSE,
+                  pointSize = 8.0,
+                  labSize = 6.0, 
+                  colCustom = keyvals)
+  
+  return(list(plot = p, data = data))
+}
 
 
+# FUNCTION 2: Save csv file for each group
+save_csv_for_GSEA <- function(SE, group, phenotype, output_path) {
+  result <- log_FC_analysis(SE, group, phenotype)
+  
+  mz_ranked <- result$data %>% arrange(p_value) %>% dplyr::select(p_value, t_score)
+  mz_ranked <- mz_ranked %>% rownames_to_column("m.z")
+  colnames(mz_ranked) <- c("m.z", "p.value", "t.score")
+  
+  # Save
+  write.csv(mz_ranked, output_path, row.names = FALSE, quote = FALSE)
+}
+```
+
+
+```{r}
+# Function call
+cluster_numbers <- SE$cluster_mz %>% unique
+base_path <- "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/GSEA/cluster_k_11/input/"
+
+for (i in cluster_numbers) {
+  file_name <- paste0("GSEA_input_cluster", i, ".csv")
+  file_path <- file.path(base_path, file_name)
+  save_csv_for_GSEA(SE, as.character(i), "cluster_mz", file_path)
+}
+```
+
+
+## 3. Metaclustering
+
+```{r}
+# Read in data
+
+## base path
+base_path_out <- "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/GSEA/cluster_k_11/output/out_5/mummichog_pathway_enrichment_mummichog.csv"
+
+## specific paths
+cluster_mz_files <- paste0("out", 1:8, ".csv")
+
+cluster_mz_files <- c("out_5", "out_7")
+
+## Combine the paths
+file_paths <- c(
+  file.path(base_path_out, cluster_mz_files)
+)
+
+
+# Transform data for Heatmap
+group_names <- c(paste0(seq(1:8)))
+col_names <- c("pathway", "n_tot_pathway", "hits", "p_val", "p_adj", "NES", "compounds")
+
+combined_df <- bind_rows(Map(function(file, group) {
+  df <- read.csv(file)
+  colnames(df) <- col_names
+  df$group <- group
+  return(df)
+}, file_paths, group_names))
+```
+
+
+
+```{r}
+# Load libraries
+library(dplyr)
+library(readr)
+
+# Define the base output directory
+base_dir <- "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/GSEA/cluster_k_11/output"
+
+# Find all relevant CSV files (recursive search for subfolders "out_*")
+csv_files <- list.files(
+  path = base_dir,
+  pattern = "mummichog_pathway_enrichment_mummichog\\.csv$",
+  recursive = TRUE,
+  full.names = TRUE
+)
+
+# Read and combine all into one dataframe
+all_results <- csv_files %>%
+  lapply(function(f) {
+    df <- read_csv(f, show_col_types = FALSE)
+    df$out_folder <- basename(dirname(f))   # e.g., "out_5"
+    return(df)
+  }) %>%
+  bind_rows()
+
+
+
+
+
+
+```
+
+```{r}
+library(dplyr)
+library(readr)
+library(jsonlite)
+library(purrr)
+
+# Base directory
+base_dir <- "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/GSEA/cluster_k_11/output"
+
+# Get all out_* folders
+out_folders <- list.dirs(base_dir, recursive = FALSE, full.names = TRUE)
+
+# Function to read one out_* folder
+read_out_folder <- function(folder) {
+  # CSV file
+  csv_file <- file.path(folder, "mummichog_pathway_enrichment_mummichog.csv")
+  df <- read_csv(csv_file, show_col_types = FALSE)
+  colnames(df)[1] <- "pathway"
+  
+  # JSON file
+  json_file <- file.path(folder, "scattermum.json")
+  jdat <- fromJSON(json_file)
+  jdf <- tibble(
+    path = unlist(jdat$pathnames),
+    enr  = unlist(jdat$enr)
+  )
+  
+  # Join CSV and JSON
+  df <- df %>%
+    left_join(jdf, by = c("pathway" = "path")) %>%
+    mutate(group = basename(folder))
+  
+  return(df)
+}
+
+# Apply across all out_* folders and combine
+all_results <- map_dfr(out_folders, read_out_folder)
+```
+
+```{r}
+all_results$NES <- scale(all_results$enr, center = TRUE, scale = TRUE)
+
+all_results <- all_results %>% mutate(scaled_NES = NES*-log10(`P(Fisher)`))
+
+
+result_mat <- all_results %>%
+  dplyr::select(pathway, group, scaled_NES) %>%
+  pivot_wider(names_from = group, values_from = scaled_NES, values_fill = 0) %>% column_to_rownames("pathway") %>% t() %>% as.matrix()
+
+Heatmap(result_mat)
+```
+
+
+```{r}
+library(clValid)
+set.seed(22)
+testCL<- clValid(result_mat,
+                 nClust = 2:10,
+                 #clMethods = c("kmeans"),
+                 clMethods = c("hierarchical","agnes","kmeans"),
+                 validation="internal", # The internal measures include the connectivity, and Silhouette Width, and Dunn Index.
+                 metric="euclidean", 
+                 method = "ward", 
+                 maxitems = 5000)
+summary(testCL)
+plot(testCL, legend = FALSE)
+```
+
+```{r}
+set.seed(22)
+h_meta <- Heatmap(result_mat, row_km = 5, row_km_repeats = 100)
+h_meta <- draw(h_meta)
+
+## Selection 
+row_order_h_ag <- row_order(h_meta)
+anno <- result_mat %>% as.data.frame %>% rownames_to_column("cluster") %>% select(cluster)
+anno$cluster_mz <- str_split(anno$cluster, "out_", simplify = TRUE)[,2]
+anno$metacluster <- NA
+
+library(foreach)
+foreach(i = seq_along(row_order_h_ag))%do%{
+anno$metacluster <- as.factor((ifelse(rownames(anno) %in% row_order_h_ag[[i]], i, anno$metacluster)))
+}
+anno$metacluster <- unfactor(anno$metacluster)
+
+## Add to SE
+SE$metacluster <- anno$metacluster[match(SE$cluster_mz, anno$cluster_mz)]
+```
+
+### Survival testing
+
+```{r}
+surv_out <- colData(SE) %>% as.data.frame %>% select(PID, OS_months, status_OS, metacluster) %>% unique()
+
+fit <- survfit(Surv(OS_months, status_OS) ~ metacluster, data = surv_out)
+
+ggsurvplot(fit, 
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          conf.int = FALSE
+)
+```
