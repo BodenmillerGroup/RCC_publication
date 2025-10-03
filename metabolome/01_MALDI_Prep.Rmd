@@ -85,7 +85,6 @@ TMA224_anno$PID <- str_replace(TMA224_anno$`SP Number`, "B", "B20")
 ```
 
 ```{r}
-
 raw_20 <- raw_out %>% filter(TMA == "20") 
 
 raw_20$PID <- TMA20_anno$PID[match(raw_20$spot_ID, TMA20_anno$`# spots`)]
@@ -98,8 +97,6 @@ patient_meta <- as.data.frame(patient_meta)
 for (entry in meta_add) {
   colData(sce)[,entry] <- patient_meta[,entry][match(colData(sce)[,"PID"],patient_meta[,"PID"])]
 }
-
-
 ```
 
 
