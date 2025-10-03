@@ -1735,6 +1735,7 @@ ggplot(fisher_full_selected, aes(x=category, y = gene,col = odds_ratio, size = -
   coord_flip()
 dev.off()
 ```
+
 Association with survival
 
 ```{r}
