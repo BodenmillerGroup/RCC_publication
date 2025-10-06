@@ -265,6 +265,7 @@ TMA_anno <- TMA_anno %>% filter(subtype_combined == "ccRCC")
 ```{r}
 peak_anno <- read_excel("/Volumes/G_DQBM_BB_Central$/datasharing/Lasse/Marlene/metabolome/data_analysis/RCC_Annotated_Mass_LM.xlsx")
 
+#peak_anno$kegg_id[peak_anno$kegg_id == "NA"] <- NA
 peak_anno$KEGG.pathway[peak_anno$KEGG.pathway == "NA"] <- NA
 peak_anno$KEGG.map[peak_anno$KEGG.map == "NA"] <- NA
 
@@ -278,12 +279,12 @@ setdiff(anno_mass, raw_mass) %>% length() # 95 m/z annotated but not observed
 
 
 ```{r}
-df_1 <- read.csv("/Volumes/G_DQBM_BB_Central$/users/marllu/T_panel/data_analysis/KEGG_anno_M_H.csv")
-df_2 <- read.csv("/Volumes/G_DQBM_BB_Central$/users/marllu/T_panel/data_analysis/KEGG_anno_M_H2O.csv")
-df_3 <- read.csv("/Volumes/G_DQBM_BB_Central$/users/marllu/T_panel/data_analysis/KEGG_anno_M_H2O_H.csv")
-df_4 <- read.csv("/Volumes/G_DQBM_BB_Central$/users/marllu/T_panel/data_analysis/KEGG_anno_M_K_2H.csv")
-df_5 <- read.csv("/Volumes/G_DQBM_BB_Central$/users/marllu/T_panel/data_analysis/KEGG_anno_M_Na_2H.csv")
-df_6 <- read.csv("/Volumes/G_DQBM_BB_Central$/users/marllu/T_panel/data_analysis/KEGG_anno_M_Cl.csv")
+df_1 <- read.csv("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/KEGG_anno_MH.csv")
+df_2 <- read.csv("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/KEGG_anno_MH2O.csv")
+df_3 <- read.csv("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/KEGG_anno_MH2OH.csv")
+df_4 <- read.csv("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/KEGG_anno_MCl.csv")
+df_5 <- read.csv("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/KEGG_anno_MK2H.csv")
+df_6 <- read.csv("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/KEGG_anno_MNa2H.csv")
 
 # subset to new metabolites
 kegg_existing <- peak_anno$kegg_id %>% unique
@@ -312,22 +313,16 @@ df_5$adduct <- rep("M+Na-2H", nrow(df_5))
 df_6$adduct <- rep("M+Cl", nrow(df_6))
 
 # match colnames
-colnames(df_1) <- c("Mass", "mass_adduct", "query", "kegg_id", "name", "result_mass", "KEGG.map", "hmdb_id", "given","adduct")
-colnames(df_2) <- c("Mass", "mass_adduct", "query", "kegg_id", "name", "result_mass", "KEGG.map", "hmdb_id", "given","adduct")
-colnames(df_3) <- c("Mass", "mass_adduct", "query", "kegg_id", "name", "result_mass", "KEGG.map", "hmdb_id", "given","adduct")
-colnames(df_4) <- c("Mass", "mass_adduct", "query", "kegg_id", "name", "result_mass", "KEGG.map", "hmdb_id", "given","adduct")
-colnames(df_5) <- c("Mass", "mass_adduct", "query", "kegg_id", "name", "result_mass", "KEGG.map", "hmdb_id", "given","adduct")
-colnames(df_6) <- c("Mass", "mass_adduct", "query", "kegg_id", "name", "result_mass", "KEGG.map", "hmdb_id", "given","adduct")
-
+colnames(df_1) <- colnames(df_2) <- colnames(df_3) <- colnames(df_4) <- colnames(df_5) <- colnames(df_6) <- c("Mass", "mass_adduct", "query", "kegg_id", "name", "result_mass", "KEGG.map", "KEGG.pathway","hmdb_id", "given","adduct")
 
 # add to peak_anno
 peak_anno_updated <- bind_rows(peak_anno %>% dplyr::select(Mass, kegg_id, accession, name, chemical_formula, adduct, adduct.mz, ppm, KEGG.pathway, KEGG.map, given), 
-                               df_1 %>% dplyr::select(Mass, kegg_id, name, KEGG.map, given, adduct),
-                               df_2 %>% dplyr::select(Mass, kegg_id, name, KEGG.map, given, adduct),
-                               df_3 %>% dplyr::select(Mass, kegg_id, name, KEGG.map, given, adduct),
-                               df_4 %>% dplyr::select(Mass, kegg_id, name, KEGG.map, given, adduct),
-                               df_5 %>% dplyr::select(Mass, kegg_id, name, KEGG.map, given, adduct),
-                               df_6 %>% dplyr::select(Mass, kegg_id, name, KEGG.map, given, adduct)) %>% arrange(Mass)
+                               df_1 %>% dplyr::select(Mass, kegg_id, name, KEGG.map, KEGG.pathway, given, adduct),
+                               df_2 %>% dplyr::select(Mass, kegg_id, name, KEGG.map, KEGG.pathway, given, adduct),
+                               df_3 %>% dplyr::select(Mass, kegg_id, name, KEGG.map, KEGG.pathway, given, adduct),
+                               df_4 %>% dplyr::select(Mass, kegg_id, name, KEGG.map, KEGG.pathway, given, adduct),
+                               df_5 %>% dplyr::select(Mass, kegg_id, name, KEGG.map, KEGG.pathway, given, adduct),
+                               df_6 %>% dplyr::select(Mass, kegg_id, name, KEGG.map, KEGG.pathway, given, adduct)) %>% arrange(Mass)
 
 peak_anno_updated
 ```
@@ -375,13 +370,26 @@ data$PID %>% unique %>% length
 
 # subset to compounds found in human KEGG pathways
 mass_annotated <- round(peak_anno_updated$Mass, 6)
-data <- data %>% filter(`m/z` %in% mass_annotated) # 125 m/z
+data <- data %>% filter(`m/z` %in% mass_annotated) # 134 m/z
 data$`m/z` %>% unique %>% length
 
 # remove mz with 0 intensity across all patients
 null_mz <- data %>% group_by(`m/z`) %>% summarise(sum = sum(intensity)) %>% filter(sum == 0) %>% pull(`m/z`)
-data <- data %>% filter(!`m/z`%in% null_mz) # 4 m/z
-data$`m/z` %>% unique %>% length # 121 m/z remaining
+data <- data %>% filter(!`m/z`%in% null_mz) # 7 m/z
+data$`m/z` %>% unique %>% length # 127 m/z remaining
+
+
+# remove 64 mz
+df_20 <- data[data$TMA == "20",]
+df_224 <- data[data$TMA == "224",]
+mz_20 <- df_20 %>% group_by(`m/z`) %>% summarise(sum = sum(intensity)) %>% filter(sum == 0) %>% pull(`m/z`) # mz with intensity = 0 in all patients
+mz_224 <- df_224 %>% group_by(`m/z`) %>% summarise(sum = sum(intensity)) %>% filter(sum == 0) %>% pull(`m/z`) # mz with intensity = 0 in all patients
+
+TMA_mz <- union(mz_20, mz_224)
+# Keep two of the metabolites so the total is 101 m/z for downstream Metaboanalyst analysis
+TMA_mz <- TMA_mz[1:26]
+data <- data %>% filter(!`m/z`%in% TMA_mz) 
+data$`m/z` %>% unique %>% length # 101 m/z
 ```
 
 #### Save prepared data

@@ -41,9 +41,9 @@ library(dendextend)
 
 data <- t(assay(SE, "min_max")) %>% as.matrix()
 
-set.seed(25)
+set.seed(22)
 testCL<- clValid(data,
-                 nClust = 8:20,
+                 nClust = 9:20,
                  #clMethods = c("kmeans"),
                  clMethods = c("hierarchical","agnes","kmeans"),
                  validation="internal", 
@@ -52,12 +52,13 @@ testCL<- clValid(data,
                  maxitems = 5000)
 summary(testCL)
 plot(testCL, legend = FALSE)
-
-#agnes_split <- as.dendrogram(agnes(scale(data),metric = "euclidean",method = "ward"))
-#agnes_split <- color_branches(agnes_split, k = 4)
-#plot(agnes_split)
 ```
 
+```{r}
+agnes_split <- as.dendrogram(agnes(scale(data),metric = "euclidean",method = "ward"))
+agnes_split <- color_branches(agnes_split, k = 9)
+plot(agnes_split)
+```
 
 ```{r}
 set.seed(22)
@@ -65,10 +66,10 @@ h_com <- Heatmap(data,
         col = viridis(100), 
         clustering_method_columns = "ward.D2", 
         clustering_method_rows = "ward.D2",
-        row_km = 18, 
-        row_km_repeats = 10000,
+        row_km = 14, 
+        row_km_repeats = 2500,
         #cluster_rows = agnes_split,
-        #row_split = 4,
+        #row_split = 9,
         name = "min_max",
         show_row_names=FALSE)+
   Heatmap(scale(data), name = "scaled",
@@ -285,7 +286,7 @@ save_csv_for_GSEA <- function(SE, group, phenotype, output_path) {
 ```{r}
 # Function call - Adjust PATH
 cluster_numbers <- SE$cluster_mz %>% unique %>% sort
-base_path <- "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/GSEA/cluster_k_17/input/"
+base_path <- "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/GSEA/new_cluster_k_14/input/"
 
 for (i in cluster_numbers) {
   file_name <- paste0("GSEA_input_cluster", i, ".csv")
@@ -304,7 +305,7 @@ library(jsonlite)
 library(purrr)
 
 # Base directory
-base_dir <- "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/GSEA/cluster_k_17/output"
+base_dir <- "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/GSEA/new_cluster_k_14/output"
 
 # Get all out_* folders
 out_folders <- list.dirs(base_dir, recursive = FALSE, full.names = TRUE)
@@ -404,9 +405,9 @@ set.seed(22)
 h_meta <- 
   Heatmap(result_mat_p, 
           col = viridis(100),
-          #row_split = 4,
-          row_km = 6, 
-          row_km_repeats = 1000,
+          row_split = 7,
+          #row_km = 7, 
+          #row_km_repeats = 1000,
           clustering_method_rows = "ward.D2",
           clustering_method_columns = "ward.D2",
           column_title = NULL,
@@ -488,7 +489,7 @@ result_mat_p
 library(clValid)
 set.seed(22)
 testCL<- clValid(result_mat_nes,
-                 nClust = 2:10,
+                 nClust = 3:10,
                  #clMethods = c("hierarchical", "agnes","kmeans"),
                  clMethods = c("hierarchical"),
                  validation="internal", 
@@ -529,7 +530,7 @@ set.seed(22)
 h_meta <- 
   Heatmap(result_mat_nes, 
           col = viridis(100),
-          row_split = 6,
+          row_split = 5,
           #cluster_rows = agnes_split,
           #row_km = 5, 
           #row_km_repeats = 1000,
@@ -827,11 +828,12 @@ for (i in cluster_numbers) {
 ### Survival associated metabolites 
 
 ```{r}
+# MEAN
 metabo_df <- t(assay(SE, "min_max")) %>% as.data.frame 
 
 ## Based on categories (mean or median division of cluster proportions) 
 metabo_df_mean <- foreach(i = colnames(metabo_df),.combine = "cbind")%do%{
-metabo_df %>% select(all_of(i)) %>% mutate(mean = ifelse(metabo_df[,i] > median(metabo_df[,i]),"B","A")) %>% pull(mean)
+metabo_df %>% select(all_of(i)) %>% mutate(mean = ifelse(metabo_df[,i] > mean(metabo_df[,i]),"B","A")) %>% pull(mean)
 }
 
 #colnames(metabo_df_mean) <- colnames(metabo_df)
@@ -845,7 +847,7 @@ metabo_df_mean$OS_months <- SE$OS_months[match(rownames(metabo_df), SE$ID)]
 
 # Extract p-values from log-rank / direction of trend
 cur_surv_out <- foreach(x = colnames(metabo_df_mean %>% select(-status_OS, -OS_months)), .combine = "rbind")%do%{
-  metabo_df_mean[[x]] <- factor(metabo_df_mean[[x]], levels = c("A", "B"))
+  metabo_df_mean[[x]] <- factor(metabo_df_mean[[x]], levels = c("B", "A"))
   formula <- as.formula(paste("Surv(OS_months, status_OS) ~ ", x))
   fit <- survdiff(formula, data = metabo_df_mean)
   data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[1], exp_2 = fit$exp[1], ratio = fit$obs[1]/fit$exp[1])
@@ -866,9 +868,10 @@ cur_surv_plot$result <- ifelse(cur_surv_plot$direction == "high" & cur_surv_plot
                                     ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p_adj < 0.1, "DOWN", 
                                            ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p < 0.05, "DOWN_trend",NA))))
 
-
 cur_surv_plot$type <- "metabolites"
+cur_surv_plot_mean <- cur_surv_plot 
 
+library(ggnewscale)
 ggplot(cur_surv_plot, aes(x=reorder(group,ratio), y = type, col = ratio, size= -log10(p)))+
   geom_point()+
   theme_classic()+
@@ -885,6 +888,234 @@ ggplot(cur_surv_plot, aes(x=reorder(group,ratio), y = type, col = ratio, size= -
   coord_flip()
 
 ```
+
+
+```{r}
+# MEDIAN
+metabo_df <- t(assay(SE, "min_max")) %>% as.data.frame 
+
+## Based on categories (mean or median division of cluster proportions) 
+metabo_df_mean <- foreach(i = colnames(metabo_df),.combine = "cbind")%do%{
+metabo_df %>% select(all_of(i)) %>% mutate(mean = ifelse(metabo_df[,i] > median(metabo_df[,i]),"B","A")) %>% pull(mean)
+}
+
+#colnames(metabo_df_mean) <- colnames(metabo_df)
+rownames(metabo_df_mean) <- rownames(metabo_df)
+metabo_df_mean <- as.data.frame(metabo_df_mean)
+
+#colnames(metabo_df_mean) <- str_replace(colnames(metabo_df), "\\.", "_")
+
+metabo_df_mean$status_OS <- SE$status_OS[match(rownames(metabo_df), SE$ID)]
+metabo_df_mean$OS_months <- SE$OS_months[match(rownames(metabo_df), SE$ID)]
+
+# Extract p-values from log-rank / direction of trend
+cur_surv_out <- foreach(x = colnames(metabo_df_mean %>% select(-status_OS, -OS_months)), .combine = "rbind")%do%{
+  metabo_df_mean[[x]] <- factor(metabo_df_mean[[x]], levels = c("B", "A"))
+  formula <- as.formula(paste("Surv(OS_months, status_OS) ~ ", x))
+  fit <- survdiff(formula, data = metabo_df_mean)
+  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[1], exp_2 = fit$exp[1], ratio = fit$obs[1]/fit$exp[1])
+}
+
+# Adjust p-values using BH 
+cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
+
+# Match m/z names back 
+match <- data.frame(mz = colnames(metabo_df), result = colnames(metabo_df_mean %>% select(-status_OS, -OS_months)))
+cur_surv_out$group <- match$mz[match(cur_surv_out$group, match$result)]
+
+
+# Create and plot heatmap 
+cur_surv_plot <- cur_surv_out %>% mutate(direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% filter(p < 0.05)
+cur_surv_plot$result <- ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p_adj < 0.1, "UP",
+                             ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p < 0.05, "UP_trend", 
+                                    ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p_adj < 0.1, "DOWN", 
+                                           ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p < 0.05, "DOWN_trend",NA))))
+
+cur_surv_plot$type <- "metabolites"
+cur_surv_plot_median <- cur_surv_plot 
+
+library(ggnewscale)
+ggplot(cur_surv_plot, aes(x=reorder(group,ratio), y = type, col = ratio, size= -log10(p)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  scale_shape_manual(values = c(16,15,17))+
+  new_scale(new_aes = "shape")+
+  new_scale(new_aes = "color") +
+  geom_point(data = cur_surv_plot, shape = 1, aes(size = -log10(p), col = result), stroke =1.5)+
+  scale_shape_manual(values = c(1,0,2))+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("Cox model")+
+  coord_flip()
+
+```
+
+
+```{r}
+# Combined visualization
+cur_surv_plot_mean$category <- "mean"
+cur_surv_plot_median$category <- "median"
+
+plot_exp_combined <- rbind(cur_surv_plot_mean, cur_surv_plot_median)
+both <- plot_exp_combined %>% group_by(group,direction) %>% count() %>% filter(n > 1) %>% pull(group)
+plot_exp_combined$category <- ifelse(plot_exp_combined$group %in% both, "both", plot_exp_combined$category)
+plot_exp_combined_fil <- plot_exp_combined %>% group_by(group, category) %>% reframe(p = mean(p), 
+                                                                                     result = result, 
+                                                                                     type = type, 
+                                                                                     ratio = mean(ratio),
+                                                                                     direction = direction) %>% unique()
+
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/MY_km_expression_bubble.pdf", width = 3, height = 5)
+ggplot(plot_exp_combined_fil, aes(x=reorder(group,ratio), y = type, shape = category, col = ratio, size= -log10(p)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  scale_shape_manual(values = c(16,15,17))+
+  new_scale(new_aes = "shape")+
+  new_scale(new_aes = "color") +
+  geom_point(data = plot_exp_combined_fil,aes(size = -log10(p), shape = category, col = result), stroke =1.5)+
+  scale_shape_manual(values = c(1,0,2))+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("Cox model")+
+  coord_flip()
+#dev.off()
+```
+
+
+
+
+
+
+
+```{r}
+check_df <- metabo_df_mean
+colnames(check_df) <- c(colnames(metabo_df), "status_OS", "OS_months")
+
+surv_df <- check_df %>% select(all_of(unique(cur_surv_plot$group)), status_OS, OS_months)
+
+colnames(surv_df)[1:6] <- paste0("mz_", str_replace(colnames(surv_df)[1:6], "\\.", "_"))
+
+fit <- survfit(Surv(OS_months, status_OS) ~ mz_384_03295, data = surv_df)
+
+ggsurvplot(fit, 
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          palette = "Set1",
+          conf.int = FALSE
+)
+```
+
+
+```{r}
+peak_anno_updated <- read.csv("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/RCC_Annotated_Mass_Filtered_LM.csv")
+
+peak_anno_updated %>% filter(Mass %in% plot_exp_combined$group) %>% select(Mass, name, KEGG.pathway) %>% unique()
+```
+
+
+### Progression associated metabolites
+
+```{r}
+sce_prog <- readRDS("/Volumes/G_DQBM_BB_Central$/users/marllu/T_panel/data_analysis/sce_ccRCC_T_07.rds")
+SE$PDL1_score <- sce_prog$PDL1_score[match(SE$PID, sce_prog$PID)]
+```
+
+```{r}
+progression_p_test <- function(SE, x, group) {
+  
+  SE_sub <- SE[,!is.na(SE[[group]])]
+  
+  # 2. Aggregate expression per category
+  mean_SE <- aggregateAcrossCells(SE_sub,
+                                  ids = SE_sub[[group]],
+                                  statistics = "mean",
+                                  use.assay.type = "min_max")
+  
+  # 3. Calculate log-fold change (logFC)
+  logFC <- log2(assay(mean_SE, "min_max")[, mean_SE[[group]] == x] /
+                assay(mean_SE, "min_max")[, mean_SE[[group]] != x])
+  
+  # 4. Calculate p-value (based on t-test)
+  min_max <- as.data.frame(t(assay(SE_sub, "min_max")))
+  min_max[[group]] <- SE_sub[[group]]
+  
+  p_value <- c()
+  t_score <- c()
+  for (i in 1:(ncol(min_max) - 1)) {
+    t <- wilcox.test(min_max[min_max[[group]] == x, i], 
+                min_max[min_max[[group]] != x, i])
+    p_value[i] <- t$p.value
+  }
+  
+  names(p_value) <- colnames(min_max)[1:(ncol(min_max) - 1)]
+  
+  # 5. Adjust p-values for multiple testing (Optional)
+  p_value_adj <- p.adjust(p_value, method = "BH")
+  names(p_value_adj) <- colnames(min_max)[1:(ncol(min_max) - 1)]
+  
+  # 6. Prepare data for the volcano plot
+  data <- as.data.frame(cbind(logFC, p_value_adj))
+  data$category <- group
+  data <- data %>% rownames_to_column("mass")
+  return(data)
+}
+
+
+out_ISUP <- progression_p_test(SE, "G3/4", "ISUP_combined")
+out_pT <- progression_p_test(SE, "T3/4", "pT_combined")
+out_necrose <- progression_p_test(SE, "NE1", "necrose")
+out_PDL1 <- progression_p_test(SE, "1", "PDL1_score")
+
+
+out_all <- rbind(out_ISUP, out_pT, out_necrose, out_PDL1)
+out_all$direction <- ifelse(logFC >= 0, "high", "low")
+
+# Filter for masses significant in at least two comparisons
+mass_sig <- out_all %>% filter(p_value_adj < 0.05) %>% group_by(mass, direction) %>% count() %>% arrange(desc(n)) %>% filter(n > 1) %>% pull(mass)
+
+out_all_sig <- out_all %>% filter(mass %in% mass_sig) 
+```
+
+```{r}
+# Create and plot heatmap 
+out_all_sig$result <- ifelse(out_all_sig$direction == "high" & out_all_sig$p_value_adj < 0.05, "UP",
+                                    ifelse(out_all_sig$direction == "low" & out_all_sig$p_value_adj < 0.05, "DOWN", "NOTSIG"))
+
+out_all_sig$type <- "metabo"
+
+library(ggnewscale)
+ggplot(out_all_sig, aes(x=reorder(mass,logFC), y = category, col = logFC, size= -log10(p_value_adj )))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 0)+
+  scale_size(range = c(2,10))+
+  scale_shape_manual(values = c(16,15,17))+
+  new_scale(new_aes = "shape")+
+  new_scale(new_aes = "color") +
+  geom_point(data = out_all_sig, shape = 1, aes(size = -log10(p_value_adj ), col = result), stroke =1.5)+
+  scale_shape_manual(values = c(1,0,2))+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("Cox model")+
+  coord_flip()
+```
+
+```{r}
+peak_anno_updated <- read.csv("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/RCC_Annotated_Mass_Filtered_LM.csv")
+
+check <- peak_anno_updated %>% filter(Mass %in% unique(out_all_sig$mass)) %>% select(Mass, name, KEGG.pathway) %>% unique()
+
+```
+
+
 
 
 
