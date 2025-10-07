@@ -56,7 +56,7 @@ plot(testCL, legend = FALSE)
 
 ```{r}
 agnes_split <- as.dendrogram(agnes(scale(data),metric = "euclidean",method = "ward"))
-agnes_split <- color_branches(agnes_split, k = 9)
+agnes_split <- color_branches(agnes_split, k = 10)
 plot(agnes_split)
 ```
 
@@ -66,10 +66,10 @@ h_com <- Heatmap(data,
         col = viridis(100), 
         clustering_method_columns = "ward.D2", 
         clustering_method_rows = "ward.D2",
-        row_km = 14, 
-        row_km_repeats = 2500,
-        #cluster_rows = agnes_split,
-        #row_split = 9,
+       # row_km = 15, 
+        #row_km_repeats = 2500,
+        cluster_rows = agnes_split,
+        row_split = 10,
         name = "min_max",
         show_row_names=FALSE)+
   Heatmap(scale(data), name = "scaled",
@@ -114,6 +114,7 @@ ggsurvplot(fit,
           linetype = "strata", # Change line type by groups
           surv.median.line = "hv", # Specify median survival
           ggtheme = theme_classic(), # Change ggplot2 theme
+          #log.rank.weights = "n",
           conf.int = FALSE
 )
 ```
@@ -286,7 +287,7 @@ save_csv_for_GSEA <- function(SE, group, phenotype, output_path) {
 ```{r}
 # Function call - Adjust PATH
 cluster_numbers <- SE$cluster_mz %>% unique %>% sort
-base_path <- "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/GSEA/new_cluster_k_14/input/"
+base_path <- "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/GSEA/new_cluster_a_10/input/"
 
 for (i in cluster_numbers) {
   file_name <- paste0("GSEA_input_cluster", i, ".csv")
@@ -1076,7 +1077,7 @@ out_PDL1 <- progression_p_test(SE, "1", "PDL1_score")
 
 
 out_all <- rbind(out_ISUP, out_pT, out_necrose, out_PDL1)
-out_all$direction <- ifelse(logFC >= 0, "high", "low")
+out_all$direction <- ifelse(out_all$logFC >= 0, "high", "low")
 
 # Filter for masses significant in at least two comparisons
 mass_sig <- out_all %>% filter(p_value_adj < 0.05) %>% group_by(mass, direction) %>% count() %>% arrange(desc(n)) %>% filter(n > 1) %>% pull(mass)

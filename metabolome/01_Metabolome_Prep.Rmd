@@ -379,17 +379,17 @@ data <- data %>% filter(!`m/z`%in% null_mz) # 7 m/z
 data$`m/z` %>% unique %>% length # 127 m/z remaining
 
 
-# remove 64 mz
-df_20 <- data[data$TMA == "20",]
-df_224 <- data[data$TMA == "224",]
-mz_20 <- df_20 %>% group_by(`m/z`) %>% summarise(sum = sum(intensity)) %>% filter(sum == 0) %>% pull(`m/z`) # mz with intensity = 0 in all patients
-mz_224 <- df_224 %>% group_by(`m/z`) %>% summarise(sum = sum(intensity)) %>% filter(sum == 0) %>% pull(`m/z`) # mz with intensity = 0 in all patients
-
-TMA_mz <- union(mz_20, mz_224)
-# Keep two of the metabolites so the total is 101 m/z for downstream Metaboanalyst analysis
-TMA_mz <- TMA_mz[1:26]
-data <- data %>% filter(!`m/z`%in% TMA_mz) 
-data$`m/z` %>% unique %>% length # 101 m/z
+# # remove 64 mz
+# df_20 <- data[data$TMA == "20",]
+# df_224 <- data[data$TMA == "224",]
+# mz_20 <- df_20 %>% group_by(`m/z`) %>% summarise(sum = sum(intensity)) %>% filter(sum == 0) %>% pull(`m/z`) # mz with intensity = 0 in all patients
+# mz_224 <- df_224 %>% group_by(`m/z`) %>% summarise(sum = sum(intensity)) %>% filter(sum == 0) %>% pull(`m/z`) # mz with intensity = 0 in all patients
+# 
+# TMA_mz <- union(mz_20, mz_224)
+# # Keep two of the metabolites so the total is 101 m/z for downstream Metaboanalyst analysis
+# TMA_mz <- TMA_mz[1:26]
+# data <- data %>% filter(!`m/z`%in% TMA_mz) 
+# data$`m/z` %>% unique %>% length # 101 m/z
 ```
 
 #### Save prepared data
