@@ -44,8 +44,8 @@ data <- t(assay(SE, "min_max")) %>% as.matrix()
 set.seed(22)
 testCL<- clValid(data,
                  nClust = 9:20,
-                 #clMethods = c("kmeans"),
-                 clMethods = c("hierarchical","agnes","kmeans"),
+                 clMethods = c("kmeans"),
+                 #clMethods = c("agnes"),
                  validation="internal", 
                  metric="euclidean", 
                  method = "ward", 
@@ -66,10 +66,10 @@ h_com <- Heatmap(data,
         col = viridis(100), 
         clustering_method_columns = "ward.D2", 
         clustering_method_rows = "ward.D2",
-       # row_km = 15, 
-        #row_km_repeats = 2500,
-        cluster_rows = agnes_split,
-        row_split = 10,
+        row_km = 18, 
+        row_km_repeats = 10000,
+        #cluster_rows = agnes_split,
+        #row_split = 17,
         name = "min_max",
         show_row_names=FALSE)+
   Heatmap(scale(data), name = "scaled",
@@ -285,15 +285,15 @@ save_csv_for_GSEA <- function(SE, group, phenotype, output_path) {
 ```
 
 ```{r}
-# Function call - Adjust PATH
-cluster_numbers <- SE$cluster_mz %>% unique %>% sort
-base_path <- "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/GSEA/new_cluster_a_10/input/"
-
-for (i in cluster_numbers) {
-  file_name <- paste0("GSEA_input_cluster", i, ".csv")
-  file_path <- file.path(base_path, file_name)
-  save_csv_for_GSEA(SE, as.character(i), "cluster_mz", file_path)
-}
+# # Function call - Adjust PATH
+# cluster_numbers <- SE$cluster_mz %>% unique %>% sort
+# base_path <- "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/GSEA/new_cluster_k_17/input/"
+# 
+# for (i in cluster_numbers) {
+#   file_name <- paste0("GSEA_input_cluster", i, ".csv")
+#   file_path <- file.path(base_path, file_name)
+#   save_csv_for_GSEA(SE, as.character(i), "cluster_mz", file_path)
+# }
 ```
 
 
@@ -306,7 +306,7 @@ library(jsonlite)
 library(purrr)
 
 # Base directory
-base_dir <- "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/GSEA/new_cluster_k_14/output"
+base_dir <- "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/GSEA/cluster_k_17/output_4/"
 
 # Get all out_* folders
 out_folders <- list.dirs(base_dir, recursive = FALSE, full.names = TRUE)
@@ -340,6 +340,22 @@ all_results <- map_dfr(out_folders, read_out_folder)
 ```
 
 ```{r}
+# Add missing cluster with no enrichment
+all_results <- bind_rows(all_results,
+all_results[1,] %>%
+  mutate("P(Fisher)" = 1, enr = 0, 
+         pathway = "Glycolysis or Gluconeogenesis",
+         group = "out_9"),
+all_results[1,] %>%
+  mutate("P(Fisher)" = 1, enr = 0, 
+         pathway = "Glycolysis or Gluconeogenesis",
+         group = "out_13")
+)
+```
+
+
+
+```{r}
 all_results$NES <- scale(all_results$enr, center = TRUE, scale = TRUE)
 
 all_results <- all_results %>% mutate(log_p = -log10(`P(Fisher)`), scaled_NES = NES*-log10(`P(Fisher)`), scaled_enr = enr*-log10(`P(Fisher)`))
@@ -352,9 +368,9 @@ Heatmap(result_mat_p, col = viridis(100))
 
 # Based on scales_NES
 result_mat_nes <- all_results %>%
-  dplyr::select(pathway, group, scaled_enr) %>%
-  pivot_wider(names_from = group, values_from = scaled_enr, values_fill = 0) %>% column_to_rownames("pathway") %>% t() %>% as.matrix()
-Heatmap(result_mat_nes, col = viridis(100))
+  dplyr::select(pathway, group, scaled_NES) %>%
+  pivot_wider(names_from = group, values_from = scaled_NES, values_fill = 0) %>% column_to_rownames("pathway") %>% t() %>% as.matrix()
+Heatmap(result_mat_nes)
 
 # # Based on NES
 # result_mat_nes <- all_results %>%
@@ -365,13 +381,15 @@ Heatmap(result_mat_nes, col = viridis(100))
 
 ### P value based
 
+Used this for downstream analysis. 
+
 ```{r}
 library(clValid)
 set.seed(22)
 testCL<- clValid(result_mat_p,
-                 nClust = 2:10,
-                 clMethods = c("hierarchical", "agnes","kmeans"),
-                 #clMethods = c("hierarchical"),
+                 nClust = 3:15,
+                 #clMethods = c("hierarchical", "agnes","kmeans"),
+                 clMethods = c("hierarchical"),
                  validation="internal", 
                  metric="euclidean", 
                  method = "ward", 
@@ -379,6 +397,15 @@ testCL<- clValid(result_mat_p,
 summary(testCL)
 plot(testCL, legend = FALSE)
 ```
+
+```{r}
+#agnes_split <- as.dendrogram(agnes(scale(result_mat_p),metric = "euclidean",method = "ward"))
+#agnes_split <- color_branches(agnes_split, k = 6)
+#plot(agnes_split)
+```
+
+
+
 
 ```{r}
 ## Column Anno
@@ -406,8 +433,9 @@ set.seed(22)
 h_meta <- 
   Heatmap(result_mat_p, 
           col = viridis(100),
-          row_split = 7,
-          #row_km = 7, 
+          row_split = 8, #or9
+          #cluster_rows = agnes_split,
+          #row_km = 4, 
           #row_km_repeats = 1000,
           clustering_method_rows = "ward.D2",
           clustering_method_columns = "ward.D2",
@@ -490,9 +518,9 @@ result_mat_p
 library(clValid)
 set.seed(22)
 testCL<- clValid(result_mat_nes,
-                 nClust = 3:10,
-                 #clMethods = c("hierarchical", "agnes","kmeans"),
-                 clMethods = c("hierarchical"),
+                 nClust = 3:9,
+                 clMethods = c("hierarchical", "agnes","kmeans"),
+                 #clMethods = c("hierarchical"),
                  validation="internal", 
                  metric="euclidean", 
                  method = "ward", 
@@ -504,6 +532,12 @@ plot(testCL, legend = FALSE)
 #agnes_split <- color_branches(agnes_split, k = 7)
 #plot(agnes_split)
 ```
+```{r}
+agnes_split <- as.dendrogram(agnes(scale(result_mat_nes),metric = "euclidean",method = "ward"))
+agnes_split <- color_branches(agnes_split, k = 6)
+plot(agnes_split)
+```
+
 
 ```{r}
 ## Column Anno
@@ -530,10 +564,10 @@ col_anno_ha <- HeatmapAnnotation(broad = anno_simple(col_anno$broad, col = col_b
 set.seed(22)
 h_meta <- 
   Heatmap(result_mat_nes, 
-          col = viridis(100),
-          row_split = 5,
+          #col = viridis(100),
+          row_split = 6,
           #cluster_rows = agnes_split,
-          #row_km = 5, 
+          #row_km = 6, 
           #row_km_repeats = 1000,
           clustering_method_rows = "ward.D2",
           clustering_method_columns = "ward.D2",
@@ -603,7 +637,7 @@ result_by_metacluster <- result_mat_nes_agg %>%
   summarise(across(everything(), mean)) %>% column_to_rownames("metacluster")
 
 # Row anno
-n_PID <- colData(SE) %>% as.data.frame() %>% select(metacluster_nes,PID) %>% group_by(metacluster_nes) %>% count()
+n_PID <- colData(SE) %>% as.data.frame() %>% select(metacluster_nes,PID) %>% group_by(metacluster_nes) %>% dplyr::count()
 row_anno <- HeatmapAnnotation(n_PID = anno_barplot(n_PID$n, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)), which = "row")
   
   
@@ -623,7 +657,7 @@ Heatmap(result_by_metacluster,
 
 ```{r}
 # Export results
-meta_out <- colData(SE) %>% as.data.frame %>% select(PID, metacluster_p, metacluster_nes) %>% remove_rownames()
+meta_out <- colData(SE) %>% as.data.frame %>% select(PID, cluster_mz, metacluster_p, metacluster_nes) %>% remove_rownames()
 
 write_csv(meta_out, "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/metacluster_metabolome.csv")
 ```
@@ -639,6 +673,7 @@ umap_df <- umap_df %>% as.data.frame()
 umap_df$TMA <- SE$TMA[match(rownames(umap_df), SE$ID)]
 umap_df$TMA <- as.factor(umap_df$TMA)
 umap_df$metacluster_nes <- SE$metacluster_nes[match(rownames(umap_df), SE$ID)]
+umap_df$metacluster_p <- SE$metacluster_p[match(rownames(umap_df), SE$ID)]
 
 ggplot(data=umap_df, aes(x=UMAP1, y=UMAP2, color = TMA)) +
   geom_point() +
@@ -655,6 +690,19 @@ ggplot(data=umap_df, aes(x=UMAP1, y=UMAP2, color = TMA)) +
   theme_classic()
 
 ggplot(data=umap_df, aes(x=UMAP1, y=UMAP2, color = metacluster_nes)) +
+  geom_point() +
+  theme(
+    plot.title = element_text(size = 20),       
+    axis.title.x = element_text(size = 15), 
+    axis.title.y = element_text(size = 15), 
+    legend.title = element_text(size = 15), 
+    legend.text = element_text(size = 12),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12) 
+  )+
+  theme_classic()
+
+ggplot(data=umap_df, aes(x=UMAP1, y=UMAP2, color = metacluster_p)) +
   geom_point() +
   theme(
     plot.title = element_text(size = 20),       
@@ -960,7 +1008,7 @@ cur_surv_plot_mean$category <- "mean"
 cur_surv_plot_median$category <- "median"
 
 plot_exp_combined <- rbind(cur_surv_plot_mean, cur_surv_plot_median)
-both <- plot_exp_combined %>% group_by(group,direction) %>% count() %>% filter(n > 1) %>% pull(group)
+both <- plot_exp_combined %>% group_by(group,direction) %>% dplyr::count() %>% dplyr::filter(n > 1) %>% pull(group)
 plot_exp_combined$category <- ifelse(plot_exp_combined$group %in% both, "both", plot_exp_combined$category)
 plot_exp_combined_fil <- plot_exp_combined %>% group_by(group, category) %>% reframe(p = mean(p), 
                                                                                      result = result, 
@@ -1018,7 +1066,19 @@ ggsurvplot(fit,
 ```{r}
 peak_anno_updated <- read.csv("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/RCC_Annotated_Mass_Filtered_LM.csv")
 
-peak_anno_updated %>% filter(Mass %in% plot_exp_combined$group) %>% select(Mass, name, KEGG.pathway) %>% unique()
+test <- peak_anno_updated %>% filter(Mass %in% plot_exp_combined$group) %>% select(Mass, name, KEGG.pathway) %>% unique() %>% filter(KEGG.pathway != "Metabolic pathways" & name != "Guanosine 3'-monophosphate")
+
+df_binary <- test %>%
+  separate_rows(KEGG.pathway, sep = ";\\s*") %>%  # if multiple pathways are separated by semicolons
+  mutate(value = 1) %>%
+  distinct(name, KEGG.pathway, .keep_all = TRUE) %>%
+  pivot_wider(
+    names_from = KEGG.pathway,
+    values_from = value,
+    values_fill = list(value = 0)
+  )
+
+Heatmap(test %>% select(-Mass, -name))
 ```
 
 
@@ -1080,7 +1140,7 @@ out_all <- rbind(out_ISUP, out_pT, out_necrose, out_PDL1)
 out_all$direction <- ifelse(out_all$logFC >= 0, "high", "low")
 
 # Filter for masses significant in at least two comparisons
-mass_sig <- out_all %>% filter(p_value_adj < 0.05) %>% group_by(mass, direction) %>% count() %>% arrange(desc(n)) %>% filter(n > 1) %>% pull(mass)
+mass_sig <- out_all %>% filter(p_value_adj < 0.05) %>% group_by(mass, direction) %>% dplyr::count() %>% arrange(desc(n)) %>% dplyr::filter(n > 1) %>% pull(mass)
 
 out_all_sig <- out_all %>% filter(mass %in% mass_sig) 
 ```

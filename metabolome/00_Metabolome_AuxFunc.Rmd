@@ -59,7 +59,7 @@ hsa_to_compound_df <- do.call(rbind, lapply(names(hsa_to_compound_list), functio
 }))
 
 ## save
-write.csv(hsa_to_compound_df, file = "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/cpd_in_hsa_pathways",row.names = TRUE)
+write.csv(hsa_to_compound_df, file = "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/cpd_in_hsa_pathways.csv",row.names = TRUE)
 ```
 
 
@@ -85,7 +85,7 @@ peak_anno$KEGG.map[peak_anno$KEGG.map == "NA"] <- NA
 
 masses <- peak_anno$Mass %>% unique
 
-ppm <- 5  # mass accuracy in ppm
+ppm <- 5  # Mass accuracy in ppm
 
 # Define adducts with corrections
 adducts <- list(
@@ -97,7 +97,7 @@ adducts <- list(
   "[M+Cl]-" = -34.9688527
 )
 
-# Function: query KEGG compounds by exact mass
+# Query KEGG compounds by exact mass
 get_compound <- function(mass, mass_adduct, ppm) {
   tolerance <- mass * (ppm / 1e6)
   mass <- mass + mass_adduct
