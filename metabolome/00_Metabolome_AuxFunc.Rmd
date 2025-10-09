@@ -59,7 +59,7 @@ hsa_to_compound_df <- do.call(rbind, lapply(names(hsa_to_compound_list), functio
 }))
 
 ## save
-write.csv(hsa_to_compound_df, file = "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/cpd_in_hsa_pathways",row.names = TRUE)
+write.csv(hsa_to_compound_df, file = "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/cpd_in_hsa_pathways.csv",row.names = TRUE)
 ```
 
 
@@ -76,17 +76,31 @@ M - H2O - H]⁻ => +19.0183896
 Perform search for all Mass corrections above
 
 ```{r}
-mass_adduct <- -34.9688527 # adjust Mass correction (see above)
+library(KEGGREST)
+library(stringr)
+
+peak_anno <- read_excel("/mnt/central_nas_full/datasharing/Lasse/Marlene/metabolome/data_analysis/RCC_Annotated_Mass_LM.xlsx")
+peak_anno$KEGG.pathway[peak_anno$KEGG.pathway == "NA"] <- NA
+peak_anno$KEGG.map[peak_anno$KEGG.map == "NA"] <- NA
 
 masses <- peak_anno$Mass %>% unique
 
-df_result <- data.frame(matrix(ncol = 8, nrow = 0))
-colnames(df_result) <- c("mz","mass_adduct", "query", "kegg_id","result_name", "result_mass", "result_pathway", "hmdb_id")
+ppm <- 5  # Mass accuracy in ppm
 
-# function call to KEGG
+# Define adducts with corrections
+adducts <- list(
+  "[M-H]-" = +1.0078250,
+  "[M-H2O]-" = +18.0105646,
+  "[M-H2O-H]-" = +19.0183896,
+  "[M+K-2H]-" = -36.9480565,
+  "[M+Na-2H]-" = -20.9741193,
+  "[M+Cl]-" = -34.9688527
+)
+
+# Query KEGG compounds by exact mass
 get_compound <- function(mass, mass_adduct, ppm) {
-  tolerance <- mass * (ppm / 10^6) # calculate the tolerance on the observed mass
-  mass <- mass+mass_adduct
+  tolerance <- mass * (ppm / 1e6)
+  mass <- mass + mass_adduct
   lower_bound <- mass - tolerance
   upper_bound <- mass + tolerance
   query <- paste0(lower_bound, "-", upper_bound)
@@ -94,61 +108,117 @@ get_compound <- function(mass, mass_adduct, ppm) {
   return(list(query = query, results = results))
 }
 
+# Function: retrieve KEGG compound info
 get_compound_information <- function(C_number){
   compound_info <- keggGet(C_number)
-  Sys.sleep(0.34)
-  result_name <-  paste0(compound_info[[1]]$NAME,  collapse = " ")
+  Sys.sleep(0.34)  # KEGG API rate limit
+  
+  result_name <- paste0(compound_info[[1]]$NAME, collapse = " ")
   result_mass <- compound_info[[1]]$EXACT_MASS
-  result_pathway <- ifelse(is.null(compound_info[[1]]$PATHWAY), NA, paste0(names(compound_info[[1]]$PATHWAY),  collapse = ", "))
+  
+  if (is.null(compound_info[[1]]$PATHWAY)) {
+    result_pathways <- NA
+  } else {
+    result_pathways <- data.frame(
+      id = names(compound_info[[1]]$PATHWAY),
+      name = unname(compound_info[[1]]$PATHWAY),
+      stringsAsFactors = FALSE
+    )
+  }
+  
   db_links <- compound_info[[1]]$DBLINKS
-  hmdb_id <- ifelse( TRUE %in% grepl("HMDB", db_links), db_links[grepl("HMDB", db_links)], NA)
-  return(list(result_name = result_name, result_mass = result_mass, result_pathway = result_pathway, hmdb_id = hmdb_id))
+  hmdb_id <- if (TRUE %in% grepl("HMDB", db_links)) db_links[grepl("HMDB", db_links)] else NA
+  
+  return(list(
+    result_name = result_name,
+    result_mass = result_mass,
+    result_pathways = result_pathways,
+    hmdb_id = hmdb_id
+  ))
 }
 
-
-for (mass in masses){
-  kegg_result <- get_compound(mass, mass_adduct, 4)
-  Sys.sleep(0.34) # systems only allows 3 queries per second
-
-  # extract information per compound
-  if (length(kegg_result$results) != 0){
-    for (j in seq_along(kegg_result$results)){
-      C_number <- str_split(names(kegg_result$results)[j], ":")[[1]][2]
-      compound_info <- get_compound_information(C_number)
-
-      new_row <- data.frame(mz = mass,
-                            mass_adduct = mass+mass_adduct,
-                            query = kegg_result$query,
-                            kegg_id = C_number,
-                            result_name = compound_info$result_name,
-                            result_mass = compound_info$result_mass,
-                            result_pathway = compound_info$result_pathway,
-                            hmdb_id = compound_info$hmdb_id,
-                            stringsAsFactors = FALSE
-                                        )
+# Main loop over adducts
+for (adduct_name in names(adducts)) {
+  mass_adduct <- adducts[[adduct_name]]
+  
+  # Initialize results for this adduct
+  df_result <- data.frame(
+    mz = numeric(0),
+    mass_adduct = numeric(0),
+    query = character(0),
+    kegg_id = character(0),
+    result_name = character(0),
+    result_mass = numeric(0),
+    result_pathway_id = character(0),
+    result_pathway_name = character(0),
+    hmdb_id = character(0),
+    stringsAsFactors = FALSE
+  )
+  
+  for (mass in masses) {
+    kegg_result <- get_compound(mass, mass_adduct, ppm)
+    Sys.sleep(0.34)
+    
+    if (length(kegg_result$results) != 0) {
+      for (j in seq_along(kegg_result$results)) {
+        C_number <- str_split(names(kegg_result$results)[j], ":")[[1]][2]
+        compound_info <- get_compound_information(C_number)
+        
+        if (all(is.na(compound_info$result_pathways))) {
+          new_row <- data.frame(
+            mz = mass,
+            mass_adduct = mass + mass_adduct,
+            query = kegg_result$query,
+            kegg_id = C_number,
+            result_name = compound_info$result_name,
+            result_mass = compound_info$result_mass,
+            result_pathway_id = NA,
+            result_pathway_name = NA,
+            hmdb_id = compound_info$hmdb_id,
+            stringsAsFactors = FALSE
+          )
+          df_result <- rbind(df_result, new_row)
+        } else {
+          for (i in seq_len(nrow(compound_info$result_pathways))) {
+            new_row <- data.frame(
+              mz = mass,
+              mass_adduct = mass + mass_adduct,
+              query = kegg_result$query,
+              kegg_id = C_number,
+              result_name = compound_info$result_name,
+              result_mass = compound_info$result_mass,
+              result_pathway_id = compound_info$result_pathways$id[i],
+              result_pathway_name = compound_info$result_pathways$name[i],
+              hmdb_id = compound_info$hmdb_id,
+              stringsAsFactors = FALSE
+            )
+            df_result <- rbind(df_result, new_row)
+          }
+        }
+      }
+    } else {
+      new_row <- data.frame(
+        mz = mass,
+        mass_adduct = mass + mass_adduct,
+        query = kegg_result$query,
+        kegg_id = NA,
+        result_name = NA,
+        result_mass = NA,
+        result_pathway_id = NA,
+        result_pathway_name = NA,
+        hmdb_id = NA,
+        stringsAsFactors = FALSE
+      )
       df_result <- rbind(df_result, new_row)
     }
-
-  } else {
-    new_row <- data.frame(mz = mass,
-                          mass_adduct = mass+mass_adduct,
-                          query = kegg_result$query,
-                          kegg_id = NA,
-                          result_name = NA,
-                          result_mass = NA,
-                          result_pathway = NA,
-                          hmdb_id = NA,
-                          stringsAsFactors = FALSE
-                                      )
-    df_result <- rbind(df_result, new_row)
   }
+  
+  # Save results to CSV per adduct
+  out_file <- paste0("/mnt/central_nas/rcc_volume/RCC/metabolome/data_analysis/", "KEGG_anno_", gsub("\\[|\\]|\\+|\\-| ", "", adduct_name), ".csv")
+  write.csv(df_result, out_file, row.names = FALSE)
+  message("Saved: ", out_file)
 }
-
-# write.table(df_result, file = "/Volumes/G_DQBM_BB_Central$/users/marllu/T_panel/data_analysis/KEGG_anno_M_Cl.csv",
-#             sep = ",", row.names = FALSE, col.names = TRUE)
-# df_from_csv <- read.csv("/Volumes/G_DQBM_BB_Central$/users/marllu/T_panel/data_analysis/KEGG_anno_M_H.csv")
 ```
-
 
 ```{r}
 # Function to format dataframe with limited column width
