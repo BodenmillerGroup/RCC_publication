@@ -51,7 +51,10 @@ testCL<- clValid(data,
                  method = "ward", 
                  maxitems = 5000)
 summary(testCL)
-plot(testCL, legend = FALSE)
+
+pdf("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/figures/metabolome/MALDI_cluster_sil_k.pdf", width = 4.5, height = 3.5, onefile = FALSE)
+plot(testCL)[3]
+dev.off()
 ```
 
 ```{r}
@@ -107,6 +110,7 @@ surv_out <- colData(SE) %>% as.data.frame %>% select(PID, OS_months, status_OS, 
 
 fit <- survfit(Surv(OS_months, status_OS) ~ cluster_mz, data = surv_out)
 
+pdf("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/figures/metabolome/MALDI_cluster_kaplan.pdf", width = 8, height = 5, onefile = FALSE)
 ggsurvplot(fit, 
           pval = TRUE,
           risk.table = TRUE, # Add risk table
@@ -117,6 +121,7 @@ ggsurvplot(fit,
           #log.rank.weights = "n",
           conf.int = FALSE
 )
+dev.off()
 ```
 
 
@@ -287,7 +292,7 @@ save_csv_for_GSEA <- function(SE, group, phenotype, output_path) {
 ```{r}
 # # Function call - Adjust PATH
 # cluster_numbers <- SE$cluster_mz %>% unique %>% sort
-# base_path <- "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/GSEA/new_cluster_k_17/input/"
+# base_path <- "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/GSEA/cluster_k_17/input/"
 # 
 # for (i in cluster_numbers) {
 #   file_name <- paste0("GSEA_input_cluster", i, ".csv")
@@ -306,7 +311,7 @@ library(jsonlite)
 library(purrr)
 
 # Base directory
-base_dir <- "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/GSEA/cluster_k_17/output_4/"
+base_dir <- "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/GSEA/cluster_k_17/output_4_new/"
 
 # Get all out_* folders
 out_folders <- list.dirs(base_dir, recursive = FALSE, full.names = TRUE)
@@ -340,17 +345,17 @@ all_results <- map_dfr(out_folders, read_out_folder)
 ```
 
 ```{r}
-# Add missing cluster with no enrichment
-all_results <- bind_rows(all_results,
-all_results[1,] %>%
-  mutate("P(Fisher)" = 1, enr = 0, 
-         pathway = "Glycolysis or Gluconeogenesis",
-         group = "out_9"),
-all_results[1,] %>%
-  mutate("P(Fisher)" = 1, enr = 0, 
-         pathway = "Glycolysis or Gluconeogenesis",
-         group = "out_13")
-)
+# # Add missing cluster with no enrichment
+# all_results <- bind_rows(all_results,
+# all_results[1,] %>%
+#   mutate("P(Fisher)" = 1, enr = 0, 
+#          pathway = "Glycolysis or Gluconeogenesis",
+#          group = "out_9"),
+# all_results[1,] %>%
+#   mutate("P(Fisher)" = 1, enr = 0, 
+#          pathway = "Glycolysis or Gluconeogenesis",
+#          group = "out_13")
+# )
 ```
 
 
@@ -387,7 +392,7 @@ Used this for downstream analysis.
 library(clValid)
 set.seed(22)
 testCL<- clValid(result_mat_p,
-                 nClust = 3:15,
+                 nClust = 3:13,
                  #clMethods = c("hierarchical", "agnes","kmeans"),
                  clMethods = c("hierarchical"),
                  validation="internal", 
@@ -396,6 +401,22 @@ testCL<- clValid(result_mat_p,
                  maxitems = 5000)
 summary(testCL)
 plot(testCL, legend = FALSE)
+
+out_testCL <- as.data.frame(testCL@measures) %>% t() 
+rownames(out_testCL) <- testCL@nClust
+out_testCL <- out_testCL %>% as.data.frame %>% rownames_to_column("nclus")
+
+
+# Plot the first variable (y1) on the left axis
+pdf("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/figures/metabolome/MALDI_metacluster_silanddunn_h.pdf", width = 4.5, height = 3.5, onefile = FALSE)
+plot(out_testCL$nclus, out_testCL$Silhouette, type = "b", col = "black", pch = 16,
+     ylab = "Silhouette", xlab = "Number of clusters")
+par(new = TRUE)
+plot(out_testCL$nclus, out_testCL$Dunn, type = "b", col = "grey", pch = 17,
+     axes = FALSE, xlab = "", ylab = "Dunn index")
+axis(side = 4)
+mtext("Dunn index", side = 4, line = 3)
+dev.off()
 ```
 
 ```{r}
@@ -424,7 +445,7 @@ pathway_anno <- bind_rows(
 
 col_anno <- data.frame(fine = colnames(result_mat_p))
 col_anno$broad <- pathway_anno$hsa_class[match(col_anno$fine, pathway_anno$hsa_name)]
-col_broad <- setNames(brewer.pal(10, "Paired"), unique(col_anno$broad))
+col_broad <- setNames(brewer.pal(10, "Set3"), unique(col_anno$broad))
 col_anno_ha <- HeatmapAnnotation(broad = anno_simple(col_anno$broad, col = col_broad),
                                  fine = anno_text(col_anno$fine))
 
@@ -502,13 +523,41 @@ result_by_metacluster <- result_mat_p_agg %>%
   group_by(metacluster) %>%
   summarise(across(everything(), mean)) %>% column_to_rownames("metacluster")
 
+# Add rowAnno for archetypes
+archetype_info <- read_csv("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/metadata_metabolome_archetypes.csv")
+row_anno <- data.frame(metacluster = rownames(result_by_metacluster))
+row_anno$metabolic_subtype_name <- archetype_info$metabolic_subtype_name[match(paste0("ms_", row_anno$metacluster), archetype_info$metabolic_subtype)]
 
-Heatmap(result_by_metacluster, col = viridis(100),
-        column_split = col_anno$broad)%v%
+# Archetype fractions
+fraction_arche <- archetype_info %>% group_by(metabolic_subtype_name) %>% dplyr::count(BF_PL_TME_archetypes) %>% mutate(fra = n/sum(n)) %>% pivot_wider(id_cols = metabolic_subtype_name, names_from = BF_PL_TME_archetypes, values_from = fra, values_fill = 0) %>% column_to_rownames("metabolic_subtype_name")
+fraction_arche <- fraction_arche[match(row_anno$metabolic_subtype_name, rownames(fraction_arche)),] 
+col_group <- setNames(c("#0571B0", "gold3", "#CA0020"),c("TME_activated","TME_silent","TME_suppressed"))
+
+# Number of patients
+n_PID <- archetype_info %>% group_by(metabolic_subtype_name) %>% dplyr::count()
+n_PID <- n_PID[match(row_anno$metabolic_subtype_name, n_PID$metabolic_subtype_name),] 
+
+row_anno_ha <- HeatmapAnnotation(
+  nPID = anno_barplot(n_PID$n, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)), 
+  fraction = anno_barplot(fraction_arche, width = unit(10, "mm"), gp = gpar(fill = col_group)),
+  naming = anno_text(row_anno$metabolic_subtype_name), 
+  gap = unit(1,"mm"),
+  which = "row")
+
+pdf("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/figures/metabolome/MALDI_metacluster_heatmap.pdf", width = 10, height = 7, onefile = FALSE)
+h <- Heatmap(result_by_metacluster, col = viridis(100),
+        column_split = col_anno$broad, right_annotation = row_anno_ha)%v%
   col_anno_ha
+draw(h)
+dev.off()
 
 
-result_mat_p
+lgd <- Legend(title = "class", at = names(col_broad), 
+               legend_gp = gpar(fill = col_broad))
+
+pdf("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/figures/metabolome/MALDI_metacluster_heatmap_legendonly.pdf", width = 5, height = 5, onefile = FALSE)
+draw(h, annotation_legend_list = list(lgd))
+dev.off()
 ```
 
 
@@ -720,7 +769,7 @@ ggplot(data=umap_df, aes(x=UMAP1, y=UMAP2, color = metacluster_p)) +
 library(ggplot2)
 
 ## PCA of cluster space
-pca_res <- prcomp(result_mat_nes, center = TRUE, scale. = TRUE)
+pca_res <- prcomp(result_mat_p, center = TRUE, scale. = TRUE)
 
 pca_summary <- summary(pca_res)
 var_exp <- 100 * pca_summary$importance[2, 1:2]  # Proportion of variance for PC1 and PC2
@@ -857,8 +906,6 @@ save_csv_for_GSEA <- function(SE, group, phenotype, output_path) {
 log_FC_analysis(SE_eco, "TME_suppressed", "survival_eco")
 log_FC_analysis(SE_eco, "TME_silent", "survival_eco")
 log_FC_analysis(SE_eco, "TME_activated", "survival_eco")
-
-save_csv_for_GSEA(SE_eco, "TME_silent", "survival_eco", file_path)
 ```
 
 ```{r}
@@ -1016,7 +1063,7 @@ plot_exp_combined_fil <- plot_exp_combined %>% group_by(group, category) %>% ref
                                                                                      ratio = mean(ratio),
                                                                                      direction = direction) %>% unique()
 
-#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/MY_km_expression_bubble.pdf", width = 3, height = 5)
+pdf("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/figures/metabolome/MALDI_surv_association.pdf", width = 5, height = 5)
 ggplot(plot_exp_combined_fil, aes(x=reorder(group,ratio), y = type, shape = category, col = ratio, size= -log10(p)))+
   geom_point()+
   theme_classic()+
@@ -1031,7 +1078,7 @@ ggplot(plot_exp_combined_fil, aes(x=reorder(group,ratio), y = type, shape = cate
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   ylab("Cox model")+
   coord_flip()
-#dev.off()
+dev.off()
 ```
 
 
@@ -1065,20 +1112,41 @@ ggsurvplot(fit,
 
 ```{r}
 peak_anno_updated <- read.csv("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/RCC_Annotated_Mass_Filtered_LM.csv")
-
-test <- peak_anno_updated %>% filter(Mass %in% plot_exp_combined$group) %>% select(Mass, name, KEGG.pathway) %>% unique() %>% filter(KEGG.pathway != "Metabolic pathways" & name != "Guanosine 3'-monophosphate")
+test <- peak_anno_updated %>% filter(Mass %in% plot_exp_combined$group) %>% select(Mass, name, KEGG.pathway) %>% unique() %>% filter(KEGG.pathway != "Metabolic pathways")
 
 df_binary <- test %>%
-  separate_rows(KEGG.pathway, sep = ";\\s*") %>%  # if multiple pathways are separated by semicolons
+  group_by(Mass) %>%
+  summarise(
+    name = str_c(unique(name), collapse = "; "),
+    KEGG.pathway = str_c(unique(KEGG.pathway), collapse = "; ")
+  ) %>%
+  separate_rows(KEGG.pathway, sep = ";\\s*") %>%
   mutate(value = 1) %>%
-  distinct(name, KEGG.pathway, .keep_all = TRUE) %>%
+  distinct(Mass, KEGG.pathway, .keep_all = TRUE) %>%
   pivot_wider(
     names_from = KEGG.pathway,
     values_from = value,
     values_fill = list(value = 0)
-  )
+  ) %>%
+  ungroup()
 
-Heatmap(test %>% select(-Mass, -name))
+mat <- df_binary %>% column_to_rownames("Mass") %>% select(-name)
+
+anno <- df_binary %>% select(Mass, name)
+anno$direction <- plot_exp_combined_fil$direction[match(anno$Mass, plot_exp_combined_fil$group)]
+direction_col <- setNames(c("#E41A1C", "#377EB8"), 
+                      c("high", "low"))
+
+row_anno <- HeatmapAnnotation(direction = anno_simple(anno$direction, col = direction_col),
+                              metabolite = anno_text(anno$name), 
+                              which = "row")
+
+pdf("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/figures/metabolome/MALDI_surv_association_heatmap.pdf", width = 16, height = 5)
+Heatmap(mat, 
+        row_names_side = "left",
+        row_split = anno$direction)+
+  row_anno
+dev.off()
 ```
 
 
@@ -1153,6 +1221,7 @@ out_all_sig$result <- ifelse(out_all_sig$direction == "high" & out_all_sig$p_val
 out_all_sig$type <- "metabo"
 
 library(ggnewscale)
+pdf("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/figures/metabolome/MALDI_progression_association.pdf", width = 5, height = 5)
 ggplot(out_all_sig, aes(x=reorder(mass,logFC), y = category, col = logFC, size= -log10(p_value_adj )))+
   geom_point()+
   theme_classic()+
@@ -1167,18 +1236,65 @@ ggplot(out_all_sig, aes(x=reorder(mass,logFC), y = category, col = logFC, size= 
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   ylab("Cox model")+
   coord_flip()
+dev.off()
 ```
 
 ```{r}
 peak_anno_updated <- read.csv("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/RCC_Annotated_Mass_Filtered_LM.csv")
 
-check <- peak_anno_updated %>% filter(Mass %in% unique(out_all_sig$mass)) %>% select(Mass, name, KEGG.pathway) %>% unique()
+#check <- peak_anno_updated %>% filter(Mass %in% unique(out_all_sig$mass)) %>% select(Mass, name, KEGG.pathway) %>% unique()
 
+test <- peak_anno_updated %>% filter(Mass %in% out_all_sig$mass) %>% select(Mass, name, KEGG.pathway) %>% unique() %>% filter(KEGG.pathway != "Metabolic pathways")
+
+test_red <- test %>%
+  group_by(Mass, name) %>%
+  slice_head(n = 2) %>%   # keep the first two rows within each group
+  ungroup()
+
+
+df_binary <- test_red %>%
+  group_by(Mass) %>%
+  summarise(
+    name = str_c(unique(name), collapse = "; "),
+    KEGG.pathway = str_c(unique(KEGG.pathway), collapse = "; ")
+  ) %>%
+  separate_rows(KEGG.pathway, sep = ";\\s*") %>%
+  mutate(value = 1) %>%
+  distinct(Mass, KEGG.pathway, .keep_all = TRUE) %>%
+  pivot_wider(
+    names_from = KEGG.pathway,
+    values_from = value,
+    values_fill = list(value = 0)
+  ) %>%
+  ungroup()
+
+mat <- df_binary %>% column_to_rownames("Mass") %>% select(-name)
+
+anno <- df_binary %>% select(Mass, name)
+anno$direction <- out_all_sig$direction[match(anno$Mass, out_all_sig$mass)]
+direction_col <- setNames(c("#E41A1C", "#377EB8"), 
+                      c("high", "low"))
+
+anno$name[2] <- "Many"
+row_anno <- HeatmapAnnotation(direction = anno_simple(anno$direction, col = direction_col),
+                              metabolite = anno_text(anno$name), 
+                              which = "row")
+
+pdf("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/figures/metabolome/MALDI_progression_association_heatmap.pdf", width = 17, height = 6)
+Heatmap(mat, 
+        row_names_side = "left", 
+        row_split = anno$direction)+
+  row_anno
+dev.off()
+
+#Heatmap(mat)
 ```
 
 
+## Save objects
 
+```{r}
+saveRDS(SE, "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/SE_MALDI_02.rds")
+```
 
-
-# TO DO - over disease progression
 
