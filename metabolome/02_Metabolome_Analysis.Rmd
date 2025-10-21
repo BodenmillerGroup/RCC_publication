@@ -1156,7 +1156,7 @@ dev.off()
 ### Progression associated metabolites
 
 ```{r}
-sce_prog <- readRDS("/Volumes/G_DQBM_BB_Central$/users/marllu/T_panel/data_analysis/sce_ccRCC_T_07.rds")
+sce_prog <- readRDS("/mnt/central_nas_full/users/marllu/T_panel/data_analysis/sce_ccRCC_T_07.rds")
 SE$PDL1_score <- sce_prog$PDL1_score[match(SE$PID, sce_prog$PID)]
 ```
 
@@ -1291,6 +1291,22 @@ Heatmap(mat,
 dev.off()
 
 #Heatmap(mat)
+```
+
+
+
+## Export survival-relevant metabolites 
+
+```{r}
+# Export survival-relevant metabolites
+relevant_mz <- unique(c(out_all_sig %>% pull(mass), plot_exp_combined_fil %>% pull(group)))
+
+metabo_df <- t(assay(SE, "min_max")) %>% as.data.frame
+rownames(metabo_df) <- SE$PID
+
+metabo_rel_df <- metabo_df[,colnames(metabo_df) %in% relevant_mz]
+
+write.csv(metabo_rel_df, "/mnt/central_nas/rcc_volume/RCC/metabolome/data_analysis/surv_relevant_mz.csv", quote = FALSE)
 ```
 
 

@@ -1927,6 +1927,18 @@ ggplot(fisher_full_selected, aes(x=category, y = gene,col = odds_ratio, size = -
 dev.off()
 ```
 
+###### Export survival-relevant genomic features 
+
+```{r}
+# Extract mutations
+mut_rel <- unique(c(unfactor(fisher_full_selected$category), paste0(cur_surv_plot$group, "_clonal")))
+
+cur_out_mut_rel <- metadata_genome %>% select(PID,all_of(GOI_clonal)) %>% unique() %>% remove_rownames %>% column_to_rownames("PID")
+
+cur_out_mut_rel <- cur_groups[, colnames(cur_groups) %in% mut_rel] %>% rownames_to_column("PID")
+
+write.csv(cur_out_mut_rel, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/surv_relevant_mutations.csv")
+```
 
 
 

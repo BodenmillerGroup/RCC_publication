@@ -104,9 +104,9 @@ if(dim(cor_test)[2] > 1) {
     diag = FALSE
   )
   
-  # Identify pairs with cor > 0.95
+  # Identify pairs with cor > 0.9
   high_corr_pairs <-
-    which(abs(cor_matrix) > 0.95 &
+    which(abs(cor_matrix) > 0.9 &
             lower.tri(cor_matrix), arr.ind = TRUE)
   high_corr_pairs_df <- data.frame(
     Var1 = rownames(cor_matrix)[high_corr_pairs[, 1]],
