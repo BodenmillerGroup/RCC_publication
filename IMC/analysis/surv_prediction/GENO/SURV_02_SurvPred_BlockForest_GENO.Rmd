@@ -140,7 +140,7 @@ folds <- createDataPartition(y$status_OS, p = 0.75, times = 10)
 block <- list()
 
 # Define the block priorities
-priorities <- c("CLIN", "IMC", "DNA", "META")
+priorities <- c("CLIN", "IMC", "GENO", "META")
 block_position <- 1
 
 # Loop through priorities

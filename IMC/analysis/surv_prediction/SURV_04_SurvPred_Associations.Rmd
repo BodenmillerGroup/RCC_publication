@@ -1935,7 +1935,7 @@ mut_rel <- unique(c(unfactor(fisher_full_selected$category), paste0(cur_surv_plo
 
 cur_out_mut_rel <- metadata_genome %>% select(PID,all_of(GOI_clonal)) %>% unique() %>% remove_rownames %>% column_to_rownames("PID")
 
-cur_out_mut_rel <- cur_groups[, colnames(cur_groups) %in% mut_rel] %>% rownames_to_column("PID")
+cur_out_mut_rel <- cur_out_mut_rel[, colnames(cur_out_mut_rel) %in% mut_rel] %>% rownames_to_column("PID")
 
 write.csv(cur_out_mut_rel, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/surv_relevant_mutations.csv")
 ```
@@ -2794,6 +2794,18 @@ ggplot(fisher_full_selected, aes(x=category, y = gene,col = odds_ratio, size = -
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   coord_flip()
 dev.off()
+```
+###### Export survival-relevant CNV
+
+```{r}
+# Extract CNV
+CNV_rel <- unique(c(paste0(unfactor(fisher_full_selected$category),"_clonal"), paste0(cur_surv_plot$group, "_clonal")))
+
+cur_out_CNV_rel <- metadata_CNV %>% select(PID,all_of(GOI_clonal)) %>% unique() %>% remove_rownames %>% column_to_rownames("PID")
+
+cur_out_CNV_rel <- cur_out_CNV_rel[, colnames(cur_out_CNV_rel) %in% CNV_rel] %>% rownames_to_column("PID")
+
+write.csv(cur_out_CNV_rel, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/surv_relevant_CNV.csv")
 ```
 
 ###### CNV burden 
