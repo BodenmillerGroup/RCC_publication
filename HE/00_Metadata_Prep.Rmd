@@ -145,6 +145,9 @@ sce_T <- readRDS("/mnt/central_nas_full/users/marllu/T_panel/data_analysis/sce_c
 sce_MY <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_07.rds")
 dim(sce_T)[2]+dim(sce_MY)[2]+dim(sce_TU)[2]
 
+# Total number of patients 
+length(unique(c(sce_TU$PID, sce_T$PID, sce_MY$PID)))
+
 # Total number of images 
 length(unique(sce_TU$sample_id))+length(unique(sce_T$sample_id))+length(unique(sce_MY$sample_id))
 
