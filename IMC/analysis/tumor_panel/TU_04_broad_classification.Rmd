@@ -1395,6 +1395,7 @@ alluvial_wide(data = colData(sce) %>% as.data.frame %>% select(cluster_category,
 
 ```{r}
 saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_04.rds")
+#sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_04.rds")
 ```
 
 ### Compare categories spatially 

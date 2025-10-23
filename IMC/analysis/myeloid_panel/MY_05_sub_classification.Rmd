@@ -1224,7 +1224,7 @@ plotPixels(cur_images,
 
 #### Defintion
 
-For downstream analysis, we will use SOM-Astir-GMM based immune metacluster assignment. 
+For downstream analysis, we will use Graph-Astir-GMM based immune metacluster assignment. 
 
 ```{r}
 sce$immune_metacluster <- unfactor(sce$immune_metacluster_graph_test)
