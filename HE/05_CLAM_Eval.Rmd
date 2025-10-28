@@ -71,7 +71,7 @@ Here, we are selecting the best performing model fold (fold 8).
 
 ```{r}
 # Mean proportions across images per patient
-results_selected <- results %>% filter(fold == "8") %>% group_by(TME_archetype, PID, fold) %>% mutate(prop = mean(prop)) %>% dplyr::select(PID, fold, TME_archetype, prop) %>% unique()
+results_selected <- results %>% filter(fold == "7") %>% group_by(TME_archetype, PID, fold) %>% mutate(prop = mean(prop)) %>% dplyr::select(PID, fold, TME_archetype, prop) %>% unique()
 ```
 
 ```{r}
@@ -119,7 +119,7 @@ library(survminer)
 fit <- survfit(Surv(OS_days, status_OS) ~ TME_archetype_selected, data = results_combined)
 print(fit)
 
-#pdf("/mnt/central_nas/rcc_volume/RCC/figures/HE/TCGA_KIRC_Survival_ArchetypesPredict.pdf", width = 7, height = 5, onefile = FALSE)
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/HE/TCGA_KIRC_Survival_ArchetypesPredict_selected.pdf", width = 7, height = 5, onefile = FALSE)
 ggsurvplot(fit,
           pval = TRUE,
           risk.table = TRUE, # Add risk table
@@ -131,10 +131,12 @@ ggsurvplot(fit,
           conf.int = FALSE)
 #dev.off()
 
+
 #Plot survival curves
 fit <- survfit(Surv(OS_days, status_OS) ~ TME_archetype_folds, data = results_combined)
 print(fit)
 
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/HE/TCGA_KIRC_Survival_ArchetypesPredict_folds.pdf", width = 7, height = 3.5, onefile = FALSE)
 ggsurvplot(fit,
           pval = TRUE,
           risk.table = TRUE, # Add risk table
@@ -144,6 +146,7 @@ ggsurvplot(fit,
           palette = c("#0571B0", "gold3", "#CA0020"),
           ggtheme = theme_classic(), 
           conf.int = FALSE)
+dev.off()
 ```
 
 
@@ -199,14 +202,81 @@ ggsurvplot_list(surv_plots,
 ```
 
 
+```{r}
+library(dplyr)
+
+# Get the fold-specific archetype columns
+fold_cols <- paste0("TME_archetype_", 0:9)
+
+# Majority vote per PID
+results_combined <- results_combined %>%
+  rowwise() %>%
+  mutate(TME_archetype_majority = {
+    archetypes <- c_across(all_of(fold_cols))
+    names(sort(table(archetypes), decreasing = TRUE))[1]
+  }) %>%
+  ungroup()
+
+# Only top 3 performing folds
+fold_cols3 <- paste0("TME_archetype_", c(1,4,7,8,9))
+
+# Majority vote per PID
+results_combined <- results_combined %>%
+  rowwise() %>%
+  mutate(TME_archetype_majority3 = {
+    archetypes <- c_across(all_of(fold_cols3))
+    names(sort(table(archetypes), decreasing = TRUE))[1]
+  }) %>%
+  ungroup()
+
+```
 
 
+```{r}
+# Mean proportions across images per patient
+results_folds <- results %>% group_by(TME_archetype, PID, fold) %>% mutate(prop = mean(prop)) %>% dplyr::select(PID, fold, TME_archetype, prop) %>% unique()
+```
 
+```{r}
+results_out_folds <- results_folds %>% group_by(PID, TME_archetype) %>% mutate(mean = max(prop)) %>% dplyr::select(PID, TME_archetype, mean) %>% ungroup() %>% group_by(PID) %>% filter(mean == max(mean)) %>% unique()
+```
+
+
+```{r}
+#Plot survival curves
+fit <- survfit(Surv(OS_days, status_OS) ~ TME_archetype_majority, data = results_combined)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv",
+          palette = c("#0571B0", "gold3", "#CA0020"),
+          ggtheme = theme_classic(), 
+          conf.int = FALSE)
+
+#Plot survival curves
+fit <- survfit(Surv(OS_days, status_OS) ~ TME_archetype_majority3, data = results_combined)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv",
+          palette = c("#0571B0", "gold3", "#CA0020"),
+          ggtheme = theme_classic(), 
+          conf.int = FALSE)
+
+```
 
 
 
 ```{r}
-all <- results_combined %>% ungroup() %>% dplyr::select(TME_archetype_folds, TME_archetype_selected)
+all <- results_combined %>% ungroup() %>% dplyr::select(TME_archetype_folds, TME_archetype_selected, TME_archetype_majority)
 alluvial_wide(all, 
               colorful_fill_variable_stratum = FALSE,
               col_vector_flow = c("#0571B0", "gold3", "#CA0020"))+

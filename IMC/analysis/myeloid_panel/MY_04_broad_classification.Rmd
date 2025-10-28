@@ -1391,6 +1391,7 @@ alluvial_wide(data = colData(sce) %>% as.data.frame %>% select(cluster_category,
 
 ```{r}
 saveRDS(sce, "/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_04.rds")
+#sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_04.rds")
 ```
 
 ### Compare categories spatially 
@@ -1429,6 +1430,107 @@ ggplot(spatial_comp, aes(x = analysis_cat, y = mean_ecc))+
 ```
 
 ### Visualization
+
+#### Heatmap 
+
+```{r}
+#Read sce after clustering, astir and GMM
+sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_04.rds")
+
+### 1. Heatmap body ###
+
+# Aggregrate across cells with the mean
+mean_sce <- aggregateAcrossCells(sce, ids = sce$analysis_cat,
+                                 statistics = "mean",
+                                 use.assay.type = "min_max",
+                                 subset.row = rowData(sce)$broad_cluster)
+
+### 2. Heatmap annotation ###
+
+### 2.1 Spatial features
+
+#Add number of neighbors to sce object (saved in ColPair)
+n_neighbors <- colPair(sce) %>% as.data.frame() %>% group_by(from) %>% dplyr::count() %>% arrange(desc(n))
+sce$n_neighbors <- n_neighbors$n[match(seq_along(colnames(sce)),n_neighbors$from)]
+sce$n_neighbors <- sce$n_neighbors %>% replace_na(0)
+
+#Select spatial features and average over analysis_cats 
+spatial <- colData(sce) %>% as.data.frame %>% select(area,eccentricity,n_neighbors, analysis_cat)
+spatial <- spatial %>% select(-analysis_cat) %>% aggregate(by = list(analysis_cat = spatial$analysis_cat), FUN = mean) %>% column_to_rownames("analysis_cat")
+
+#Define color schemes for spatial features and add to metadata
+area_col <- colorRamp2(c(min(spatial$area),median(spatial$area),max(spatial$area)), c(brewer.pal(3,"Blues")[1],brewer.pal(3,"Blues")[2],brewer.pal(3,"Blues")[3]))
+metadata(sce)$colors$area <- area_col
+
+eccentricity_col <- colorRamp2(c(min(spatial$eccentricity),median(spatial$eccentricity),max(spatial$eccentricity)), c(brewer.pal(3,"Purples")[1],brewer.pal(3,"Purples")[2],brewer.pal(3,"Purples")[3]))
+metadata(sce)$colors$eccentricity <- eccentricity_col
+
+n_neighbors_col <- colorRamp2(c(min(spatial$n_neighbors),median(spatial$n_neighbors),max(spatial$n_neighbors)), c(brewer.pal(3,"RdPu")[1],brewer.pal(3,"RdPu")[2],brewer.pal(3,"RdPu")[3]))
+metadata(sce)$colors$n_neighbors <- n_neighbors_col
+
+#Create Spatial Heatmap Annotation
+ha_spatial <- HeatmapAnnotation(
+    area = spatial$area,
+    eccentricity = spatial$eccentricity,
+    n_neighbors = spatial$n_neighbors, 
+    col = list(area = metadata(sce)$colors$area,
+               eccentricity = metadata(sce)$colors$eccentricity,
+               n_neighbors = metadata(sce)$colors$n_neighbors),
+    border = TRUE,
+    which = "row")
+
+### 2.2 Metadata features
+
+#Number of cells per analysis_cat 
+n_cells <- colData(mean_sce) %>% as.data.frame %>% select(analysis_cat, ncells)
+
+# # Number of contributing patients (at least 5 cells)
+cluster_PID <- colData(sce) %>% as.data.frame() %>% select(analysis_cat,PID) %>% group_by(analysis_cat) %>% table() %>% as.data.frame
+n_PID <- cluster_PID %>% filter(Freq>5) %>% group_by(analysis_cat) %>% count(name = "n_PID") %>% column_to_rownames("analysis_cat")
+
+#GMM - non-epithelial GMM
+nr_immune <- colData(sce) %>% as.data.frame %>% select(analysis_cat, non_epithelial_GMM) %>% table()
+fr_immune <- as.data.frame(nr_immune) %>% pivot_wider(names_from = non_epithelial_GMM, values_from = Freq) %>% column_to_rownames("analysis_cat")
+fr_immune <- fr_immune %>% transmute(fr_immune = `TRUE`/rowSums(fr_immune)) %>% as.data.frame()
+
+#Astir - non-epithelial prediction
+nr_astir <- colData(sce) %>% as.data.frame %>% select(analysis_cat, astir_combined) %>% table()
+fr_astir <- as.data.frame(nr_astir) %>% pivot_wider(names_from = astir_combined, values_from = Freq) %>% column_to_rownames("analysis_cat")
+fr_astir <- fr_astir %>% select(-"Unknown/Other") %>% transmute(fr_astir = `Non-Epithelial`/rowSums(fr_astir)) %>% as.data.frame()
+
+ha_meta <- HeatmapAnnotation(GMM_NonEpi = anno_barplot(fr_immune, width = unit(12, "mm"),gp = gpar(fill = "#377EB8", col = 1)),
+                            Astir_NonEpi = anno_barplot(fr_astir, width = unit(12, "mm"),gp = gpar(fill = "#377EB8", col = 1)),
+                            n_cells = anno_barplot(n_cells$ncells, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),n_PID = anno_barplot(n_PID$n_PID, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),
+                            border = TRUE, 
+                            annotation_name_rot = 90,
+                            gap = unit(1,"mm"),
+                            which = "row")
+
+
+### 3. Define tumor, mixed and stroma analysis_cat (based on astir)
+#### This step is highly important for downstream categories 
+
+
+
+### 4. Plot combined Heatmap
+h <- Heatmap(t(assay(mean_sce, "min_max")),
+        col = col_main,
+        name= "min_max",
+        km = 1,
+        show_row_names = T, 
+        row_names_side = "left",
+        show_column_names =  T, #row_split = anno_cluscat$analysis_cat_category,
+        clustering_method_rows = "ward.D2",
+        clustering_method_columns = "ward.D2")+
+  #Heatmap(scale(t(assay(mean_sce, "min_max"))))+
+  ha_spatial+
+  ha_meta#+
+  #ha_cluscat
+
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/myeloid_panel/MY_broadclass_tumornontumor_heatmap.pdf", width = 8, height = 3)
+draw(h)
+dev.off()
+```
 
 #### cytoviewer
 

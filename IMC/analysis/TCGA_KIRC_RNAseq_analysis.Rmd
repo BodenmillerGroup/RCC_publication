@@ -133,9 +133,9 @@ GOI <- GOI_IntOGen$Symbol
 
 mutation_xena <- mutation_xena %>% filter(gene %in% GOI) %>% pivot_wider(names_from = "gene", values_from = "mutation") %>% select(-TGFBR2, -ARHGEF10L, -PTPRK, -RAP1GDS1)
 
-mutation_xena_filtered <- mutation_xena %>% select(PID, VHL, BAP1, PBRM1, SETD2, PTEN) %>% as.data.frame
+mutation_xena_filtered <- mutation_xena %>% select(PID, VHL, BAP1, PBRM1, SETD2, PTEN, NF2) %>% as.data.frame
 
-for (entry in colnames(mutation_xena_filtered)[colnames(mutation_xena_filtered) %in% c("VHL", "BAP1", "PBRM1", "SETD2", "PTEN")]) {
+for (entry in colnames(mutation_xena_filtered)[colnames(mutation_xena_filtered) %in% c("VHL", "BAP1", "PBRM1", "SETD2", "PTEN", "NF2")]) {
   colData(kirc.clean)[,entry] <- mutation_xena_filtered[,entry][match(colData(kirc.clean)[,"PID"],mutation_xena_filtered$PID)]
 }
 ```
@@ -1086,9 +1086,9 @@ Heatmap(ht, name = "Mean signature Z-scores")
 ### Save
 
 ```{r}
-saveRDS(res, "/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_nodesign.rds") 
-saveRDS(vsd, "/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_vsd_nodesign.rds") 
-saveRDS(kirc.clean,"/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_cleaned.rds")
+# saveRDS(res, "/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_nodesign.rds") 
+# saveRDS(vsd, "/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_vsd_nodesign.rds") 
+# saveRDS(kirc.clean,"/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_cleaned.rds")
 
 # res <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_nodesign.rds") 
 vsd <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_vsd_nodesign.rds") 
@@ -1106,6 +1106,7 @@ results_combined <- read_csv("/mnt/central_nas/rcc_volume/RCC/HE/CLAM/TCGA_KIRC/
 ```
 
 ```{r}
+# TME_archetype 7 or selected or folds
 vsd$TME_archetype <- results_combined$TME_archetype_folds[match(vsd$PID, results_combined$PID)]
 kirc.clean$TME_archetype <- results_combined$TME_archetype_folds[match(kirc.clean$PID, results_combined$PID)]
 ```
@@ -1125,14 +1126,17 @@ cur_surv <- colData(kirc.clean) %>% as.data.frame() %>% dplyr::select(PID, OS_da
 fit <- survfit(Surv(OS_days, status_OS) ~ TME_archetype, data = cur_surv)
 print(fit)
 
+
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/TCGA_KIRC/TCGA_KIRC_Survival_ArchetypesPredict_folds.pdf", width = 7, height = 3.5, onefile = FALSE)
 ggsurvplot(fit,
           pval = TRUE,
           risk.table = TRUE, # Add risk table
           risk.table.col = "strata", # Change risk table color by groups
           linetype = "strata", # Change line type by groups
           surv.median.line = "hv", # Specify median survival
-          #palette = unname(metadata(kirc.clean)$colors$ISUP_combined),
+          palette = c("#0571B0", "gold3", "#CA0020"),
           ggtheme = theme_classic())
+dev.off()
 ```
 
 ### Cox models
@@ -1258,17 +1262,49 @@ dittoBarPlot(vsd, var = "pT_combined", group.by = "TME_archetype",retain.factor.
 dittoBarPlot(vsd, var = "ISUP_combined", group.by = "TME_archetype",retain.factor.levels = FALSE)+
   scale_fill_manual(values = metadata(vsd)$colors$ISUP_combined)+
   ggtitle("")
-
-dittoBarPlot(vsd[,!is.na(vsd$BAP1)], var = "BAP1", group.by = "TME_archetype",retain.factor.levels = FALSE)+
-  ggtitle("")
-dittoBarPlot(vsd[,!is.na(vsd$PBRM1)], var = "PBRM1", group.by = "TME_archetype",retain.factor.levels = FALSE)+
-  ggtitle("")
-
-dittoBarPlot(vsd[,!is.na(vsd$SETD2)], var = "SETD2", group.by = "TME_archetype",retain.factor.levels = FALSE)+
-  ggtitle("")
-dittoBarPlot(vsd[,!is.na(vsd$VHL)], var = "VHL", group.by = "TME_archetype",retain.factor.levels = FALSE)+
-  ggtitle("")
 ```
+
+```{r}
+# BAP1
+dittoBarPlot(vsd[,!is.na(vsd$BAP1)], var = "BAP1", group.by = "TME_archetype",retain.factor.levels = FALSE)+
+  ggtitle("")+
+  scale_fill_brewer(palette = "Set1", direction = -1)
+
+df <- as.data.frame(colData(vsd)[!is.na(vsd$BAP1), c("BAP1", "TME_archetype")])
+print(fisher.test(table(df$BAP1, df$TME_archetype)))
+vsd$TME_archetype_comb <- ifelse(vsd$TME_archetype == "TME_suppressed", "TME_suppressed", "Other")
+dittoBarPlot(vsd[,!is.na(vsd$BAP1)], var = "BAP1", group.by = "TME_archetype_comb",retain.factor.levels = FALSE)+
+  ggtitle("")
+df <- as.data.frame(colData(vsd)[!is.na(vsd$BAP1), c("BAP1", "TME_archetype_comb")])
+print(fisher.test(table(df$BAP1, df$TME_archetype_comb)))
+```
+
+```{r}
+# PBRM1
+dittoBarPlot(vsd[,!is.na(vsd$PBRM1)], var = "PBRM1", group.by = "TME_archetype",retain.factor.levels = FALSE)+
+  ggtitle("")+
+  scale_fill_brewer(palette = "Set1", direction = -1)
+
+df <- as.data.frame(colData(vsd)[!is.na(vsd$PBRM1), c("PBRM1", "TME_archetype")])
+print(fisher.test(table(df$PBRM1, df$TME_archetype)))
+vsd$TME_archetype_comb <- ifelse(vsd$TME_archetype == "TME_silent", "TME_silent", "Other")
+dittoBarPlot(vsd[,!is.na(vsd$PBRM1)], var = "PBRM1", group.by = "TME_archetype_comb",retain.factor.levels = FALSE)+
+  ggtitle("")
+df <- as.data.frame(colData(vsd)[!is.na(vsd$PBRM1), c("PBRM1", "TME_archetype_comb")])
+print(fisher.test(table(df$PBRM1, df$TME_archetype_comb)))
+```
+
+```{r}
+dittoBarPlot(vsd[,!is.na(vsd$BAP1)], var = "BAP1", group.by = "TME_archetype",retain.factor.levels = FALSE)+
+  ggtitle("")+
+  scale_fill_brewer(palette = "Set1", direction = -1)+
+  guides(fill = "none")+
+dittoBarPlot(vsd[,!is.na(vsd$PBRM1)], var = "PBRM1", group.by = "TME_archetype",retain.factor.levels = FALSE)+
+  ggtitle("")+
+  scale_fill_brewer(palette = "Set1", direction = -1)
+```
+
+
 
 ### Marker expression comparison for PID groups 
 
@@ -1278,7 +1314,7 @@ dittoBarPlot(vsd[,!is.na(vsd$VHL)], var = "VHL", group.by = "TME_archetype",reta
 # Define GOI of interest
 #GOI <- c("ICAM1", "VHL")
 #GOI <- c("VHL","CA9", "KRT19", "GPX4", "HLA-DRA", "NFKB1", "CCND1", "HIF1A", "TP53", "MYC", "ICAM1", "PDK4", "NT5E", "SMARCA4", "PKM", "CD274", "MME", "IDH2", "EPAS1", "AURKA", "HAVCR2", "EGFR", "RPS6", "FLT1", "MTOR", "RB1", "SLC2A1", "FH", "GLUD1", "CD44", "VIM")
-GOI <- c("VHL", "NFKB1", "CCND1", "ICAM1", "EGFR", "FLT1", "RB1")
+GOI <- c("VHL", "ICAM1", "CD44", "MTOR")
 GOI_rel <- GOI[GOI %in% rownames(vsd)]
 
 # Define heatmap based on normalized counts 
@@ -1459,8 +1495,8 @@ Heatmap(scale(ht), name = "Scaled mean Z-scores")+
 
 ```{r}
 library(readxl)
-#HU_SIG <- read_excel("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/data/DCCD_SubTables_NatureGenetics.xlsx",sheet = 8, col_names = TRUE)
-HU_SIG <- read_excel("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/IMC/tumor_panel/data_analysis/data/DCCD_SubTables_NatureGenetics.xlsx",sheet = 8, col_names = TRUE)
+HU_SIG <- read_excel("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/data/DCCD_SubTables_NatureGenetics.xlsx",sheet = 8, col_names = TRUE)
+#HU_SIG <- read_excel("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/IMC/tumor_panel/data_analysis/data/DCCD_SubTables_NatureGenetics.xlsx",sheet = 8, col_names = TRUE)
 
 # Extract unique signatures genes for each immune subtype
 IM4 <- HU_SIG %>% filter(Immune_subtype == "IM4") %>% pull(Symbol) #De-clear differentiated ccRCC
@@ -1485,15 +1521,21 @@ df <- as.data.frame(scale(df))
 
 df$signature_sum <- rowSums(df,na.rm = TRUE)
 df$TME_archetype <- vsd$TME_archetype[match(rownames(df), colnames(vsd))]
+df <- df[!is.na(df$TME_archetype),]
 
 compare_means(signature_sum ~ TME_archetype,df) #pairwise comparisons
 compare_means(signature_sum ~ TME_archetype,df, method = "kruskal.test") #global comparison
+col_group <- setNames(c("#0571B0", "gold3", "#CA0020"),c("TME_activated","TME_silent","TME_suppressed"))
 
-ggplot(df, aes(x = TME_archetype, y = signature_sum))+
-  geom_jitter(aes(color = TME_archetype), size = 3, position=position_jitter(w=0.1,h=0.1))+
-  geom_boxplot(outlier.color = NA)+
-  scale_color_brewer(palette = "Paired")+
+
+ggplot(df, aes(x = TME_archetype, y = signature_sum, fill = TME_archetype))+
+  geom_point(aes(color = TME_archetype))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
+  #scale_color_brewer(palette = "Paired")+
+  scale_color_manual(values = col_group)+
+  scale_fill_manual(values = col_group)+
   theme_classic()+
+  guides(color = "none")+
   ylab("IM4 signature (Hu et al.)")+
   stat_compare_means()
 
@@ -1533,6 +1575,47 @@ ggplot(df, aes(x = TME_archetype, y = signature_sum))+
   stat_compare_means()
 
 mat <- df %>% pivot_longer(cols = 1:(ncol(df)-2), names_to = "gene", values_to = "exprs") %>% group_by(TME_archetype, gene) %>% summarize(mean = mean(exprs))
+mat <- mat %>% filter(!is.na(mean))
+ht <- mat %>% pivot_wider(names_from = "gene", values_from = "mean") %>% column_to_rownames("TME_archetype")
+
+Heatmap(ht, name = "Mean signature Z-scores")
+```
+
+### Genomic dedifferentiation signature (Salgia et al., Cancer Cell, 25)
+
+```{r}
+genom_sig <- c("CD44", "COL6A1", "DCBLD2", "GFPT2", "L1CAM", "PLAU", "PLTP", "SEMA3C", "TFAP2A", "TRNP1")
+
+## 1. pan AV signature per PID group 
+genom_sig_rel <- genom_sig[genom_sig %in% rownames(assay(vsd))]
+# Filter for available genes
+#TNBC_PID <- colnames(vsd[,vsd$TNBC == "TNBC"])
+#vsd_TNBC <- vsd[, colnames(vsd) %in% TNBC_PID]
+#df <- t(assay(vsd_TNBC)[genom_sig_rel ,]) %>% as.data.frame
+df <- t(assay(vsd)[genom_sig_rel ,]) %>% as.data.frame
+
+# Z-score gene expression 
+df <- as.data.frame(scale(df))
+
+df$signature_sum <- rowSums(df,na.rm = TRUE)
+df$TME_archetype <- vsd$TME_archetype[match(rownames(df), colnames(vsd))]
+df <- df[!is.na(df$TME_archetype),]
+
+compare_means(signature_sum ~ TME_archetype,df) #pairwise comparisons
+compare_means(signature_sum ~ TME_archetype,df, method = "kruskal.test") #global comparison
+
+ggplot(df, aes(x = TME_archetype, y = signature_sum, fill = TME_archetype))+
+  geom_point(aes(color = TME_archetype))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
+  #scale_color_brewer(palette = "Paired")+
+  scale_color_manual(values = col_group)+
+  scale_fill_manual(values = col_group)+
+  theme_classic()+
+  guides(color = "none")+
+  ylab("Genomic dedifferentiation (Salgia et al.)")+
+  stat_compare_means()
+
+mat <- df %>% pivot_longer(cols = 1:(ncol(df)-2), names_to = "gene", values_to = "exprs") %>% group_by(TME_archetype, gene) %>% summarize(mean = mean(exprs)) %>% na.omit()
 mat <- mat %>% filter(!is.na(mean))
 ht <- mat %>% pivot_wider(names_from = "gene", values_from = "mean") %>% column_to_rownames("TME_archetype")
 
@@ -1891,7 +1974,7 @@ mean(cm_stats$F1)
 ### TME archetypes
 
 ```{r}
-#kirc.clean <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_cleaned.rds")
+kirc.clean <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_cleaned.rds")
 #saveRDS(kirc.clean, "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_cleaned.rds")
 ```
 
@@ -1912,7 +1995,7 @@ ddsSE_1 <- ddsSE_1[keep, ]
 ## 2: Filter for protein-coding genes
 library(biomaRt)
 out <- data.frame(og = rownames(ddsSE_1),
-           sh = sub("\\..*", "", rownames(ddsSE_1)))devtools::install_github("Lothelab/CMScaller")
+           sh = sub("\\..*", "", rownames(ddsSE_1)))
 ensembl <- useEnsembl(biomart = "genes", dataset = "hsapiens_gene_ensembl")
 gene_info <- getBM(attributes = c("ensembl_gene_id", "gene_biotype"),
                    filters = "ensembl_gene_id",
@@ -2029,10 +2112,11 @@ up_res_not_icam_vs_MTOR <- res_not_icam_vs_MTOR[
 #NOTUP <- intersect(rownames(up_not_icam_vs_icam), rownames(up_res_not_icam_vs_MTOR))
 
 ## COMBINE ALL KEY GENES
-KEYUP <- unique(c(MTORUP, ICAMUP, NOTUP))
+KEYUP <- unique(c(MTORUP, ICAMUP))
 
 unique(KEYUP)
 ```
+
 
 ```{r}
 # Define GOI of interest
@@ -2059,12 +2143,29 @@ ht <- mat %>% pivot_wider(names_from = "gene", values_from = "mean") %>% column_
 anno <- df %>% dplyr::select(TME_archetype) %>% group_by(TME_archetype) %>% dplyr::count() %>% na.omit()
 anno <- anno[match(anno$TME_archetype, rownames(ht)),]
 
+## Create column annotation 
+ca <- data.frame(genes = colnames(ht))
+ca$cat <- ifelse(ca$genes %in% ICAMUP, "ICAM", "MTOR")
+gene_col <- setNames(c("#CA0020", "#0571B0"), rev(unique(ca$cat)))
+ca <- columnAnnotation(cat = ca$cat, col = list(cat = gene_col))
+
 ## Print heatmap 
 Heatmap(ht, col = viridis(100), name = "Mean Z-scores")
 
-Heatmap(scale(ht), name = "Scaled mean Z-scores")+
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/TCGA_KIRC/TCGA_KIRC_heatmap_genesignatures.pdf", height = 3, width = 8)
+Heatmap(scale(ht), 
+        name = "Scaled mean Z-scores", 
+        show_column_names = FALSE, 
+        bottom_annotation = ca)+
   rowAnnotation(n = anno_barplot(anno$n, gp = gpar(fill = "#440154FF")))+
   rowAnnotation(anno = anno_text(anno$TME_archetype))
+#dev.off()
+```
+
+```{r}
+# Save genesets
+saveRDS(MTORUP,"/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/MTORUP_geneset_NTP.rds")
+saveRDS(ICAMUP,"/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/ICAMUP_geneset_NTP.rds")
 ```
 
 #### NTP - Prediction
@@ -2072,10 +2173,9 @@ Heatmap(scale(ht), name = "Scaled mean Z-scores")+
 ```{r}
 # Nearest template prediction
 library(CMScaller)
+set.seed(22)
 
 # Step 1: Prepare expression matrix (genes x samples, log2 scale)
-expr_mat <- assay(vsd)  
-
 tpm_mat <- assays(kirc.clean)$tpm_unstrand 
 log2_tpm <- log2(tpm_mat + 1)
 expr_mat <- ematAdjust(log2_tpm, method = "RLE")
@@ -2096,21 +2196,56 @@ template_mat <- data.frame(class = factor(names(keyup)),
 ntp_result <- ntp(
   emat = expr_mat,           
   template = template_mat,
-  distance = "spearman",
+  distance = "cosine",
   nPerm = 1000,              
   seed = 22,                 
-  nCores = 30,
   doPlot = TRUE
 )
-
-ntp_result %>% group_by(prediction) %>% dplyr::count()
 ```
 
 ```{r}
-# TO DO - make nice heatmap from predictions
+library(dplyr)
+library(caret)
+
+kirc.clean$TME_archetype <- factor(kirc.clean$TME_archetype)
+
+# Store results
+results <- data.frame(FDR_cutoff = numeric(), Mean_Balanced_Accuracy = numeric())
+
+# Loop through FDR cutoffs from 0.05 to 0.01 (step -0.005)
+for (fdr_cutoff in c(seq(0.05, 0.001, by = -0.005), 0.0001)) {
+  
+  # Generate predictions based on current cutoff
+  ntp_out <- ntp_result %>%
+    tibble::rownames_to_column("PID") %>%
+    mutate(group_predict = ifelse(FDR < fdr_cutoff, as.character(prediction), "NOT"))
+  
+  # Map predictions to kirc.clean
+  kirc.clean$TME_archetype_predict <- ntp_out$group_predict[match(kirc.clean$PID, ntp_out$PID)]
+  
+  # Rename groups
+  kirc.clean$TME_archetype_predict[kirc.clean$TME_archetype_predict == "ICAM"] <- "TME_suppressed"
+  kirc.clean$TME_archetype_predict[kirc.clean$TME_archetype_predict == "NOT"] <- "TME_silent"
+  kirc.clean$TME_archetype_predict[kirc.clean$TME_archetype_predict == "MTOR"] <- "TME_activated"
+  
+  # Factor levels
+  kirc.clean$TME_archetype_predict <- factor(kirc.clean$TME_archetype_predict, levels = levels(kirc.clean$TME_archetype))
+  
+  # Generate confusion matrix
+  cm <- confusionMatrix(data = kirc.clean$TME_archetype_predict, 
+                        reference = kirc.clean$TME_archetype, 
+                        mode = "everything")
+  
+  # Extract and store mean balanced accuracy
+  cm_stats <- as.data.frame(cm$byClass)
+  mean_ba <- mean(cm_stats$`Balanced Accuracy`, na.rm = TRUE)
+  mean_f1 <- mean(cm_stats$F1, na.rm = TRUE)
+  
+  results <- rbind(results, data.frame(FDR_cutoff = fdr_cutoff, 
+                                       Mean_Balanced_Accuracy = mean_ba, 
+                                       mean_f1 = mean_f1))
+}
 ```
-
-
 
 
 ```{r}
@@ -2122,6 +2257,7 @@ ntp_out$status_OS <- vsd$status_OS[match(ntp_out$PID, vsd$PID)]
 fit <- survfit(Surv(OS_months, status_OS) ~ group_predict, data = ntp_out)
 print(fit)
 
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/TCGA_KIRC/TCGA_KIRC_Survival_ArchetypesPredict_NTP.pdf", width = 7, height = 5, onefile = FALSE)
 ggsurvplot(fit,
           pval = TRUE,
           risk.table = TRUE, # Add risk table
@@ -2129,11 +2265,11 @@ ggsurvplot(fit,
           linetype = "strata", # Change line type by groups
           surv.median.line = "hv", # Specify median survival
           ggtheme = theme_classic(), # Change ggplot2 theme¨
-          #palette = c("#046C9A", "#000000", "#D69C4E", "#ECCBAE", "#ABDDDE"),
+          palette = c("#CA0020","#0571B0","gold3"),
           conf.int = FALSE
 )
+#dev.off()
 ```
-
 
 ```{r}
 kirc.clean$TME_archetype_predict <- ntp_out$group_predict[match(kirc.clean$PID, ntp_out$PID)]
@@ -2147,6 +2283,7 @@ kirc.clean$TME_archetype_predict <- factor(kirc.clean$TME_archetype_predict, lev
 
 table(kirc.clean$TME_archetype_predict, kirc.clean$TME_archetype)
 ```
+
 
 ```{r}
 # Performance
@@ -2163,9 +2300,350 @@ mean(cm_stats$F1)
 ```
 
 
+```{r}
+ntp_out <- ntp_result %>% rownames_to_column("PID") %>% mutate(group_predict = ifelse(FDR < 0.01, as.character(prediction), "NOT"))
+
+kirc.clean$TME_archetype_predict <- ntp_out$group_predict[match(kirc.clean$PID, ntp_out$PID)]
+
+kirc.clean$TME_archetype_predict[kirc.clean$TME_archetype_predict == "ICAM"] <- "TME_suppressed"
+kirc.clean$TME_archetype_predict[kirc.clean$TME_archetype_predict == "NOT"] <- "TME_silent"
+kirc.clean$TME_archetype_predict[kirc.clean$TME_archetype_predict == "MTOR"] <- "TME_activated"
+
+kirc.clean$TME_archetype <- factor(kirc.clean$TME_archetype)
+kirc.clean$TME_archetype_predict <- factor(kirc.clean$TME_archetype_predict, levels = levels(kirc.clean$TME_archetype))
+
+library(caret)
+cm <- confusionMatrix(data = kirc.clean$TME_archetype_predict, 
+                      reference = kirc.clean$TME_archetype, 
+                      mode = "everything")
+
+cm
+
+cm_stats <- as.data.frame(cm$byClass)
+mean(cm_stats$`Balanced Accuracy`) 
+```
+
+```{r}
+# Heatmap from predictions
+
+# Matrix
+gen_mat <- expr_mat[template_mat$probe,]
+
+# Row-Anno
+row_anno <- data.frame(gene = rownames(gen_mat))
+row_anno$cat <- template_mat$class[match(row_anno$gene, template_mat$probe)]
+gene_col <- setNames(brewer.pal(3,"Set1")[1:2], rev(unfactor(unique(row_anno$cat))))
+
+ra <- columnAnnotation(cat = row_anno$cat, col = list(cat = gene_col))
+
+# Col-Anno
+col_anno <- data.frame(PID = colnames(gen_mat))
+col_anno$group <- kirc.clean$TME_archetype_predict[match(col_anno$PID, kirc.clean$PID)]
+col_anno_ob <- rowAnnotation(group = col_anno$group, 
+                                col = list(group = col_group)) 
+
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/TCGA_KIRC/TCGA_KIRC_heatmap_NTPprediction.pdf", height = 6, width = 5)
+Heatmap(t(gen_mat), 
+        column_split = row_anno$cat,
+        row_split = col_anno$group,
+        right_annotation = col_anno_ob, 
+        show_row_names = FALSE, 
+        show_row_dend = TRUE, 
+        show_column_dend = TRUE
+        )%v%
+  ra
+dev.off()
+```
+
+```{r}
+vsd$TME_archetype_predict <- kirc.clean$TME_archetype_predict[match(vsd$PID, kirc.clean$PID)]
+
+# Define GOI of interest
+#GOI <- c("ICAM1", "VHL")
+#GOI <- c("VHL","CA9", "KRT19", "GPX4", "HLA-DRA", "NFKB1", "CCND1", "HIF1A", "TP53", "MYC", "ICAM1", "PDK4", "NT5E", "SMARCA4", "PKM", "CD274", "MME", "IDH2", "EPAS1", "AURKA", "HAVCR2", "EGFR", "RPS6", "FLT1", "MTOR", "RB1", "SLC2A1", "FH", "GLUD1", "CD44", "VIM")
+GOI <- c("VHL", "ICAM1", "CD44", "MTOR")
+GOI_rel <- GOI[GOI %in% rownames(vsd)]
+
+# Define heatmap based on normalized counts 
+## Option 1: size-factor normalized counts 
+#df <- t(counts(dds, normalized = TRUE)[GOI,]) %>% as.data.frame %>% rownames_to_column("PID")
+## Option 2: vst counts
+df <- t(assay(vsd)[GOI_rel,]) %>% as.data.frame 
+df <- df %>% rownames_to_column("PID")
+
+## Create heatmap body 
+df$TME_archetype_predict <- vsd$TME_archetype_predict[match(df$PID, colnames(vsd))]
+
+mat <- df %>% pivot_longer(cols = 2:(ncol(df)-1), names_to = "gene", values_to = "exprs") %>% group_by(TME_archetype_predict, gene) %>% summarize(mean = mean(exprs)) %>% na.omit()
+                                                                                                                                  
+ht <- mat %>% pivot_wider(names_from = "gene", values_from = "mean") %>% column_to_rownames("TME_archetype_predict")
+
+## Create row annotation 
+anno <- df %>% dplyr::select(TME_archetype_predict) %>% group_by(TME_archetype_predict) %>% dplyr::count() %>% na.omit()
+anno <- anno[match(anno$TME_archetype_predict, rownames(ht)),]
+
+## Print heatmap 
+Heatmap(ht, name = "Mean Z-scores")
+
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/TCGA_KIRC/TCGA_KIRC_archetype_keymarkers_ht.pdf", height = 2.5, width = 6)
+Heatmap(scale(ht), name = "Scaled mean Z-scores")+
+  rowAnnotation(n = anno_barplot(anno$n, gp = gpar(fill = "#440154FF")))+
+  rowAnnotation(anno = anno_text(anno$TME_archetype_predict))
+#dev.off()
+```
+
+```{r}
+# BAP1
+df <- as.data.frame(colData(vsd)[!is.na(vsd$BAP1), c("BAP1", "TME_archetype_predict")])
+print(fisher.test(table(df$BAP1, df$TME_archetype_predict)))
+
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/TCGA_KIRC/TCGA_KIRC_archetype_BAP1mut.pdf", width = 3, height = 4)
+dittoBarPlot(vsd[,!is.na(vsd$BAP1)], var = "BAP1", group.by = "TME_archetype_predict",retain.factor.levels = FALSE)+
+  ggtitle("")+
+  scale_fill_brewer(palette = "Set1", direction = -1)+
+  ggtitle(print(fisher.test(table(df$BAP1, df$TME_archetype_predict))))
+dev.off()
 
 
-# CONTINUE HERE
+vsd$TME_archetype_predict_comb <- ifelse(vsd$TME_archetype_predict == "TME_suppressed", "TME_suppressed", "Other")
+dittoBarPlot(vsd[,!is.na(vsd$BAP1)], var = "BAP1", group.by = "TME_archetype_predict_comb",retain.factor.levels = FALSE)+
+  ggtitle("")
+df <- as.data.frame(colData(vsd)[!is.na(vsd$BAP1), c("BAP1", "TME_archetype_predict_comb")])
+print(fisher.test(table(df$BAP1, df$TME_archetype_predict_comb)))
+```
+
+
+
+```{r}
+# PBRM1
+df <- as.data.frame(colData(vsd)[!is.na(vsd$PBRM1), c("PBRM1", "TME_archetype_predict")])
+print(fisher.test(table(df$PBRM1, df$TME_archetype_predict)))
+
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/TCGA_KIRC/TCGA_KIRC_archetype_PBRM1mut.pdf", width = 4, height = 3)
+dittoBarPlot(vsd[,!is.na(vsd$PBRM1)], var = "PBRM1", group.by = "TME_archetype_predict",retain.factor.levels = FALSE)+
+  ggtitle("")+
+  scale_fill_brewer(palette = "Set1", direction = -1)+
+  ggtitle(print(fisher.test(table(df$PBRM1, df$TME_archetype_predict))))
+dev.off()
+```
+
+```{r}
+res_MCP <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_MCP.rds") 
+
+#Z-scoring of MCP results by cell type
+res_MCP_1 <- res_MCP %>% dplyr::select(-cell_type)
+rownames(res_MCP_1) <- res_MCP$cell_type
+res_MCP_z <- as.data.frame(t(scale(t(res_MCP_1), center=TRUE, scale=TRUE)))
+res_MCP_z <- res_MCP_z %>% rownames_to_column("cell_type")
+
+res_MCP_plot <- res_MCP_z %>% pivot_longer(2:ncol(res_MCP_z), names_to = "PID", values_to = "score")
+
+res_MCP_plot$TME_archetype_predict <- kirc.clean$TME_archetype_predict[match(res_MCP_plot$PID, colnames(kirc.clean))]
+
+ggplot(res_MCP_plot, aes(x = TME_archetype_predict, y = score))+
+  geom_boxplot(outlier.colour = NA)+
+  geom_jitter(aes(color = TME_archetype_predict), size = 3, position=position_jitter(w=0.1,h=0.1))+
+  facet_wrap(~cell_type, scales = "free_y")+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90))+
+  scale_color_brewer(palette = "Set1")+
+  guides(color = "none")
+  #stat_compare_means(method = "t.test")
+  
+# Heatmap visualization  
+ht_MCP <- res_MCP_plot %>% group_by(TME_archetype_predict, cell_type) %>% dplyr::summarize(mean = mean(score)) %>% na.omit() %>% pivot_wider(names_from = TME_archetype_predict, values_from = mean) %>% column_to_rownames("cell_type") 
+
+Heatmap(ht_MCP, name = "mean MCP-Z-score")
+```
+
+```{r}
+res_quanti <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_quantiseq.rds") 
+
+#Z-scoring of quanti results by cell type
+res_quanti_z <- res_quanti %>% filter(cell_type != "uncharacterized cell") %>% column_to_rownames("cell_type")
+
+res_quanti_z <- as.data.frame(t(scale(t(res_quanti_z), center=TRUE, scale=TRUE)))
+res_quanti_z <- res_quanti_z %>% rownames_to_column("cell_type")
+
+res_quanti_plot <- res_quanti_z %>% pivot_longer(2:ncol(res_quanti_z), names_to = "PID", values_to = "score")
+
+res_quanti_plot$TME_archetype_predict <- kirc.clean$TME_archetype_predict[match(res_quanti_plot$PID, colnames(kirc.clean))]
+
+ggplot(res_quanti_plot, aes(x = TME_archetype_predict, y = score))+
+  geom_boxplot(outlier.colour = NA)+
+  geom_jitter(aes(color = TME_archetype_predict), size = 3, position=position_jitter(w=0.1,h=0.1))+
+  facet_wrap(~cell_type, scales = "free_y")+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90))+
+  scale_color_brewer(palette = "Set1")+
+  guides(color = "none")
+  #scale_color_manual(values = metadata(vsd)$colors$KRT57_score)
+  #stat_compare_means(method = "t.test")
+
+res_M2 <- res_quanti_plot %>% filter(cell_type == "Macrophage M2")
+
+ggplot(res_M2, aes(x = TME_archetype_predict, y = score))+
+  geom_boxplot(outlier.colour = NA)+
+  geom_jitter(aes(color = TME_archetype_predict), size = 3, position=position_jitter(w=0.1,h=0.1))+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90))+
+  scale_color_brewer(palette = "Set1")+
+  guides(color = "none")
+
+
+# Heatmap visualization  
+ht_quanti <- res_quanti_plot %>% group_by(TME_archetype_predict, cell_type) %>% dplyr::summarize(mean = mean(score)) %>% na.omit() %>% pivot_wider(names_from = TME_archetype_predict, values_from = mean) %>% column_to_rownames("cell_type")
+
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/TCGA_KIRC/TCGA_KIRC_archetype_quanti_ht.pdf", width = 6, height = 5)
+Heatmap(ht_quanti, name = "mean quanti-Z-score")
+dev.off()
+```
+
+
+```{r}
+genom_sig <- c("CD44", "COL6A1", "DCBLD2", "GFPT2", "L1CAM", "PLAU", "PLTP", "SEMA3C", "TFAP2A", "TRNP1")
+
+## 1. pan AV signature per PID group 
+genom_sig_rel <- genom_sig[genom_sig %in% rownames(assay(vsd))]
+# Filter for available genes
+#TNBC_PID <- colnames(vsd[,vsd$TNBC == "TNBC"])
+#vsd_TNBC <- vsd[, colnames(vsd) %in% TNBC_PID]
+#df <- t(assay(vsd_TNBC)[genom_sig_rel ,]) %>% as.data.frame
+df <- t(assay(vsd)[genom_sig_rel ,]) %>% as.data.frame
+
+# Z-score gene expression 
+df <- as.data.frame(scale(df))
+
+df$signature_sum <- rowSums(df,na.rm = TRUE)
+df$TME_archetype_predict <- vsd$TME_archetype_predict[match(rownames(df), colnames(vsd))]
+df <- df[!is.na(df$TME_archetype_predict),]
+
+compare_means(signature_sum ~ TME_archetype_predict,df) #pairwise comparisons
+compare_means(signature_sum ~ TME_archetype_predict,df, method = "kruskal.test") #global comparison
+
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/TCGA_KIRC/TCGA_KIRC_archetype_genomicdediffsig_box.pdf", width = 5, height = 5)
+ggplot(df, aes(x = TME_archetype_predict, y = signature_sum, fill = TME_archetype_predict))+
+  geom_point(aes(color = TME_archetype_predict))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
+  #scale_color_brewer(palette = "Paired")+
+  scale_color_manual(values = col_group)+
+  scale_fill_manual(values = col_group)+
+  theme_classic()+
+  guides(color = "none")+
+  ylab("Genomic dedifferentiation (Salgia et al.)")+
+  stat_compare_means()
+dev.off()
+
+mat <- df %>% pivot_longer(cols = 1:(ncol(df)-2), names_to = "gene", values_to = "exprs") %>% group_by(TME_archetype_predict, gene) %>% summarize(mean = mean(exprs)) %>% na.omit()
+mat <- mat %>% filter(!is.na(mean))
+ht <- mat %>% pivot_wider(names_from = "gene", values_from = "mean") %>% column_to_rownames("TME_archetype_predict")
+
+Heatmap(ht, name = "Mean signature Z-scores")
+```
+
+
+```{r}
+library(readxl)
+HU_SIG <- read_excel("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/data/DCCD_SubTables_NatureGenetics.xlsx",sheet = 8, col_names = TRUE)
+#HU_SIG <- read_excel("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/IMC/tumor_panel/data_analysis/data/DCCD_SubTables_NatureGenetics.xlsx",sheet = 8, col_names = TRUE)
+
+# Extract unique signatures genes for each immune subtype
+IM4 <- HU_SIG %>% filter(Immune_subtype == "IM4") %>% pull(Symbol) #De-clear differentiated ccRCC
+IM3 <- HU_SIG %>% filter(Immune_subtype == "IM3") %>% pull(Symbol)
+IM2 <- HU_SIG %>% filter(Immune_subtype == "IM2") %>% pull(Symbol) #Good prognosis
+IM1 <- HU_SIG %>% filter(Immune_subtype == "IM1") %>% pull(Symbol)
+```
+
+IM4 
+
+```{r}
+## 1. pan AV signature per PID group 
+IM4_rel <- IM4[IM4 %in% rownames(assay(vsd))]
+# Filter for available genes
+#TNBC_PID <- colnames(vsd[,vsd$TNBC == "TNBC"])
+#vsd_TNBC <- vsd[, colnames(vsd) %in% TNBC_PID]
+#df <- t(assay(vsd_TNBC)[IM4_rel ,]) %>% as.data.frame
+df <- t(assay(vsd)[IM4_rel ,]) %>% as.data.frame
+
+# Z-score gene expression 
+df <- as.data.frame(scale(df))
+
+df$signature_sum <- rowSums(df,na.rm = TRUE)
+df$TME_archetype_predict <- vsd$TME_archetype_predict[match(rownames(df), colnames(vsd))]
+df <- df[!is.na(df$TME_archetype_predict),]
+
+compare_means(signature_sum ~ TME_archetype_predict,df) #pairwise comparisons
+compare_means(signature_sum ~ TME_archetype_predict,df, method = "kruskal.test") #global comparison
+col_group <- setNames(c("#0571B0", "gold3", "#CA0020"),c("TME_activated","TME_silent","TME_suppressed"))
+
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/TCGA_KIRC/TCGA_KIRC_archetype_IM4Hu_box.pdf", width = 5, height = 3)
+ggplot(df, aes(x = TME_archetype_predict, y = signature_sum, fill = TME_archetype_predict))+
+  geom_point(aes(color = TME_archetype_predict))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
+  #scale_color_brewer(palette = "Paired")+
+  scale_color_manual(values = col_group)+
+  scale_fill_manual(values = col_group)+
+  theme_classic()+
+  guides(color = "none")+
+  ylab("IM4 signature (Hu et al.)")+
+  stat_compare_means()
+dev.off()
+
+mat <- df %>% pivot_longer(cols = 1:(ncol(df)-2), names_to = "gene", values_to = "exprs") %>% group_by(TME_archetype_predict, gene) %>% summarize(mean = mean(exprs)) %>% na.omit()
+mat <- mat %>% filter(!is.na(mean))
+ht <- mat %>% pivot_wider(names_from = "gene", values_from = "mean") %>% column_to_rownames("TME_archetype_predict")
+
+Heatmap(ht, name = "Mean signature Z-scores")
+```
+
+
+
+```{r}
+library(KEGGREST)
+pathway_info <- keggGet("hsa00240") #Pyrmidine metabolism #hsa00010 (Glycolysis)
+glyco <- str_split(pathway_info[[1]]$GENE[seq(2, length(pathway_info[[1]]$GENE), 2)], ";", simplify = TRUE)[,1]
+
+## 1. pan AV signature per PID group 
+glyco_rel <- glyco[glyco %in% rownames(assay(vsd))]
+# Filter for available genes
+#TNBC_PID <- colnames(vsd[,vsd$TNBC == "TNBC"])
+#vsd_TNBC <- vsd[, colnames(vsd) %in% TNBC_PID]
+#df <- t(assay(vsd_TNBC)[glyco_rel ,]) %>% as.data.frame
+df <- t(assay(vsd)[glyco_rel ,]) %>% as.data.frame
+
+# Z-score gene expression 
+df <- as.data.frame(scale(df))
+
+df$signature_sum <- rowSums(df,na.rm = TRUE)
+df$TME_archetype_predict <- vsd$TME_archetype_predict[match(rownames(df), colnames(vsd))]
+df <- df[!is.na(df$TME_archetype_predict),]
+
+compare_means(signature_sum ~ TME_archetype_predict,df) #pairwise comparisons
+compare_means(signature_sum ~ TME_archetype_predict,df, method = "kruskal.test") #global comparison
+col_group <- setNames(c("#0571B0", "gold3", "#CA0020"),c("TME_activated","TME_silent","TME_suppressed"))
+
+
+ggplot(df, aes(x = TME_archetype_predict, y = signature_sum, fill = TME_archetype_predict))+
+  geom_point(aes(color = TME_archetype_predict))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
+  #scale_color_brewer(palette = "Paired")+
+  scale_color_manual(values = col_group)+
+  scale_fill_manual(values = col_group)+
+  theme_classic()+
+  guides(color = "none")+
+  ylab("glyco signature (Hu et al.)")+
+  stat_compare_means()
+
+mat <- df %>% pivot_longer(cols = 1:(ncol(df)-2), names_to = "gene", values_to = "exprs") %>% group_by(TME_archetype_predict, gene) %>% summarize(mean = mean(exprs)) %>% na.omit()
+mat <- mat %>% filter(!is.na(mean))
+ht <- mat %>% pivot_wider(names_from = "gene", values_from = "mean") %>% column_to_rownames("TME_archetype_predict")
+
+Heatmap(ht, name = "Mean signature Z-scores")
+
+```
+
+
+
 
 ### Save
 
@@ -2329,8 +2807,38 @@ rownames(TPM_mat) <- rowData(kirc.clean)$gene_name
 ### MCP-counter 
 
 ```{r}
-#res_MCP <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_MCP.rds") 
-res_MCP <- immunedeconv::deconvolute(TPM_mat, method = "mcp_counter")
+res_MCP <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_MCP.rds") 
+
+#Z-scoring of MCP results by cell type
+res_MCP_1 <- res_MCP %>% dplyr::select(-cell_type)
+rownames(res_MCP_1) <- res_MCP$cell_type
+res_MCP_z <- as.data.frame(t(scale(t(res_MCP_1), center=TRUE, scale=TRUE)))
+res_MCP_z <- res_MCP_z %>% rownames_to_column("cell_type")
+
+res_MCP_plot <- res_MCP_z %>% pivot_longer(2:ncol(res_MCP_z), names_to = "PID", values_to = "score")
+
+res_MCP_plot$TME_archetype <- kirc.clean$TME_archetype[match(res_MCP_plot$PID, colnames(kirc.clean))]
+
+ggplot(res_MCP_plot, aes(x = TME_archetype, y = score))+
+  geom_boxplot(outlier.colour = NA)+
+  geom_jitter(aes(color = TME_archetype), size = 3, position=position_jitter(w=0.1,h=0.1))+
+  facet_wrap(~cell_type, scales = "free_y")+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90))+
+  scale_color_brewer(palette = "Set1")+
+  guides(color = "none")
+  #stat_compare_means(method = "t.test")
+  
+# Heatmap visualization  
+ht_MCP <- res_MCP_plot %>% group_by(TME_archetype, cell_type) %>% dplyr::summarize(mean = mean(score)) %>% na.omit() %>% pivot_wider(names_from = TME_archetype, values_from = mean) %>% column_to_rownames("cell_type") 
+
+Heatmap(ht_MCP, name = "mean MCP-Z-score")
+```
+
+
+```{r}
+res_MCP <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_MCP.rds") 
+#res_MCP <- immunedeconv::deconvolute(TPM_mat, method = "mcp_counter")
 ```
 
 ```{r}
@@ -2397,11 +2905,15 @@ Heatmap(ht_MCP, name = "mean MCP-Z-score")
 ### Quanti-Seq 
 
 ```{r}
-#res_quanti <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_quantiseq.rds") 
-res_quanti <- immunedeconv::deconvolute(TPM_mat, method = "quantiseq")
+#res_quanti <- immunedeconv::deconvolute(TPM_mat, method = "quantiseq")
+#saveRDS(res_quanti, "/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_quantiseq.rds") 
+
+res_quanti <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_quantiseq.rds") 
 ```
 
 ```{r}
+res_quanti <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_quantiseq.rds") 
+
 #Z-scoring of quanti results by cell type
 res_quanti_z <- res_quanti %>% filter(cell_type != "uncharacterized cell") %>% column_to_rownames("cell_type")
 
@@ -2422,7 +2934,17 @@ ggplot(res_quanti_plot, aes(x = TME_archetype, y = score))+
   guides(color = "none")
   #scale_color_manual(values = metadata(vsd)$colors$KRT57_score)
   #stat_compare_means(method = "t.test")
-  
+
+res_M2 <- res_quanti_plot %>% filter(cell_type == "Macrophage M2")
+
+ggplot(res_M2, aes(x = TME_archetype, y = score))+
+  geom_boxplot(outlier.colour = NA)+
+  geom_jitter(aes(color = TME_archetype), size = 3, position=position_jitter(w=0.1,h=0.1))+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90))+
+  scale_color_brewer(palette = "Set1")+
+  guides(color = "none")
+
 
 # Heatmap visualization  
 ht_quanti <- res_quanti_plot %>% group_by(TME_archetype, cell_type) %>% dplyr::summarize(mean = mean(score)) %>% na.omit() %>% pivot_wider(names_from = TME_archetype, values_from = mean) %>% column_to_rownames("cell_type")
@@ -2469,8 +2991,10 @@ saveRDS(res_quanti, "/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_K
 ### xCell
 
 ```{r}
-res_xcell <- immunedeconv::deconvolute(TPM_mat, method = "xcell")
-saveRDS(res_xcell, "/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_xcell.rds") 
+#res_xcell <- immunedeconv::deconvolute(TPM_mat, method = "xcell")
+#saveRDS(res_xcell, "/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_xcell.rds") 
+
+res_xcell <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_xcell.rds") 
 ```
 
 
@@ -2556,7 +3080,7 @@ ht_mut <- draw(ht_mut)
 col_order_ht <- column_order(ht_mut)
 driver_mat_ordered <- driver_mat[col_order_ht,]
 
-write_csv(driver_mat_ordered, "/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_genomic_subtype_anno.csv")
+#write_csv(driver_mat_ordered, "/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_genomic_subtype_anno.csv")
 ```
 
 ### Visualization
@@ -2650,11 +3174,12 @@ ggsurvplot(fit,
 library(caret)
 
 # Groups
-vsd$ICAM1_driven <- ifelse(vsd$PID_ICAM_mTOR_group == "ICAM1_driven", "1", "0")
-vsd$MTOR_driven <- ifelse(vsd$PID_ICAM_mTOR_group == "MTOR_driven", "1", "0")
-vsd$Not_ICAM_mTOR_driven <- ifelse(vsd$PID_ICAM_mTOR_group == "Not_ICAM_mTOR_driven", "1", "0")
+vsd$ICAM1_driven <- ifelse(vsd$TME_archetype == "TME_suppressed", "1", "0")
+vsd$MTOR_driven <- ifelse(vsd$TME_archetype == "TME_activated", "1", "0")
+vsd$Not_ICAM_mTOR_driven <- ifelse(vsd$TME_archetype == "TME_silent", "1", "0")
 
 # Genomic subtype
+vsd$genomic_subtype <- driver_mat_anno$genomic_subtype[match(vsd$PID, driver_mat_anno$PID)]
 vsd$VHL_wildtype <- ifelse(vsd$genomic_subtype == "VHL_wildtype", "1", "0")
 vsd$PBRM1_driven <- ifelse(vsd$genomic_subtype == "PBRM1_driven", "1", "0")
 vsd$BAP1_driven <- ifelse(vsd$genomic_subtype == "BAP1_driven", "1", "0")
@@ -2663,9 +3188,7 @@ vsd$multiple_drivers <- ifelse(vsd$genomic_subtype == "multiple_drivers", "1", "
 ```
 
 ```{r}
-vsd$genomic_subtype <- driver_mat_anno$genomic_subtype[match(vsd$PID, driver_mat_anno$PID)]
-
-dittoBarPlot(vsd[,!is.na(vsd$genomic_subtype)], var = "genomic_subtype", group.by = "PID_ICAM_mTOR_group",retain.factor.levels = FALSE)+
+dittoBarPlot(vsd[,!is.na(vsd$genomic_subtype)], var = "genomic_subtype", group.by = "TME_archetype",retain.factor.levels = FALSE)+
   ggtitle("")
 ```
 
@@ -2678,7 +3201,9 @@ Not_ICAM_mTOR_driven) %>% unique()
 
 # Binary mutation matrix
 ## Here GOI clonal 
-cur_mut_clonal <- colData(vsd) %>% as.data.frame %>% select(PID, VHL_wildtype, VHL_monodriver, BAP1_driven, PBRM1_driven, multiple_drivers) %>% unique() %>% remove_rownames %>% column_to_rownames("PID") %>% t()
+cur_mut_clonal <- colData(vsd) %>% as.data.frame %>% select(PID, VHL_wildtype, VHL_monodriver, BAP1_driven, PBRM1_driven, multiple_drivers) %>% unique() %>% remove_rownames %>% column_to_rownames("PID") %>% filter(complete.cases(.)) %>% t()
+
+cur_groups <- cur_groups[cur_groups$PID %in% colnames(cur_mut_clonal),]
 
 # Function to perform Fisher exact test for each gene
 perform_fisher_test <- function(gene_row, group1_cols, group2_cols) {

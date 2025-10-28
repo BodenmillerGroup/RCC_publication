@@ -24,6 +24,7 @@ library(SingleCellExperiment)
 
 ```{r}
 metadata_all <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/data/Metadata_combined_RCC_onlyPT.csv")
+#metadata_all <- read_csv("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/data/Metadata_combined_RCC_onlyPT.csv")
 ```
 
 ```{r}
@@ -137,6 +138,41 @@ metadata_selected$MSI_data <- metadata_selected$PID %in% (maldi_data %>% filter(
 metadata_selected$surv_data <- ifelse(!is.na(metadata_selected$OS_months),TRUE,FALSE)
 ```
 
+```{r}
+# Total number of cells 
+sce_TU <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_07.rds")
+sce_T <- readRDS("/mnt/central_nas_full/users/marllu/T_panel/data_analysis/sce_ccRCC_T_07.rds")
+sce_MY <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_07.rds")
+dim(sce_T)[2]+dim(sce_MY)[2]+dim(sce_TU)[2]
+
+# Total number of patients 
+length(unique(c(sce_TU$PID, sce_T$PID, sce_MY$PID)))
+
+# Total number of images 
+length(unique(sce_TU$sample_id))+length(unique(sce_T$sample_id))+length(unique(sce_MY$sample_id))
+
+# Number of images per PID across panels
+n_images_out <- Meta_viz %>% as.data.frame %>% select(PID)
+
+n_MY <- colData(sce_MY) %>% as.data.frame %>% select(PID, sample_id) %>% unique %>% count(PID) %>% arrange(desc(n))
+n_T <- colData(sce_T) %>% as.data.frame %>% select(PID, sample_id) %>% unique %>% count(PID) %>% arrange(desc(n))
+n_TU <- colData(sce_TU) %>% as.data.frame %>% select(PID, sample_id) %>% unique %>% count(PID) %>% arrange(desc(n))
+
+n_images_out$n_images_MY <- n_MY$n[match(n_images_out$PID, n_MY$PID)]
+n_images_out$n_images_T <- n_T$n[match(n_images_out$PID, n_T$PID)]
+n_images_out$n_images_TU <- n_TU$n[match(n_images_out$PID, n_TU$PID)]
+
+n_images_out <- n_images_out %>%
+  rowwise() %>%
+  mutate(mean = mean(c_across(where(is.numeric)), na.rm = TRUE), cat = "PID") %>%
+  arrange(desc(mean)) 
+
+ggplot(n_images_out, aes(mean))+
+  geom_bar(fill = "#440154FF")+
+  theme_classic()
+```
+
+
 ### Rich cohort overview
 
 ccRCC only 
@@ -153,6 +189,9 @@ Meta_viz <- metadata_selected %>% filter(subtype_combined == "ccRCC") %>% dplyr:
 Meta_viz <- as.data.frame(lapply(Meta_viz, as.character))
 Meta_viz[is.na(Meta_viz)] <- "Unknown"
 
+# Add to metadata selected
+Meta_viz$n_images <- n_images_out$mean[match(Meta_viz$PID, n_images_out$PID)]
+
 #Arrange
 Meta_viz <- Meta_viz %>% arrange(desc(pT_simple), desc(ISUP_simple), desc(necrose))
 
@@ -160,6 +199,8 @@ colors <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analys
 names(colors$pT_simple)[1:4] <- paste0("T",names(colors$pT_simple)[1:4])
 names(colors$ISUP)[1:4] <- paste0("G",names(colors$ISUP)[1:4])
 names(colors$necrose)[1:2] <- paste0("NE",names(colors$necrose)[1:2])
+
+col_nimages <- colorRamp2(c(0,median(Meta_viz$n_images, na.rm = TRUE),max(Meta_viz$n_images, na.rm = TRUE)), c(brewer.pal(3,"Oranges")[1],brewer.pal(3,"Oranges")[2],brewer.pal(3,"Oranges")[3]))
 
 #Color scheme
 col <- list(PID = colors$PID, 
@@ -174,7 +215,8 @@ col <- list(PID = colors$PID,
             IMC_MY_data = setNames(c("black","grey"), c("FALSE", "TRUE")), 
             HE_data = setNames(c("black","grey"), c("FALSE", "TRUE")), 
             MSI_data = setNames(c("black","grey"), c("FALSE", "TRUE")), 
-            GEN_data = setNames(c("black","grey"), c("FALSE", "TRUE"))
+            GEN_data = setNames(c("black","grey"), c("FALSE", "TRUE")),
+            n_images = col_nimages
             )
 
 #Heatmap Annotation
@@ -188,6 +230,7 @@ sample_anno <- HeatmapAnnotation(PID = Meta_viz$PID,
                                 IMC_TU_data = Meta_viz$IMC_TU_data,
                                 IMC_T_data = Meta_viz$IMC_T_data, 
                                 IMC_MY_data = Meta_viz$IMC_MY_data,
+                                n_images = Meta_viz$n_images,
                                 HE_data = Meta_viz$HE_data, 
                                 MSI_data = Meta_viz$MSI_data,
                                 GEN_data = Meta_viz$GEN_data,
@@ -200,10 +243,15 @@ sample_anno <- HeatmapAnnotation(PID = Meta_viz$PID,
                                 )%v%NULL
 
 #Display plot
-#pdf("/mnt/central_nas/rcc_volume/RCC/figures/cohort_overview/ccRCC_cohort_heatmap.pdf", width = 11, height = 4, onefile = FALSE)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/cohort_overview/ccRCC_cohort_heatmap.pdf", width = 11, height = 4.5, onefile = FALSE)
 draw(sample_anno)
-#dev.off()
+dev.off()
 ```
+
+
+
+
+
 
 ### Rich panel overview
 
