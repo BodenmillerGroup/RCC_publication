@@ -1,0 +1,187 @@
+---
+title: "08_Metabolome_Prep"
+output: html_document
+date: "2024-10-27"
+editor_options: 
+  chunk_output_type: inline
+---
+# MALDI-MSI data preparation 
+
+## Software requirments 
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(RColorBrewer)
+library(foreach)
+library(circlize)
+library(ComplexHeatmap)
+library(scater)
+library(BiocParallel)
+library(Cardinal)
+```
+
+
+## 1. Read in data 
+
+```{r}
+mse_1 <- readMSIData("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/raw/ztma_20_rcc_no_normalized_complete_spectrum.imzML", as = "MSImagingExperiment")
+mse_1
+
+mse_2 <- readMSIData("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/raw/ztma_224_rcc_no_normalized_complete_spectrum.imzML", as = "MSImagingExperiment")
+mse_2
+```
+
+```{r}
+# Mean feature intensities
+mean_1 <- summarizeFeatures(mse_1, FUN="mean") # Runs long
+mean_2 <- summarizeFeatures(mse_2, FUN="mean") # Runs long
+
+mean_df <- fData(mean_1) %>% as.data.frame
+
+
+ggplot(mean_df, aes(mz, mean))+
+  geom_line()+
+  theme_classic()
+
+ggplot(mean_df %>% filter(mz < 500 & mz > 490), aes(mz, mean))+
+  geom_line()+
+  theme_classic()
+```
+
+```{r}
+# Mean pixel intensities (Across all channels)
+mse_1_TIC <- summarizePixels(mse_1, c(TIC="sum"))
+image(mse_1_TIC, superpose = FALSE)
+
+mse_2_TIC <- summarizePixels(mse_2, c(TIC="sum"))
+image(mse_2_TIC, superpose = FALSE)
+```
+
+```{r}
+# This should allow segmentation into cores?
+coord <- coord(mse_1_norm) %>% as.data.frame
+```
+
+
+
+
+
+## 2. Preprocessing 
+
+### Normalize 
+
+```{r}
+mse_1_norm <- process(normalize(mse_1, method="tic"))
+mse_2_norm <- process(normalize(mse_2, method="tic"))
+
+mse_1_norm
+```
+
+```{r}
+# Mean feature intensities
+mean_1 <- summarizeFeatures(mse_1_norm, FUN="mean")
+mean_2 <- summarizeFeatures(mse_2_norm, FUN="mean")
+
+
+mean_df <- rbind(fData(mean_1) %>% as.data.frame %>% mutate(data = "TMA20"), fData(mean_2) %>% as.data.frame %>% mutate(data = "TMA224"))
+
+ggplot(mean_df, aes(mz, mean, color = data))+
+  geom_line(alpha = 0.5)+
+  theme_classic()
+
+ggplot(mean_df %>% filter(mz < 500 & mz > 400), aes(mz, mean, color = data))+
+  geom_line()+
+  theme_classic()
+
+ggplot(mean_df %>% filter(mz < 750 & mz > 740), aes(mz, mean, color = data))+
+  geom_line()+
+  theme_classic()
+
+ggplot(mean_df %>% filter(mz < 550 & mz > 540), aes(mz, mean, color = data))+
+  geom_line()+
+  theme_classic()
+```
+
+
+```{r}
+# check difference of mass bins 
+mean_df_diff <- mean_df %>% group_by(data) %>% arrange(mz) %>% mutate(diff = c(NA,diff(mz)))
+
+ggplot(mean_df_diff, aes(data, diff, color = data))+
+  geom_boxplot()+
+  theme_classic()
+
+ggplot(mean_df_diff, aes(mz, diff, color = data))+
+  geom_point()+
+  theme_classic()
+```
+
+### Peak picking
+
+```{r}
+mse_1_peak <- process(peakPick(mse_1_norm, SNR = 3, method = "mad")) 
+mse_2_peak <- process(peakPick(mse_2_norm, SNR = 3, method = "mad")) 
+```
+
+
+```{r}
+# Mean feature intensities
+mean_1 <- summarizeFeatures(mse_1_peak, FUN="mean")
+mean_2 <- summarizeFeatures(mse_2_peakfData(mse_peaks), FUN="mean")
+
+
+mean_df <- rbind(fData(mean_1) %>% as.data.frame %>% mutate(data = "TMA20"), fData(mean_2) %>% as.data.frame %>% mutate(data = "TMA224"))
+
+ggplot(mean_df, aes(mz, mean, color = data))+
+  geom_line(alpha = 0.5)+
+  theme_classic()
+
+ggplot(mean_df %>% filter(mz < 500 & mz > 400), aes(mz, mean, color = data))+
+  geom_line()+
+  theme_classic()
+
+ggplot(mean_df %>% filter(mz < 750 & mz > 740), aes(mz, mean, color = data))+
+  geom_line()+
+  theme_classic()
+
+ggplot(mean_df %>% filter(mz < 550 & mz > 540), aes(mz, mean, color = data))+
+  geom_line()+
+  theme_classic()
+```
+
+
+
+
+
+
+
+```{r}
+
+plot(mse_1_norm, coord=list(x=16, y=16), linewidth=2)
+
+fData(mse_1_norm)
+mse_1_norm
+
+data_peaks <- process(data, plot=interactive())
+
+
+```
+
+```{r}
+any(colSums(intensity(mse_1_norm)) == 0)
+```
+
+```{r}
+p1 <- process(peakPick(mse_1_norm, method = "mad")) |> 
+    plot(coord=list(x=16, y=16), linewidth=2)
+
+p1
+
+matter::as_facets(list(p1, p2), nrow=2,
+    labels=c("Derivative-based SNR", "Dynamic filtering-based SNR"))
+```
+
+
+
+

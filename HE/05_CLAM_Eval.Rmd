@@ -136,7 +136,7 @@ ggsurvplot(fit,
 fit <- survfit(Surv(OS_days, status_OS) ~ TME_archetype_folds, data = results_combined)
 print(fit)
 
-pdf("/mnt/central_nas/rcc_volume/RCC/figures/HE/TCGA_KIRC_Survival_ArchetypesPredict_folds.pdf", width = 7, height = 3.5, onefile = FALSE)
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/HE/TCGA_KIRC_Survival_ArchetypesPredict_folds.pdf", width = 7, height = 3.5, onefile = FALSE)
 ggsurvplot(fit,
           pval = TRUE,
           risk.table = TRUE, # Add risk table
@@ -146,7 +146,7 @@ ggsurvplot(fit,
           palette = c("#0571B0", "gold3", "#CA0020"),
           ggtheme = theme_classic(), 
           conf.int = FALSE)
-dev.off()
+#dev.off()
 ```
 
 
