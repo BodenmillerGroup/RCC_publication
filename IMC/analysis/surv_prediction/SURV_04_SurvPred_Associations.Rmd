@@ -1374,6 +1374,46 @@ plotSpatial(
 dev.off()
 ```
 
+
+```{r}
+out <- colData(sce_T) %>% as.data.frame %>% select(PID, sample_id, spatial_CD8_pheno, celltype_combined_broad) %>% filter(celltype_combined_broad == "CD8") %>% group_by(sample_id, spatial_CD8_pheno, PID) %>% dplyr::count() %>% group_by(PID, spatial_CD8_pheno) %>% mutate(n = mean(n)) %>% select(PID, spatial_CD8_pheno, n) %>% unique()
+
+out$CD8_category <- ifelse(out$n <= quantile(out$n, probs = seq(0,1,0.33))[2], "low", 
+                           ifelse(out$n >= quantile(out$n, probs = seq(0,1,0.33))[3], "high", "medium"))
+
+out_viz <- out %>% group_by(CD8_category, spatial_CD8_pheno) %>% dplyr::count() %>% ungroup() %>% group_by(CD8_category) %>% mutate(fra = n/sum(n))
+
+out_viz$CD8_category <- factor(out_viz$CD8_category, levels = c("high","medium","low"))
+
+ggplot(out_viz, aes(x = CD8_category, y = fra, fill = spatial_CD8_pheno))+
+  geom_bar(stat = "identity", color = "black")+
+  theme_classic()+
+  scale_fill_manual(values = metadata(sce_T)$colors$spatial_CD8_pheno)
+
+sce_T$CD8_number_category <- out$CD8_category[match(sce_T$PID, out$PID)]
+```
+
+```{r}
+## Number group
+cur_surv <- colData(sce_T) %>% as.data.frame() %>% filter(PID %in% metadata_selected$PID) %>% select(PID, CD8_number_category, OS_months, status_OS) %>% unique()
+
+#Plot survival curves
+fit <- survfit(Surv(OS_months, status_OS) ~ CD8_number_category, data = cur_surv)
+print(fit)
+
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_Kaplan_NumberCD8.pdf", width = 8, height = 5, onefile = FALSE)
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(),
+          palette = "Set1")#, # Change ggplot2 theme
+dev.off()
+```
+
+
 ##### Genomics
 
 ```{r}
