@@ -133,9 +133,9 @@ GOI <- GOI_IntOGen$Symbol
 
 mutation_xena <- mutation_xena %>% filter(gene %in% GOI) %>% pivot_wider(names_from = "gene", values_from = "mutation") %>% select(-TGFBR2, -ARHGEF10L, -PTPRK, -RAP1GDS1)
 
-mutation_xena_filtered <- mutation_xena %>% select(PID, VHL, BAP1, PBRM1, SETD2, PTEN, NF2) %>% as.data.frame
+mutation_xena_filtered <- mutation_xena %>% select(PID, VHL, BAP1, PBRM1, SETD2, PTEN, NF2, TP53) %>% as.data.frame
 
-for (entry in colnames(mutation_xena_filtered)[colnames(mutation_xena_filtered) %in% c("VHL", "BAP1", "PBRM1", "SETD2", "PTEN", "NF2")]) {
+for (entry in colnames(mutation_xena_filtered)[colnames(mutation_xena_filtered) %in% c("VHL", "BAP1", "PBRM1", "SETD2", "PTEN", "NF2", "TP53")]) {
   colData(kirc.clean)[,entry] <- mutation_xena_filtered[,entry][match(colData(kirc.clean)[,"PID"],mutation_xena_filtered$PID)]
 }
 ```
@@ -308,8 +308,13 @@ mat <- assay(vsd)
 #saveRDS(res, "/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_nodesign.rds") 
 #saveRDS(vsd, "/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_vsd_nodesign.rds") 
 #saveRDS(kirc.clean,"/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_cleaned.rds")
+```
 
-res <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_nodesign.rds")
+
+# 1. Survival ecotypes (H&E)
+
+```{r}
+#res <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_res_nodesign.rds")
 vsd <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_vsd_nodesign.rds")
 kirc.clean <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_cleaned.rds")
 
@@ -317,9 +322,6 @@ kirc.clean <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/TCGA
 # vsd <- readRDS("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_vsd_nodesign.rds") 
 # kirc.clean <- readRDS("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/validation/TCGA_KIRC/TCGA_KIRC_cleaned.rds")
 ```
-
-
-# 1. Survival ecotypes (H&E)
 
 ## Read in group information
 
@@ -543,6 +545,20 @@ dittoBarPlot(vsd[,!is.na(vsd$PBRM1)], var = "PBRM1", group.by = "TME_archetype_c
 df <- as.data.frame(colData(vsd)[!is.na(vsd$PBRM1), c("PBRM1", "TME_archetype_comb")])
 print(fisher.test(table(df$PBRM1, df$TME_archetype_comb)))
 ```
+```{r}
+# TP53
+dittoBarPlot(vsd[,!is.na(vsd$TP53)], var = "TP53", group.by = "TME_archetype",retain.factor.levels = FALSE)+
+  ggtitle("")+
+  scale_fill_brewer(palette = "Set1", direction = -1)
+
+df <- as.data.frame(colData(vsd)[!is.na(vsd$TP53), c("TP53", "TME_archetype")])
+print(fisher.test(table(df$TP53, df$TME_archetype)))
+vsd$TME_archetype_comb <- ifelse(vsd$TME_archetype == "TME_suppressed", "TME_suppressed", "Other")
+dittoBarPlot(vsd[,!is.na(vsd$TP53)], var = "TP53", group.by = "TME_archetype_comb",retain.factor.levels = FALSE)+
+  ggtitle("")
+df <- as.data.frame(colData(vsd)[!is.na(vsd$TP53), c("TP53", "TME_archetype_comb")])
+print(fisher.test(table(df$TP53, df$TME_archetype_comb)))
+```
 
 ```{r}
 dittoBarPlot(vsd[,!is.na(vsd$BAP1)], var = "BAP1", group.by = "TME_archetype",retain.factor.levels = FALSE)+
@@ -550,6 +566,9 @@ dittoBarPlot(vsd[,!is.na(vsd$BAP1)], var = "BAP1", group.by = "TME_archetype",re
   scale_fill_brewer(palette = "Set1", direction = -1)+
   guides(fill = "none")+
 dittoBarPlot(vsd[,!is.na(vsd$PBRM1)], var = "PBRM1", group.by = "TME_archetype",retain.factor.levels = FALSE)+
+  ggtitle("")+
+  scale_fill_brewer(palette = "Set1", direction = -1)+
+dittoBarPlot(vsd[,!is.na(vsd$TP53)], var = "TP53", group.by = "TME_archetype",retain.factor.levels = FALSE)+
   ggtitle("")+
   scale_fill_brewer(palette = "Set1", direction = -1)
 ```
@@ -1322,10 +1341,11 @@ ra <- columnAnnotation(cat = row_anno$cat, col = list(cat = gene_col))
 # Col-Anno
 col_anno <- data.frame(PID = colnames(gen_mat))
 col_anno$group <- kirc.clean$TME_archetype_predict[match(col_anno$PID, kirc.clean$PID)]
+col_group <- setNames(c("#0571B0", "gold3", "#CA0020"),c("TME_activated","TME_silent","TME_suppressed"))
 col_anno_ob <- rowAnnotation(group = col_anno$group, 
                                 col = list(group = col_group)) 
 
-#pdf("/mnt/central_nas/rcc_volume/RCC/figures/TCGA_KIRC/TCGA_KIRC_heatmap_NTPprediction.pdf", height = 6, width = 5)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/TCGA_KIRC/TCGA_KIRC_heatmap_NTPprediction.pdf", height = 4, width = 5)
 Heatmap(t(gen_mat), 
         column_split = row_anno$cat,
         row_split = col_anno$group,
@@ -1335,7 +1355,7 @@ Heatmap(t(gen_mat),
         show_column_dend = TRUE
         )%v%
   ra
-#dev.off()
+dev.off()
 ```
 
 
@@ -1617,12 +1637,13 @@ out_gse_medium <- out_gse_medium %>% filter(Description %in% shared) %>%
 
 
 ```{r}
-out_gse_all <- rbind(out_gse_act %>% arrange(p.adjust) %>% slice(1:8), 
-                     out_gse_sup %>% arrange(p.adjust) %>% slice(1:8), 
-                     out_gse_medium %>% arrange(p.adjust) %>% slice(1:8))
+out_gse_all <- rbind(out_gse_act %>% arrange(p.adjust) %>% slice(1:10), 
+                     out_gse_sup %>% arrange(p.adjust) %>% slice(1:10), 
+                     out_gse_medium %>% arrange(p.adjust) %>% slice(1:10))
 
 # Plot
 library(tidytext)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/TCGA_KIRC/TCGA_KIRC_archetype_GSEA.pdf", width = 7, height = 5)
 ggplot(out_gse_all,
        aes(x = category,
            y = reorder_within(Description, -p.adjust, category),
@@ -1632,8 +1653,8 @@ ggplot(out_gse_all,
   scale_y_reordered() + 
   facet_grid(category ~ ., scales = "free_y", space = "free_y") +
   theme_classic() +
-  scale_color_gradient2(high = "#E41A1C", low = "white") +
-  scale_size(range = c(2, 10))
+  scale_color_gradient2(high = "#E41A1C", low = "white")
+dev.off()
 ```
 
 
@@ -2035,12 +2056,12 @@ Heatmap(scale(ht), name = "Scaled mean Z-scores")+
 df <- as.data.frame(colData(vsd)[!is.na(vsd$BAP1), c("BAP1", "TME_archetype_predict")])
 print(fisher.test(table(df$BAP1, df$TME_archetype_predict)))
 
-pdf("/mnt/central_nas/rcc_volume/RCC/figures/TCGA_KIRC/TCGA_KIRC_archetype_BAP1mut.pdf", width = 3, height = 4)
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/TCGA_KIRC/TCGA_KIRC_archetype_BAP1mut.pdf", width = 3, height = 4)
 dittoBarPlot(vsd[,!is.na(vsd$BAP1)], var = "BAP1", group.by = "TME_archetype_predict",retain.factor.levels = FALSE)+
   ggtitle("")+
   scale_fill_brewer(palette = "Set1", direction = -1)+
   ggtitle(print(fisher.test(table(df$BAP1, df$TME_archetype_predict))))
-dev.off()
+#dev.off()
 
 
 vsd$TME_archetype_predict_comb <- ifelse(vsd$TME_archetype_predict == "TME_suppressed", "TME_suppressed", "Other")
@@ -2055,13 +2076,35 @@ print(fisher.test(table(df$BAP1, df$TME_archetype_predict_comb)))
 df <- as.data.frame(colData(vsd)[!is.na(vsd$PBRM1), c("PBRM1", "TME_archetype_predict")])
 print(fisher.test(table(df$PBRM1, df$TME_archetype_predict)))
 
-pdf("/mnt/central_nas/rcc_volume/RCC/figures/TCGA_KIRC/TCGA_KIRC_archetype_PBRM1mut.pdf", width = 4, height = 3)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/TCGA_KIRC/TCGA_KIRC_archetype_PBRM1mut.pdf", width = 3, height = 3)
 dittoBarPlot(vsd[,!is.na(vsd$PBRM1)], var = "PBRM1", group.by = "TME_archetype_predict",retain.factor.levels = FALSE)+
   ggtitle("")+
   scale_fill_brewer(palette = "Set1", direction = -1)+
   ggtitle(print(fisher.test(table(df$PBRM1, df$TME_archetype_predict))))
 dev.off()
 ```
+
+```{r}
+# TP53
+df <- as.data.frame(colData(vsd)[!is.na(vsd$TP53), c("TP53", "TME_archetype_predict")])
+print(fisher.test(table(df$TP53, df$TME_archetype_predict)))
+
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/TCGA_KIRC/TCGA_KIRC_archetype_TP53mut.pdf", width = 3, height = 4)
+dittoBarPlot(vsd[,!is.na(vsd$TP53)], var = "TP53", group.by = "TME_archetype_predict",retain.factor.levels = FALSE)+
+  ggtitle("")+
+  scale_fill_brewer(palette = "Set1", direction = -1)+
+  ggtitle(print(fisher.test(table(df$TP53, df$TME_archetype_predict))))
+#dev.off()
+
+
+vsd$TME_archetype_predict_comb <- ifelse(vsd$TME_archetype_predict == "TME_suppressed", "TME_suppressed", "Other")
+dittoBarPlot(vsd[,!is.na(vsd$TP53)], var = "TP53", group.by = "TME_archetype_predict_comb",retain.factor.levels = FALSE)+
+  ggtitle("")
+df <- as.data.frame(colData(vsd)[!is.na(vsd$TP53), c("TP53", "TME_archetype_predict_comb")])
+print(fisher.test(table(df$TP53, df$TME_archetype_predict_comb)))
+```
+
+
 
 ## Immune cell deconvolution 
 

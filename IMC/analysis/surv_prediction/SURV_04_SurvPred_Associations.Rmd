@@ -1463,7 +1463,7 @@ mut_levels_for_matrix <- snv %>% pull(mut_level) %>% unique()
 Genes_list <- snv %>% pull(Genes) %>% unique()
 ## B: Genes of Interest e.g. IntOGen driver genes 
 Genes_list <- snv %>% filter(Genes %in% GOI) %>% pull(Genes) %>% unique()
-Genes_list <- Genes_list[!Genes_list %in% c("SF3B1", "STAG2", "ELOC", "ARHGAP35")]
+Genes_list <- Genes_list[!Genes_list %in% c("SF3B1", "STAG2", "ELOC", "ARHGAP35", "ERBB4", "SETBP1")]
 
 #Placeholders 
 mut_list <- list()
@@ -1602,9 +1602,9 @@ ht_all <- oncoPrint(mut_list_full,
                   pct_side = "right", row_names_side = "left")%v% ca
   
 
-pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Oncoprint_Mutations_Archetypes.pdf", width = 7, height = 6, onefile = FALSE)
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Oncoprint_Mutations_Archetypes.pdf", width = 7, height = 6, onefile = FALSE)
 draw(ht_all)
-dev.off()
+#dev.off()
 ```
 
 Survival 
@@ -1619,7 +1619,7 @@ surv_out <- metadata_genome %>% select(PID, OS_months, status_OS, PID_group_test
 
 fit <- survfit(Surv(OS_months, status_OS) ~ PID_group_test, data = surv_out)
 
-pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_Kaplan_SurvArchetypes_Mutations.pdf", width = 8, height = 5, onefile = FALSE)
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_Kaplan_SurvArchetypes_Mutations.pdf", width = 8, height = 5, onefile = FALSE)
 ggsurvplot(fit, 
           pval = TRUE,
           risk.table = TRUE, # Add risk table
@@ -1630,7 +1630,7 @@ ggsurvplot(fit,
           palette = c("gold3", "#CA0020","#0571B0"),
           conf.int = FALSE
 )
-dev.off()
+#dev.off()
 ```
 
 Associations 
@@ -1670,8 +1670,8 @@ for (entry in GOI_all) {
 ```
 
 ```{r}
-GOI_all <- GOI_all[!GOI_all %in% c("SF3B1_all","ELOC_all","STAG2_all","ARHGAP35_all")]
-GOI_clonal <- GOI_clonal[!GOI_clonal %in% c("SF3B1_clonal","ELOC_clonal","STAG2_clonal","ARHGAP35_clonal")]
+#GOI_all <- GOI_all[!GOI_all %in% c("SF3B1_all","ELOC_all","STAG2_all","ARHGAP35_all")]
+GOI_clonal <- GOI_clonal[!GOI_clonal %in% c("SF3B1_clonal","ELOC_clonal","STAG2_clonal","ARHGAP35_clonal", "ERBB4_clonal", "SETBP1_clonal")]
 ```
 
 ```{r}
@@ -1762,7 +1762,7 @@ ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_a
 mut_selected <- fisher_full %>% filter(result != "NOTSIG") %>% pull(gene) %>% unfactor
 fisher_full_selected <- fisher_full %>% filter(gene %in% mut_selected)
 
-pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Mutations_Archetypes_Bubble.pdf", width = 6, height = 3, onefile = FALSE)
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Mutations_Archetypes_Bubble.pdf", width = 6, height = 3, onefile = FALSE)
 ggplot(fisher_full_selected, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_adj)))+
   geom_point()+
   theme_classic()+
@@ -1773,7 +1773,7 @@ ggplot(fisher_full_selected, aes(x=category, y = gene,col = odds_ratio, size = -
   scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   coord_flip()
-dev.off()
+#dev.off()
 ```
 
 Association with survival
@@ -1819,7 +1819,7 @@ cur_surv_plot$result <- ifelse(cur_surv_plot$direction == "high" & cur_surv_plot
 
 cur_surv_plot$type <- "mutation"
 
-pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Mutations_Survival_Bubble.pdf", width = 3, height = 4)
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Mutations_Survival_Bubble.pdf", width = 3, height = 4)
 ggplot(cur_surv_plot, aes(x=reorder(group,ratio), y = type, col = ratio, size= -log10(p)))+
   geom_point()+
   theme_classic()+
@@ -1834,17 +1834,17 @@ ggplot(cur_surv_plot, aes(x=reorder(group,ratio), y = type, col = ratio, size= -
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   ylab("Cox model")+
   coord_flip()
-dev.off()
+#dev.off()
 ```
 
 ```{r}
 library(survival)
 library(survminer)
 
-cur_surv <- mut_matrix %>% select(PID, OS_months, status_OS, TP53, BAP1, PBRM1) %>% unique()
+cur_surv <- mut_matrix %>% select(PID, OS_months, status_OS, TP53, SETD2, MET) %>% unique()
 
 #Plot survival curves
-fit <- survfit(Surv(OS_months, status_OS) ~ PBRM1, data = cur_surv)
+fit <- survfit(Surv(OS_months, status_OS) ~ SETD2, data = cur_surv)
 print(fit)
 
 ggsurvplot(fit,
@@ -1953,7 +1953,7 @@ mut_selected <- fisher_full %>% filter(result != "NOTSIG") %>% pull(category) %>
 
 fisher_full_selected <- fisher_full %>% filter(category %in% mut_selected)
 
-pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Mutations_Progression_Bubble.pdf", width = 4, height = 4)
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Mutations_Progression_Bubble.pdf", width = 4, height = 4)
 ggplot(fisher_full_selected, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_adj)))+
   geom_point()+
   theme_classic()+
@@ -1964,7 +1964,7 @@ ggplot(fisher_full_selected, aes(x=category, y = gene,col = odds_ratio, size = -
   scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   coord_flip()
-dev.off()
+#dev.off()
 ```
 
 ###### Export survival-relevant genomic features 
@@ -1995,6 +1995,7 @@ variant_combined_filtered_2$cohort <- "cohort_new"
 variant_combined_filtered_2$clonality <- "clonal" #add clonal attribute 
 
 variant_combined_full <- rbind(variant_combined_filtered, variant_combined_filtered_2)
+variant_combined_full <- variant_combined_full %>% filter(AllelicDepthAlt>1 & ReadDepth >=5)
 ```
 
 ```{r}
@@ -2097,7 +2098,7 @@ variant_combined_full <- rbind(variant_combined_filtered, variant_combined_filte
 ```
 
 ```{r}
-mut_list_full_all <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/mut_list_full_ALLnotGOI.rds")
+mut_list_full_all <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/mut_list_full_ALLnotGOI.rds") #from above
 
 sum_matrix <- Reduce(`+`, mut_list_full_all)
 sum_matrix <- as.matrix(ifelse(sum_matrix >= 1, 1,0))

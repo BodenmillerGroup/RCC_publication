@@ -176,7 +176,7 @@ files <- list.files(path)
 PID <- str_split(files, "_B", simplify = TRUE)[,1]
 ```
 
-```{r}
+```{r, message = FALSE}
 # Create combined variant table 
 variant_combined <- foreach(i = seq_along(files), .combine = "rbind")%do%{
    variant_table <- read_tsv(paste0(path, files[i]))
@@ -425,7 +425,7 @@ sample_id <- str_split(files, "\\.", simplify = TRUE)[,1]
 PID <- str_split(files, "_", simplify = TRUE)[,1]
 ```
 
-```{r}
+```{r, message=FALSE}
 # Create combined variant table 
 variant_combined <- foreach(i = seq_along(files), .combine = "rbind")%do%{
    variant_table <- read_tsv(paste0(path, files[i]))
@@ -1000,11 +1000,18 @@ GOI <- c(GOI, "ELOC") # Add ELOC (TCEB1)
 
 ```{r}
 ## Check potential PID for filtering
-variant_check <- variant_combined_full %>% filter(PID_old %in% PID_kick_out, Genes %in% GOI)
+variant_check <- variant_combined_full %>% filter(Genes %in% GOI)
 ```
 
+
+### Filter read depth and variant reads
+
 ```{r}
-variant_combined_full <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_full_withmeta.csv")
+# Option 1:
+variant_combined_full <- variant_combined_full %>% filter(AllelicDepthAlt>=2 & ReadDepth>=5)
+
+# Option 2:
+variant_combined_full <- variant_combined_full %>% filter(AllelicDepthAlt>=5)
 ```
 
 
@@ -1017,7 +1024,6 @@ variant_combined_GOI <- variant_combined_full #%>% filter(Genes %in% GOI)
 colnames(variant_combined_GOI)
 
 variant_combined_GOI <- variant_combined_GOI %>% select(PID, PID_old, Genes, clonality, variant_consequence_combined, cohort)
-
 ```
 
 ```{r}
@@ -1054,7 +1060,7 @@ full_consensus_GOI$necrose <- as.character(full_consensus_GOI$necrose)
 # From IMC analysis: PDL1 score plus color assignments 
 #sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_04.rds")
 
-full_consensus_GOI$PDL1_score <- sce$PDL1_score[match(full_consensus_GOI$PID, sce$PID)]
+#full_consensus_GOI$PDL1_score <- sce$PDL1_score[match(full_consensus_GOI$PID, sce$PID)]
 ```
 
 ### Save 
@@ -1062,18 +1068,12 @@ full_consensus_GOI$PDL1_score <- sce$PDL1_score[match(full_consensus_GOI$PID, sc
 ```{r}
 write_csv(full_consensus_GOI, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/SNV_CNV_combined_full_withmeta.csv")
 
-full_consensus_GOI_fil <- full_consensus_GOI %>% filter(Genes %in% GOI)
-
-write_csv(full_consensus_GOI_fil, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/SNV_CNV_combined_full_GOI_withmeta.csv")
+#full_consensus_GOI_fil <- full_consensus_GOI %>% filter(Genes %in% GOI)
+#write_csv(full_consensus_GOI_fil, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/SNV_CNV_combined_full_GOI_withmeta.csv")
 ```
 
 
 ## 5. Visualization
-
-```{r}
-full_consensus_GOI <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/SNV_CNV_combined_full_withmeta.csv")
-variant_combined_full <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_full_withmeta.csv")
-```
 
 ```{r}
 # ccRCC mutational driver genes 
@@ -1081,15 +1081,13 @@ GOI_IntOGen <- read_tsv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/da
 GOI <- GOI_IntOGen$Symbol #n = 44
 ```
 
-```{r}
-# From IMC analysis: PDL1 score plus color assignments 
-sce <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/sce_ccRCC_MY_04.rds")
-```
-
-
 ### Oncoprint 
 
 #### Only SNV 
+
+```{r}
+variant_combined_full <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_full_withmeta.csv")
+```
 
 ```{r}
 #Load processed data file and select columns of interest
@@ -1281,6 +1279,10 @@ draw(ht_all)
 #### SNV / CNV 
 
 ```{r}
+full_consensus_GOI <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/SNV_CNV_combined_full_withmeta.csv")
+```
+
+```{r}
 #Load processed data file and select columns of interest
 snv <- full_consensus_GOI
 
@@ -1408,7 +1410,7 @@ fun_alter = list(
 test_alter_fun(fun_alter)
 
 ## Step 2: Column Annotation
-c_anno <- data.frame(PID = colnames(mut_list_full[1]$frameshift_variant))
+c_anno <- data.frame(PID = colnames(mut_list_full[1]$missense_variant))
 c_anno$cohort <- full_consensus_GOI$cohort[match(c_anno$PID, full_consensus_GOI$PID)]
 
 c_anno$gender <- full_consensus_GOI$gender[match(c_anno$PID, full_consensus_GOI$PID)]
@@ -1434,7 +1436,7 @@ ca_PID <- columnAnnotation(gender = c_anno$gender,
                            )
 
 ## Step 3: Row Annotation 
-r_anno <- data.frame(genes = rownames(mut_list_full[1]$frameshift_variant))
+r_anno <- data.frame(genes = rownames(mut_list_full[1]$missense_variant))
 r_anno$key_genes <- ifelse(r_anno$genes %in% c("VHL","PBRM1","BAP1","SETD2"), "key_driver", "other_driver")
 
   
@@ -1450,52 +1452,4 @@ ht_all <- oncoPrint(mut_list_full,
 
 draw(ht_all)
 ```
-
-
-
-# Save plots as pdf
-
-```{r save_plots, include=FALSE}
-##IMPORTANT: change to chunk output in console for this last part - DO NOT RUN LIKE THIS DUE TO DUPLICATED VARIABLE NAMES
-
-##save plots as pdf (vector graphics)
-
-pdf("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/figures/oncoprint_fullcohort_variants_drivers.pdf",width = 10,height = 7)
-draw(ht_all)
-dev.off()
-
-pdf("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/figures/genomic_subtypes_heatmap_IHC_anno.pdf",width = 8,height = 4)
-ht_mut_anno
-dev.off()
-
-pdf("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/figures/genomic_subtypes_survival.pdf",width = 6,height = 5, onefile = FALSE)
-ggsurvplot(fit,
-          pval = TRUE,
-          risk.table = TRUE, # Add risk table
-          risk.table.col = "strata", # Change risk table color by groups
-          linetype = "strata", # Change line type by groups
-          surv.median.line = "hv", # Specify median survival
-          ggtheme = theme_classic(), # Change ggplot2 theme¨
-          palette = c("#046C9A", "#000000", "#D69C4E", "#ECCBAE", "#ABDDDE"),
-          conf.int = FALSE
-)
-dev.off()
-
-pdf("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/figures/genomic_subtypes_diffabun_progression.pdf",width = 6,height = 4, onefile = FALSE)
-ggplot(fisher_full, aes(x=reorder(gene, -p_out), y = category,col = odds_ratio, size= -log10(p_adj)))+
-  geom_point()+
-  theme_classic()+
-  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
-  scale_size(range = c(2,10))+
-  new_scale_colour() +
-  geom_point(data = fisher_full,shape = 1,aes(size = -log10(p_adj), col = result), stroke =1.5)+
-  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
-  xlab("Genomic subtype")
-dev.off()
-
-##IMPORTANT: change back to chunk output inline
-```
-
-
 

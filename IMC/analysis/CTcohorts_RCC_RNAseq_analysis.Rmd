@@ -128,6 +128,7 @@ ntp_out$PFS_months <- se$PFS[match(ntp_out$PID, se$UUID)]
 ntp_out$status_PFS <- se$PFS_CNSR[match(ntp_out$PID, se$UUID)]
 ntp_out$treatment <- se$Treatment[match(ntp_out$PID, se$UUID)]
 ntp_out$location <- se$Tumor_Location[match(ntp_out$PID, se$UUID)]
+ntp_out$IMDC <- se$IMDC[match(ntp_out$PID, se$UUID)]
 ```
 
 
@@ -545,6 +546,55 @@ dittoBarPlot(se_sub, var = "Response", group.by = "Treatment", split.by = "TME_a
 dittoBarPlot(se_sub, var = "Response", split.by = "Treatment", group.by = "TME_archetype")+
   ggtitle("ORR")
 ```
+
+
+```{r}
+# IMDC to archetypes
+dittoBarPlot(se, var = "TME_archetype", group.by = "IMDC")+
+  scale_fill_manual(values = c("#CA0020","#0571B0", "gold3"))
+
+
+# Poor IMDC score
+fit <- survfit(Surv(OS, OS_CNSR) ~ TME_archetype, data = colData(se) %>% as.data.frame %>% filter(IMDC == "Poor"))
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme¨
+          palette = c("#CA0020","#0571B0", "gold3"),
+          conf.int = FALSE
+)
+```
+```{r}
+library(survival)
+library(survminer)
+
+se$PID <- se$UUID
+se$status_OS <- se$OS_CNSR
+se$OS_months <- se$OS
+
+cur_surv <- colData(se) %>% as.data.frame %>% select(PID, OS_months, status_OS, TME_archetype, IMDC) %>% filter(!is.na(TME_archetype) & !is.na(IMDC))
+
+covariates_null <- cur_surv %>% select(-PID, -OS_months, -status_OS, -TME_archetype) %>% colnames
+multi_formula_null <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates_null, collapse = " + ")))
+multi_model_null <- coxph(multi_formula_null, data = cur_surv)
+
+covariates_full <- cur_surv %>% select(-PID, -OS_months, -status_OS) %>% colnames
+multi_formula_full <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates_full, collapse = " + ")))
+multi_model_full <- coxph(multi_formula_full, data = cur_surv)
+
+#cur_surv is.na(cur_surv$PID_metagroups)
+
+# Log-likelihood ratio test
+out_anova <- anova(multi_model_null, multi_model_full)
+anova(multi_model_null, multi_model_full)
+write.xlsx(out_anova, "/mnt/central_nas/rcc_volume/RCC/figures/supp_tables/anova_JAVELIN_ecotypes_IMDC.xlsx")
+```
+
 
 ```{r}
 # Define GOI of interest
@@ -1070,6 +1120,8 @@ dittoBarPlot(se_sub, var = "ORR_comb", group.by = "Arm", split.by = "TME_archety
 dittoBarPlot(se_sub, var = "ORR_comb", split.by = "Arm", group.by = "TME_archetype")+
   ggtitle("ORR")
 ```
+
+
 ```{r}
 df <- as.data.frame(colData(se_sub)[!is.na(se_sub$TME_archetype), c("Arm", "ORR_comb", "TME_archetype")])
 fisher_out <- c(paste0("NOT p = ",fisher.test(table(df[df$TME_archetype == "NOT",]$Arm, df[df$TME_archetype == "NOT",]$ORR_comb))$p, "ICAM p = ",fisher.test(table(df[df$TME_archetype == "ICAM",]$Arm, df[df$TME_archetype == "ICAM",]$ORR_comb))$p, "MTOR p = ",fisher.test(table(df[df$TME_archetype == "MTOR",]$Arm, df[df$TME_archetype == "MTOR",]$ORR_comb))$p))
@@ -1097,6 +1149,62 @@ dittoBarPlot(se_sub, var = "ExtremeResponder", group.by = "Arm", split.by = "TME
 dittoBarPlot(se_sub, var = "ExtremeResponder", split.by = "Arm", group.by = "TME_archetype")+
   ggtitle("ExtremeResponder")
 ```
+
+```{r}
+dittoBarPlot(se_sub, var = "TME_archetype", group.by = "ImmunoPhenotype", scale = "count", data.out = TRUE)
+```
+
+```{r}
+# IMDC to archetypes
+se_sub <- se[,se$IMDC %in% c("FAVORABLE", "INTERMEDIATE", "POOR")]
+
+dittoBarPlot(se_sub, var = "TME_archetype", group.by = "IMDC")+
+  scale_fill_manual(values = c("#CA0020","#0571B0", "gold3"))
+
+se_sub$Arm
+# Poor IMDC score
+fit <- survfit(Surv(OS, OS_CNSR) ~ TME_archetype, data = colData(se_sub) %>% as.data.frame %>% filter(IMDC == "POOR"))
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme¨
+          palette = c("#CA0020","#0571B0", "gold3"),
+          conf.int = FALSE
+)
+```
+
+```{r}
+library(survival)
+library(survminer)
+
+se$PID <- se$SUBJID
+se$status_OS <- se$OS_CNSR
+se$OS_months <- se$OS
+
+cur_surv <- colData(se) %>% as.data.frame %>% select(PID, OS_months, status_OS, TME_archetype, IMDC) %>% filter(!is.na(TME_archetype) & !is.na(IMDC))
+
+covariates_null <- cur_surv %>% select(-PID, -OS_months, -status_OS, -TME_archetype) %>% colnames
+multi_formula_null <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates_null, collapse = " + ")))
+multi_model_null <- coxph(multi_formula_null, data = cur_surv)
+
+covariates_full <- cur_surv %>% select(-PID, -OS_months, -status_OS) %>% colnames
+multi_formula_full <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates_full, collapse = " + ")))
+multi_model_full <- coxph(multi_formula_full, data = cur_surv)
+
+#cur_surv is.na(cur_surv$PID_metagroups)
+
+# Log-likelihood ratio test
+out_anova <- anova(multi_model_null, multi_model_full)
+anova(multi_model_null, multi_model_full)
+write.xlsx(out_anova, "/mnt/central_nas/rcc_volume/RCC/figures/supp_tables/anova_Checkmate_ecotypes_IMDC.xlsx")
+```
+
+
 
 
 ```{r}
