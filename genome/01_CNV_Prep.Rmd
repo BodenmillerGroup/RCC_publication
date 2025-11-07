@@ -109,7 +109,7 @@ CNV_genes <- CNV_genes %>% filter(!is.na(PID))
 # ccRCC mutational driver genes 
 GOI_IntOGen <- read_tsv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/data/IntOGen_DriverGenes_CCRCC.tsv")
 GOI <- GOI_IntOGen$Symbol #n = 44
-GOI <- c(GOI, "ELOC")
+GOI <- c(GOI)
 ```
 
 ```{r}
