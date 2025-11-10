@@ -159,7 +159,7 @@ if(length(chi_test) > 1) {
   
   # Identify pairs with
   high_corr_pairs <-
-    which(abs(direct_comp) < 0.01 &
+    which(abs(direct_comp) < 0.001 &
             lower.tri(direct_comp), arr.ind = TRUE)
   
   high_corr_pairs_df <- data.frame(

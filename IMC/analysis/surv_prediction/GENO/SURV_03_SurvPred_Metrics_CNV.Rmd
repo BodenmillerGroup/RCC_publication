@@ -36,15 +36,15 @@ conflicts_prefer(base::setdiff)
 ### Read results from different models 
 
 ```{r}
-cv_results_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-10-21/BF_CNV_CNV.rds")
+cv_results_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-11-10/BF_CNV_CNV.rds")
 
-cv_results_2 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-10-21/BF_IMC_noGEN_CNV.rds")
+cv_results_2 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-11-10/BF_IMC_noGEN_CNV.rds")
 
-cv_results_3 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-10-21/BF_IMC_noGEN_CNV_CNV.rds")
+cv_results_3 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-11-10/BF_IMC_noGEN_CNV_CNV.rds")
 
-#cv_results_4 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-10-21/BF_GENO_CNV_CNV.rds")
+#cv_results_4 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-11-10/BF_GENO_CNV_CNV.rds")
 
-#cv_results_5 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-10-21/BF_IMC_noGEN_GENO_CNV_CNV.rds")
+#cv_results_5 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2025-11-10/BF_IMC_noGEN_GENO_CNV_CNV.rds")
 ```
 
 ```{r}
@@ -53,7 +53,7 @@ cv_results_3 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockFore
 cv_results_list <- list(
   "CNV" = cv_results_1,
   "IMC" = cv_results_2,
-  "IMC_CNV" = cv_results_3
+  "IMC_CNV" = cv_results_3#,
   #"GENO_CNV" = cv_results_4,
   #"IMC_GENO_CNV" = cv_results_5
 )

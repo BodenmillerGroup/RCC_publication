@@ -1431,9 +1431,7 @@ genomic_sub <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/ge
 ## 1C: CNV Arm-level events
 CNV_arm_sum_out <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/CNV_key_armlevel_combined_consensus.csv")
 CNV_arm_sum_out$chr_arm_type <- paste0(CNV_arm_sum_out$chr_arm, "_", CNV_arm_sum_out$type_summarized)
-
-CNV_per_PID <- CNV_arm_sum_out %>% mutate(binary = ifelse(type_summarized %in% c("gain", "loss"), 1, 0)) %>% filter(clonality == "clonal") %>% pivot_wider(id_cols = PID, names_from = chr_arm_type, values_from = binary)
-CNV_per_PID[is.na(CNV_per_PID)] <- 0
+CNV_arm_sum_out <- CNV_arm_sum_out %>% filter(PID %in% metadata_selected$PID)
 ```
 
 ###### Mutations
@@ -1605,9 +1603,9 @@ ht_all <- oncoPrint(mut_list_full,
                   pct_side = "right", row_names_side = "left")%v% ca
   
 
-#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Oncoprint_Mutations_Archetypes.pdf", width = 7, height = 6, onefile = FALSE)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Oncoprint_Mutations_Archetypes.pdf", width = 7, height = 6, onefile = FALSE)
 draw(ht_all)
-#dev.off()
+dev.off()
 ```
 
 Survival 
@@ -1622,7 +1620,7 @@ surv_out <- metadata_genome %>% select(PID, OS_months, status_OS, PID_group_test
 
 fit <- survfit(Surv(OS_months, status_OS) ~ PID_group_test, data = surv_out)
 
-#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_Kaplan_SurvArchetypes_Mutations.pdf", width = 8, height = 5, onefile = FALSE)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_Kaplan_SurvArchetypes_Mutations.pdf", width = 8, height = 5, onefile = FALSE)
 ggsurvplot(fit, 
           pval = TRUE,
           risk.table = TRUE, # Add risk table
@@ -1633,7 +1631,7 @@ ggsurvplot(fit,
           palette = c("gold3", "#CA0020","#0571B0"),
           conf.int = FALSE
 )
-#dev.off()
+dev.off()
 ```
 
 Associations 
@@ -1765,7 +1763,7 @@ ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_a
 mut_selected <- fisher_full %>% filter(result != "NOTSIG") %>% pull(gene) %>% unfactor
 fisher_full_selected <- fisher_full %>% filter(gene %in% mut_selected)
 
-#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Mutations_Archetypes_Bubble.pdf", width = 6, height = 3, onefile = FALSE)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Mutations_Archetypes_Bubble.pdf", width = 6, height = 3, onefile = FALSE)
 ggplot(fisher_full_selected, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_adj)))+
   geom_point()+
   theme_classic()+
@@ -1776,7 +1774,7 @@ ggplot(fisher_full_selected, aes(x=category, y = gene,col = odds_ratio, size = -
   scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   coord_flip()
-#dev.off()
+dev.off()
 ```
 
 Association with survival
@@ -1822,7 +1820,7 @@ cur_surv_plot$result <- ifelse(cur_surv_plot$direction == "high" & cur_surv_plot
 
 cur_surv_plot$type <- "mutation"
 
-#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Mutations_Survival_Bubble.pdf", width = 3, height = 4)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Mutations_Survival_Bubble.pdf", width = 3, height = 4)
 ggplot(cur_surv_plot, aes(x=reorder(group,ratio), y = type, col = ratio, size= -log10(p)))+
   geom_point()+
   theme_classic()+
@@ -1837,7 +1835,7 @@ ggplot(cur_surv_plot, aes(x=reorder(group,ratio), y = type, col = ratio, size= -
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   ylab("Cox model")+
   coord_flip()
-#dev.off()
+dev.off()
 ```
 
 ```{r}
@@ -1972,7 +1970,7 @@ mut_selected <- fisher_full %>% filter(result != "NOTSIG") %>% pull(category) %>
 
 fisher_full_selected <- fisher_full %>% filter(category %in% mut_selected)
 
-#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Mutations_Progression_Bubble.pdf", width = 4, height = 4)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Mutations_Progression_Bubble.pdf", width = 4, height = 4)
 ggplot(fisher_full_selected, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_adj)))+
   geom_point()+
   theme_classic()+
@@ -1983,7 +1981,7 @@ ggplot(fisher_full_selected, aes(x=category, y = gene,col = odds_ratio, size = -
   scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   coord_flip()
-#dev.off()
+dev.off()
 ```
 
 ###### Export survival-relevant genomic features 
@@ -2014,7 +2012,7 @@ variant_combined_filtered_2$cohort <- "cohort_new"
 variant_combined_filtered_2$clonality <- "clonal" #add clonal attribute 
 
 variant_combined_full <- rbind(variant_combined_filtered, variant_combined_filtered_2)
-variant_combined_full <- variant_combined_full %>% filter(AllelicDepthAlt>1 & ReadDepth >=5)
+variant_combined_full <- variant_combined_full %>% filter(AllelicDepthAlt>=2 & Frequency>5)
 ```
 
 ```{r}
@@ -2170,179 +2168,6 @@ ggsurvplot(fit,
 dev.off()
 ```
 
-```{r}
-# OPTION 2: Selected impact variants across GOI genes
-variant_combined_full <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_full_withmeta.csv")
-
-#Load processed data file and select columns of interest
-snv <- variant_combined_full
-
-# Optional: Filter low-cov patients
-#snv <- snv %>% filter(!PID_old %in% PID_kick_out)
-
-snv$mut_level <- snv$variant_consequence_clean
-
-snv <- snv %>% select(PID, Genes, mut_level)
-
-mut_levels_for_matrix <- snv %>% pull(mut_level) %>% unique()
-
-# Select genes 
-## A: All genes 
-Genes_list <- snv %>% pull(Genes) %>% unique()
-## B: Genes of Interest e.g. IntOGen driver genes 
-Genes_list <- snv %>% filter(Genes %in% GOI) %>% pull(Genes) %>% unique()
-Genes_list <- Genes_list[!Genes_list %in% c("SF3B1", "STAG2", "ARHGAP35")]
-
-#Placeholders 
-mut_list <- list()
-placeholder_Genes <- Genes_list[1]
-pids <- unique(snv$PID)
-placeholder_pid <- pids[1]
-
-for(mut in mut_levels_for_matrix){
-  
-  #select all SNVs/Indels of the mut_level and give a value of 1
-  x <- snv %>%
-    dplyr::filter(mut_level==mut,
-                  Genes %in% Genes_list | 
-                    grepl(paste0(paste0("^", Genes_list, "[,;]"), collapse="|"), Genes) |       #allow for multi-Genes mutations
-                    grepl(paste0(paste0("[,;]", Genes_list, "$"), collapse="|"), Genes) ) %>%  
-    dplyr::select(PID, Genes) %>%
-    dplyr::mutate(value=1) %>%
-    dplyr::distinct()
-  
-  if(dim(x)[1]!=0){
-    x <- x %>%
-      tidyr::spread(Genes, value)
-    
-    #transpose and replace NA by 0
-    y <- x %>% column_to_rownames("PID")
-    y <- t(y)
-    y[is.na(y)] <- 0
-    
-  }else{
-    y <- tibble(0)
-    colnames(y) <- placeholder_pid
-    rownames(y) <- placeholder_Genes
-  }
-  
-  mut_list[[mut]] <- as.matrix(y)
-}
-
-#Unify matrices
-mut_list_full <- unify_mat_list(mut_list)
-
-# Create a new list entry called "Multiple" for multiple gene mutations within a PID
-sum_matrix <- Reduce(`+`, mut_list_full)
-mut_list_full$multiple <- as.matrix(ifelse(sum_matrix > 1, 1,0))
-
-# keep the order of annotation and mutation list
-#ord= anno$PID_short
-  
-# show every gene and patient
-# blank for patients  and.or genes missing 
-for (i in seq_along(mut_list_full)){
-  dif_gen = setdiff(Genes_list,rownames(mut_list_full[[i]]))
-  dif_pat = setdiff(pids,colnames(mut_list_full[[i]]))
-  
-  blank= matrix(ncol=length(dif_pat),nrow=length(rownames(mut_list_full[[i]])),0)
-  colnames(blank)=dif_pat
-  rownames(blank)=rownames(mut_list_full[[i]])
-  mut_list_full[[i]]=cbind(mut_list_full[[i]],blank)
-  
-  blank= matrix(ncol=ncol(mut_list_full[[i]]),nrow=length(dif_gen),0)
-  colnames(blank)=colnames(mut_list_full[[i]])
-  rownames(blank)=dif_gen
-  mut_list_full[[i]]=rbind(mut_list_full[[i]],blank)
-  #mut_list_full[[i]]=mut_list_full[[i]][,ord]
-}
-
-# Optional: Create a new list entry called "Clonality" for gene mutation clonality annotation per PID
-subclonal_anno <- variant_combined_full %>% select(PID, Genes, clonality) %>% unique() %>% pivot_wider(id_cols = PID, names_from = Genes, values_from = clonality) %>% column_to_rownames("PID")
-
-subclonal_anno[is.na(subclonal_anno)] <- "none"
-subclonal_anno <- t(ifelse(subclonal_anno == "subclonal", 1, 0))
-
-subclonal_anno <- subclonal_anno[match(rownames(mut_list_full$missense_variant), rownames(subclonal_anno)),]
-subclonal_anno <- subclonal_anno[,match(colnames(mut_list_full$missense_variant), colnames(subclonal_anno))]
-
-mut_list_full$subclonal <- subclonal_anno
-```
-
-```{r}
-sum_matrix <- Reduce(`+`, mut_list_full)
-sum_matrix <- as.matrix(ifelse(sum_matrix >= 1, 1,0))
-sum_matrix[mut_list_full$subclonal == 1] <- 0.5
-save_sum <- as.data.frame(t(sum_matrix)) %>% rownames_to_column("PID")
-```
-
-```{r}
-MUT_burden <- save_sum %>% column_to_rownames("PID") %>% mutate(burden = rowSums(.)) %>% rownames_to_column("PID") %>% select(PID, burden)
-
-MUT_burden$BF_PL_TME_archetypes <- metadata_selected$BF_PL_TME_archetypes[match(MUT_burden$PID, metadata_selected$PID)]
-MUT_burden <- MUT_burden %>% filter(!is.na(BF_PL_TME_archetypes))
-
-col_group <- setNames(c("#0571B0", "gold3", "#CA0020"),c("TME_activated","TME_silent","TME_suppressed"))
-
-ggplot(MUT_burden, aes(x = BF_PL_TME_archetypes, y = burden, fill = BF_PL_TME_archetypes))+
-  geom_point(aes(color = BF_PL_TME_archetypes))+
-  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
-  theme_classic()+
-  stat_compare_means(vjust = 1)+
-  scale_fill_manual(values = col_group)+
-  scale_color_manual(values = col_group)+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
-  xlab("Models")+
-  ylab("MUT events (Drivers)")
-```
-
-###### Mutation ITH index
-
-```{r}
-# Intra-tumor genomic heterogeneity index (ITH)
-## Driver mutations
-ITH_index <- mut_anno %>% filter(Genes %in% Genes_list & cohort == "cohort_old") %>% group_by(PID, clonality) %>% dplyr::count() %>% ungroup() %>% pivot_wider(names_from = "clonality", values_from = "n") %>% replace_na(list(clonal = 0, subclonal = 0)) %>% mutate(ITH_index = subclonal/clonal)
-
-# Replace Inf with max(ITH_index)
-ITH_index$ITH_index[ITH_index$ITH_index == Inf] <- max(ITH_index %>% filter(ITH_index != Inf) %>% pull(ITH_index))
-
-# Add archetypes
-ITH_index$BF_PL_TME_archetypes <- metadata_selected$BF_PL_TME_archetypes[match(ITH_index$PID, metadata_selected$PID)]
-ITH_index <- ITH_index %>% filter(!is.na(BF_PL_TME_archetypes))
-
-ggplot(ITH_index, aes(x = BF_PL_TME_archetypes, y = ITH_index, fill = BF_PL_TME_archetypes))+
-  geom_point(aes(color = BF_PL_TME_archetypes))+
-  geom_boxplot(outlier.color = NA)+
-  guides(color = "none")+
-  theme_classic()+
-  stat_compare_means(vjust = 1)+
-  scale_fill_manual(values = col_group)+
-  scale_color_manual(values = col_group)+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
-  ylab("ITH index (Driver)")
-
-
-## All mutations
-ITH_index <- variant_combined_full %>% filter(Genes %in% Genes_list & cohort == "cohort_old") %>% group_by(PID, clonality) %>% dplyr::count() %>% ungroup() %>% pivot_wider(names_from = "clonality", values_from = "n") %>% replace_na(list(clonal = 0, subclonal = 0)) %>% mutate(ITH_index = subclonal/clonal)
-
-# Replace Inf with max(ITH_index)
-ITH_index$ITH_index[ITH_index$ITH_index == Inf] <- max(ITH_index %>% filter(ITH_index != Inf) %>% pull(ITH_index))
-
-# Add archetypes
-ITH_index$BF_PL_TME_archetypes <- metadata_selected$BF_PL_TME_archetypes[match(ITH_index$PID, metadata_selected$PID)]
-ITH_index <- ITH_index %>% filter(!is.na(BF_PL_TME_archetypes))
-
-ggplot(ITH_index, aes(x = BF_PL_TME_archetypes, y = ITH_index, fill = BF_PL_TME_archetypes))+
-  geom_point(aes(color = BF_PL_TME_archetypes))+
-  geom_boxplot(outlier.color = NA)+
-  guides(color = "none")+
-  theme_classic()+
-  stat_compare_means(vjust = 1)+
-  scale_fill_manual(values = col_group)+
-  scale_color_manual(values = col_group)+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
-  ylab("ITH index (Driver)")
-```
 
 ###### CNV
 
@@ -2503,7 +2328,7 @@ Survival
 
 ```{r}
 # Subset for PID for which we have genomics data
-metadata_CNV <- metadata_selected[metadata_selected$PID %in% CNV_per_PID$PID,]
+metadata_CNV <- metadata_selected[metadata_selected$PID %in% cnv$PID,]
 ```
 
 ```{r}
@@ -2526,6 +2351,17 @@ dev.off()
 ```
 
 ```{r}
+# CNV per patient 
+CNV_per_PID <- CNV_arm_sum_out %>%
+  mutate(
+    binary = case_when(
+      clonality == "clonal" & type_summarized %in% c("gain","loss") ~ 1,
+      clonality == "clonal" ~ 0,
+      TRUE ~ NA_real_
+    )) %>% pivot_wider(id_cols = PID, names_from = chr_arm_type, values_from = binary)
+
+CNV_per_PID[is.na(CNV_per_PID)] <- 0
+
 # Add relevant metadata to sce 
 CNV_per_PID <- as.data.frame(CNV_per_PID)
 
@@ -2743,7 +2579,6 @@ test_out <- as.data.frame(t(ifelse(sum_matrix == 1, 1, 0)))
 for (entry in CNV_clonal) {
   metadata_CNV[,entry] <- test_out[,entry][match(metadata_CNV[,"PID"],rownames(test_out))]
 }
-
 ```
 
 
@@ -2869,54 +2704,6 @@ write.csv(cur_out_CNV_rel, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis
 ```
 
 ###### CNV burden 
-
-```{r}
-## Key CNV arm-level events
-CNV_arm_sum_out <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/CNV_key_armlevel_combined_consensus.csv")
-CNV_arm_sum_out$chr_arm_type <- paste0(CNV_arm_sum_out$chr_arm, "_", CNV_arm_sum_out$type_summarized)
-```
-
-```{r}
-# Only clonal key events
-CNV_per_PID <- CNV_arm_sum_out %>% mutate(binary = ifelse(type_summarized %in% c("gain", "loss"), 1, 0)) %>% filter(clonality == "clonal") %>% pivot_wider(id_cols = PID, names_from = chr_arm_type, values_from = binary)
-CNV_per_PID[is.na(CNV_per_PID)] <- 0
-
-CNV_burden <- CNV_per_PID %>% column_to_rownames("PID") %>% mutate(burden = rowSums(.)) %>% rownames_to_column("PID") %>% select(PID, burden)
-
-CNV_burden$BF_PL_TME_archetypes <- metadata_selected$BF_PL_TME_archetypes[match(CNV_burden$PID, metadata_selected$PID)]
-CNV_burden <- CNV_burden %>% filter(!is.na(BF_PL_TME_archetypes))
-
-ggplot(CNV_burden, aes(x = BF_PL_TME_archetypes, y = burden, fill = BF_PL_TME_archetypes))+
-  geom_point(aes(color = BF_PL_TME_archetypes))+
-  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
-  theme_classic()+
-  stat_compare_means(vjust = 1)+
-  scale_fill_manual(values = col_group)+
-  scale_color_manual(values = col_group)+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
-  xlab("Models")+
-  ylab("CNV events")
-
-# All key events
-CNV_per_PID <- CNV_arm_sum_out %>% mutate(binary = ifelse(!type_summarized %in% c("neutral"), 1, 0)) %>% pivot_wider(id_cols = PID, names_from = chr_arm_type, values_from = binary)
-CNV_per_PID[is.na(CNV_per_PID)] <- 0
-
-CNV_burden <- CNV_per_PID %>% column_to_rownames("PID") %>% mutate(burden = rowSums(.)) %>% rownames_to_column("PID") %>% select(PID, burden)
-
-CNV_burden$BF_PL_TME_archetypes <- metadata_selected$BF_PL_TME_archetypes[match(CNV_burden$PID, metadata_selected$PID)]
-CNV_burden <- CNV_burden %>% filter(!is.na(BF_PL_TME_archetypes))
-
-ggplot(CNV_burden, aes(x = BF_PL_TME_archetypes, y = burden, fill = BF_PL_TME_archetypes))+
-  geom_point(aes(color = BF_PL_TME_archetypes))+
-  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
-  theme_classic()+
-  stat_compare_means(vjust = 1)+
-  scale_fill_manual(values = col_group)+
-  scale_color_manual(values = col_group)+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
-  xlab("Models")+
-  ylab("CNV events")
-```
 
 ```{r}
 ## All CNV arm-level events
@@ -3055,9 +2842,9 @@ ht_mut_anno <- Heatmap(t(mut_mat), name = "Mutation status",
                        column_title = "Genomic subtypes", 
                        cluster_column_slices = FALSE, show_column_names = FALSE)%v%ca
 
-#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Oncoprint_GenomicSub_Archetypes.pdf", width = 7, height = 4, onefile = FALSE)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Oncoprint_GenomicSub_Archetypes.pdf", width = 7, height = 4, onefile = FALSE)
 ht_mut_anno <- draw(ht_mut_anno)
-#dev.off()
+dev.off()
 ```
 
 Survival
@@ -3067,7 +2854,7 @@ Survival
 fit <- survfit(Surv(OS_months, status_OS) ~ genomic_subtype, data = driver_mat_anno)
 print(fit)
 
-#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survival_GenomicSub_Archetypes.pdf", width = 8, height = 5, onefile = FALSE)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survival_GenomicSub_Archetypes.pdf", width = 8, height = 5, onefile = FALSE)
 ggsurvplot(fit,
           pval = TRUE,
           risk.table = TRUE, # Add risk table
@@ -3078,7 +2865,7 @@ ggsurvplot(fit,
           palette = c("#046C9A", "#000000", "#D69C4E", "#ECCBAE", "#ABDDDE"),
           conf.int = FALSE
 )
-#dev.off()
+dev.off()
 
 fit <- survfit(Surv(OS_months, status_OS) ~ evolution_type, data = driver_mat_anno)
 print(fit)
@@ -3182,7 +2969,7 @@ plot(hc)
 column_sorted <- hc$order
 fisher_full$gene <- factor(fisher_full$gene, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
 
-#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/GenomicSub_Archetypes_Bubble.pdf", width = 5, height = 3, onefile = FALSE)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/GenomicSub_Archetypes_Bubble.pdf", width = 5, height = 3, onefile = FALSE)
 ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_adj)))+
   geom_point()+
   theme_classic()+
@@ -3193,7 +2980,7 @@ ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_a
   scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   coord_flip()
-#dev.off()
+dev.off()
 ```
 
 2. Evolution types
