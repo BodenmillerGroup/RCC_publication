@@ -2119,7 +2119,7 @@ mut_list_full_all <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/Bloc
 
 sum_matrix <- Reduce(`+`, mut_list_full_all)
 sum_matrix <- as.matrix(ifelse(sum_matrix >= 1, 1,0))
-sum_matrix[mut_list_full$subclonal == 1] <- 0.5
+sum_matrix[mut_list_full_all$subclonal == 1] <- 0.5
 save_sum <- as.data.frame(t(sum_matrix)) %>% rownames_to_column("PID")
 ```
 

@@ -146,7 +146,7 @@ write_csv(CNV_consensus, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/C
 
 ## 3. Arm-level CNVs 
 
-```{r}
+```{r, message = FALSE}
 files <- list.files("/mnt/central_nas/rcc_volume/RCC/genome/results/cohort_1_ena/03_CNV/pureCN_raw/")
 filenames <- str_replace(files[str_detect(files, "pureCN")], "pureCN_","")
 
@@ -305,6 +305,7 @@ CNV_arm_sum_out_sub <- CNV_arm_sum_out %>%   filter(
 ```{r}
 # Save
 write_csv(CNV_arm_sum_out_sub,"/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/CNV_key_armlevel_combined_consensus.csv")
+CNV_arm_sum_out_sub <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/CNV_key_armlevel_combined_consensus.csv")
 ```
 
 

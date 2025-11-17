@@ -175,8 +175,6 @@ Optional: One could also use the median counts per gene
 ```{r}
 PID_select <- colData(kirc.clean) %>% as.data.frame %>% group_by(PID) %>% dplyr::count() %>% filter(n > 1) %>% pull(PID)
 # n = 4
-
-kirc.clean <- kirc.clean[,!kirc.clean$PID %in% PID_select]
 ```
 
 
@@ -334,6 +332,9 @@ results_combined <- read_csv("/mnt/central_nas/rcc_volume/RCC/HE/CLAM/TCGA_KIRC/
 # TME_archetype 7 or selected or folds
 vsd$TME_archetype <- results_combined$TME_archetype_folds[match(vsd$PID, results_combined$PID)]
 kirc.clean$TME_archetype <- results_combined$TME_archetype_folds[match(kirc.clean$PID, results_combined$PID)]
+
+kirc.clean[,!is.na(kirc.clean$TME_archetype)]
+vsd[,!is.na(vsd$TME_archetype)]
 ```
 
 ## Survival impact 
@@ -1168,6 +1169,10 @@ Heatmap(scale(ht),
 # Save genesets
 saveRDS(MTORUP,"/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/MTORUP_geneset_NTP.rds")
 saveRDS(ICAMUP,"/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/ICAMUP_geneset_NTP.rds")
+
+MTORUP <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/MTORUP_geneset_NTP.rds")
+ICAMUP <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/ICAMUP_geneset_NTP.rds")
+
 ```
 
 #### NTP - Prediction

@@ -227,14 +227,14 @@ variant_combined$PID <- ID_match_new$PID[match(variant_combined$PID,ID_match_new
 
 ```{r}
 write_csv(variant_combined, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_cohort2.csv")
-#variant_combined <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_cohort2.csv")
+variant_combined <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_cohort2.csv")
 ```
 
 ### Filter 
 
 ```{r}
 # ccRCC mutational driver genes 
-GOI_IntOGen <- read_tsv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/data/IntOGen_DriverGenes_CCRCC.tsv")
+GOI_IntOGen <- read_tsv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/data/IntOGen_DriverGenes_CCRCC.tsv") #Downloaded: 10 April 2024
 GOI <- GOI_IntOGen$Symbol #n = 44
 ```
 
@@ -443,7 +443,7 @@ variant_combined <- foreach(i = seq_along(files), .combine = "rbind")%do%{
 
 ```{r}
 write_csv(variant_combined, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_cohort1.csv")
-#variant_combined <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_cohort1.csv")
+variant_combined <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_cohort1.csv")
 ```
 
 #### Match identifiers
@@ -850,8 +850,8 @@ variant_combined_full <- variant_combined_full %>% filter(subtype_combined == "c
 ```
 
 ```{r}
-write_csv(variant_combined_full, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_full_withmeta.csv")
-#variant_combined_full <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_full_withmeta.csv")
+#write_csv(variant_combined_full, "/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_full_withmeta.csv")
+variant_combined_full <- read_csv("/mnt/central_nas/rcc_volume/RCC/genome/data_analysis/variant_combined_full_withmeta.csv")
 ```
 
 ```{r}
