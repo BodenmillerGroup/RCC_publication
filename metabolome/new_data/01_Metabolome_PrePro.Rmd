@@ -79,7 +79,12 @@ mse_1_proc_SNR30 <- mse_1 |>
   normalize(method="rms") |>
   smooth() |>
   peakPick(method = "filter", SNR = 3)
-  
+
+mse_1_proc_SNR15 <- mse_1 |> 
+  normalize(method="rms") |>
+  smooth() |>
+  peakPick(method = "filter", SNR = 1.5)
+
 # Full spectra
 plot(mse_1, i=c(10, 100, 10000, 501), ylim=c(0,4e+06))
 
@@ -102,18 +107,91 @@ plot(mse_1, i=c(10, 100, 10000, 501), xlim = c(200, 220), ylim = c(0,4e+06))
 plot(mse_1_proc_SNR25, i=c(10, 100, 10000, 501), xlim = c(200, 220), ylim=c(0,1e+07))
 plot(mse_1_proc_SNR30, i=c(10, 100, 10000, 501), xlim = c(200, 220), ylim=c(0,1e+07))
 ```
+```{r}
+# Processing
+## Includes Normalization, Smoothing and Peak Picking
+mse_2_proc_SNR25 <- mse_2 |> 
+  normalize(method="rms") |> 
+  smooth() |> 
+  peakPick(method = "filter", SNR = 2)
+
+mse_2_proc_SNR30 <- mse_2 |> 
+  normalize(method="rms") |>
+  smooth() |>
+  peakPick(method = "filter", SNR = 3)
+
+mse_2_proc_SNR15 <- mse_2 |> 
+  normalize(method="rms") |>
+  smooth() |>
+  peakPick(method = "filter", SNR = 1.5)
+
+# Full spectra
+plot(mse_2, i=c(10, 100, 10000, 501), ylim=c(0,4e+06))
+
+# Broad regions
+plot(mse_2, i=c(10, 100, 10000, 501), xlim = c(200, 400), ylim=c(0,4e+06))
+plot(mse_2_proc_SNR25, i=c(10, 100, 10000, 501), xlim = c(200, 400), ylim=c(0,1e+07), legend = FALSE)
+plot(mse_2_proc_SNR30, i=c(10, 100, 10000, 501), xlim = c(200, 400), ylim=c(0,1e+07))
+
+plot(mse_2, i=c(10, 100, 10000, 501), xlim = c(100, 200), ylim=c(0,4e+06))
+plot(mse_2_proc_SNR25, i=c(10, 100, 10000, 501), xlim = c(100, 200), ylim=c(0,1e+07), legend = FALSE)
+plot(mse_2_proc_SNR30, i=c(10, 100, 10000, 501), xlim = c(100, 200), ylim=c(0,1e+07))
+
+
+# Detailed regions
+plot(mse_2, i=c(10, 100, 10000, 501), xlim = c(380, 400), ylim=c(0,4e+06))
+plot(mse_2_proc_SNR25, i=c(10, 100, 10000, 501), xlim = c(380, 400), ylim=c(0,1e+07), legend = FALSE)
+plot(mse_2_proc_SNR30, i=c(10, 100, 10000, 501), xlim = c(380, 400), ylim=c(0,1e+07))
+
+plot(mse_2, i=c(10, 100, 10000, 501), xlim = c(200, 220), ylim = c(0,4e+06))
+plot(mse_2_proc_SNR25, i=c(10, 100, 10000, 501), xlim = c(200, 220), ylim=c(0,1e+07))
+plot(mse_2_proc_SNR30, i=c(10, 100, 10000, 501), xlim = c(200, 220), ylim=c(0,1e+07))
+```
 
 
 ### Peak align 
 
 ```{r}
 # Run peak alignment - Calls process() - Takes long?
+## TMA20
 mse_1_proc_SNR25_aligned <- peakAlign(mse_1_proc_SNR25)
-saveRDS(mse_1_proc_SNR25_aligned, "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/new_data/data_analysis/TM20_aligned_SNR25.rds")
+saveRDS(mse_1_proc_SNR25_aligned, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM20_aligned_SNR25.rds")
 
 mse_1_proc_SNR30_aligned <- peakAlign(mse_1_proc_SNR30)
-saveRDS(mse_1_proc_SNR30_aligned, "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/new_data/data_analysis/TM20_aligned_SNR30.rds")
+saveRDS(mse_1_proc_SNR30_aligned, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM20_aligned_SNR30.rds")
+
+mse_1_proc_SNR15 <- peakAlign(mse_1_proc_SNR15)
+saveRDS(mse_1_proc_SNR30_aligned, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM20_aligned_SNR15.rds")
+
+## TMA224
+mse_2_proc_SNR25_aligned <- peakAlign(mse_2_proc_SNR25)
+saveRDS(mse_2_proc_SNR25_aligned, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM224_aligned_SNR25.rds")
+
+mse_2_proc_SNR30_aligned <- peakAlign(mse_2_proc_SNR30)
+saveRDS(mse_2_proc_SNR30_aligned, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM224_aligned_SNR30.rds")
+
+mse_2_proc_SNR15 <- peakAlign(mse_2_proc_SNR15)
+saveRDS(mse_2_proc_SNR30_aligned, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM224_aligned_SNR15.rds")
 ```
+
+
+```{r}
+fData(mse_1_proc_SNR30_aligned)
+fData(mse_1_proc_SNR25_aligned)
+```
+
+# Peak filtering
+
+```{r}
+mse_1_proc_SNR30_filtered <- subsetFeatures(mse_1_proc_SNR30_aligned, freq > 0.01)
+fData(mse_1_proc_SNR30_filtered)
+
+mse_1_proc_SNR25_filtered <- subsetFeatures(mse_1_proc_SNR25_aligned, freq > 0.01)
+fData(mse_1_proc_SNR25_filtered)
+
+
+```
+
 
 
 
