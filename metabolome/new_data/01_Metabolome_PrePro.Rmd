@@ -9,7 +9,7 @@ editor_options:
 
 ## Software requirments 
 
-```{r}
+```{r, message=FALSE}
 library(tidyverse)
 library(readxl)
 library(RColorBrewer)
@@ -25,34 +25,104 @@ library(Cardinal)
 ## 1. Read in data 
 
 ```{r}
-mse_1 <- readMSIData("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/new_data/raw/ztma_20_rcc_no_normalized_complete_spectrum.imzML", as = "MSImagingExperiment")
-mse_2 <- readMSIData("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/new_data/raw/ztma_224_rcc_no_normalized_complete_spectrum.imzML", as = "MSImagingExperiment")
+mse_1 <- readMSIData("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/raw/ztma_20_rcc_no_normalized_complete_spectrum.imzML", as = "MSImagingExperiment")
+mse_2 <- readMSIData("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/raw/ztma_224_rcc_no_normalized_complete_spectrum.imzML", as = "MSImagingExperiment")
 
 mse_1
 mse_2
 ```
 
+
+```{r}
+# Spectra data
+spectraData(mse_1)
+spectra(mse_1, "intensity")
+
+# Pixel data
+pixelData(mse_1)
+pixelData(mse_2)
+coord(mse_1)[,"z"] <- as.numeric(coord(mse_1)[,"z"])
+coord(mse_2)[,"z"] <- as.numeric(coord(mse_2)[,"z"])
+
+# Runnames
+runNames(mse_1)
+
+# Features
+featureData(mse_1)
+```
+
+```{r}
+# Plot 
+## Different spectra numbers
+plot(mse_1, i=c(10, 100))
+plot(mse_1, i=c(10, 100), xlim=c(300, 400), ylim=c(0,10000000),
+    superpose=TRUE)
+
+# By coordinates
+plot(mse_1, coord=list(x = 1, y = 11, z = 1))
+```
+
+
 ## 2. Preprocessing 
 
-### Normalize 
+### Normalization, Smoothing, Peak picking
 
 ```{r}
-set.seed(22)
-mse_1_norm <- process(normalize(mse_1, method="tic"), BPPARAM = MulticoreParam(workers = 9))
-mse_2_norm <- process(normalize(mse_2, method="tic"), BPPARAM = MulticoreParam(workers = 9))
+# Processing
+## Includes Normalization, Smoothing and Peak Picking
+mse_1_proc_SNR25 <- mse_1 |> 
+  normalize(method="rms") |> 
+  smooth() |> 
+  peakPick(method = "filter", SNR = 2)
+
+mse_1_proc_SNR30 <- mse_1 |> 
+  normalize(method="rms") |>
+  smooth() |>
+  peakPick(method = "filter", SNR = 3)
+  
+# Full spectra
+plot(mse_1, i=c(10, 100, 10000, 501), ylim=c(0,4e+06))
+
+# Broad regions
+plot(mse_1, i=c(10, 100, 10000, 501), xlim = c(200, 400), ylim=c(0,4e+06))
+plot(mse_1_proc_SNR25, i=c(10, 100, 10000, 501), xlim = c(200, 400), ylim=c(0,1e+07), legend = FALSE)
+plot(mse_1_proc_SNR30, i=c(10, 100, 10000, 501), xlim = c(200, 400), ylim=c(0,1e+07))
+
+plot(mse_1, i=c(10, 100, 10000, 501), xlim = c(100, 200), ylim=c(0,4e+06))
+plot(mse_1_proc_SNR25, i=c(10, 100, 10000, 501), xlim = c(100, 200), ylim=c(0,1e+07), legend = FALSE)
+plot(mse_1_proc_SNR30, i=c(10, 100, 10000, 501), xlim = c(100, 200), ylim=c(0,1e+07))
+
+
+# Detailed regions
+plot(mse_1, i=c(10, 100, 10000, 501), xlim = c(380, 400), ylim=c(0,4e+06))
+plot(mse_1_proc_SNR25, i=c(10, 100, 10000, 501), xlim = c(380, 400), ylim=c(0,1e+07), legend = FALSE)
+plot(mse_1_proc_SNR30, i=c(10, 100, 10000, 501), xlim = c(380, 400), ylim=c(0,1e+07))
+
+plot(mse_1, i=c(10, 100, 10000, 501), xlim = c(200, 220), ylim = c(0,4e+06))
+plot(mse_1_proc_SNR25, i=c(10, 100, 10000, 501), xlim = c(200, 220), ylim=c(0,1e+07))
+plot(mse_1_proc_SNR30, i=c(10, 100, 10000, 501), xlim = c(200, 220), ylim=c(0,1e+07))
 ```
 
 
+### Peak align 
+
 ```{r}
-saveRDS(mse_1_norm, "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/new_data/data_analysis/TM20norm.rds")
-saveRDS(mse_2_norm, "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/new_data/data_analysis/TM224norm.rds")
+# Run peak alignment - Calls process() - Takes long?
+mse_1_proc_SNR25_aligned <- peakAlign(mse_1_proc_SNR25)
+saveRDS(mse_1_proc_SNR25_aligned, "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/new_data/data_analysis/TM20_aligned_SNR25.rds")
+
+mse_1_proc_SNR30_aligned <- peakAlign(mse_1_proc_SNR30)
+saveRDS(mse_1_proc_SNR30_aligned, "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/new_data/data_analysis/TM20_aligned_SNR30.rds")
 ```
+
+
 
 CONTINUE HERE
 
 ```{r}
 # Mean feature intensities
-mean_1 <- summarizeFeatures(mse_1_norm, FUN="mean")
+mean_1 <- summarizeFeatures(mse_1_peaks, stat="mean")
+
 mean_2 <- summarizeFeatures(mse_2_norm, FUN="mean")
 
 
@@ -88,72 +158,3 @@ ggplot(mean_df_diff, aes(mz, diff, color = data))+
   geom_point()+
   theme_classic()
 ```
-
-### Peak picking
-
-```{r}
-mse_1_peak <- process(peakPick(mse_1_norm, SNR = 3, method = "mad")) 
-mse_2_peak <- process(peakPick(mse_2_norm, SNR = 3, method = "mad")) 
-```
-
-
-```{r}
-# Mean feature intensities
-mean_1 <- summarizeFeatures(mse_1_peak, FUN="mean")
-mean_2 <- summarizeFeatures(mse_2_peakfData(mse_peaks), FUN="mean")
-
-
-mean_df <- rbind(fData(mean_1) %>% as.data.frame %>% mutate(data = "TMA20"), fData(mean_2) %>% as.data.frame %>% mutate(data = "TMA224"))
-
-ggplot(mean_df, aes(mz, mean, color = data))+
-  geom_line(alpha = 0.5)+
-  theme_classic()
-
-ggplot(mean_df %>% filter(mz < 500 & mz > 400), aes(mz, mean, color = data))+
-  geom_line()+
-  theme_classic()
-
-ggplot(mean_df %>% filter(mz < 750 & mz > 740), aes(mz, mean, color = data))+
-  geom_line()+
-  theme_classic()
-
-ggplot(mean_df %>% filter(mz < 550 & mz > 540), aes(mz, mean, color = data))+
-  geom_line()+
-  theme_classic()
-```
-
-
-
-
-
-
-
-```{r}
-
-plot(mse_1_norm, coord=list(x=16, y=16), linewidth=2)
-
-fData(mse_1_norm)
-mse_1_norm
-
-data_peaks <- process(data, plot=interactive())
-
-
-```
-
-```{r}
-any(colSums(intensity(mse_1_norm)) == 0)
-```
-
-```{r}
-p1 <- process(peakPick(mse_1_norm, method = "mad")) |> 
-    plot(coord=list(x=16, y=16), linewidth=2)
-
-p1
-
-matter::as_facets(list(p1, p2), nrow=2,
-    labels=c("Derivative-based SNR", "Dynamic filtering-based SNR"))
-```
-
-
-
-
