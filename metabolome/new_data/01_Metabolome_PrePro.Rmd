@@ -71,11 +71,16 @@ plot(mse_1, coord=list(x = 1, y = 11, z = 1))
 # TMA20
 peaks_drift_1 <- estimateReferencePeaks(mse_1)
 
-mse_1_proc_SNR25 <- mse_1 |> 
-  recalibrate(ref = peaks_drift_1, method="locmax", tolerance=50, units="ppm") |>
+mse_1_recab <- process(
+  recalibrate(mse_1, ref = peaks_drift_1, method="locmax", tolerance=50, units="ppm")
+  )
+
+mse_1_proc_SNR20 <- mse_1_recab  |> 
   normalize(method="rms") |> 
   smooth() |> 
   peakPick(method = "filter", SNR = 2)
+
+mse_1_proc_SNR20_aligned <- peakAlign(mse_1_proc_SNR20)
 
 saveRDS(mse_1_proc_SNR25_aligned, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM20_picked_SNR20.rds")
 
@@ -83,14 +88,20 @@ saveRDS(mse_1_proc_SNR25_aligned, "/mnt/central_nas/rcc_volume/RCC/metabolome/ne
 # TMA224
 peaks_drift_2 <- estimateReferencePeaks(mse_2)
 
-mse_2_proc_SNR20 <- mse_2 |> 
-  recalibrate(ref = peaks_drift_2, method="locmax", tolerance=50, units="ppm") |>
+mse_2_recab <- process(
+  recalibrate(mse_2, ref = peaks_drift_2, method="locmax", tolerance=50, units="ppm")
+  )
+
+mse_2_proc_SNR20 <- mse_2_recab |> 
   normalize(method="rms") |> 
   smooth() |> 
   peakPick(method = "filter", SNR = 2)
 
+mse_2_proc_SNR20_aligned <- peakAlign(mse_2_proc_SNR20)
+
 saveRDS(mse_2_proc_SNR20_aligned, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM224_picked_SNR20.rds")
 ```
+
 
 ```{r}
 # Processing
