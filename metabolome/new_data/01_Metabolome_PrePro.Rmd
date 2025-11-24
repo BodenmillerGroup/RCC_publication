@@ -58,14 +58,238 @@ plot(mse_1, i=c(10, 100))
 plot(mse_1, i=c(10, 100), xlim=c(300, 400), ylim=c(0,10000000),
     superpose=TRUE)
 
-# By coordinates
-plot(mse_1, coord=list(x = 1, y = 11, z = 1))
+# Image
+image(mse_1, mz = 199.007)
+image(mse_2, mz = 199.007)
 ```
-
 
 ## 2. Preprocessing 
 
-### Normalization, Recalibration, Smoothing, Peak picking
+### Basic 
+
+```{r}
+# Remove z-axis (always 1)
+coord(mse_1) <- coord(mse_1)[ , c("x", "y")]
+coord(mse_2) <- coord(mse_2)[ , c("x", "y")]
+```
+
+### Segmentation 
+
+TMA 20 
+
+```{r}
+## TMA20 
+
+library(igraph)
+
+df <- pData(mse_1)
+
+# Build a lookup for faster neighbor search
+key <- paste(df$x, df$y, sep = "_")
+idx_lookup <- match(key, key)
+
+# For each pixel, find its 4-neighbors (up/down/left/right)
+neighbors <- function(i) {
+  x <- df$x[i]
+  y <- df$y[i]
+  nbrs <- paste(
+    c(x+1, x-1, x,   x),
+    c(y,   y,   y+1, y-1),
+    sep = "_"
+  )
+  match(nbrs, key)
+}
+
+# Build edges between each pixel and its neighbors
+edges <- 
+  lapply(seq_len(nrow(df)), function(i) {
+    nbs <- neighbors(i)
+    nbs <- nbs[!is.na(nbs)]
+    if (length(nbs))
+      rbind(rep(i, length(nbs)), nbs)
+  })
+
+edges <- do.call(cbind, edges)
+
+# Create graph
+g <- graph_from_edgelist(t(edges), directed = FALSE)
+
+# Connected component IDs
+comp <- components(g)$membership
+
+# Back to the MSIexperiment object:
+pData(mse_1)$object_id <- as.character(comp)
+
+# Visualize
+image(mse_1, "object_id")
+```
+
+
+
+
+```{r}
+# Filter segmented objects based on size 
+size_objects <- pData(mse_1) %>% as.data.frame %>% group_by(object_id) %>% dplyr::count()
+
+size_objects <- size_objects %>% mutate(check = ifelse(n < 80 | n > 210, TRUE, FALSE))
+
+# Add to MSI
+mse_1$check <- size_objects$check[match(mse_1$object_id, size_objects$object_id)]
+image(mse_1, "object_id")
+
+# Filter objects
+mse_1_fil <- mse_1[mse_1$check == FALSE]
+image(mse_1_fil, "object_id")
+```
+
+
+```{r}
+# Export segmentation image for annotation
+plot <- pData(mse_1_fil) %>% as.data.frame
+
+centroids <- plot %>% 
+  group_by(object_id) %>%
+  summarise(
+    x = mean(x),
+    y = mean(y)
+  )
+
+pdf("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TMA20_seg_image.pdf", width = 12, height = 5)
+ggplot(plot, aes(x, y, fill = factor(object_id))) +
+  scale_x_reverse() + 
+  geom_tile() +
+  geom_text(data = centroids, 
+            aes(x, y, label = object_id),
+            color = "black",
+            size = 4) +
+  theme_minimal()+
+  guides(fill = "none")
+dev.off()
+
+
+anno <- pData(mse_1_fil) %>% as.data.frame %>% select(run, object_id) %>% unique() %>% remove_rownames() %>% mutate(object_id = as.numeric(object_id)) %>% arrange(-object_id) %>% mutate(object_id = as.character(object_id))
+write_csv(anno, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TMA20_seg_anno.csv")
+```
+
+
+TMA224 
+
+```{r}
+## TMA224
+
+library(igraph)
+
+df <- pData(mse_2)
+
+# Build a lookup for faster neighbor search
+key <- paste(df$x, df$y, sep = "_")
+idx_lookup <- match(key, key)
+
+# For each pixel, find its 4-neighbors (up/down/left/right)
+neighbors <- function(i) {
+  x <- df$x[i]
+  y <- df$y[i]
+  nbrs <- paste(
+    c(x+1, x-1, x,   x),
+    c(y,   y,   y+1, y-1),
+    sep = "_"
+  )
+  match(nbrs, key)
+}
+
+# Build edges between each pixel and its neighbors
+edges <- 
+  lapply(seq_len(nrow(df)), function(i) {
+    nbs <- neighbors(i)
+    nbs <- nbs[!is.na(nbs)]
+    if (length(nbs))
+      rbind(rep(i, length(nbs)), nbs)
+  })
+
+edges <- do.call(cbind, edges)
+
+# Create graph
+g <- graph_from_edgelist(t(edges), directed = FALSE)
+
+# Connected component IDs
+comp <- components(g)$membership
+
+# Back to the MSIexperiment object:
+pData(mse_2)$object_id <- as.character(comp)
+
+# Visualize
+image(mse_2, "object_id")
+```
+
+
+
+
+```{r}
+# Filter segmented objects based on size 
+size_objects <- pData(mse_2) %>% as.data.frame %>% group_by(object_id) %>% dplyr::count()
+
+size_objects <- size_objects %>% mutate(check = ifelse(n < 80 | n > 225, TRUE, FALSE))
+
+# Add to MSI
+mse_2$check <- size_objects$check[match(mse_2$object_id, size_objects$object_id)]
+image(mse_2, "check")
+
+# Filter objects
+#mse_2_fil <- mse_2[mse_2$check == FALSE]
+#image(mse_2_fil, "object_id")
+```
+
+```{r}
+df <- pData(mse_2)[, c("x", "y", "object_id", "check")]
+
+# Build empty matrix with image size
+width  <- max(df$x)
+height <- max(df$y)
+
+label_matrix <- matrix(0L, nrow = height, ncol = width)
+label_matrix_1 <- matrix(0L, nrow = height, ncol = width)
+
+label_matrix[cbind(df$y, df$x)] <- df$object_id
+label_matrix_1[cbind(df$y, df$x)] <- df$check
+
+library(writexl)
+write_xlsx(list(sheet1 = as.data.frame(label_matrix), sheet2 = as.data.frame(label_matrix_1)), path = "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TMA224_labelmatrix.xlsx")
+
+```
+
+
+
+
+```{r}
+# Export segmentation image for annotation
+plot <- pData(mse_2_fil) %>% as.data.frame
+
+centroids <- plot %>% 
+  group_by(object_id) %>%
+  summarise(
+    x = mean(x),
+    y = mean(y)
+  )
+
+pdf("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TMA224_seg_image.pdf", width = 12, height = 5)
+ggplot(plot, aes(x, y, fill = factor(object_id))) +
+  scale_x_reverse() + 
+  geom_tile() +
+  geom_text(data = centroids, 
+            aes(x, y, label = object_id),
+            color = "black",
+            size = 4) +
+  theme_minimal()+
+  guides(fill = "none")
+dev.off()
+
+
+anno <- pData(mse_2_fil) %>% as.data.frame %>% select(run, object_id) %>% unique() %>% remove_rownames() %>% mutate(object_id = as.numeric(object_id)) %>% arrange(-object_id) %>% mutate(object_id = as.character(object_id))
+write_csv(anno, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TMA224_seg_anno.csv")
+```
+
+
+### Normalization, Recalibration, Smoothing, Peak picking, Peak align
 
 ```{r}
 # TMA20
@@ -82,7 +306,7 @@ mse_1_proc_SNR20 <- mse_1_recab  |>
 
 mse_1_proc_SNR20_aligned <- peakAlign(mse_1_proc_SNR20)
 
-saveRDS(mse_1_proc_SNR25_aligned, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM20_picked_SNR20.rds")
+saveRDS(mse_1_proc_SNR20_aligned, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM20_picked_SNR20.rds")
 
 
 # TMA224
@@ -226,6 +450,12 @@ mse_2_proc_SNR15_aligned <- mse_2_proc_SNR15
 ### Common mz grid 
 
 ```{r}
+mse_1_proc_SNR25_aligned <- readRDS("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM20_aligned_SNR25.rds")
+
+mse_test <- mse_1_proc_SNR25_aligned
+```
+
+```{r}
 # Round mz values to find common grid
 mz(mse_2_proc_SNR25_aligned) <- round(mz(mse_2_proc_SNR25_aligned), 3)
 mz(mse_1_proc_SNR25_aligned) <- round(mz(mse_1_proc_SNR25_aligned), 3)
@@ -256,70 +486,9 @@ image(mse_combined, mz=mz_grid[100])
 ```
 
 
-```{r}
-mse_test_small <- subsetPixels(mse_1, x > 200 & x < 250)
-
-image(mse_test_small, mz = 200)
-```
-
-
-```{r}
-library(igraph)
-
-
-df <- pData(mse_test_small)
-
-# Build a lookup for faster neighbor search
-key <- paste(df$x, df$y, sep = "_")
-idx_lookup <- match(key, key)
-
-# For each pixel, find its 4-neighbors (up/down/left/right)
-neighbors <- function(i) {
-  x <- df$x[i]
-  y <- df$y[i]
-  nbrs <- paste(
-    c(x+1, x-1, x,   x),
-    c(y,   y,   y+1, y-1),
-    sep = "_"
-  )
-  match(nbrs, key)
-}
-
-# Build edges between each pixel and its neighbors
-edges <- 
-  lapply(seq_len(nrow(df)), function(i) {
-    nbs <- neighbors(i)
-    nbs <- nbs[!is.na(nbs)]
-    if (length(nbs))
-      rbind(rep(i, length(nbs)), nbs)
-  })
-
-edges
-edges <- do.call(cbind, edges)
-
-# Create graph
-g <- graph_from_edgelist(t(edges), directed = FALSE)
-
-# Connected component IDs
-comp <- components(g)$membership
-
-# Add to metadata
-df$object_id <- comp
-
-as.data.frame(df)
-# If you want it back in the MSIexperiment object:
-pData(mse_test_small)$object_id <- comp
 
 
 
-pData(mse_test_small)
-
-image(mse_test_small, mz = 200, subset = pData(mse_test_small)$object_id == "17")
-```
-
-```{r}
-summarizePixels(mse_combined)
-```
 
 
 ### Peak filtering
