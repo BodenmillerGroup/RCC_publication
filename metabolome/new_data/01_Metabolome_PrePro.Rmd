@@ -415,9 +415,6 @@ for (entry in meta_add) {
   
   pData(mse_2_fil)[[entry]] <- metadata_selected[,entry][match(pData(mse_2_fil)[["TMA_id"]],metadata_selected[,"TMA_id"])]
 }
-
-
-
 ```
 
 
@@ -445,9 +442,18 @@ plot(mse_1_fil_ccRCC, i=c(10, 100, 10000, 30000), xlim = c(154.85, 154.95), ylim
 ### Normalization, Recalibration, Smoothing, Peak picking, Peak align
 
 ```{r}
-# TMA20
-peaks_drift_1 <- estimateReferencePeaks(mse_1_fil_ccRCC)
+mse_1_fil_ccRCC <- readRDS("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM20_ccRCC.rds")
+mse_2_fil_ccRCC <- readRDS("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM224_ccRCC.rds")
 
+# Make pData comparable for later merging
+mse_1_fil_ccRCC$object_id_1 <- NULL
+mse_2_fil_ccRCC$object_id_final <- NULL
+mse_2_fil_ccRCC$check_1 <- NULL
+mse_2_fil_ccRCC$x_y <- NULL 
+```
+
+```{r}
+# TMA20
 mse_1_fil_ccRCC_proc_SNR20 <- mse_1_fil_ccRCC |> 
   Cardinal::normalize(method="rms") |> 
   smooth() |> 
@@ -456,12 +462,7 @@ mse_1_fil_ccRCC_proc_SNR20 <- mse_1_fil_ccRCC |>
 mse_1_fil_ccRCC_proc_SNR20_aligned <- peakAlign(mse_1_fil_ccRCC_proc_SNR20, 
                                                 tolerance = 5, units = "ppm")
 
-mse_1_fil_ccRCC_proc_SNR20_aligned_ref <- peakAlign(mse_1_fil_ccRCC_proc_SNR20, 
-                                                ref = peaks_drift_1, 
-                                                tolerance = 5, units = "ppm")
-
 saveRDS(mse_1_fil_ccRCC_proc_SNR20_aligned, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM20_picked_SNR20.rds")
-saveRDS(mse_1_fil_ccRCC_proc_SNR20_aligned_ref, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM20_picked_SNR20_withref.rds")
 
 mse_1_fil_ccRCC_proc_SNR15 <- mse_1_fil_ccRCC |> 
   Cardinal::normalize(method="rms") |> 
@@ -471,258 +472,96 @@ mse_1_fil_ccRCC_proc_SNR15 <- mse_1_fil_ccRCC |>
 mse_1_fil_ccRCC_proc_SNR15_aligned <- peakAlign(mse_1_fil_ccRCC_proc_SNR15, 
                                                 tolerance = 5, units = "ppm")
 
-mse_1_fil_ccRCC_proc_SNR15_aligned_ref <- peakAlign(mse_1_fil_ccRCC_proc_SNR15, 
-                                                ref = peaks_drift_1, 
-                                                tolerance = 5, units = "ppm")
-
 saveRDS(mse_1_fil_ccRCC_proc_SNR15_aligned, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM20_picked_SNR15.rds")
-saveRDS(mse_1_fil_ccRCC_proc_SNR15_aligned_ref, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM20_picked_SNR15_withref.rds")
 
 # TMA224
-peaks_drift_2 <- estimateReferencePeaks(mse_2_fil_ccRCC_proc_SNR20)
-
 mse_2_fil_ccRCC_proc_SNR20 <- mse_2_fil_ccRCC |> 
-  normalize(method="rms") |> 
+  Cardinal::normalize(method="rms") |> 
   smooth() |> 
   peakPick(method = "filter", SNR = 2)
 
 mse_2_fil_ccRCC_proc_SNR20_aligned <- peakAlign(mse_2_fil_ccRCC_proc_SNR20, 
                                                 tolerance = 5, units = "ppm")
 
-mse_2_fil_ccRCC_proc_SNR20_aligned_ref <- peakAlign(mse_2_fil_ccRCC_proc_SNR20, 
-                                                ref = peaks_drift_2, 
-                                                tolerance = 5, units = "ppm")
-
 saveRDS(mse_2_fil_ccRCC_proc_SNR20_aligned, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM224_picked_SNR20.rds")
-saveRDS(mse_2_fil_ccRCC_proc_SNR20_aligned_ref, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM224_picked_SNR20_withref.rds")
 
 mse_2_fil_ccRCC_proc_SNR15 <- mse_2_fil_ccRCC |> 
-  normalize(method="rms") |> 
+  Cardinal::normalize(method="rms") |> 
   smooth() |> 
   peakPick(method = "filter", SNR = 1.5)
 
 mse_2_fil_ccRCC_proc_SNR15_aligned <- peakAlign(mse_2_fil_ccRCC_proc_SNR15, 
-                                                tolerance = 5, units = "ppm")
-
-mse_2_fil_ccRCC_proc_SNR15_aligned_ref <- peakAlign(mse_2_fil_ccRCC_proc_SNR15, 
-                                                ref = peaks_drift_2, 
-                                                tolerance = 5, units = "ppm")
+                                                tolerance = 5, units = "ppm", 
+                                                BPPARAM = MulticoreParam(workers = 2))
 
 saveRDS(mse_2_fil_ccRCC_proc_SNR15_aligned, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM224_picked_SNR15.rds")
-saveRDS(mse_2_fil_ccRCC_proc_SNR15_aligned_ref, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM224_picked_SNR15_withref.rds")
 ```
 
-# CONTINUE HERE
-
-
 ```{r}
-plot(mse_1_fil_ccRCC_proc_SNR20, i=c(10, 100, 10000, 30000), ylim=c(0,1e+07))
-
 plot(mse_1_fil_ccRCC, i=c(10, 100, 10000, 30000), xlim = c(100, 200), ylim=c(0,4e+06))
-plot(mse_1_fil_ccRCC_proc_SNR20, i=c(10, 100, 10000, 30000), xlim = c(100, 200), ylim=c(0,1e+07))
+plot(mse_1_fil_ccRCC_proc_SNR20_aligned, i=c(10, 100, 10000, 30000), xlim = c(100, 200), ylim=c(0,1e+07))
 
-
-plot(mse_1_fil_ccRCC, i=c(10, 100, 10000, 30000), xlim = c(154.85, 154.95), ylim=c(0,4e+06))
-plot(mse_1_fil_ccRCC_proc_SNR20, i=c(10, 100, 10000, 30000), xlim = c(154.85, 154.95), ylim=c(0,1e+07))
+plot(mse_2_fil_ccRCC, i=c(10, 100, 10000, 30000), xlim = c(100, 200), ylim=c(0,4e+06))
+plot(mse_2_fil_ccRCC_proc_SNR20_aligned, i=c(10, 100, 10000, 30000), xlim = c(100, 200), ylim=c(0,1e+07))
 ```
 
-
-
-```{r}
-# Processing
-## Includes Normalization, Smoothing and Peak Picking
-mse_1_proc_SNR25 <- mse_1 |> 
-  normalize(method="rms") |> 
-  smooth() |> 
-  peakPick(method = "filter", SNR = 2)
-
-mse_1_proc_SNR30 <- mse_1 |> 
-  normalize(method="rms") |>
-  smooth() |>
-  peakPick(method = "filter", SNR = 3)
-
-mse_1_proc_SNR15 <- mse_1 |> 
-  normalize(method="rms") |>
-  smooth() |>
-  peakPick(method = "filter", SNR = 1.5)
-
-# Full spectra
-plot(mse_1, i=c(10, 100, 10000, 501), ylim=c(0,4e+06))
-
-# Broad regions
-plot(mse_1, i=c(10, 100, 10000, 501), xlim = c(200, 400), ylim=c(0,4e+06))
-plot(mse_1_proc_SNR25, i=c(10, 100, 10000, 501), xlim = c(200, 400), ylim=c(0,1e+07), legend = FALSE)
-plot(mse_1_proc_SNR30, i=c(10, 100, 10000, 501), xlim = c(200, 400), ylim=c(0,1e+07))
-
-plot(mse_1, i=c(10, 100, 10000, 501), xlim = c(100, 200), ylim=c(0,4e+06))
-plot(mse_1_proc_SNR25, i=c(10, 100, 10000, 501), xlim = c(100, 200), ylim=c(0,1e+07), legend = FALSE)
-plot(mse_1_proc_SNR30, i=c(10, 100, 10000, 501), xlim = c(100, 200), ylim=c(0,1e+07))
-
-
-# Detailed regions
-plot(mse_1, i=c(10, 100, 10000, 501), xlim = c(380, 400), ylim=c(0,4e+06))
-plot(mse_1_proc_SNR25, i=c(10, 100, 10000, 501), xlim = c(380, 400), ylim=c(0,1e+07), legend = FALSE)
-plot(mse_1_proc_SNR30, i=c(10, 100, 10000, 501), xlim = c(380, 400), ylim=c(0,1e+07))
-
-plot(mse_1, i=c(10, 100, 10000, 501), xlim = c(200, 220), ylim = c(0,4e+06))
-plot(mse_1_proc_SNR25, i=c(10, 100, 10000, 501), xlim = c(200, 220), ylim=c(0,1e+07))
-plot(mse_1_proc_SNR30, i=c(10, 100, 10000, 501), xlim = c(200, 220), ylim=c(0,1e+07))
-```
-
-
-```{r}
-# Processing
-## Includes Normalization, Smoothing and Peak Picking
-mse_2_proc_SNR25 <- mse_2 |> 
-  normalize(method="rms") |> 
-  smooth() |> 
-  peakPick(method = "filter", SNR = 2)
-
-mse_2_proc_SNR30 <- mse_2 |> 
-  normalize(method="rms") |>
-  smooth() |>
-  peakPick(method = "filter", SNR = 3)
-
-mse_2_proc_SNR15 <- mse_2 |> 
-  normalize(method="rms") |>
-  smooth() |>
-  peakPick(method = "filter", SNR = 1.5)
-
-# Full spectra
-plot(mse_2, i=c(10, 100, 10000, 501), ylim=c(0,4e+06))
-
-# Broad regions
-plot(mse_2, i=c(10, 100, 10000, 501), xlim = c(200, 400), ylim=c(0,4e+06))
-plot(mse_2_proc_SNR25, i=c(10, 100, 10000, 501), xlim = c(200, 400), ylim=c(0,1e+07), legend = FALSE)
-plot(mse_2_proc_SNR30, i=c(10, 100, 10000, 501), xlim = c(200, 400), ylim=c(0,1e+07))
-
-plot(mse_2, i=c(10, 100, 10000, 501), xlim = c(100, 200), ylim=c(0,4e+06))
-plot(mse_2_proc_SNR25, i=c(10, 100, 10000, 501), xlim = c(100, 200), ylim=c(0,1e+07), legend = FALSE)
-plot(mse_2_proc_SNR30, i=c(10, 100, 10000, 501), xlim = c(100, 200), ylim=c(0,1e+07))
-
-
-# Detailed regions
-plot(mse_2, i=c(10, 100, 10000, 501), xlim = c(380, 400), ylim=c(0,4e+06))
-plot(mse_2_proc_SNR25, i=c(10, 100, 10000, 501), xlim = c(380, 400), ylim=c(0,1e+07), legend = FALSE)
-plot(mse_2_proc_SNR30, i=c(10, 100, 10000, 501), xlim = c(380, 400), ylim=c(0,1e+07))
-
-plot(mse_2, i=c(10, 100, 10000, 501), xlim = c(200, 220), ylim = c(0,4e+06))
-plot(mse_2_proc_SNR25, i=c(10, 100, 10000, 501), xlim = c(200, 220), ylim=c(0,1e+07))
-plot(mse_2_proc_SNR30, i=c(10, 100, 10000, 501), xlim = c(200, 220), ylim=c(0,1e+07))
-```
-
-
-
-
-
-
-
-### Peak align 
-
-```{r}
-# Run peak alignment - Calls process() - Takes long?
-## TMA20
-mse_1_proc_SNR25_aligned <- peakAlign(mse_1_proc_SNR25)
-saveRDS(mse_1_proc_SNR25_aligned, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM20_aligned_SNR25.rds")
-
-mse_1_proc_SNR30_aligned <- peakAlign(mse_1_proc_SNR30)
-saveRDS(mse_1_proc_SNR30_aligned, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM20_aligned_SNR30.rds")
-
-mse_1_proc_SNR15_aligned <- peakAlign(mse_1_proc_SNR15)
-saveRDS(mse_1_proc_SNR30_aligned, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM20_aligned_SNR15.rds")
-
-## TMA224
-mse_2_proc_SNR25_aligned <- peakAlign(mse_2_proc_SNR25)
-saveRDS(mse_2_proc_SNR25_aligned, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM224_aligned_SNR25.rds")
-
-mse_2_proc_SNR30_aligned <- peakAlign(mse_2_proc_SNR30)
-saveRDS(mse_2_proc_SNR30_aligned, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM224_aligned_SNR30.rds")
-
-mse_2_proc_SNR15_aligned <- peakAlign(mse_2_proc_SNR15)
-saveRDS(mse_2_proc_SNR30_aligned, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM224_aligned_SNR15.rds")
-```
-
-
-```{r}
-<- readRDS(mse_1_proc_SNR25_aligned, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM20_aligned_SNR25.rds")
-
-fData(mse_1_proc_SNR30_aligned)
-fData(mse_1_proc_SNR25_aligned)
-
-mse_2_proc_SNR15_aligned <- mse_2_proc_SNR15
-```
 
 ### Common mz grid 
 
 ```{r}
-mse_1_proc_SNR25_aligned <- readRDS("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM20_aligned_SNR25.rds")
+mse_1_fil_ccRCC_proc_SNR20_aligned <- readRDS("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM20_picked_SNR20.rds")
 
-mse_test <- mse_1_proc_SNR25_aligned
+mse_2_fil_ccRCC_proc_SNR20_aligned <- readRDS("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM224_picked_SNR20.rds")
 ```
 
 ```{r}
 # Round mz values to find common grid
-mz(mse_2_proc_SNR25_aligned) <- round(mz(mse_2_proc_SNR25_aligned), 3)
-mz(mse_1_proc_SNR25_aligned) <- round(mz(mse_1_proc_SNR25_aligned), 3)
+mz(mse_2_fil_ccRCC_proc_SNR20_aligned) <- round(mz(mse_2_fil_ccRCC_proc_SNR20_aligned), 4)
+mz(mse_1_fil_ccRCC_proc_SNR20_aligned) <- round(mz(mse_1_fil_ccRCC_proc_SNR20_aligned), 4)
 
-mz_grid <- intersect(mz(mse_1_proc_SNR25_aligned), mz(mse_2_proc_SNR25_aligned))
+mz_grid <- intersect(mz(mse_1_fil_ccRCC_proc_SNR20_aligned), mz(mse_2_fil_ccRCC_proc_SNR20_aligned)) #373 for SNR20
 
 # Subset to common grid
-mse_2_proc_SNR25_aligned <- subsetFeatures(mse_2_proc_SNR25_aligned, mz %in% mz_grid)
-mse_1_proc_SNR25_aligned <- subsetFeatures(mse_1_proc_SNR25_aligned, mz %in% mz_grid)
-
+mse_2_fil_ccRCC_proc_SNR20_aligned <- subsetFeatures(mse_2_fil_ccRCC_proc_SNR20_aligned, mz %in% mz_grid)
+mse_1_fil_ccRCC_proc_SNR20_aligned <- subsetFeatures(mse_1_fil_ccRCC_proc_SNR20_aligned, mz %in% mz_grid)
 
 # Combine
-mse_combined <- cbind(mse_2_proc_SNR25_aligned, mse_1_proc_SNR25_aligned)
+mse_combined <- cbind(mse_1_fil_ccRCC_proc_SNR20_aligned, mse_2_fil_ccRCC_proc_SNR20_aligned)
+
+
+pData(mse_1_fil_ccRCC_proc_SNR20_aligned)
+
+
+  
+colnames(pData(mse_2_fil_ccRCC_proc_SNR20_aligned))[!colnames(pData(mse_2_fil_ccRCC_proc_SNR20_aligned)) %in% 
+colnames(pData(mse_1_fil_ccRCC_proc_SNR20_aligned))]
+
+colnames(pData(mse_1_fil_ccRCC_proc_SNR20_aligned))[!colnames(pData(mse_1_fil_ccRCC_proc_SNR20_aligned)) %in% 
+colnames(pData(mse_2_fil_ccRCC_proc_SNR20_aligned))]
+
+
+colnames(pData(mse_1_fil_ccRCC_proc_SNR20_aligned))
+[!colnames(pData(mse_2_fil_ccRCC_proc_SNR20_aligned)) %in% c("object_id_final","check_1")]
+
 fData(mse_combined)
 
 # Subset features
 mse_combined
 ```
 
-
-
-```{r}
-pData <- pData(mse_combined) %>% as.data.frame
-```
-
-```{r}
-image(mse_combined, mz=mz_grid[100])
-```
-
-
-
-
-
-
-
 ### Peak filtering
 
 Only combined
 
 ```{r}
-# TMA20
-mse_1_proc_SNR30_filtered <- subsetFeatures(mse_1_proc_SNR30_aligned, freq > 0.01)
-fData(mse_1_proc_SNR30_filtered)
+# Filter species with at least 1% frequency
+mse_combined_fil <- subsetFeatures(mse_combined, freq > 0.01)
+fData(mse_combined_fil)
 
-mse_1_proc_SNR25_filtered <- subsetFeatures(mse_1_proc_SNR25_aligned, freq > 0.01)
-fData(mse_1_proc_SNR25_filtered)
-
-mse_1_proc_SNR15_filtered <- subsetFeatures(mse_1_proc_SNR15_aligned, freq > 0.01)
-fData(mse_1_proc_SNR15_filtered)
+# 207 features
 ```
 
-```{r}
-# TMA224
-mse_2_proc_SNR30_filtered <- subsetFeatures(mse_2_proc_SNR30_aligned, freq > 0.01)
-fData(mse_2_proc_SNR30_filtered)
 
-mse_2_proc_SNR25_filtered <- subsetFeatures(mse_2_proc_SNR25_aligned, freq > 0.01)
-fData(mse_2_proc_SNR25_filtered)
-
-mse_2_proc_SNR15_filtered <- subsetFeatures(mse_2_proc_SNR15_aligned, freq > 0.01)
-fData(mse_2_proc_SNR15_filtered)
-```
 
 
 CONTINUE HERE
