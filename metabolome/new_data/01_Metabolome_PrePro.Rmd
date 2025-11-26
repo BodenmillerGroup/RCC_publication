@@ -460,7 +460,10 @@ mse_1_fil_ccRCC_proc_SNR20 <- mse_1_fil_ccRCC |>
   peakPick(method = "filter", SNR = 2)
 
 mse_1_fil_ccRCC_proc_SNR20_aligned <- peakAlign(mse_1_fil_ccRCC_proc_SNR20, 
-                                                tolerance = 5, units = "ppm")
+                                                tolerance = 5, units = "ppm", 
+                                                BPPARAM = MulticoreParam(workers = 2))
+
+gc()
 
 saveRDS(mse_1_fil_ccRCC_proc_SNR20_aligned, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM20_picked_SNR20.rds")
 
@@ -470,7 +473,10 @@ mse_1_fil_ccRCC_proc_SNR15 <- mse_1_fil_ccRCC |>
   peakPick(method = "filter", SNR = 1.5)
 
 mse_1_fil_ccRCC_proc_SNR15_aligned <- peakAlign(mse_1_fil_ccRCC_proc_SNR15, 
-                                                tolerance = 5, units = "ppm")
+                                                tolerance = 5, units = "ppm",
+                                                BPPARAM = MulticoreParam(workers = 2))
+
+gc()
 
 saveRDS(mse_1_fil_ccRCC_proc_SNR15_aligned, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM20_picked_SNR15.rds")
 
@@ -481,7 +487,10 @@ mse_2_fil_ccRCC_proc_SNR20 <- mse_2_fil_ccRCC |>
   peakPick(method = "filter", SNR = 2)
 
 mse_2_fil_ccRCC_proc_SNR20_aligned <- peakAlign(mse_2_fil_ccRCC_proc_SNR20, 
-                                                tolerance = 5, units = "ppm")
+                                                tolerance = 5, units = "ppm",
+                                                BPPARAM = MulticoreParam(workers = 2))
+
+gc()
 
 saveRDS(mse_2_fil_ccRCC_proc_SNR20_aligned, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM224_picked_SNR20.rds")
 
@@ -493,6 +502,8 @@ mse_2_fil_ccRCC_proc_SNR15 <- mse_2_fil_ccRCC |>
 mse_2_fil_ccRCC_proc_SNR15_aligned <- peakAlign(mse_2_fil_ccRCC_proc_SNR15, 
                                                 tolerance = 5, units = "ppm", 
                                                 BPPARAM = MulticoreParam(workers = 2))
+
+gc()
 
 saveRDS(mse_2_fil_ccRCC_proc_SNR15_aligned, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM224_picked_SNR15.rds")
 ```
