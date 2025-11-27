@@ -436,7 +436,7 @@ p
 ```
 
 ```{r}
-df <- assay%>% t() %>% as.data.frame()
+df <- assay %>% t() %>% as.data.frame()
 df$TMA <- raw_out$TMA[match(rownames(df), raw_out$ID)]
 df_long <- df %>% pivot_longer(cols = -TMA, names_to = "mz", values_to = "intensity")
 
