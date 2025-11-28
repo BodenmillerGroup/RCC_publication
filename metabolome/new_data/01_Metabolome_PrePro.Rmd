@@ -9,7 +9,7 @@ editor_options:
 
 ## Software requirments 
 
-```{r}
+```{r, message=FALSE}
 library(tidyverse)
 library(readxl)
 library(RColorBrewer)
@@ -25,135 +25,646 @@ library(Cardinal)
 ## 1. Read in data 
 
 ```{r}
-mse_1 <- readMSIData("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/new_data/raw/ztma_20_rcc_no_normalized_complete_spectrum.imzML", as = "MSImagingExperiment")
-mse_2 <- readMSIData("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/new_data/raw/ztma_224_rcc_no_normalized_complete_spectrum.imzML", as = "MSImagingExperiment")
+mse_1 <- readMSIData("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/raw/ztma_20_rcc_no_normalized_complete_spectrum.imzML", as = "MSImagingExperiment")
+mse_2 <- readMSIData("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/raw/ztma_224_rcc_no_normalized_complete_spectrum.imzML", as = "MSImagingExperiment")
 
 mse_1
 mse_2
 ```
 
+
+```{r}
+# Spectra data
+spectraData(mse_1)
+spectra(mse_1, "intensity")
+
+# Pixel data
+pixelData(mse_1)
+pixelData(mse_2)
+coord(mse_1)[,"z"] <- as.numeric(coord(mse_1)[,"z"])
+coord(mse_2)[,"z"] <- as.numeric(coord(mse_2)[,"z"])
+
+# Runnames
+runNames(mse_1)
+
+# Features
+featureData(mse_1)
+```
+
+```{r}
+# Plot 
+## Different spectra numbers
+plot(mse_1, i=c(10, 100))
+plot(mse_1, i=c(10, 100), xlim=c(300, 400), ylim=c(0,10000000),
+    superpose=TRUE)
+
+# Image
+image(mse_1, mz = 199.007)
+image(mse_2, mz = 199.007)
+```
+
 ## 2. Preprocessing 
 
-### Normalize 
+### Basic 
+
+```{r}
+# Remove z-axis (always 1)
+coord(mse_1) <- coord(mse_1)[ , c("x", "y")]
+coord(mse_2) <- coord(mse_2)[ , c("x", "y")]
+```
+
+### Segmentation 
+
+TMA 20 
+
+```{r}
+## TMA20 
+
+library(igraph)
+
+df <- pData(mse_1)
+
+# Build a lookup for faster neighbor search
+key <- paste(df$x, df$y, sep = "_")
+idx_lookup <- match(key, key)
+
+# For each pixel, find its 4-neighbors (up/down/left/right)
+neighbors <- function(i) {
+  x <- df$x[i]
+  y <- df$y[i]
+  nbrs <- paste(
+    c(x+1, x-1, x,   x),
+    c(y,   y,   y+1, y-1),
+    sep = "_"
+  )
+  match(nbrs, key)
+}
+
+# Build edges between each pixel and its neighbors
+edges <- 
+  lapply(seq_len(nrow(df)), function(i) {
+    nbs <- neighbors(i)
+    nbs <- nbs[!is.na(nbs)]
+    if (length(nbs))
+      rbind(rep(i, length(nbs)), nbs)
+  })
+
+edges <- do.call(cbind, edges)
+
+# Create graph
+g <- graph_from_edgelist(t(edges), directed = FALSE)
+
+# Connected component IDs
+comp <- components(g)$membership
+
+# Back to the MSIexperiment object:
+pData(mse_1)$object_id <- as.character(comp)
+
+# Visualize
+image(mse_1, "object_id")
+```
+
+
+
+
+```{r}
+# Filter segmented objects based on size 
+size_objects <- pData(mse_1) %>% as.data.frame %>% group_by(object_id) %>% dplyr::count()
+
+size_objects <- size_objects %>% mutate(check = ifelse(n < 80 | n > 220, TRUE, FALSE))
+
+# Add to MSI
+mse_1$check <- size_objects$check[match(mse_1$object_id, size_objects$object_id)]
+image(mse_1, "object_id")
+
+# Filter objects
+mse_1_fil <- mse_1[mse_1$check == FALSE]
+image(mse_1_fil, "object_id")
+```
+
+
+```{r}
+# Export segmentation image for annotation
+plot <- pData(mse_1_fil) %>% as.data.frame
+
+centroids <- plot %>% 
+  group_by(object_id) %>%
+  summarise(
+    x = mean(x),
+    y = mean(y)
+  )
+
+pdf("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TMA20_seg_image.pdf", width = 12, height = 5)
+ggplot(plot, aes(x, y, fill = factor(object_id))) +
+  scale_x_reverse() + 
+  geom_tile() +
+  geom_text(data = centroids, 
+            aes(x, y, label = object_id),
+            color = "black",
+            size = 4) +
+  theme_minimal()+
+  guides(fill = "none")
+dev.off()
+
+
+anno <- pData(mse_1_fil) %>% as.data.frame %>% select(run, object_id) %>% unique() %>% remove_rownames() %>% mutate(object_id = as.numeric(object_id)) %>% arrange(-object_id) %>% mutate(object_id = as.character(object_id))
+write_csv(anno, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TMA20_seg_anno.csv")
+```
+
+
+TMA224 
+
+```{r}
+## TMA224
+
+library(igraph)
+
+df <- pData(mse_2)
+
+# Build a lookup for faster neighbor search
+key <- paste(df$x, df$y, sep = "_")
+idx_lookup <- match(key, key)
+
+# For each pixel, find its 4-neighbors (up/down/left/right)
+neighbors <- function(i) {
+  x <- df$x[i]
+  y <- df$y[i]
+  nbrs <- paste(
+    c(x+1, x-1, x,   x),
+    c(y,   y,   y+1, y-1),
+    sep = "_"
+  )
+  match(nbrs, key)
+}
+
+# Build edges between each pixel and its neighbors
+edges <- 
+  lapply(seq_len(nrow(df)), function(i) {
+    nbs <- neighbors(i)
+    nbs <- nbs[!is.na(nbs)]
+    if (length(nbs))
+      rbind(rep(i, length(nbs)), nbs)
+  })
+
+edges <- do.call(cbind, edges)
+
+# Create graph
+g <- graph_from_edgelist(t(edges), directed = FALSE)
+
+# Connected component IDs
+comp <- components(g)$membership
+
+# Back to the MSIexperiment object:
+pData(mse_2)$object_id <- as.character(comp)
+
+# Visualize
+image(mse_2, "object_id")
+```
+
+
+
+
+
+
+```{r}
+# In TMA225 we had some merged cores, which we manually separated in Excel
+df <- pData(mse_2)[, c("x", "y", "object_id", "check")] %>% as.data.frame
+
+# Build empty matrix with image size
+width  <- max(df$x)
+height <- max(df$y)
+
+label_matrix <- matrix(0L, nrow = height, ncol = width)
+label_matrix_1 <- matrix(0L, nrow = height, ncol = width)
+
+label_matrix[cbind(df$y, df$x)] <- df$object_id
+label_matrix_1[cbind(df$y, df$x)] <- df$check
+
+library(writexl)
+write_xlsx(list(sheet1 = as.data.frame(label_matrix), sheet2 = as.data.frame(label_matrix_1)), path = "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TMA224_labelmatrix.xlsx")
+```
+
+```{r}
+label_matrix_edited <- read_xlsx("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TMA224_labelmatrix.xlsx", col_names = as.character(seq(1, ncol(label_matrix))))
+
+height <- nrow(label_matrix_edited)
+width  <- ncol(label_matrix_edited)
+
+df_new <- data.frame(
+  x = rep(seq_len(width), times = height),
+  y = rep(seq_len(height), each = width),
+  object_id_new = as.vector(t(label_matrix_edited))
+)
+
+df_new$x_y <- paste0(df_new$x, "_", df_new$y)
+mse_2$x_y <- paste0(mse_2$x, "_", mse_2$y)
+df_new$object_id_old <- mse_2$object_id[match(df_new$x_y, mse_2$x_y)]
+df_new <- df_new %>% filter(object_id_new != "0")
+
+# New number mapping in order
+ids <- unique(df_new$object_id_new)
+num_part <- as.numeric(gsub("[^0-9].*$", "", ids))
+letter_part <- gsub("^[0-9]+", "", ids)
+ord <- order(num_part, letter_part)
+ids_sorted <- ids[ord]
+new_ids <- seq_along(ids_sorted)
+new_ids <- setNames(new_ids, ids_sorted)
+
+df_new$object_id_final <- new_ids[match(df_new$object_id_new, names(new_ids))]
+
+# Add to mse object
+mse_2$object_id_final <- df_new$object_id_final[match(mse_2$x_y, df_new$x_y)]
+mse_2 <- mse_2[!is.na(mse_2$object_id_final)]
+```
+
+
+```{r}
+# Filter segmented objects based on size 
+size_objects <- pData(mse_2) %>% as.data.frame %>% group_by(object_id_final) %>% dplyr::count()
+
+size_objects <- size_objects %>% mutate(check_1 = ifelse(n < 80 | n > 220, TRUE, FALSE))
+
+# Add to MSI
+mse_2$check_1 <- size_objects$check_1[match(mse_2$object_id_final, size_objects$object_id_final)]
+image(mse_2, "check_1")
+
+# Filter objects
+mse_2_fil <- mse_2[mse_2$check_1 == FALSE]
+image(mse_2_fil, "check_1")
+```
+
+```{r}
+# Overwrite object id
+mse_2_fil$object_id <- as.character(mse_2_fil$object_id_final)
+```
+
+
+```{r}
+# Export segmentation image for annotation
+plot <- pData(mse_2_fil) %>% as.data.frame
+
+centroids <- plot %>% 
+  group_by(object_id) %>%
+  summarise(
+    x = mean(x),
+    y = mean(y)
+  )
+
+pdf("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TMA224_seg_image.pdf", width = 12, height = 5)
+ggplot(plot, aes(x, y, fill = factor(object_id))) +
+  scale_x_reverse() + 
+  geom_tile() +
+  geom_text(data = centroids, 
+            aes(x, y, label = object_id),
+            color = "black",
+            size = 4) +
+  theme_minimal()+
+  guides(fill = "none")
+dev.off()
+
+
+anno <- pData(mse_2_fil) %>% as.data.frame %>% select(run, object_id) %>% unique() %>% remove_rownames() %>% mutate(object_id = as.numeric(object_id)) %>% arrange(-object_id) %>% mutate(object_id = as.character(object_id))
+write_csv(anno, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TMA224_seg_anno.csv")
+```
+
+
+#### Add TMA metadata 
+
+```{r}
+anno_224 <- read_csv("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TMA224_seg_anno_final.csv")
+anno_20 <- read_csv("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TMA20_seg_anno_final.csv")
+
+mse_1_fil$TMA_id <- anno_20$TMA_id[match(mse_1_fil$object_id, anno_20$object_id)]
+mse_2_fil$TMA_id <- anno_224$TMA_id[match(mse_2_fil$object_id, anno_224$object_id)]
+
+# Remove cores with no TMA id (control tissues)
+mse_1_fil <- mse_1_fil[!is.na(mse_1_fil$TMA_id)]
+image(mse_1_fil, "object_id")
+
+mse_2_fil <- mse_2_fil[!is.na(mse_2_fil$TMA_id)]
+image(mse_2_fil, "object_id")
+```
+
+
+```{r}
+metadata_all <- read_csv("/mnt/central_nas/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/data/Metadata_combined_RCC_onlyPT.csv")
+#metadata_all <- read_csv("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/IMC/myeloid_panel/data_analysis/data/Metadata_combined_RCC_onlyPT.csv")
+```
+
+```{r}
+# Add TMA ID
+metadata_all$TMA_id <- str_replace(paste0(metadata_all$grid,"x",metadata_all$x,"y",metadata_all$y),"NA","")
+metadata_all$TMA_id <- str_replace(metadata_all$TMA_id, "x","X")
+metadata_all$TMA_id <- str_replace(metadata_all$TMA_id, "y","Y")
+metadata_all[is.na(metadata_all$x),]$TMA_id <- "CX7Y8" #was missing in data
+```
+
+```{r}
+metadata_all$subtype_combined <- ifelse(metadata_all$subtype %in% c("clear_cell_RCC", "papillary_RCC", "chromophobe_RCC"), metadata_all$subtype, "other")
+metadata_all$subtype_combined[metadata_all$subtype_combined == "clear_cell_RCC"] <- "ccRCC"
+metadata_all$subtype_combined[metadata_all$subtype_combined == "papillary_RCC"] <- "pRCC"
+metadata_all$subtype_combined[metadata_all$subtype_combined == "chromophobe_RCC"] <- "chrRCC"
+```
+
+```{r}
+## Update survival censoring
+metadata_all$status_OS <- ifelse(metadata_all$censor_dead_0_alive_1 == 1, 0, 
+       ifelse(metadata_all$censor_dead_0_alive_1 == 0, 1, metadata_all$censor_dead_0_alive_1))
+
+metadata_all$OS_months <- metadata_all$survival_months
+
+## Combine relevant disease progression categories
+metadata_all$pT_combined <- ifelse(metadata_all$pT_simple %in% c("1","2"),"1/2", ifelse(metadata_all$pT_simple %in% c("3","4"), "3/4", metadata_all$pT_simple))
+
+metadata_all$ISUP_simple <- metadata_all$ISUP
+metadata_all$ISUP_combined <- ifelse(metadata_all$ISUP %in% c("1","2"),"1/2", ifelse(metadata_all$ISUP %in% c("3","4"), "3/4", metadata_all$ISUP))
+metadata_all$lymphocytes_combined <- ifelse(metadata_all$lymphocytes %in% c("1","2"),"1/2", metadata_all$lymphocytes)
+```
+
+
+```{r}
+# Make sure stage, grade and necrose are encoded as characters
+metadata_all$pT_simple <- as.character(paste0("T",metadata_all$pT_simple))
+metadata_all$pT_combined <- as.character(paste0("T",metadata_all$pT_combined))
+
+metadata_all$ISUP_simple <- as.character(paste0("G",metadata_all$ISUP_simple))
+metadata_all$ISUP_combined <- as.character(paste0("G",metadata_all$ISUP_combined))
+
+metadata_all$necrose <- as.character(paste0("NE",metadata_all$necrose))
+
+# Revert NAs
+metadata_all$necrose[metadata_all$necrose == "NENA"] <- NA
+
+metadata_all$ISUP_simple[metadata_all$ISUP_simple == "GNA"] <- NA
+metadata_all$ISUP_combined[metadata_all$ISUP_combined == "GNA"] <- NA
+
+metadata_all$pT_simple[metadata_all$pT_simple == "TNA"] <- NA
+metadata_all$pT_combined[metadata_all$pT_combined == "TNA"] <- NA
+```
+
+```{r}
+metadata_selected <- metadata_all %>% select(PID, TMA_id, subtype_combined, gender, age, age_bin, type, status_OS, OS_months, pT_simple, pT_combined, ISUP_simple, ISUP_combined, necrose) %>% as.data.frame
+```
+
+
+```{r}
+meta_add <- colnames(metadata_selected)[colnames(metadata_selected) %in% c("PID", "subtype_combined", "gender", "age", "age_bin", "status_OS", "OS_months", "pT_simple", "pT_combined", "ISUP_simple", "ISUP_combined", "necrose")]
+
+for (entry in meta_add) {
+  pData(mse_1_fil)[[entry]] <- metadata_selected[,entry][match(pData(mse_1_fil)[["TMA_id"]],metadata_selected[,"TMA_id"])]
+  
+  pData(mse_2_fil)[[entry]] <- metadata_selected[,entry][match(pData(mse_2_fil)[["TMA_id"]],metadata_selected[,"TMA_id"])]
+}
+```
+
+
+#### Subset to ccRCC 
+
+```{r}
+mse_1_fil_ccRCC <- mse_1_fil[!is.na(mse_1_fil$PID) & mse_1_fil$subtype_combined == "ccRCC"]
+image(mse_1_fil_ccRCC, "subtype_combined")
+
+mse_2_fil_ccRCC <- mse_2_fil[!is.na(mse_2_fil$PID) & mse_2_fil$subtype_combined == "ccRCC"]
+image(mse_2_fil_ccRCC, "subtype_combined")
+```
+```{r}
+saveRDS(mse_1_fil_ccRCC, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM20_ccRCC.rds")
+saveRDS(mse_2_fil_ccRCC, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM224_ccRCC.rds")
+```
+
+```{r}
+plot(mse_1_fil_ccRCC, i=c(10, 100, 10000, 30000), ylim=c(0,4e+06))
+plot(mse_1_fil_ccRCC, i=c(10, 100, 10000, 30000), xlim = c(100, 200), ylim=c(0,4e+06), superpose = TRUE)
+plot(mse_1_fil_ccRCC, i=c(10, 100, 10000, 30000), xlim = c(140, 160), ylim=c(0,4e+06), superpose = TRUE)
+plot(mse_1_fil_ccRCC, i=c(10, 100, 10000, 30000), xlim = c(154.85, 154.95), ylim=c(0,4e+06), superpose = TRUE)
+```
+
+### Normalization, Recalibration, Smoothing, Peak picking, Peak align
+
+```{r}
+mse_1_fil_ccRCC <- readRDS("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM20_ccRCC.rds")
+mse_2_fil_ccRCC <- readRDS("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM224_ccRCC.rds")
+
+# Make pData comparable for later merging
+mse_1_fil_ccRCC$object_id_1 <- NULL
+mse_2_fil_ccRCC$object_id_final <- NULL
+mse_2_fil_ccRCC$check_1 <- NULL
+mse_2_fil_ccRCC$x_y <- NULL 
+```
+
+```{r}
+# TMA20
+mse_1_fil_ccRCC_proc_SNR20 <- mse_1_fil_ccRCC |> 
+  Cardinal::normalize(method="rms") |> 
+  smooth() |> 
+  peakPick(method = "filter", SNR = 2)
+
+mse_1_fil_ccRCC_proc_SNR20_aligned <- peakAlign(mse_1_fil_ccRCC_proc_SNR20, 
+                                                tolerance = 5, units = "ppm", 
+                                                BPPARAM = MulticoreParam(workers = 2))
+
+gc()
+
+saveRDS(mse_1_fil_ccRCC_proc_SNR20_aligned, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM20_picked_SNR20.rds")
+
+mse_1_fil_ccRCC_proc_SNR15 <- mse_1_fil_ccRCC |> 
+  Cardinal::normalize(method="rms") |> 
+  smooth() |> 
+  peakPick(method = "filter", SNR = 1.5)
+
+mse_1_fil_ccRCC_proc_SNR15_aligned <- peakAlign(mse_1_fil_ccRCC_proc_SNR15, 
+                                                tolerance = 5, units = "ppm",
+                                                BPPARAM = MulticoreParam(workers = 2))
+
+gc()
+
+saveRDS(mse_1_fil_ccRCC_proc_SNR15_aligned, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM20_picked_SNR15.rds")
+
+# TMA224
+mse_2_fil_ccRCC_proc_SNR20 <- mse_2_fil_ccRCC |> 
+  Cardinal::normalize(method="rms") |> 
+  smooth() |> 
+  peakPick(method = "filter", SNR = 2)
+
+mse_2_fil_ccRCC_proc_SNR20_aligned <- peakAlign(mse_2_fil_ccRCC_proc_SNR20, 
+                                                tolerance = 5, units = "ppm",
+                                                BPPARAM = MulticoreParam(workers = 2))
+
+gc()
+
+saveRDS(mse_2_fil_ccRCC_proc_SNR20_aligned, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM224_picked_SNR20.rds")
+
+mse_2_fil_ccRCC_proc_SNR15 <- mse_2_fil_ccRCC |> 
+  Cardinal::normalize(method="rms") |> 
+  smooth() |> 
+  peakPick(method = "filter", SNR = 1.5)
+
+mse_2_fil_ccRCC_proc_SNR15_aligned <- peakAlign(mse_2_fil_ccRCC_proc_SNR15, 
+                                                tolerance = 5, units = "ppm", 
+                                                BPPARAM = MulticoreParam(workers = 2))
+
+gc()
+
+saveRDS(mse_2_fil_ccRCC_proc_SNR15_aligned, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM224_picked_SNR15.rds")
+```
+
+```{r}
+plot(mse_1_fil_ccRCC, i=c(10, 100, 10000, 30000), xlim = c(100, 200), ylim=c(0,4e+06))
+plot(mse_1_fil_ccRCC_proc_SNR20_aligned, i=c(10, 100, 10000, 30000), xlim = c(100, 200), ylim=c(0,1e+07))
+
+plot(mse_2_fil_ccRCC, i=c(10, 100, 10000, 30000), xlim = c(100, 200), ylim=c(0,4e+06))
+plot(mse_2_fil_ccRCC_proc_SNR20_aligned, i=c(10, 100, 10000, 30000), xlim = c(100, 200), ylim=c(0,1e+07))
+```
+
+
+### Common mz grid 
+
+#### SNR20 
+
+```{r}
+mse_1_fil_ccRCC_proc_SNR20_aligned <- readRDS("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM20_picked_SNR20.rds")
+
+mse_2_fil_ccRCC_proc_SNR20_aligned <- readRDS("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM224_picked_SNR20.rds")
+```
+
+```{r}
+# Round mz values to find common grid
+mz(mse_2_fil_ccRCC_proc_SNR20_aligned) <- round(mz(mse_2_fil_ccRCC_proc_SNR20_aligned), 4)
+mz(mse_1_fil_ccRCC_proc_SNR20_aligned) <- round(mz(mse_1_fil_ccRCC_proc_SNR20_aligned), 4)
+
+mz_grid <- intersect(mz(mse_1_fil_ccRCC_proc_SNR20_aligned), mz(mse_2_fil_ccRCC_proc_SNR20_aligned)) #373 for SNR20
+
+# Subset to common grid
+mse_2_fil_ccRCC_proc_SNR20_aligned <- subsetFeatures(mse_2_fil_ccRCC_proc_SNR20_aligned, mz %in% mz_grid)
+mse_1_fil_ccRCC_proc_SNR20_aligned <- subsetFeatures(mse_1_fil_ccRCC_proc_SNR20_aligned, mz %in% mz_grid)
+
+# Combine
+mse_combined_SNR20 <- cbind(mse_1_fil_ccRCC_proc_SNR20_aligned, mse_2_fil_ccRCC_proc_SNR20_aligned)
+mse_combined_SNR20
+```
+
+
+#### SNR15
+
+```{r}
+mse_1_fil_ccRCC_proc_SNR15_aligned <- readRDS("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM20_picked_SNR15.rds")
+
+mse_2_fil_ccRCC_proc_SNR15_aligned <- readRDS("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM224_picked_SNR15.rds")
+```
+
+```{r}
+# Round mz values to find common grid
+mz(mse_2_fil_ccRCC_proc_SNR15_aligned) <- round(mz(mse_2_fil_ccRCC_proc_SNR15_aligned), 4)
+mz(mse_1_fil_ccRCC_proc_SNR15_aligned) <- round(mz(mse_1_fil_ccRCC_proc_SNR15_aligned), 4)
+
+mz_grid <- intersect(mz(mse_1_fil_ccRCC_proc_SNR15_aligned), mz(mse_2_fil_ccRCC_proc_SNR15_aligned)) #373 for SNR15
+
+# Subset to common grid
+mse_2_fil_ccRCC_proc_SNR15_aligned <- subsetFeatures(mse_2_fil_ccRCC_proc_SNR15_aligned, mz %in% mz_grid)
+mse_1_fil_ccRCC_proc_SNR15_aligned <- subsetFeatures(mse_1_fil_ccRCC_proc_SNR15_aligned, mz %in% mz_grid)
+
+# Combine
+mse_combined_SNR15 <- cbind(mse_1_fil_ccRCC_proc_SNR15_aligned, mse_2_fil_ccRCC_proc_SNR15_aligned)
+mse_combined_SNR15
+```
+
+### Peak filtering
+
+Only combined
+
+```{r}
+# Filter species with at least 1% frequency
+mse_combined_SNR20_fil <- subsetFeatures(mse_combined_SNR20, freq > 0.005)
+fData(mse_combined_SNR20_fil)
+
+mse_combined_SNR15_fil <- subsetFeatures(mse_combined_SNR15, freq > 0.005)
+fData(mse_combined_SNR15_fil)
+```
+
+```{r}
+saveRDS(mse_combined_SNR15_fil, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/Combined_fil_SNR15.rds")
+
+saveRDS(mse_combined_SNR20_fil, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/Combined_fil_SNR20.rds")
+```
+
+
+
+### Summarize 
+
+```{r}
+# Run this in terminal 
+## Set "ulimit -s unlimited"
+library(Cardinal)
+mse_combined_SNR15_fil <- readRDS("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/Combined_fil_SNR15.rds")
+
+mse_combined_SNR15_sum <- summarizeFeatures(mse_combined_SNR15_fil, stat="mean", groups=mse_combined_SNR15_fil$PID)
+
+saveRDS(mse_combined_SNR15_sum, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/Combined_sum_SNR15.rds")
+
+
+mse_combined_SNR20_fil <- readRDS("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/Combined_fil_SNR20.rds")
+
+mse_combined_SNR20_sum <- summarizeFeatures(mse_combined_SNR20_fil, stat="mean", groups=mse_combined_SNR20_fil$PID)
+
+saveRDS(mse_combined_SNR20_sum, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/Combined_sum_SNR20.rds")
+
+```
+```{r}
+mse_combined_SNR15_sum <- readRDS("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/Combined_sum_SNR15.rds")
+
+# Prepare mean assay
+assay <- fData(mse_combined_SNR15_sum) %>% as.data.frame() %>% select(-count, -freq, -count.1, -freq.1) %>% column_to_rownames("mz")
+colnames(assay) <- str_remove(colnames(check), ".mean")
+
+# Prepare colData
+meta_keep <- colnames(pData(mse_combined_SNR15_sum))[colnames(pData(mse_combined_SNR15_sum)) %in% c("run", "PID", "subtype_combined", "gender", "age", "age_bin", "status_OS", "OS_months", "pT_simple", "pT_combined", "ISUP_simple", "ISUP_combined", "necrose")]
+colData <- pData(mse_combined_SNR15_sum) %>% as.data.frame %>% select(all_of(meta_keep)) %>% unique()
+colData$PID <- str_replace(colData$PID, "-", ".")
+```
 
 ```{r}
 set.seed(22)
-mse_1_norm <- process(normalize(mse_1, method="tic"), BPPARAM = MulticoreParam(workers = 9))
-mse_2_norm <- process(normalize(mse_2, method="tic"), BPPARAM = MulticoreParam(workers = 9))
-```
 
+umap_df <- calculateUMAP(assay, n_neighbors = 50, pca = 50, external_neighbors=TRUE, BPPARAM = MulticoreParam())
+umap_df <- umap_df %>% as.data.frame()
 
-```{r}
-saveRDS(mse_1_norm, "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/new_data/data_analysis/TM20norm.rds")
-saveRDS(mse_2_norm, "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/new_data/data_analysis/TM224norm.rds")
-```
+umap_df$TMA <- colData$run[match(rownames(umap_df), colData$PID)]
+umap_df$ISUP_combined <- colData$ISUP_combined[match(rownames(umap_df), colData$PID)]
+umap_df$pT_combined <- colData$pT_combined[match(rownames(umap_df), colData$PID)]
 
-CONTINUE HERE
-
-```{r}
-# Mean feature intensities
-mean_1 <- summarizeFeatures(mse_1_norm, FUN="mean")
-mean_2 <- summarizeFeatures(mse_2_norm, FUN="mean")
-
-
-mean_df <- rbind(fData(mean_1) %>% as.data.frame %>% mutate(data = "TMA20"), fData(mean_2) %>% as.data.frame %>% mutate(data = "TMA224"))
-
-ggplot(mean_df, aes(mz, mean, color = data))+
-  geom_line(alpha = 0.5)+
+ggplot(data=umap_df, aes(x=UMAP1, y=UMAP2, col = TMA)) +
+  geom_point()+ 
   theme_classic()
 
-ggplot(mean_df %>% filter(mz < 500 & mz > 400), aes(mz, mean, color = data))+
-  geom_line()+
+ggplot(data=umap_df, aes(x=UMAP1, y=UMAP2, col = ISUP_combined)) +
+  geom_point()+ 
   theme_classic()
 
-ggplot(mean_df %>% filter(mz < 750 & mz > 740), aes(mz, mean, color = data))+
-  geom_line()+
+ggplot(data=umap_df, aes(x=UMAP1, y=UMAP2, col = pT_combined)) +
+  geom_point()+ 
   theme_classic()
-
-ggplot(mean_df %>% filter(mz < 550 & mz > 540), aes(mz, mean, color = data))+
-  geom_line()+
-  theme_classic()
-```
-
-
-```{r}
-# check difference of mass bins 
-mean_df_diff <- mean_df %>% group_by(data) %>% arrange(mz) %>% mutate(diff = c(NA,diff(mz)))
-
-ggplot(mean_df_diff, aes(data, diff, color = data))+
-  geom_boxplot()+
-  theme_classic()
-
-ggplot(mean_df_diff, aes(mz, diff, color = data))+
-  geom_point()+
-  theme_classic()
-```
-
-### Peak picking
-
-```{r}
-mse_1_peak <- process(peakPick(mse_1_norm, SNR = 3, method = "mad")) 
-mse_2_peak <- process(peakPick(mse_2_norm, SNR = 3, method = "mad")) 
-```
-
-
-```{r}
-# Mean feature intensities
-mean_1 <- summarizeFeatures(mse_1_peak, FUN="mean")
-mean_2 <- summarizeFeatures(mse_2_peakfData(mse_peaks), FUN="mean")
-
-
-mean_df <- rbind(fData(mean_1) %>% as.data.frame %>% mutate(data = "TMA20"), fData(mean_2) %>% as.data.frame %>% mutate(data = "TMA224"))
-
-ggplot(mean_df, aes(mz, mean, color = data))+
-  geom_line(alpha = 0.5)+
-  theme_classic()
-
-ggplot(mean_df %>% filter(mz < 500 & mz > 400), aes(mz, mean, color = data))+
-  geom_line()+
-  theme_classic()
-
-ggplot(mean_df %>% filter(mz < 750 & mz > 740), aes(mz, mean, color = data))+
-  geom_line()+
-  theme_classic()
-
-ggplot(mean_df %>% filter(mz < 550 & mz > 540), aes(mz, mean, color = data))+
-  geom_line()+
-  theme_classic()
-```
-
-
-
-
-
-
-
-```{r}
-
-plot(mse_1_norm, coord=list(x=16, y=16), linewidth=2)
-
-fData(mse_1_norm)
-mse_1_norm
-
-data_peaks <- process(data, plot=interactive())
-
-
 ```
 
 ```{r}
-any(colSums(intensity(mse_1_norm)) == 0)
+df <- assay %>% t() %>% as.data.frame()
+df_long <- df %>% pivot_longer(cols = 1:ncol(df), names_to = "mz", values_to = "intensity")
+
+p <- ggplot(df_long, aes(x = mz, y = intensity)) +
+  geom_boxplot(fill = "#E07A5F") +
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 5))
+p
 ```
 
 ```{r}
-p1 <- process(peakPick(mse_1_norm, method = "mad")) |> 
-    plot(coord=list(x=16, y=16), linewidth=2)
+mse_combined_SNR20_sum <- readRDS("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/Combined_sum_SNR20.rds")
 
-p1
+# Prepare mean assay
+assay <- fData(mse_combined_SNR20_sum) %>% as.data.frame() %>% select(-count, -freq, -count.1, -freq.1) %>% column_to_rownames("mz")
+colnames(assay) <- str_remove(colnames(check), ".mean")
 
-matter::as_facets(list(p1, p2), nrow=2,
-    labels=c("Derivative-based SNR", "Dynamic filtering-based SNR"))
+# Prepare colData
+meta_keep <- colnames(pData(mse_combined_SNR20_sum))[colnames(pData(mse_combined_SNR20_sum)) %in% c("run", "PID", "subtype_combined", "gender", "age", "age_bin", "status_OS", "OS_months", "pT_simple", "pT_combined", "ISUP_simple", "ISUP_combined", "necrose")]
+colData <- pData(mse_combined_SNR20_sum) %>% as.data.frame %>% select(all_of(meta_keep)) %>% unique()
+colData$PID <- str_replace(colData$PID, "-", ".")
 ```
-
-
-
-
