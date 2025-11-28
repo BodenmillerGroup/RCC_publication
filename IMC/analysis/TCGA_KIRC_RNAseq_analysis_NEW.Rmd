@@ -970,6 +970,54 @@ Heatmap(ht, name = "Mean signature Z-scores")
 ```
 
 
+Chromosomal instability 
+
+```{r}
+chrom_sig <- read_excel("/mnt/central_nas/tnbc_volume/TNBC/data_analysis/03_data/ChromosomalInstability_Carter_NatGen06.xlsx",sheet = 1, col_names = FALSE)
+
+# Extract unique genes that were up- or down-regulated in each signature 
+chrom_sig_up <- chrom_sig$...1 %>% unique()
+```
+
+```{r}
+## 1. pan AV signature per PID group 
+chrom_sig_up_rel <- chrom_sig_up[chrom_sig_up %in% rownames(assay(vsd))]
+# Filter for available genes
+#TNBC_PID <- colnames(vsd[,vsd$TNBC == "TNBC"])
+#vsd_TNBC <- vsd[, colnames(vsd) %in% TNBC_PID]
+#df <- t(assay(vsd_TNBC)[chrom_sig_up_rel ,]) %>% as.data.frame
+df <- t(assay(vsd)[chrom_sig_up_rel ,]) %>% as.data.frame
+
+# Z-score gene expression 
+df <- as.data.frame(scale(df))
+
+df$signature_sum <- rowSums(df,na.rm = TRUE)
+df$TME_archetype <- vsd$TME_archetype[match(rownames(df), colnames(vsd))]
+df <- df[!is.na(df$TME_archetype),]
+
+compare_means(signature_sum ~ TME_archetype,df) #pairwise comparisons
+compare_means(signature_sum ~ TME_archetype,df, method = "kruskal.test") #global comparison
+
+ggplot(df, aes(x = TME_archetype, y = signature_sum, fill = TME_archetype))+
+  geom_point(aes(color = TME_archetype))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
+  #scale_color_brewer(palette = "Paired")+
+  scale_color_manual(values = col_group)+
+  scale_fill_manual(values = col_group)+
+  theme_classic()+
+  guides(color = "none")+
+  ylab("Chromosomal instability (Carter et al.)")+
+  stat_compare_means()
+
+mat <- df %>% pivot_longer(cols = 1:(ncol(df)-2), names_to = "gene", values_to = "exprs") %>% group_by(TME_archetype, gene) %>% summarize(mean = mean(exprs)) %>% na.omit()
+mat <- mat %>% filter(!is.na(mean))
+ht <- mat %>% pivot_wider(names_from = "gene", values_from = "mean") %>% column_to_rownames("TME_archetype")
+
+Heatmap(ht, name = "Mean signature Z-scores")
+```
+
+
+
 ## Differential expression analysis
 
 Here for survival ecotypes from H&E prediction 
@@ -2212,6 +2260,33 @@ ht_quanti <- res_quanti_plot %>% group_by(TME_archetype_predict, cell_type) %>% 
 Heatmap(ht_quanti, name = "mean quanti-Z-score")
 #dev.off()
 ```
+
+```{r}
+decon_comb <- rbind(ht_quanti %>% rownames_to_column("celltype") %>% pivot_longer(2:4, values_to = "z_score", names_to = "ecotype") %>% mutate(method = "quanti"),
+ht_MCP %>% rownames_to_column("celltype") %>% pivot_longer(2:4, values_to = "z_score", names_to = "ecotype") %>% mutate(method = "mcp"))
+
+ht_comb <-decon_comb %>% group_by(celltype, ecotype) %>% mutate(mean_z = mean(z_score)) %>% dplyr::select(celltype, mean_z, ecotype) %>% unique() %>% pivot_wider(id_cols = celltype, values_from = mean_z, names_from = ecotype) %>% column_to_rownames("celltype")
+
+
+anno <- decon_comb %>% group_by(celltype, method) %>% count() %>% ungroup() %>% group_by(celltype) %>% summarise(method = paste0(method, collapse = "_"))
+
+anno <- anno[match(rownames(ht_comb),anno$celltype),]
+
+col_method <- setNames(brewer.pal(3, "Blues"), c("quanti", "mcp", "mcp_quanti"))
+
+Heatmap(ht_comb)+
+  rowAnnotation(method = anno_simple(anno$method, col = col_method), 
+                names = anno_text(anno$celltype))
+  
+
+decon_comb %>% group_by(celltype, method) %>% count()
+
+merge(ht_quanti, ht_MCP, by = )
+
+```
+
+
+
 
 ## Gene signatures
 
