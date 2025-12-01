@@ -3082,17 +3082,57 @@ ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_a
 
 
 
+###### IMC cell type densities
 
+```{r}
+## Read in data
+general_dens_combined <- read_csv("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/general_densities_allpanels.csv")
 
+general_dens_combined <- general_dens_combined %>% filter(celltype_combined_broad != "Unknown_Other")
 
+general_dens_out <- general_dens_combined %>% group_by(PID, celltype_combined_broad) %>% summarise(density = mean(density))
 
+general_dens_out$BF_PL_TME_archetypes <- metadata_selected$BF_PL_TME_archetypes[match(general_dens_out$PID, metadata_selected$PID)]
 
+general_dens_out <- general_dens_out[!is.na(general_dens_out$BF_PL_TME_archetypes),]
+
+# Plot
+ggplot(general_dens_out, aes(x = BF_PL_TME_archetypes, y = density, fill = BF_PL_TME_archetypes))+
+  facet_wrap(~celltype_combined_broad, scales = "free_y")+
+  geom_point(aes(color = BF_PL_TME_archetypes))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
+  theme_classic()+
+  stat_compare_means(vjust = 1)+
+  scale_fill_manual(values = col_group)+
+  scale_color_manual(values = col_group)+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  xlab("Models")+
+  ylab("Cell density")+
+  guides(fill = "none", color = "none")
+
+# Focus on endothelial cells
+endo_dens_out <- general_dens_out %>% filter(celltype_combined_broad %in% c("Endothelial"))
+
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_Archetype_EndoDensity_Box.pdf", width = 8, height = 4, onefile = FALSE)
+ggplot(endo_dens_out, aes(x = BF_PL_TME_archetypes, y = density, fill = BF_PL_TME_archetypes))+
+  geom_point(aes(color = BF_PL_TME_archetypes))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
+  theme_classic()+
+  stat_compare_means(vjust = 1)+
+  scale_fill_manual(values = col_group)+
+  scale_color_manual(values = col_group)+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  xlab("Models")+
+  ylab("Endothelial cell density")
+dev.off()
+
+```
 
 
 ###### Tumor IMC expression
 
 ```{r}
-# sce_TU <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_05.rds")
+# sce_TU <- readRDS("/mnt/central_nas/rcc_volume/RCC/IMC/tumor_panel/data_analysis/sce_ccRCC_TU_0.rds")
 # 
 # # Add archetypes
 # sce_TU$BF_PL_TME_archetypes <- metadata_selected$BF_PL_TME_archetypes[match(sce_TU$PID, metadata_selected$PID)]
