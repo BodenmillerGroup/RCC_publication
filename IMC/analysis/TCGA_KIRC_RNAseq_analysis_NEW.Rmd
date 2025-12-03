@@ -584,7 +584,7 @@ Key IMC genes
 # Define GOI of interest
 #GOI <- c("ICAM1", "VHL")
 #GOI <- c("VHL","CA9", "KRT19", "GPX4", "HLA-DRA", "NFKB1", "CCND1", "HIF1A", "TP53", "MYC", "ICAM1", "PDK4", "NT5E", "SMARCA4", "PKM", "CD274", "MME", "IDH2", "EPAS1", "AURKA", "HAVCR2", "EGFR", "RPS6", "FLT1", "MTOR", "RB1", "SLC2A1", "FH", "GLUD1", "CD44", "VIM")
-GOI <- c("VHL", "ICAM1", "CD44", "MTOR")
+GOI <- c("VHL", "ICAM1", "CD44", "CCND1")
 GOI_rel <- GOI[GOI %in% rownames(vsd)]
 
 # Define heatmap based on normalized counts 
@@ -1884,7 +1884,7 @@ for (fdr_cutoff in c(seq(0.05, 0.001, by = -0.005), 0.0001)) {
 
 
 ```{r}
-ntp_out <- ntp_result %>% rownames_to_column("PID") %>% mutate(group_predict = ifelse(FDR < 0.01, as.character(prediction), "NOT"))
+ntp_out <- ntp_result %>% rownames_to_column("PID") %>% mutate(group_predict = ifelse(FDR < 0.05, as.character(prediction), "NOT"))
 
 ntp_out$OS_months <- vsd$OS_days[match(ntp_out$PID, vsd$PID)]
 ntp_out$status_OS <- vsd$status_OS[match(ntp_out$PID, vsd$PID)]
@@ -1892,7 +1892,7 @@ ntp_out$status_OS <- vsd$status_OS[match(ntp_out$PID, vsd$PID)]
 fit <- survfit(Surv(OS_months, status_OS) ~ group_predict, data = ntp_out)
 print(fit)
 
-pdf("/mnt/central_nas/rcc_volume/RCC/figures/TCGA_KIRC/TCGA_KIRC_Survival_ArchetypesPredict_NTP.pdf", width = 7, height = 5, onefile = FALSE)
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/TCGA_KIRC/TCGA_KIRC_Survival_ArchetypesPredict_NTP.pdf", width = 7, height = 5, onefile = FALSE)
 ggsurvplot(fit,
           pval = TRUE,
           risk.table = TRUE, # Add risk table
@@ -1903,7 +1903,7 @@ ggsurvplot(fit,
           palette = c("#CA0020","#0571B0","gold3"),
           conf.int = FALSE
 )
-dev.off()
+#dev.off()
 ```
 
 ```{r}
@@ -2060,9 +2060,9 @@ hr_prop
 ```{r}
 
 # Define GOI of interest
-#GOI <- c("ICAM1", "VHL")
-#GOI <- c("VHL","CA9", "KRT19", "GPX4", "HLA-DRA", "NFKB1", "CCND1", "HIF1A", "TP53", "MYC", "ICAM1", "PDK4", "NT5E", "SMARCA4", "PKM", "CD274", "MME", "IDH2", "EPAS1", "AURKA", "HAVCR2", "EGFR", "RPS6", "FLT1", "MTOR", "RB1", "SLC2A1", "FH", "GLUD1", "CD44", "VIM")
-GOI <- c("VHL", "ICAM1", "CD44", "MTOR")
+GOI <- c("NFKB1", "CCND1", "MTOR", "IDH2", "RB1", "VHL", "GLUD1", "ICAM1", "CD44")
+#GOI <- c("VHL", "ICAM1", "CD44", "CCND1")
+
 GOI_rel <- GOI[GOI %in% rownames(vsd)]
 
 # Define heatmap based on normalized counts 
@@ -2086,11 +2086,11 @@ anno <- anno[match(anno$TME_archetype_predict, rownames(ht)),]
 ## Print heatmap 
 Heatmap(ht, name = "Mean Z-scores")
 
-pdf("/mnt/central_nas/rcc_volume/RCC/figures/TCGA_KIRC/TCGA_KIRC_archetype_keymarkers_ht.pdf", height = 2.5, width = 6)
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/TCGA_KIRC/TCGA_KIRC_archetype_keymarkers_ht.pdf", height = 2.5, width = 6)
 Heatmap(scale(ht), name = "Scaled mean Z-scores")+
   rowAnnotation(n = anno_barplot(anno$n, gp = gpar(fill = "#440154FF")))+
   rowAnnotation(anno = anno_text(anno$TME_archetype_predict))
-dev.off()
+#dev.off()
 ```
 
 
@@ -2098,11 +2098,11 @@ dev.off()
 
 ```{r}
 # Compare H&E predicted with gene-signature prediction 
-pdf("/mnt/central_nas/rcc_volume/RCC/figures/TCGA_KIRC/TCGA_KIRC_HEvsGENEsig_bar.pdf", width = 4, height = 3)
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/TCGA_KIRC/TCGA_KIRC_HEvsGENEsig_bar.pdf", width = 4, height = 3)
 dittoBarPlot(vsd, var = "TME_archetype_predict", group.by = "TME_archetype",retain.factor.levels = FALSE)+
   scale_fill_manual(values = col_group)+
   ggtitle(print(chisq.test(table(vsd$TME_archetype, vsd$TME_archetype_predict))$p.value))
-dev.off()
+#dev.off()
 ```
 
 
@@ -2111,12 +2111,12 @@ dev.off()
 df <- as.data.frame(colData(vsd)[!is.na(vsd$BAP1), c("BAP1", "TME_archetype_predict")])
 print(fisher.test(table(df$BAP1, df$TME_archetype_predict)))
 
-pdf("/mnt/central_nas/rcc_volume/RCC/figures/TCGA_KIRC/TCGA_KIRC_archetype_BAP1mut.pdf", width = 3, height = 4)
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/TCGA_KIRC/TCGA_KIRC_archetype_BAP1mut.pdf", width = 3, height = 4)
 dittoBarPlot(vsd[,!is.na(vsd$BAP1)], var = "BAP1", group.by = "TME_archetype_predict",retain.factor.levels = FALSE)+
   ggtitle("")+
   scale_fill_brewer(palette = "Set1", direction = -1)+
   ggtitle(print(fisher.test(table(df$BAP1, df$TME_archetype_predict))))
-dev.off()
+#dev.off()
 
 
 vsd$TME_archetype_predict_comb <- ifelse(vsd$TME_archetype_predict == "TME_suppressed", "TME_suppressed", "Other")
@@ -2131,12 +2131,12 @@ print(fisher.test(table(df$BAP1, df$TME_archetype_predict_comb)))
 df <- as.data.frame(colData(vsd)[!is.na(vsd$PBRM1), c("PBRM1", "TME_archetype_predict")])
 print(fisher.test(table(df$PBRM1, df$TME_archetype_predict)))
 
-pdf("/mnt/central_nas/rcc_volume/RCC/figures/TCGA_KIRC/TCGA_KIRC_archetype_PBRM1mut.pdf", width = 3, height = 3)
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/TCGA_KIRC/TCGA_KIRC_archetype_PBRM1mut.pdf", width = 3, height = 3)
 dittoBarPlot(vsd[,!is.na(vsd$PBRM1)], var = "PBRM1", group.by = "TME_archetype_predict",retain.factor.levels = FALSE)+
   ggtitle("")+
   scale_fill_brewer(palette = "Set1", direction = -1)+
   ggtitle(print(fisher.test(table(df$PBRM1, df$TME_archetype_predict))))
-dev.off()
+#dev.off()
 ```
 
 ```{r}
