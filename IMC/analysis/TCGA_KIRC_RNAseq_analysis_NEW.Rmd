@@ -118,8 +118,10 @@ survival_xena$PID <- survival_xena$`_PATIENT`
 
 survival_xena$status_OS <- survival_xena$OS
 survival_xena$OS_days <- survival_xena$OS.time
+survival_xena$status_PFS <- survival_xena$PFI
+survival_xena$PFS_days <- survival_xena$PFI.time
 
-for (entry in colnames(survival_xena)[colnames(survival_xena) %in% c("status_OS", "OS_days")]) {
+for (entry in colnames(survival_xena)[colnames(survival_xena) %in% c("status_OS","status_PFS", "OS_days", "PFS_days")]) {
   colData(kirc.clean)[,entry] <- survival_xena[,entry][match(colData(kirc.clean)[,"PID"],survival_xena$PID)]
 }
 
@@ -346,7 +348,7 @@ vsd
 library(survival)
 library(survminer)
 
-cur_surv <- colData(kirc.clean) %>% as.data.frame() %>% dplyr::select(PID, OS_days, status_OS, TME_archetype) %>% 
+cur_surv <- colData(kirc.clean) %>% as.data.frame() %>% dplyr::select(PID, OS_days, status_OS, PFS_days, status_PFS, TME_archetype) %>% 
   #mutate(TME_archetype = ifelse(TME_archetype %in% c("2","3"), "2/3", TME_archetype)) %>% 
   unique()
 
@@ -365,6 +367,23 @@ ggsurvplot(fit,
           palette = c("#0571B0", "gold3", "#CA0020"),
           ggtheme = theme_classic())
 #dev.off()
+
+#Plot survival curves
+fit <- survfit(Surv(PFS_days, status_PFS) ~ TME_archetype, data = cur_surv)
+print(fit)
+
+
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/TCGA_KIRC/TCGA_KIRC_Survival_ArchetypesPredict_folds.pdf", width = 7, height = 3.5, onefile = FALSE)
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          palette = c("#0571B0", "gold3", "#CA0020"),
+          ggtheme = theme_classic())
+#dev.off()
+
 ```
 
 ### Cox models
@@ -584,7 +603,7 @@ Key IMC genes
 # Define GOI of interest
 #GOI <- c("ICAM1", "VHL")
 #GOI <- c("VHL","CA9", "KRT19", "GPX4", "HLA-DRA", "NFKB1", "CCND1", "HIF1A", "TP53", "MYC", "ICAM1", "PDK4", "NT5E", "SMARCA4", "PKM", "CD274", "MME", "IDH2", "EPAS1", "AURKA", "HAVCR2", "EGFR", "RPS6", "FLT1", "MTOR", "RB1", "SLC2A1", "FH", "GLUD1", "CD44", "VIM")
-GOI <- c("VHL", "ICAM1", "CD44", "CCND1")
+GOI <- c("VHL", "ICAM1", "CD44", "CCND1", "MTOR", "NFKB1")
 GOI_rel <- GOI[GOI %in% rownames(vsd)]
 
 # Define heatmap based on normalized counts 
@@ -611,6 +630,31 @@ Heatmap(ht, name = "Mean Z-scores")
 Heatmap(scale(ht), name = "Scaled mean Z-scores")+
   rowAnnotation(n = anno_barplot(anno$n, gp = gpar(fill = "#440154FF")))+
   rowAnnotation(anno = anno_text(anno$TME_archetype))
+
+## Print bubble
+mat_z <- as.data.frame(scale(ht)) %>% pivot_longer(cols = 1:ncol(as.data.frame(scale(ht))), names_to = "gene", values_to = "z_mean")
+mat$z_mean <- mat_z$z_mean
+
+# rows 
+dd <- dist(scale(ht), method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+row_sorted <- hc$order
+mat$TME_archetype <- factor(mat$TME_archetype, levels = rownames(scale(ht)[row_sorted,]))
+
+# columns 
+dd <- dist(t(scale(ht)), method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+column_sorted <- hc$order
+mat$gene <- factor(mat$gene, levels = colnames(scale(ht)[,column_sorted]))
+
+ggplot(mat, aes(x=TME_archetype, y = gene, col = z_mean, size = mean))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 0)+
+  scale_size(range = c(2,10))+
+  ggtitle("TCGA KIRC")
 ```
 
 IMC markers 
@@ -1838,56 +1882,15 @@ ntp_result <- ntp(
 )
 ```
 
-```{r}
-library(dplyr)
-library(caret)
-
-kirc.clean$TME_archetype <- factor(kirc.clean$TME_archetype)
-
-# Store results
-results <- data.frame(FDR_cutoff = numeric(), Mean_Balanced_Accuracy = numeric())
-
-# Loop through FDR cutoffs from 0.05 to 0.01 (step -0.005)
-for (fdr_cutoff in c(seq(0.05, 0.001, by = -0.005), 0.0001)) {
-  
-  # Generate predictions based on current cutoff
-  ntp_out <- ntp_result %>%
-    tibble::rownames_to_column("PID") %>%
-    mutate(group_predict = ifelse(FDR < fdr_cutoff, as.character(prediction), "NOT"))
-  
-  # Map predictions to kirc.clean
-  kirc.clean$TME_archetype_predict <- ntp_out$group_predict[match(kirc.clean$PID, ntp_out$PID)]
-  
-  # Rename groups
-  kirc.clean$TME_archetype_predict[kirc.clean$TME_archetype_predict == "ICAM"] <- "TME_suppressed"
-  kirc.clean$TME_archetype_predict[kirc.clean$TME_archetype_predict == "NOT"] <- "TME_silent"
-  kirc.clean$TME_archetype_predict[kirc.clean$TME_archetype_predict == "MTOR"] <- "TME_activated"
-  
-  # Factor levels
-  kirc.clean$TME_archetype_predict <- factor(kirc.clean$TME_archetype_predict, levels = levels(kirc.clean$TME_archetype))
-  
-  # Generate confusion matrix
-  cm <- confusionMatrix(data = kirc.clean$TME_archetype_predict, 
-                        reference = kirc.clean$TME_archetype, 
-                        mode = "everything")
-  
-  # Extract and store mean balanced accuracy
-  cm_stats <- as.data.frame(cm$byClass)
-  mean_ba <- mean(cm_stats$`Balanced Accuracy`, na.rm = TRUE)
-  mean_f1 <- mean(cm_stats$F1, na.rm = TRUE)
-  
-  results <- rbind(results, data.frame(FDR_cutoff = fdr_cutoff, 
-                                       Mean_Balanced_Accuracy = mean_ba, 
-                                       mean_f1 = mean_f1))
-}
-```
 
 
 ```{r}
-ntp_out <- ntp_result %>% rownames_to_column("PID") %>% mutate(group_predict = ifelse(FDR < 0.05, as.character(prediction), "NOT"))
+ntp_out <- ntp_result %>% rownames_to_column("PID") %>% mutate(group_predict = ifelse(FDR < 0.01, as.character(prediction), "NOT"))
 
 ntp_out$OS_months <- vsd$OS_days[match(ntp_out$PID, vsd$PID)]
 ntp_out$status_OS <- vsd$status_OS[match(ntp_out$PID, vsd$PID)]
+ntp_out$PFS_months <- vsd$PFS_days[match(ntp_out$PID, vsd$PID)]
+ntp_out$status_PFS <- vsd$status_PFS[match(ntp_out$PID, vsd$PID)]
 
 fit <- survfit(Surv(OS_months, status_OS) ~ group_predict, data = ntp_out)
 print(fit)
@@ -1904,6 +1907,20 @@ ggsurvplot(fit,
           conf.int = FALSE
 )
 #dev.off()
+
+fit <- survfit(Surv(PFS_months, status_PFS) ~ group_predict, data = ntp_out)
+print(fit)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme¨
+          palette = c("#CA0020","#0571B0","gold3"),
+          conf.int = FALSE
+)
 ```
 
 ```{r}
@@ -1954,7 +1971,7 @@ col_group <- setNames(c("#0571B0", "gold3", "#CA0020"),c("TME_activated","TME_si
 col_anno_ob <- rowAnnotation(group = col_anno$group, 
                                 col = list(group = col_group)) 
 
-pdf("/mnt/central_nas/rcc_volume/RCC/figures/TCGA_KIRC/TCGA_KIRC_heatmap_NTPprediction.pdf", height = 4, width = 5)
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/TCGA_KIRC/TCGA_KIRC_heatmap_NTPprediction.pdf", height = 4, width = 5)
 Heatmap(t(gen_mat), 
         column_split = row_anno$cat,
         row_split = col_anno$group,
@@ -1964,7 +1981,7 @@ Heatmap(t(gen_mat),
         show_column_dend = TRUE
         )%v%
   ra
-dev.off()
+#dev.off()
 ```
 
 
@@ -2058,9 +2075,8 @@ hr_prop
 ## Marker expression comparison
 
 ```{r}
-
 # Define GOI of interest
-GOI <- c("NFKB1", "CCND1", "MTOR", "IDH2", "RB1", "VHL", "GLUD1", "ICAM1", "CD44")
+GOI <- c("NFKB1", "CCND1", "MTOR", "VHL", "ICAM1", "CD44")
 #GOI <- c("VHL", "ICAM1", "CD44", "CCND1")
 
 GOI_rel <- GOI[GOI %in% rownames(vsd)]
@@ -2083,14 +2099,47 @@ ht <- mat %>% pivot_wider(names_from = "gene", values_from = "mean") %>% column_
 anno <- df %>% dplyr::select(TME_archetype_predict) %>% group_by(TME_archetype_predict) %>% dplyr::count() %>% na.omit()
 anno <- anno[match(anno$TME_archetype_predict, rownames(ht)),]
 
+## Create row annotation 
+col_anno <- data.frame(gene = colnames(ht))
+col_anno$cat <- ifelse(col_anno$gene %in% c("ICAM1", "CD44"), "poor", "good")
+cat_col_sub <- setNames(c("#0571B0", "#CA0020"), c("good", "poor"))
+
 ## Print heatmap 
 Heatmap(ht, name = "Mean Z-scores")
 
-#pdf("/mnt/central_nas/rcc_volume/RCC/figures/TCGA_KIRC/TCGA_KIRC_archetype_keymarkers_ht.pdf", height = 2.5, width = 6)
-Heatmap(scale(ht), name = "Scaled mean Z-scores")+
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/TCGA_KIRC/TCGA_KIRC_archetype_keymarkers_ht.pdf", height = 2.5, width = 6)
+Heatmap(scale(ht), name = "Scaled mean Z-scores", 
+        column_split = col_anno$cat, 
+        top_annotation = columnAnnotation(cat = anno_simple(col_anno$cat, col = cat_col_sub)), 
+        show_column_dend = FALSE)+
   rowAnnotation(n = anno_barplot(anno$n, gp = gpar(fill = "#440154FF")))+
   rowAnnotation(anno = anno_text(anno$TME_archetype_predict))
-#dev.off()
+dev.off()
+
+## Print bubble
+mat_z <- as.data.frame(scale(ht)) %>% pivot_longer(cols = 1:ncol(as.data.frame(scale(ht))), names_to = "gene", values_to = "z_mean")
+mat$z_mean <- mat_z$z_mean
+
+# rows 
+dd <- dist(scale(ht), method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+row_sorted <- hc$order
+mat$TME_archetype_predict <- factor(mat$TME_archetype_predict, levels = rownames(scale(ht)[row_sorted,]))
+
+# columns 
+dd <- dist(t(scale(ht)), method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+column_sorted <- hc$order
+mat$gene <- factor(mat$gene, levels = colnames(scale(ht)[,column_sorted]))
+
+ggplot(mat, aes(x=TME_archetype_predict, y = gene, col = z_mean, size = mean))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 0)+
+  scale_size(range = c(2,10))+
+  ggtitle("TCGA KIRC")
 ```
 
 
@@ -2111,12 +2160,13 @@ dittoBarPlot(vsd, var = "TME_archetype_predict", group.by = "TME_archetype",reta
 df <- as.data.frame(colData(vsd)[!is.na(vsd$BAP1), c("BAP1", "TME_archetype_predict")])
 print(fisher.test(table(df$BAP1, df$TME_archetype_predict)))
 
-#pdf("/mnt/central_nas/rcc_volume/RCC/figures/TCGA_KIRC/TCGA_KIRC_archetype_BAP1mut.pdf", width = 3, height = 4)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/TCGA_KIRC/TCGA_KIRC_archetype_BAP1mut.pdf", width = 3, height = 4)
 dittoBarPlot(vsd[,!is.na(vsd$BAP1)], var = "BAP1", group.by = "TME_archetype_predict",retain.factor.levels = FALSE)+
   ggtitle("")+
-  scale_fill_brewer(palette = "Set1", direction = -1)+
+  #scale_fill_brewer(palette = "Yellows", direction = -1)+
+  scale_fill_manual(values = c("#f0e6b2","#b89b00"))+
   ggtitle(print(fisher.test(table(df$BAP1, df$TME_archetype_predict))))
-#dev.off()
+dev.off()
 
 
 vsd$TME_archetype_predict_comb <- ifelse(vsd$TME_archetype_predict == "TME_suppressed", "TME_suppressed", "Other")
@@ -2134,7 +2184,8 @@ print(fisher.test(table(df$PBRM1, df$TME_archetype_predict)))
 #pdf("/mnt/central_nas/rcc_volume/RCC/figures/TCGA_KIRC/TCGA_KIRC_archetype_PBRM1mut.pdf", width = 3, height = 3)
 dittoBarPlot(vsd[,!is.na(vsd$PBRM1)], var = "PBRM1", group.by = "TME_archetype_predict",retain.factor.levels = FALSE)+
   ggtitle("")+
-  scale_fill_brewer(palette = "Set1", direction = -1)+
+  #scale_fill_brewer(palette = "Set1", direction = -1)+
+  scale_fill_manual(values = c("#f0e6b2","#b89b00"))
   ggtitle(print(fisher.test(table(df$PBRM1, df$TME_archetype_predict))))
 #dev.off()
 ```
@@ -2168,7 +2219,7 @@ library(immunedeconv)
 
 deconvolution_methods
 
-kirc.clean$PID_ICAM_mTOR_group <- vsd$PID_ICAM_mTOR_group[match(kirc.clean$PID, vsd$PID)]
+#kirc.clean$PID_ICAM_mTOR_group <- vsd$PID_ICAM_mTOR_group[match(kirc.clean$PID, vsd$PID)]
 
 # TPM gene expression matrix 
 TPM_mat <- assay(kirc.clean, "tpm_unstrand")
@@ -2274,11 +2325,13 @@ anno <- anno[match(rownames(ht_comb),anno$celltype),]
 col_method <- setNames(brewer.pal(3, "Blues"), c("quanti", "mcp", "mcp_quanti"))
 
 
-pdf("/mnt/central_nas/rcc_volume/RCC/figures/TCGA_KIRC/TCGA_KIRC_archetype_quanti_mcp_combined.pdf", width = 6, height = 5)
-Heatmap(ht_comb, row_split = anno$category)+
+#pdf("/mnt/central_nas/rcc_volume/RCC/figures/TCGA_KIRC/TCGA_KIRC_archetype_quanti_mcp_combined.pdf", width = 6, height = 5)
+Heatmap(ht_comb
+        #row_split = anno$category
+        )+
   rowAnnotation(method = anno_simple(anno$method, col = col_method), 
                 names = anno_text(anno$celltype))
-dev.off()
+#dev.off()
 ```
 
 
