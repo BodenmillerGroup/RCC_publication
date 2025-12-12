@@ -607,7 +607,6 @@ mse_combined_SNR20_fil <- readRDS("/mnt/central_nas/rcc_volume/RCC/metabolome/ne
 mse_combined_SNR20_sum <- summarizeFeatures(mse_combined_SNR20_fil, stat="mean", groups=mse_combined_SNR20_fil$PID)
 
 saveRDS(mse_combined_SNR20_sum, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/Combined_sum_SNR20.rds")
-
 ```
 ```{r}
 mse_combined_SNR15_sum <- readRDS("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/Combined_sum_SNR15.rds")
@@ -621,6 +620,8 @@ meta_keep <- colnames(pData(mse_combined_SNR15_sum))[colnames(pData(mse_combined
 colData <- pData(mse_combined_SNR15_sum) %>% as.data.frame %>% select(all_of(meta_keep)) %>% unique()
 colData$PID <- str_replace(colData$PID, "-", ".")
 ```
+
+#### UMAP 
 
 ```{r}
 set.seed(22)
@@ -667,4 +668,108 @@ colnames(assay) <- str_remove(colnames(check), ".mean")
 meta_keep <- colnames(pData(mse_combined_SNR20_sum))[colnames(pData(mse_combined_SNR20_sum)) %in% c("run", "PID", "subtype_combined", "gender", "age", "age_bin", "status_OS", "OS_months", "pT_simple", "pT_combined", "ISUP_simple", "ISUP_combined", "necrose")]
 colData <- pData(mse_combined_SNR20_sum) %>% as.data.frame %>% select(all_of(meta_keep)) %>% unique()
 colData$PID <- str_replace(colData$PID, "-", ".")
+colData <- colData %>% remove_rownames %>% column_to_rownames("PID")
+colData$PID <- rownames(colData)
+colData <- colData[match(colnames(assay), rownames(colData)),]
 ```
+
+```{r}
+SE <- SummarizedExperiment(assays=list(exprs=assay %>% as.matrix), colData=colData)
+
+
+saveRDS(SE, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/SE_SNR20.rds")
+```
+
+## Annotate 
+
+```{r}
+# KEGG based annotation is run in 00_MetabolomeAuxFunc using 
+```
+
+### KEGG based annotation
+
+```{r}
+df_1 <- read.csv("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/KEGG_anno_MH.csv")
+df_2 <- read.csv("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/KEGG_anno_MH2O.csv")
+df_3 <- read.csv("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/KEGG_anno_MH2OH.csv")
+df_4 <- read.csv("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/KEGG_anno_MCl.csv")
+df_5 <- read.csv("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/KEGG_anno_MK2H.csv")
+df_6 <- read.csv("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/KEGG_anno_MNa2H.csv")
+
+# Add adduct
+df_1$adduct <- rep("M-H", nrow(df_1))
+df_2$adduct <- rep("M-H20", nrow(df_2))
+df_3$adduct <- rep("M-H20-H", nrow(df_3))
+df_4$adduct <- rep("M+K-2H", nrow(df_4))
+df_5$adduct <- rep("M+Na-2H", nrow(df_5))
+df_6$adduct <- rep("M+Cl", nrow(df_6))
+
+# match colnames
+colnames(df_1) <- colnames(df_2) <- colnames(df_3) <- colnames(df_4) <- colnames(df_5) <- colnames(df_6) <- c("Mass", "mass_adduct", "query", "kegg_id", "name", "result_mass", "KEGG.map", "KEGG.pathway","hmdb_id","adduct")
+
+# add to peak_anno
+peak_anno_updated <- bind_rows(df_1 %>% dplyr::select(Mass, kegg_id, name, KEGG.map, KEGG.pathway, adduct),
+                               df_2 %>% dplyr::select(Mass, kegg_id, name, KEGG.map, KEGG.pathway, adduct),
+                               df_3 %>% dplyr::select(Mass, kegg_id, name, KEGG.map, KEGG.pathway, adduct),
+                               df_4 %>% dplyr::select(Mass, kegg_id, name, KEGG.map, KEGG.pathway, adduct),
+                               df_5 %>% dplyr::select(Mass, kegg_id, name, KEGG.map, KEGG.pathway, adduct),
+                               df_6 %>% dplyr::select(Mass, kegg_id, name, KEGG.map, KEGG.pathway, adduct)) %>% arrange(Mass)
+
+peak_anno_updated
+```
+
+### Subset peak annotation to hsa annotated compounds
+
+```{r}
+hsa_to_compound_df <- read.csv("/mnt/central_nas/rcc_volume/RCC/metabolome/data_analysis/cpd_in_hsa_pathways")
+
+hsa_cpd <- hsa_to_compound_df$CompoundID %>% unique
+
+peak_anno_updated <- peak_anno_updated %>% filter(kegg_id %in% hsa_cpd)
+
+merged_df <- merge(peak_anno_updated, hsa_to_compound_df, 
+                   by.x = "kegg_id", by.y = "CompoundID", 
+                   all.x = TRUE)
+
+names(merged_df)[names(merged_df) == "PathwayID"] <- "hsa_id"
+names(merged_df)[names(merged_df) == "Name"] <- "hsa_name"
+names(merged_df)[names(merged_df) == "Class"] <- "hsa_class"
+
+peak_anno_updated <- merged_df %>% arrange(Mass)
+```
+
+```{r}
+length(unique(peak_anno_updated %>% filter(!is.na(name)) %>% pull(Mass)))
+```
+
+```{r}
+SE_sub <- SE[rownames(SE) %in% peak_anno_updated$Mass,]
+```
+
+```{r}
+# Remove mz with 0 intensity across all patients (or per TMA)
+## n=0
+t(assay(SE_sub)) %>% as.data.frame %>% pivot_longer(1:nrow(assay(SE_sub)), names_to = "mz", values_to = "mean") %>% group_by(mz) %>% summarise(sum = sum(mean)) %>% arrange(sum) %>% filter(sum == 0)
+
+t(assay(SE_sub[,SE_sub$run == "ztma_20_rcc_no_normalized_complete_spectrum"])) %>% as.data.frame %>% pivot_longer(1:nrow(assay(SE_sub)), names_to = "mz", values_to = "mean") %>% group_by(mz) %>% summarise(sum = sum(mean)) %>% arrange(sum) %>% filter(sum == 0)
+
+t(assay(SE_sub[,SE_sub$run == "ztma_224_rcc_no_normalized_complete_spectrum"])) %>% as.data.frame %>% pivot_longer(1:nrow(assay(SE_sub)), names_to = "mz", values_to = "mean") %>% group_by(mz) %>% summarise(sum = sum(mean)) %>% arrange(sum) %>% filter(sum == 0)
+```
+
+
+### UMAP 
+
+```{r}
+umap_df <- calculateUMAP(SE_sub, assay.type = "exprs", n_neighbors = 50, pca = 50, external_neighbors=TRUE, BPPARAM = MulticoreParam())
+umap_df <- umap_df %>% as.data.frame()
+
+umap_df$TMA <- SE_sub$run[match(rownames(umap_df), SE_sub$PID)]
+umap_df$ISUP_combined <- SE_sub$ISUP_combined[match(rownames(umap_df), SE_sub$PID)]
+umap_df$pT_combined <- SE_sub$pT_combined[match(rownames(umap_df), SE_sub$PID)]
+
+ggplot(data=umap_df, aes(x=UMAP1, y=UMAP2, col = TMA)) +
+  geom_point()+ 
+  theme_classic()
+```
+
+

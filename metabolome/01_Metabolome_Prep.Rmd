@@ -279,7 +279,7 @@ setdiff(anno_mass, raw_mass) %>% length() # 95 m/z annotated but not observed
 
 
 ```{r}
-df_1 <- read.csv("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/KEGG_anno_4ppm/KEGG_anno_MH.csv")
+df_1 <- read.csv("/mnt/central_nas/rcc_volume/RCC/metabolome/data_analysis/KEGG_anno_4ppm/KEGG_anno_MH.csv")
 df_2 <- read.csv("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/KEGG_anno_4ppm/KEGG_anno_MH2O.csv")
 df_3 <- read.csv("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/KEGG_anno_4ppm/KEGG_anno_MH2OH.csv")
 df_4 <- read.csv("/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/metabolome/data_analysis/KEGG_anno_4ppm/KEGG_anno_MCl.csv")
