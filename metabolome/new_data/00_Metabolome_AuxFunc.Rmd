@@ -79,6 +79,8 @@ Perform search for all Mass corrections above
 library(KEGGREST)
 library(stringr)
 
+# MAKE SURE TO ADJUST THE FOLDER NAME BEFORE RUNNING THIS SCRIPT 
+
 SE <- readRDS("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/SE_SNR20.rds")
 masses <- as.numeric(rownames(SE))
 
@@ -211,7 +213,7 @@ for (adduct_name in names(adducts)) {
   }
   
   # Save results to CSV per adduct
-  out_file <- paste0("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/", "KEGG_anno_", gsub("\\[|\\]|\\+|\\-| ", "", adduct_name), ".csv")
+  out_file <- paste0("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/SNR10_R3_F05/", "KEGG_anno_", gsub("\\[|\\]|\\+|\\-| ", "", adduct_name), ".csv")
   write.csv(df_result, out_file, row.names = FALSE)
   message("Saved: ", out_file)
 }

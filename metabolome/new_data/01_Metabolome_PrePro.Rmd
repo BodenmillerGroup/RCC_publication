@@ -453,6 +453,35 @@ mse_2_fil_ccRCC$x_y <- NULL
 ```
 
 ```{r}
+mse_1_fil_ccRCC_proc_SNR10 <- mse_1_fil_ccRCC |> 
+  Cardinal::normalize(method="rms") |> 
+  smooth() |> 
+  peakPick(method = "filter", SNR = 1)
+
+mse_1_fil_ccRCC_proc_SNR10_aligned <- peakAlign(mse_1_fil_ccRCC_proc_SNR10, 
+                                                tolerance = 10, units = "ppm",
+                                                BPPARAM = MulticoreParam(workers = 2))
+
+gc()
+
+saveRDS(mse_1_fil_ccRCC_proc_SNR10_aligned, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM20_picked_SNR10_tol10.rds")
+
+mse_2_fil_ccRCC_proc_SNR10 <- mse_2_fil_ccRCC |> 
+  Cardinal::normalize(method="rms") |> 
+  smooth() |> 
+  peakPick(method = "filter", SNR = 1)
+
+mse_2_fil_ccRCC_proc_SNR10_aligned <- peakAlign(mse_2_fil_ccRCC_proc_SNR10, 
+                                                tolerance = 10, units = "ppm", 
+                                                BPPARAM = MulticoreParam(workers = 2))
+
+gc()
+
+saveRDS(mse_2_fil_ccRCC_proc_SNR10_aligned, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM224_picked_SNR10_tol10.rds")
+```
+
+
+```{r}
 # TMA20
 mse_1_fil_ccRCC_proc_SNR20 <- mse_1_fil_ccRCC |> 
   Cardinal::normalize(method="rms") |> 
@@ -480,6 +509,19 @@ gc()
 
 saveRDS(mse_1_fil_ccRCC_proc_SNR15_aligned, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM20_picked_SNR15.rds")
 
+mse_1_fil_ccRCC_proc_SNR10 <- mse_1_fil_ccRCC |> 
+  Cardinal::normalize(method="rms") |> 
+  smooth() |> 
+  peakPick(method = "filter", SNR = 1)
+
+mse_1_fil_ccRCC_proc_SNR10_aligned <- peakAlign(mse_1_fil_ccRCC_proc_SNR10, 
+                                                tolerance = 5, units = "ppm",
+                                                BPPARAM = MulticoreParam(workers = 2))
+
+gc()
+
+saveRDS(mse_1_fil_ccRCC_proc_SNR10_aligned, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM20_picked_SNR10.rds")
+
 # TMA224
 mse_2_fil_ccRCC_proc_SNR20 <- mse_2_fil_ccRCC |> 
   Cardinal::normalize(method="rms") |> 
@@ -506,14 +548,28 @@ mse_2_fil_ccRCC_proc_SNR15_aligned <- peakAlign(mse_2_fil_ccRCC_proc_SNR15,
 gc()
 
 saveRDS(mse_2_fil_ccRCC_proc_SNR15_aligned, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM224_picked_SNR15.rds")
+
+mse_2_fil_ccRCC_proc_SNR10 <- mse_2_fil_ccRCC |> 
+  Cardinal::normalize(method="rms") |> 
+  smooth() |> 
+  peakPick(method = "filter", SNR = 1)
+
+mse_2_fil_ccRCC_proc_SNR10_aligned <- peakAlign(mse_2_fil_ccRCC_proc_SNR10, 
+                                                tolerance = 5, units = "ppm", 
+                                                BPPARAM = MulticoreParam(workers = 2))
+
+gc()
+
+saveRDS(mse_2_fil_ccRCC_proc_SNR10_aligned, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM224_picked_SNR10.rds")
 ```
 
 ```{r}
 plot(mse_1_fil_ccRCC, i=c(10, 100, 10000, 30000), xlim = c(100, 200), ylim=c(0,4e+06))
-plot(mse_1_fil_ccRCC_proc_SNR20_aligned, i=c(10, 100, 10000, 30000), xlim = c(100, 200), ylim=c(0,1e+07))
+plot(mse_1_fil_ccRCC_proc_SNR10_aligned, i=c(10, 100, 10000, 30000), xlim = c(100, 200), ylim=c(0,1e+07))
 
 plot(mse_2_fil_ccRCC, i=c(10, 100, 10000, 30000), xlim = c(100, 200), ylim=c(0,4e+06))
-plot(mse_2_fil_ccRCC_proc_SNR20_aligned, i=c(10, 100, 10000, 30000), xlim = c(100, 200), ylim=c(0,1e+07))
+#plot(mse_2_fil_ccRCC_proc_SNR20_aligned, i=c(10, 100, 10000, 30000), xlim = c(100, 200), ylim=c(0,1e+07))
+plot(mse_2_fil_ccRCC_proc_SNR10_aligned, i=c(10, 100, 10000, 30000), xlim = c(100, 200), ylim=c(0,1e+07))
 ```
 
 
@@ -568,23 +624,62 @@ mse_combined_SNR15 <- cbind(mse_1_fil_ccRCC_proc_SNR15_aligned, mse_2_fil_ccRCC_
 mse_combined_SNR15
 ```
 
+#### SNR10 
+
+```{r}
+mse_1_fil_ccRCC_proc_SNR10_aligned <- readRDS("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM20_picked_SNR10.rds")
+
+mse_2_fil_ccRCC_proc_SNR10_aligned <- readRDS("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/TM224_picked_SNR10.rds")
+```
+
+```{r}
+# Round mz values to find common grid
+fData_mse1 <- fData(mse_1_fil_ccRCC_proc_SNR10_aligned) %>% as.data.frame %>% mutate(mz_rounded = round(mz, 3)) 
+mz_rounded_intersect <- intersect(fData_mse2$mz_rounded, fData_mse1$mz_rounded)
+mz_mse1_dup <- fData_mse1 %>% filter(mz_rounded %in% mz_intersect) %>% group_by(mz_rounded) %>% dplyr::count() %>% filter(n>1) %>% pull(mz_rounded) %>% as.vector()
+mz_mse1_exclude <- fData_mse1 %>% filter(mz_rounded %in% mz_mse1_dup) %>% group_by(mz_rounded) %>% filter(freq == min(freq)) %>% pull(mz) %>% as.vector()
+
+mse_1_fil_ccRCC_proc_SNR10_aligned <- subsetFeatures(mse_1_fil_ccRCC_proc_SNR10_aligned, !mz %in% mz_mse1_exclude)
+
+mz(mse_1_fil_ccRCC_proc_SNR10_aligned) <- round(mz(mse_1_fil_ccRCC_proc_SNR10_aligned), 3)
+
+
+fData_mse2 <- fData(mse_2_fil_ccRCC_proc_SNR10_aligned) %>% as.data.frame %>% mutate(mz_rounded = round(mz, 3)) 
+mz_rounded_intersect <- intersect(fData_mse2$mz_rounded, fData_mse2$mz_rounded)
+mz_mse2_dup <- fData_mse2 %>% filter(mz_rounded %in% mz_intersect) %>% group_by(mz_rounded) %>% dplyr::count() %>% filter(n>1) %>% pull(mz_rounded) %>% as.vector()
+mz_mse2_exclude <- fData_mse2 %>% filter(mz_rounded %in% mz_mse2_dup) %>% group_by(mz_rounded) %>% filter(freq == min(freq)) %>% pull(mz) %>% as.vector()
+
+mse_2_fil_ccRCC_proc_SNR10_aligned <- subsetFeatures(mse_2_fil_ccRCC_proc_SNR10_aligned, !mz %in% mz_mse2_exclude)
+
+mz(mse_2_fil_ccRCC_proc_SNR10_aligned) <- round(mz(mse_2_fil_ccRCC_proc_SNR10_aligned), 3)
+
+
+
+mz_grid <- intersect(mz(mse_1_fil_ccRCC_proc_SNR10_aligned), mz(mse_2_fil_ccRCC_proc_SNR10_aligned)) #751 for SNR10
+
+# Subset to common grid
+mse_2_fil_ccRCC_proc_SNR10_aligned <- subsetFeatures(mse_2_fil_ccRCC_proc_SNR10_aligned, mz %in% mz_grid)
+
+mse_1_fil_ccRCC_proc_SNR10_aligned <- subsetFeatures(mse_1_fil_ccRCC_proc_SNR10_aligned, mz %in% mz_grid)
+
+# Combine
+mse_combined_SNR10 <- cbind(mse_1_fil_ccRCC_proc_SNR10_aligned, mse_2_fil_ccRCC_proc_SNR10_aligned)
+mse_combined_SNR10
+```
+
+
 ### Peak filtering
 
 Only combined
 
 ```{r}
 # Filter species with at least 1% frequency
-mse_combined_SNR20_fil <- subsetFeatures(mse_combined_SNR20, freq > 0.005)
-fData(mse_combined_SNR20_fil)
-
-mse_combined_SNR15_fil <- subsetFeatures(mse_combined_SNR15, freq > 0.005)
-fData(mse_combined_SNR15_fil)
+mse_combined_SNR10_fil <- subsetFeatures(mse_combined_SNR10, freq > 0.0005)
+fData(mse_combined_SNR10_fil)
 ```
 
 ```{r}
-saveRDS(mse_combined_SNR15_fil, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/Combined_fil_SNR15.rds")
-
-saveRDS(mse_combined_SNR20_fil, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/Combined_fil_SNR20.rds")
+saveRDS(mse_combined_SNR10_fil, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/Combined_fil_SNR10.rds")
 ```
 
 
@@ -595,31 +690,46 @@ saveRDS(mse_combined_SNR20_fil, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_
 # Run this in terminal 
 ## Set "ulimit -s unlimited"
 library(Cardinal)
-mse_combined_SNR15_fil <- readRDS("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/Combined_fil_SNR15.rds")
 
-mse_combined_SNR15_sum <- summarizeFeatures(mse_combined_SNR15_fil, stat="mean", groups=mse_combined_SNR15_fil$PID)
+mse_combined_SNR10_fil <- readRDS("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/Combined_fil_SNR10.rds")
 
-saveRDS(mse_combined_SNR15_sum, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/Combined_sum_SNR15.rds")
+mse_combined_SNR10_sum <- summarizeFeatures(mse_combined_SNR10_fil, stat="mean", groups=mse_combined_SNR10_fil$PID)
 
-
-mse_combined_SNR20_fil <- readRDS("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/Combined_fil_SNR20.rds")
-
-mse_combined_SNR20_sum <- summarizeFeatures(mse_combined_SNR20_fil, stat="mean", groups=mse_combined_SNR20_fil$PID)
-
-saveRDS(mse_combined_SNR20_sum, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/Combined_sum_SNR20.rds")
+saveRDS(mse_combined_SNR10_sum, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/Combined_sum_SNR10.rds")
 ```
 ```{r}
-mse_combined_SNR15_sum <- readRDS("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/Combined_sum_SNR15.rds")
+mse_combined_SNR10_sum <- readRDS("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/Combined_sum_SNR10.rds")
 
 # Prepare mean assay
-assay <- fData(mse_combined_SNR15_sum) %>% as.data.frame() %>% select(-count, -freq, -count.1, -freq.1) %>% column_to_rownames("mz")
-colnames(assay) <- str_remove(colnames(check), ".mean")
+assay <- fData(mse_combined_SNR10_sum) %>% as.data.frame() %>% select(-count, -freq, -count.1, -freq.1) %>% column_to_rownames("mz")
+colnames(assay) <- str_remove(colnames(assay), ".mean")
 
 # Prepare colData
-meta_keep <- colnames(pData(mse_combined_SNR15_sum))[colnames(pData(mse_combined_SNR15_sum)) %in% c("run", "PID", "subtype_combined", "gender", "age", "age_bin", "status_OS", "OS_months", "pT_simple", "pT_combined", "ISUP_simple", "ISUP_combined", "necrose")]
-colData <- pData(mse_combined_SNR15_sum) %>% as.data.frame %>% select(all_of(meta_keep)) %>% unique()
+meta_keep <- colnames(pData(mse_combined_SNR10_sum))[colnames(pData(mse_combined_SNR10_sum)) %in% c("run", "PID", "subtype_combined", "gender", "age", "age_bin", "status_OS", "OS_months", "pT_simple", "pT_combined", "ISUP_simple", "ISUP_combined", "necrose")]
+colData <- pData(mse_combined_SNR10_sum) %>% as.data.frame %>% select(all_of(meta_keep)) %>% unique()
 colData$PID <- str_replace(colData$PID, "-", ".")
+colData <- colData %>% remove_rownames %>% column_to_rownames("PID")
+colData$PID <- rownames(colData)
+colData <- colData[match(colnames(assay), rownames(colData)),]
 ```
+
+```{r}
+mse_combined_SNR20_sum <- readRDS("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/Combined_sum_SNR20.rds")
+
+# Prepare mean assay
+assay <- fData(mse_combined_SNR20_sum) %>% as.data.frame() %>% select(-count, -freq, -count.1, -freq.1) %>% column_to_rownames("mz")
+colnames(assay) <- str_remove(colnames(assay), ".mean")
+
+# Prepare colData
+meta_keep <- colnames(pData(mse_combined_SNR20_sum))[colnames(pData(mse_combined_SNR20_sum)) %in% c("run", "PID", "subtype_combined", "gender", "age", "age_bin", "status_OS", "OS_months", "pT_simple", "pT_combined", "ISUP_simple", "ISUP_combined", "necrose")]
+colData <- pData(mse_combined_SNR20_sum) %>% as.data.frame %>% select(all_of(meta_keep)) %>% unique()
+colData$PID <- str_replace(colData$PID, "-", ".")
+colData <- colData %>% remove_rownames %>% column_to_rownames("PID")
+colData$PID <- rownames(colData)
+colData <- colData[match(colnames(assay), rownames(colData)),]
+```
+
+
 
 #### UMAP 
 
@@ -647,37 +757,11 @@ ggplot(data=umap_df, aes(x=UMAP1, y=UMAP2, col = pT_combined)) +
 ```
 
 ```{r}
-df <- assay %>% t() %>% as.data.frame()
-df_long <- df %>% pivot_longer(cols = 1:ncol(df), names_to = "mz", values_to = "intensity")
-
-p <- ggplot(df_long, aes(x = mz, y = intensity)) +
-  geom_boxplot(fill = "#E07A5F") +
-  theme_classic()+
-  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 5))
-p
-```
-
-```{r}
-mse_combined_SNR20_sum <- readRDS("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/Combined_sum_SNR20.rds")
-
-# Prepare mean assay
-assay <- fData(mse_combined_SNR20_sum) %>% as.data.frame() %>% select(-count, -freq, -count.1, -freq.1) %>% column_to_rownames("mz")
-colnames(assay) <- str_remove(colnames(check), ".mean")
-
-# Prepare colData
-meta_keep <- colnames(pData(mse_combined_SNR20_sum))[colnames(pData(mse_combined_SNR20_sum)) %in% c("run", "PID", "subtype_combined", "gender", "age", "age_bin", "status_OS", "OS_months", "pT_simple", "pT_combined", "ISUP_simple", "ISUP_combined", "necrose")]
-colData <- pData(mse_combined_SNR20_sum) %>% as.data.frame %>% select(all_of(meta_keep)) %>% unique()
-colData$PID <- str_replace(colData$PID, "-", ".")
-colData <- colData %>% remove_rownames %>% column_to_rownames("PID")
-colData$PID <- rownames(colData)
-colData <- colData[match(colnames(assay), rownames(colData)),]
-```
-
-```{r}
 SE <- SummarizedExperiment(assays=list(exprs=assay %>% as.matrix), colData=colData)
 
+saveRDS(SE, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/SE_SNR10.rds")
 
-saveRDS(SE, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/SE_SNR20.rds")
+#SE <- readRDS("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/SE_SNR10.rds")
 ```
 
 ## Annotate 
@@ -689,12 +773,12 @@ saveRDS(SE, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/S
 ### KEGG based annotation
 
 ```{r}
-df_1 <- read.csv("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/KEGG_anno_MH.csv")
-df_2 <- read.csv("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/KEGG_anno_MH2O.csv")
-df_3 <- read.csv("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/KEGG_anno_MH2OH.csv")
-df_4 <- read.csv("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/KEGG_anno_MCl.csv")
-df_5 <- read.csv("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/KEGG_anno_MK2H.csv")
-df_6 <- read.csv("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/KEGG_anno_MNa2H.csv")
+df_1 <- read.csv("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/SNR10_R3_F05/KEGG_anno_MH.csv")
+df_2 <- read.csv("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/SNR10_R3_F05/KEGG_anno_MH2O.csv")
+df_3 <- read.csv("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/SNR10_R3_F05/KEGG_anno_MH2OH.csv")
+df_4 <- read.csv("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/SNR10_R3_F05/KEGG_anno_MCl.csv")
+df_5 <- read.csv("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/SNR10_R3_F05/KEGG_anno_MK2H.csv")
+df_6 <- read.csv("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/SNR10_R3_F05/KEGG_anno_MNa2H.csv")
 
 # Add adduct
 df_1$adduct <- rep("M-H", nrow(df_1))
@@ -718,9 +802,10 @@ peak_anno_updated <- bind_rows(df_1 %>% dplyr::select(Mass, kegg_id, name, KEGG.
 peak_anno_updated
 ```
 
-### Subset peak annotation to hsa annotated compounds
+### Human pathway annotation
 
 ```{r}
+# Subset to compounds annotated in human pathways
 hsa_to_compound_df <- read.csv("/mnt/central_nas/rcc_volume/RCC/metabolome/data_analysis/cpd_in_hsa_pathways")
 
 hsa_cpd <- hsa_to_compound_df$CompoundID %>% unique
@@ -743,7 +828,12 @@ length(unique(peak_anno_updated %>% filter(!is.na(name)) %>% pull(Mass)))
 ```
 
 ```{r}
+# Filter SE
 SE_sub <- SE[rownames(SE) %in% peak_anno_updated$Mass,]
+
+# Save 
+saveRDS(peak_anno_updated, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/peakanno_SNR10_final.rds")
+saveRDS(SE_sub, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/SE_SNR10_final.rds")
 ```
 
 ```{r}
@@ -756,6 +846,15 @@ t(assay(SE_sub[,SE_sub$run == "ztma_20_rcc_no_normalized_complete_spectrum"])) %
 t(assay(SE_sub[,SE_sub$run == "ztma_224_rcc_no_normalized_complete_spectrum"])) %>% as.data.frame %>% pivot_longer(1:nrow(assay(SE_sub)), names_to = "mz", values_to = "mean") %>% group_by(mz) %>% summarise(sum = sum(mean)) %>% arrange(sum) %>% filter(sum == 0)
 ```
 
+```{r}
+path_histo <- peak_anno_updated %>% select(Mass, hsa_name) %>% unique() %>% group_by(hsa_name) %>% dplyr::count() %>% arrange(desc(n)) %>% filter(n > 5)
+
+ggplot(path_histo, aes(x = reorder(hsa_name,-n), y = n, fill = n))+
+  geom_bar(stat = "identity")+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90))+
+  theme(palette.colour.continuous = scales::pal_seq_gradient())
+```
 
 ### UMAP 
 
@@ -764,12 +863,131 @@ umap_df <- calculateUMAP(SE_sub, assay.type = "exprs", n_neighbors = 50, pca = 5
 umap_df <- umap_df %>% as.data.frame()
 
 umap_df$TMA <- SE_sub$run[match(rownames(umap_df), SE_sub$PID)]
+umap_df$TMA <- ifelse(umap_df$TMA == "ztma_20_rcc_no_normalized_complete_spectrum", "ZTMA20", "ZTMA224")
 umap_df$ISUP_combined <- SE_sub$ISUP_combined[match(rownames(umap_df), SE_sub$PID)]
 umap_df$pT_combined <- SE_sub$pT_combined[match(rownames(umap_df), SE_sub$PID)]
 
 ggplot(data=umap_df, aes(x=UMAP1, y=UMAP2, col = TMA)) +
   geom_point()+ 
+  theme_classic()+
+  scale_color_brewer(palette = "Set1")
+```
+
+## 3. Zero value imputation
+
+```{r}
+SE <- readRDS("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/SE_SNR10_final.rds")
+peak_anno_updated <- readRDS("/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/peakanno_SNR10_final.rds")
+```
+
+```{r}
+assay <- assay(SE) %>% t() %>% as.data.frame()
+
+# function to impute 0 values by 1/5 min per feature
+replace_zeros <- function(column) {
+  min_val <- min(column[column != 0], na.rm = TRUE)
+  imp_val <- min_val / 5
+  column[column == 0] <- imp_val
+  return(column)
+}
+
+# Apply the function to columns
+assay_imputed <- assay %>%
+  mutate(across(everything(), replace_zeros))
+
+assay_imputed <- assay_imputed %>% t()
+```
+
+
+## 4. Log transformation 
+
+```{r}
+# lop1 transformation
+assay_log <- log1p(assay_imputed)
+```
+
+```{r}
+set.seed(2201)
+umap_df <- calculateUMAP(assay_log, n_neighbors = 50, pca = 50, external_neighbors=TRUE, BPPARAM = MulticoreParam())
+umap_df <- umap_df %>% as.data.frame()
+
+umap_df$TMA <- colData$run[match(rownames(umap_df), colData$PID)]
+
+ggplot(data=umap_df, aes(x=UMAP1, y=UMAP2, color = TMA)) +
+  geom_point() +
   theme_classic()
+```
+
+## 5. Batch effect correction
+
+### fastMNN
+
+```{r}
+library(batchelor)
+library(BiocNeighbors)
+
+batch <- SE$run[match(colnames(assay_log), SE$PID)]
+available_cores <- parallel::detectCores()
+mnn_corrected <- mnnCorrect(assay_log, batch = batch,
+                            auto.merge = TRUE,
+                            BNPARAM = HnswParam(),
+                            BPPARAM = MulticoreParam(workers = (available_cores - 2) / 2, RNGseed = 22))
+
+mnn_data <- assay(mnn_corrected)
+```
+
+
+```{r}
+set.seed(2201)
+umap_df <- calculateUMAP(mnn_data, n_neighbors = 50, pca = 50, external_neighbors=TRUE, BPPARAM = MulticoreParam())
+umap_df <- umap_df %>% as.data.frame()
+
+umap_df$TMA <- colData$run[match(rownames(umap_df), colData$PID)]
+
+ggplot(data=umap_df, aes(x=UMAP1, y=UMAP2, color = TMA)) +
+  geom_point() +
+  theme_classic()
+```
+
+
+```{r}
+## Add data back to SE
+assays(SE)[["exprs_cor"]] <- mnn_data
+```
+
+## 6. Global min-max scaling
+
+Across all channels
+
+```{r}
+min_val <- min(assays(SE)[["exprs_cor"]])
+max_val <- max(assays(SE)[["exprs_cor"]])
+
+assay(SE, "min_max") <- (assays(SE)[["exprs_cor"]] - min_val) / (max_val - min_val)
+```
+
+```{r}
+SE
+```
+
+```{r}
+umap_df <- calculateUMAP(SE, assay.type = "min_max", n_neighbors = 50, pca = 50, external_neighbors=TRUE, BPPARAM = MulticoreParam())
+umap_df <- umap_df %>% as.data.frame()
+
+umap_df$TMA <- SE$run[match(rownames(umap_df), SE$PID)]
+
+ggplot(data=umap_df, aes(x=UMAP1, y=UMAP2, col = TMA)) +
+  geom_point()+ 
+  theme_classic()+
+  scale_color_brewer(palette = "Set1")
+```
+
+
+
+# SAVE 
+
+```{r}
+saveRDS(SE, "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/SE_SNR10_final1.rds")
 ```
 
 
