@@ -49,7 +49,7 @@ data <- t(assay(SE, "min_max")) %>% as.matrix()
 set.seed(22)
 testCL<- clValid(data,
                  nClust = 7:20,
-                 clMethods = c("kmeans"),
+                 clMethods = c("hierarchical","agnes", "kmeans"),
                  #clMethods = c("agnes"),
                  validation="internal", 
                  metric="euclidean", 
@@ -75,7 +75,7 @@ h_com <- Heatmap(data,
         col = viridis(100), 
         clustering_method_columns = "ward.D2", 
         clustering_method_rows = "ward.D2",
-        row_km = 18, 
+        row_km = 16, 
         row_km_repeats = 1000,
         #cluster_rows = agnes_split,
         #row_split = 17,
@@ -918,7 +918,7 @@ log_FC_analysis(SE_eco, "TME_activated", "survival_eco")
 ```{r}
 # Function call - Adjust PATH
 cluster_numbers <- SE_eco$survival_eco %>% unique
-base_path <- "/mnt/central_nas/rcc_volume/RCC/metabolome/data_analysis/GSEA/survival_eco/input/"
+base_path <- "/mnt/central_nas/rcc_volume/RCC/metabolome/new_data/data_analysis/GSEA/survival_eco/input/"
 
 for (i in cluster_numbers) {
   file_name <- paste0("survival_eco_", i, ".csv")
