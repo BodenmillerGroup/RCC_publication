@@ -36,11 +36,11 @@ conflicts_prefer(base::setdiff)
 ### Read results from different models 
 
 ```{r}
-cv_results_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2026-01-19/BF_HE_HE.rds")
+cv_results_1 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2026-01-20/BF_HE_HE.rds")
 
-cv_results_2 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2026-01-19/BF_IMC_noGEN_HE.rds")
+cv_results_2 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2026-01-20/BF_IMC_noGEN_HE.rds")
 
-cv_results_3 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2026-01-19/BF_IMC_noGEN_HE_HE.rds")
+cv_results_3 <- readRDS("/mnt/central_nas/rcc_volume/RCC/survival_pred/BlockForest/models_2026-01-20/BF_IMC_noGEN_HE_HE.rds")
 ```
 
 ```{r}
