@@ -400,7 +400,7 @@ dev.off()
 median_diff$top_feature <- median_diff$feature %in% top_features
 median_diff_plot <- median_diff %>% pivot_longer(2:3, names_to = "type", values_to = "diff")
 
-pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/StepSize_TOP_comp.pdf", width = 4, height = 3.5, onefile = FALSE)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/StepSize_TOP_comp.pdf", width = 4, height = 2.5, onefile = FALSE)
 ggplot(median_diff_plot, aes(x = reorder(top_feature,-diff), y = log2(diff), fill = top_feature))+
   facet_grid(~type, scales = "free")+
   geom_point(aes(col = top_feature))+

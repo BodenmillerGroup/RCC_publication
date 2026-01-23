@@ -157,13 +157,13 @@ out_concordance <- data.frame(fold = 1:10, t(do.call("rbind", concordance_scores
 #out_concordance <- rbind(out_concordance, fit_cox_out)
 
 library(ggpubr)
-#pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_Conc_METAvsIMC.pdf", width = 6, height = 3.5, onefile = FALSE)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/surv_prediction/Survpred_Conc_METAvsIMC.pdf", width = 6, height = 3.5, onefile = FALSE)
 ggplot(out_concordance, aes(x = reorder(model,concordance, FUN = median), y = concordance, fill = model))+
   geom_point(aes(color = model))+
   geom_boxplot(outlier.colour = NA, alpha = 0.8)+
   #coord_cartesian(ylim = c(0.5,1))+
   theme_classic()+
-  stat_compare_means(ref.group = "GEN", paired = FALSE, method = "t.test", method.args = list(alternative = "greater", label = "p.format"))+
+  stat_compare_means(ref.group = "META", paired = FALSE, method = "t.test", method.args = list(alternative = "greater", label = "p.format"))+
   stat_compare_means(vjust = 1, method = "anova")+
   scale_fill_manual(values = col_cv)+
   scale_color_manual(values = col_cv)+
@@ -171,5 +171,5 @@ ggplot(out_concordance, aes(x = reorder(model,concordance, FUN = median), y = co
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   xlab("Models")+
   ylab("Concordance (Uno)")
-#dev.off()
+dev.off()
 ```
