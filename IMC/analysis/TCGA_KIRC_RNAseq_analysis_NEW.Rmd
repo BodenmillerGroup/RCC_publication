@@ -2160,7 +2160,7 @@ dittoBarPlot(vsd, var = "TME_archetype_predict", group.by = "TME_archetype",reta
 df <- as.data.frame(colData(vsd)[!is.na(vsd$BAP1), c("BAP1", "TME_archetype_predict")])
 print(fisher.test(table(df$BAP1, df$TME_archetype_predict)))
 
-pdf("/mnt/central_nas/rcc_volume/RCC/figures/TCGA_KIRC/TCGA_KIRC_archetype_BAP1mut.pdf", width = 3, height = 4)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/TCGA_KIRC/TCGA_KIRC_archetype_BAP1mut.pdf", width = 3, height = 3)
 dittoBarPlot(vsd[,!is.na(vsd$BAP1)], var = "BAP1", group.by = "TME_archetype_predict",retain.factor.levels = FALSE)+
   ggtitle("")+
   #scale_fill_brewer(palette = "Yellows", direction = -1)+
@@ -2360,7 +2360,7 @@ df <- df[!is.na(df$TME_archetype_predict),]
 compare_means(signature_sum ~ TME_archetype_predict,df) #pairwise comparisons
 compare_means(signature_sum ~ TME_archetype_predict,df, method = "kruskal.test") #global comparison
 
-pdf("/mnt/central_nas/rcc_volume/RCC/figures/TCGA_KIRC/TCGA_KIRC_archetype_genomicdediffsig_box.pdf", width = 5, height = 5)
+pdf("/mnt/central_nas/rcc_volume/RCC/figures/TCGA_KIRC/TCGA_KIRC_archetype_genomicdediffsig_box.pdf", width = 5, height = 3)
 ggplot(df, aes(x = TME_archetype_predict, y = signature_sum, fill = TME_archetype_predict))+
   geom_point(aes(color = TME_archetype_predict))+
   geom_boxplot(outlier.colour = NA, alpha = 0.8)+
