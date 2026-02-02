@@ -1815,11 +1815,57 @@ Heatmap(scale(ht),
   rowAnnotation(anno = anno_text(anno$TME_archetype))
 #dev.off()
 ```
+```{r}
+# Select genesets for CMAP algorithm
+
+## MTOR 
+MTORUP_all <- rbind(
+  res_mtor_vs_not_icam_vhl %>% as.data.frame %>% select(log2FoldChange) %>%
+    rownames_to_column("gene") %>% mutate(cat = "mtor_vs_icam"), 
+  res_mtor_vs_icam %>% as.data.frame %>% select(log2FoldChange) %>%
+    rownames_to_column("gene") %>% mutate(cat = "mtor_vs_NOTicam")
+  ) %>% group_by(gene) %>% transmute(mean_log2 = mean(log2FoldChange)) %>% unique()
+  
+MTORUP_all$zscore <- scale(MTORUP_all$mean_log2)[,1]
+
+library(biomaRt)
+genes <- MTORUP_all$gene
+mart <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+gene_map <- getBM(
+  attributes = c("hgnc_symbol", "entrezgene_id"),
+  filters = "hgnc_symbol",
+  values = genes,
+  mart = mart
+)
+
+MTORUP_all$gene_id <- gene_map$entrezgene_id[match(MTORUP_all$gene, gene_map$hgnc_symbol)]
+
+MTORUP_cmap <- MTORUP_all %>% ungroup %>% select(gene_id, zscore)
+MTORUP_cmap <- MTORUP_cmap[!is.na(MTORUP_cmap$gene_id),]
+
+## ICAM1
+ICAMUP_all <- rbind(
+  res_ICAM_vs_not_icam_vhl %>% as.data.frame %>% select(log2FoldChange) %>%
+    rownames_to_column("gene") %>% mutate(cat = "ICAM_vs_NOTicam"), 
+  res_ICAM_vs_MTOR %>% as.data.frame %>% select(log2FoldChange) %>%
+    rownames_to_column("gene") %>% mutate(cat = "ICAM_vs_MTOR")
+  ) %>% group_by(gene) %>% transmute(mean_log2 = mean(log2FoldChange)) %>% unique()
+
+
+ICAMUP_all$zscore <- scale(ICAMUP_all$mean_log2)[,1]
+ICAMUP_all$gene_id <- gene_map$entrezgene_id[match(ICAMUP_all$gene, gene_map$hgnc_symbol)]
+
+ICAMUP_cmap <- ICAMUP_all %>% ungroup %>% select(gene_id, zscore)
+ICAMUP_cmap <- ICAMUP_cmap[!is.na(ICAMUP_cmap$gene_id),]
+```
 
 ```{r}
 # Save genesets
 saveRDS(MTORUP,"/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/MTORUP_geneset_NTP.rds")
 saveRDS(ICAMUP,"/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/ICAMUP_geneset_NTP.rds")
+saveRDS(MTORUP_cmap,"/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/MTORUP_geneset_CMAP.rds")
+saveRDS(ICAMUP_cmap,"/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/ICAMUP_geneset_CMAP.rds")
+
 
 #MTORUP <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/MTORUP_geneset_NTP.rds")
 #ICAMUP <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/ICAMUP_geneset_NTP.rds")
@@ -3085,3 +3131,25 @@ ggplot(out_kegg_all,
   scale_color_gradient2(high = "#E41A1C", low = "white") +
   scale_size(range = c(2, 10))
 ```
+
+
+# 3. Connetivity analysis
+
+```{r}
+ICAMUP_cmap <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/ICAMUP_geneset_CMAP.rds")
+MTORUP_cmap <- readRDS("/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/MTORUP_geneset_CMAP.rds")
+```
+
+## CMap 
+
+```{r}
+library(WebCMap)
+outICAM <- run_negative_CMap(query_signature=ICAMUP_cmap, K=50, cores=25)
+saveRDS(outICAM, "/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/ICAM_CMAP_out.rds")
+gc()
+
+outMTOR <- run_negative_CMap(query_signature=MTORUP_cmap, K=50, cores=25)
+saveRDS(outMTOR, "/mnt/central_nas/rcc_volume/RCC/validation/TCGA_KIRC/MTOR_CMAP_out.rds")
+gc()
+```
+
