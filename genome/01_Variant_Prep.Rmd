@@ -11,6 +11,10 @@ editor_options:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+# A spatial multi-omic portrait of survival outcome for clear cell renal cell carcinoma, Meyer et al., 2026
+
+**DISCLAIMER**: The study is currently undergoing peer-review. Therefore, the code base is under active development. It includes code for all data presented in the manuscript but also exploratory data analysis parts. File paths have to be adjusted by the user. 
+
 # Variant calls preparation
 
 ## Software requirments 

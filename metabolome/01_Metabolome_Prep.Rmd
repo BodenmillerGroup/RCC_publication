@@ -5,6 +5,11 @@ date: "2024-10-27"
 editor_options: 
   chunk_output_type: console
 ---
+
+# A spatial multi-omic portrait of survival outcome for clear cell renal cell carcinoma, Meyer et al., 2026
+
+**DISCLAIMER**: The study is currently undergoing peer-review. Therefore, the code base is under active development. It includes code for all data presented in the manuscript but also exploratory data analysis parts. File paths have to be adjusted by the user. 
+
 # MALDI-MSI data preparation 
 
 ## Software requirments 
@@ -223,10 +228,6 @@ for (col in to_add){
 TMA_anno$ID <- raw_out$ID[match(TMA_anno$PID, raw_out$PID)]
 ```
 
-from how many PID of the whole cohort do we have m/z data?
-
-data missing for 109 PID.
-
 ```{r}
 raw_out$PID %>% unique %>% length() # 675 PID
 
@@ -237,10 +238,6 @@ intersect(sce_pid, data_pid) %>% length # 612
 # with only one sample per patient
 raw_out %>% select(spot_ID, PID) %>% unique %>% group_by(PID) %>% duplicated() %>% unique
 ```
-
-specific to ccRCC cohort.
-
-data missing for 52 PID.
 
 ```{r}
 ccrcc_pid <- metadata_ccRCC$PID %>% unique # 494
@@ -253,11 +250,10 @@ intersect(ccrcc_pid, data_pid) %>% length # 444 PID
 ### Subset to ccRCC
 
 ```{r}
-# Subset to only ccRCC cases - NOTE: this is distinct from Marlenes approach
+# Subset to only ccRCC cases
 raw_out <- raw_out %>% filter(subtype_combined == "ccRCC")
 TMA_anno <- TMA_anno %>% filter(subtype_combined == "ccRCC")
 ```
-
 
 
 ## 2. Match annotations 
@@ -346,8 +342,6 @@ names(merged_df)[names(merged_df) == "Class"] <- "hsa_class"
 
 peak_anno_updated <- merged_df %>% arrange(Mass)
 ```
-
-
 
 #### save updated peak_anno
 

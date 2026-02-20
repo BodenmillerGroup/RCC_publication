@@ -5,6 +5,11 @@ date: "2024-10-27"
 editor_options: 
   chunk_output_type: inline
 ---
+
+# A spatial multi-omic portrait of survival outcome for clear cell renal cell carcinoma, Meyer et al., 2026
+
+**DISCLAIMER**: The study is currently undergoing peer-review. Therefore, the code base is under active development. It includes code for all data presented in the manuscript but also exploratory data analysis parts. File paths have to be adjusted by the user. 
+
 # MALDI-MSI data preparation 
 
 ## Software requirments 
@@ -218,81 +223,6 @@ save_csv_for_GSEA <- function(SE, group, phenotype, output_path) {
 
 
 ```{r}
-# Alternative function to test on scaled values
-
-
-# # FUNCTION 1: Perform logFC/p-value and t-score estimation
-# log_FC_analysis <- function(SE, x, group) {
-#   
-#   category_name <- paste0(x, "_other")
-#   
-#   # 1. Create the new category variable based on the input x
-#   SE[[category_name]] <- ifelse(SE[[group]] == x, x, "Other")
-#   
-#   # 2. Aggregate expression per category
-#   mean_SE <- aggregateAcrossCells(SE,
-#                                   ids = SE[[category_name]],
-#                                   statistics = "mean",
-#                                   use.assay.type = "min_max")
-#   
-#   # 3. Calculate log-fold change (logFC) using aggregated min-max values
-#   logFC <- log2(assay(mean_SE, "min_max")[, mean_SE[[category_name]] == x] /
-#                   assay(mean_SE, "min_max")[, mean_SE[[category_name]] == "Other"])
-#   
-#   # 4. Prepare per-cell assay data and scale each feature
-#   min_max <- as.data.frame(t(assay(SE, "min_max")))
-#   min_max[[category_name]] <- SE[[category_name]]
-#   
-#   # Use scale() to standardize each feature (mean = 0, sd = 1)
-#   scaled_features <- as.data.frame(scale(min_max[, -ncol(min_max)]))
-#   scaled_features[[category_name]] <- min_max[[category_name]]
-#   
-#   # 5. Run t-tests on scaled values
-#   p_value <- c()
-#   t_score <- c()
-#   for (i in 1:(ncol(scaled_features) - 1)) {
-#     t <- t.test(scaled_features[scaled_features[[category_name]] == x, i],
-#                 scaled_features[scaled_features[[category_name]] == "Other", i])
-#     p_value[i] <- t$p.value
-#     t_score[i] <- t$statistic
-#   }
-#   
-#   names(t_score) <- colnames(scaled_features)[1:(ncol(scaled_features) - 1)]
-#   names(p_value) <- colnames(scaled_features)[1:(ncol(scaled_features) - 1)]
-#   
-#   # 6. Prepare results
-#   data <- as.data.frame(cbind(logFC, p_value))
-#   data$t_score <- t_score[match(rownames(data), names(t_score))]
-#   
-#   ## Custom Color
-#   keyvals <- ifelse(
-#     data$logFC < -0.2, "#377EB8",
-#     ifelse(data$logFC > 0.2, "#E41A1C", 'black')
-#   )
-#   keyvals[is.na(keyvals)] <- 'black'
-#   names(keyvals)[keyvals == "#E41A1C"] <- paste("High", x)
-#   names(keyvals)[keyvals == 'black'] <- 'Not Sig'
-#   names(keyvals)[keyvals == "#377EB8"] <- 'High Other'
-#   
-#   # 7. Volcano Plot
-#   p <- EnhancedVolcano(data,
-#                        lab = rownames(data),
-#                        x = 'logFC',
-#                        y = 'p_value',
-#                        title = '',
-#                        boxedLabels = FALSE,
-#                        pCutoff = 0.05,
-#                        FCcutoff = 0.2,
-#                        drawConnectors = FALSE,
-#                        pointSize = 8.0,
-#                        labSize = 6.0, 
-#                        colCustom = keyvals)
-#   
-#   return(list(plot = p, data = data))
-# }
-```
-
-```{r}
 # # Function call - Adjust PATH
 # cluster_numbers <- SE$cluster_mz %>% unique %>% sort
 # base_path <- "/mnt/central_nas/rcc_volume/RCC/metabolome/data_analysis/GSEA/cluster_k_17/input/"
@@ -346,22 +276,6 @@ read_out_folder <- function(folder) {
 # Apply across all out_* folders and combine
 all_results <- map_dfr(out_folders, read_out_folder)
 ```
-
-```{r}
-# # Add missing cluster with no enrichment
-# all_results <- bind_rows(all_results,
-# all_results[1,] %>%
-#   mutate("P(Fisher)" = 1, enr = 0, 
-#          pathway = "Glycolysis or Gluconeogenesis",
-#          group = "out_9"),
-# all_results[1,] %>%
-#   mutate("P(Fisher)" = 1, enr = 0, 
-#          pathway = "Glycolysis or Gluconeogenesis",
-#          group = "out_13")
-# )
-```
-
-
 
 ```{r}
 all_results$NES <- scale(all_results$enr, center = TRUE, scale = TRUE)
@@ -427,8 +341,6 @@ mtext("Dunn index", side = 4, line = 3)
 #agnes_split <- color_branches(agnes_split, k = 6)
 #plot(agnes_split)
 ```
-
-
 
 
 ```{r}
@@ -811,8 +723,6 @@ ggplot(df_pca, aes(x = PC1, y = PC2, color = label)) +
 
 ### Survival ecotypes
 
-Nothing...
-
 ```{r}
 # Add survival ecotypes and subset object
 metadata_eco <- read_csv("/mnt/central_nas/rcc_volume/RCC/HE/data_analysis/metadata_key_HE.csv")
@@ -1084,12 +994,6 @@ ggplot(plot_exp_combined_fil, aes(x=reorder(group,ratio), y = type, shape = cate
 dev.off()
 ```
 
-
-
-
-
-
-
 ```{r}
 check_df <- metabo_df_mean
 colnames(check_df) <- c(colnames(metabo_df), "status_OS", "OS_months")
@@ -1292,8 +1196,6 @@ dev.off()
 
 #Heatmap(mat)
 ```
-
-
 
 ## Export survival-relevant metabolites 
 

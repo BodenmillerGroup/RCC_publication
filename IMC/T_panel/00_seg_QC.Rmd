@@ -1,0 +1,452 @@
+---
+title: "03_seg_QC"
+output: html_document
+date: "2023-11-29"
+---
+
+# A spatial multi-omic portrait of survival outcome for clear cell renal cell carcinoma, Meyer et al., 2026
+
+**DISCLAIMER**: The study is currently undergoing peer-review. Therefore, the code base is under active development. It includes code for all data presented in the manuscript but also exploratory data analysis parts. File paths have to be adjusted by the user. 
+
+# Segmentation Quality Control
+
+masks:
+final mask (masks_cp6 = masks) = Ir191, Ir193, H3, SMA, CA9, panCK, CD8a, CD68 (diam 15)
+
+other masks tried:
+masks_cp2 = Ir191, Ir193, H3, SMA, Vim, CA9, panCK, CD8a, CD68 (diam 15)
+masks_cp5 = Ir191, Ir193, H3, SMA, CA9, panCK, CD8a, CD68 (diam 10)
+
+## software requirement
+```{r}
+#Data containers
+library(SpatialExperiment)
+library(SingleCellExperiment)
+
+#Data processing
+library(CATALYST)
+library(scuttle)
+library(scater)
+library(imcRtools)
+
+#Data visualization
+library(cytomapper)
+library(cytoviewer)
+library(dittoSeq)
+library(viridis)
+library(shiny)
+
+#Utilities
+library(tidyverse)
+library(openxlsx)
+library(stringr)
+library(BiocParallel)
+```
+
+
+# Read in Data
+```{r}
+images <- loadImages("/mnt/central_nas/users/marllu/T_panel/00_seg_QC/img") # images from TMA224.2 Block B
+
+panel <- read_csv("/mnt/central_nas/users/marllu/T_panel/panel.csv")
+                     
+masks <- loadImages("/mnt/central_nas/users/marllu/T_panel/00_seg_QC/all_masks/masks_cp6/", as.is = TRUE)
+```
+
+## Set channelNames() 
+```{r}
+channelNames(images) <- panel$clean_target
+```
+
+## Safety check
+It is crucial that the order of the images in both CytoImageList objects is the same.
+```{r}
+all.equal(names(images), names(masks))
+```
+
+## Add additional metadata to the `elementMetadata` slot of the `CytoImageList` (accessible via mcols)
+```{r}
+# Read in images
+images_meta <- read_csv("/mnt/central_nas/users/marllu/T_panel/images.csv",col_names = TRUE)
+images_meta$names <- str_split(images_meta$image,".tiff",simplify = TRUE)[,1]
+images_meta$TMA_id <- str_split(images_meta$acquisition_description," ",simplify = TRUE)[,1]
+
+
+# Add information to metadata of CytoImageList
+mcols(images)$sample_id <- images_meta$names[match(names(images),images_meta$names)] # sample_id is set to image name
+mcols(images)$TMA_id <- images_meta$TMA_id[match(names(images),images_meta$names)]
+
+
+# Read in external metadata
+patient_meta <- read_csv("/mnt/central_nas/users/marllu/T_panel/data_analysis/data/Metadata_combined_RCC.csv",col_names = TRUE)
+patient_meta$TMA_id <- str_replace(paste0(patient_meta$grid,"x",patient_meta$x,"y",patient_meta$y),"NA","")
+patient_meta$TMA_id <- str_replace(patient_meta$TMA_id, "x","X")
+patient_meta$TMA_id <- str_replace(patient_meta$TMA_id, "y","Y")
+
+
+# Add information to metadata of CytoImageList
+mcols(images)$PID <- patient_meta$PID[match(mcols(images)$TMA_id,patient_meta$TMA_id)]
+mcols(images)$type <- patient_meta$type[match(mcols(images)$TMA_id,patient_meta$TMA_id)]
+mcols(images)$subtype <- patient_meta$subtype[match(mcols(images)$TMA_id,patient_meta$TMA_id)]
+
+images_meta$PID <- patient_meta$PID[match(images_meta$TMA_id,patient_meta$TMA_id)]
+
+# Transfer to masks objects as well
+mcols(masks) <- mcols(images)
+```
+
+
+# View images
+
+## A: `plotPixels` function from [cytomapper](https://www.bioconductor.org/packages/release/bioc/html/cytomapper.html).
+
+### Plot Images
+#### Random images
+
+Here, we select 30 random images and perform image- and channel-wise normalization (channels are first min-max normalized and scaled to a range of 0-1 before clipping the maximum intensity to 0.2).
+
+```{r}
+#Randomly select 30 images
+# set.seed(202311) # used for first images (without letter)
+# set.seed(301123) # used for images "A"
+set.seed(1999) # used for images "B" => different markers plotted
+set.seed(051223) # used for "D"
+set.seed(111223) # used for "G"
+
+
+i_random <- sample(seq_len(length(images)), 30)
+
+# Normalize and clip image
+cur_images <- images[i_random]
+cur_images <- cytomapper::normalize(cur_images, separateImages = TRUE)
+cur_images <- cytomapper::normalize(cur_images, inputRange = c(0, 0.2))
+```
+
+#### Specific images
+
+```{r}
+# saved as "_C": selected by eye on histocat
+i_specific <- which(mcols(images)$TMA_id=='BX1Y5'| mcols(images)$TMA_id=='BX1Y16'| mcols(images)$TMA_id=='BX3Y16' | mcols(images)$TMA_id=='BX7Y14') # get indices
+
+cur_images <- images[i_specific]
+
+# saved as "E" for cimages_cp1 (critical images, <0.1 cell area coverage)
+cur_images <- images[cimg_cp1]
+cur_images <- cytomapper::normalize(cur_images, separateImages = TRUE)
+cur_images <- cytomapper::normalize(cur_images, inputRange = c(0, 0.2))
+
+# saved as "F" select interesting CD44 expressing images
+i_specific_cd44 <- which(mcols(images)$TMA_id=='BX1Y3'| mcols(images)$TMA_id=='BX1Y13'| mcols(images)$TMA_id=='BX1Y15' | mcols(images)$TMA_id=='BX1Y16'| mcols(images)$TMA_id=='BX2Y1'| mcols(images)$TMA_id=='BX2Y4'| mcols(images)$TMA_id=='BX2Y5'| mcols(images)$TMA_id=='BX2Y15'| mcols(images)$TMA_id=='BX2Y16' | mcols(images)$TMA_id=='BX3Y5'| mcols(images)$TMA_id=='BX4Y5'| mcols(images)$TMA_id=='BX7Y14'| mcols(images)$TMA_id=='BX78'| mcols(images)$TMA_id=='BX7Y1'| mcols(images)$TMA_id=='BX6Y7'| mcols(images)$TMA_id=='BX6Y8'| mcols(images)$TMA_id=='BX6Y16'| mcols(images)$TMA_id=='BX5Y15')
+
+cur_images <- images[i_specific_cd44]
+cur_images <- cytomapper::normalize(cur_images, separateImages = TRUE)
+cur_images <- cytomapper::normalize(cur_images, inputRange = c(0, 0.2))
+```
+
+### Save images
+
+#### Multiple images
+
+```{r}
+library(foreach)
+library(doParallel)
+registerDoParallel(cores = 20)
+
+masks_options <- c("masks") # add other mask options
+
+foreach(i = masks_options)%dopar%{
+
+# Subset masks
+cur_masks <- get(i)
+cur_masks <- cur_masks[mcols(cur_masks)$sample_id %in% mcols(cur_images)$sample_id]
+cur_masks <- cur_masks[match(names(cur_images), names(cur_masks))]
+
+plotPixels(cur_images,
+           mask = cur_masks,
+           img_id = "sample_id",
+           colour_by = c("Ir191", "Vim", "Ca9", "SMA", "panCK", "CD8"),
+           colour = list("Ir191" = c("black", "green"),
+                         "Vim" = c("black","magenta"),
+                         "Ca9" = c("black", "darkblue"),
+                         "SMA" = c("black", "yellow"),
+                         "panCK" = c("black", "cyan"),
+                         "CD8" = c("black", "red")
+                         ),
+           thick = FALSE,
+           image_title = NULL,
+           legend = list(colour_by.title.cex = 0.7,
+                         colour_by.labels.cex = 0.7),
+           save_plot = list(filename = paste0("/mnt/central_nas/users/marllu/T_panel/00_seg_QC/seg_img/", i, "_G", ".png"), scale = 2))
+}
+```
+
+#### Single image
+
+```{r}
+# change cur_masks, and save_plot
+
+cur_masks <- masks
+cur_masks <- cur_masks[mcols(cur_masks)$sample_id %in% mcols(cur_images)$sample_id]
+cur_masks <- cur_masks[match(names(cur_images), names(cur_masks))]
+
+
+plotPixels(cur_images,
+           mask = cur_masks,
+           img_id = "sample_id",
+           colour_by = c("Ir191", "Vim", "Ca9", "SMA", "panCK", "CD8"),
+           colour = list("Ir191" = c("black", "green"),
+                         "Vim" = c("black","magenta"),
+                         "Ca9" = c("black", "darkblue"),
+                         "SMA" = c("black", "yellow"),
+                         "panCK" = c("black", "cyan"),
+                         "CD8" = c("black", "red")
+                         ),
+           thick = FALSE,
+           image_title = NULL,
+           legend = list(colour_by.title.cex = 0.7,
+                         colour_by.labels.cex = 0.7),
+           save_plot = list(filename = paste0("/mnt/central_nas/users/marllu/T_panel/00_seg_QC/seg_img/", "masks", "_B", ".png"), scale = 2))
+
+
+```   
+
+
+## B: Using `cytoviewer`
+
+```{r}
+app <- cytoviewer(image = images, 
+                  mask = masks, #object = sce_cp2,
+                  #cell_id = "ObjectNumber",
+                  img_id = "sample_id" )
+if (interactive()) {
+ shiny::runApp(app)
+}
+
+```
+
+
+
+
+# Read in Data from Steinbock
+
+*read in single cell information from steinbock generated data*
+```{r}
+sce <- read_steinbock("/mnt/central_nas/users/marllu/T_panel/00_seg_QC",intensities_folder = "intensities_cp6",return_as = "sce",regionprops_folder = "regionprops_cp6", graphs_folder = "neighbors_cp6")
+
+colnames(sce) <- paste0(sce$sample_id, "_", sce$ObjectNumber)
+rownames(sce) <- rowData(sce)$clean_target
+
+assay(sce, "exprs") <- asinh(counts(sce)/1)
+```
+
+Subset markers of interest for downstream analysis.
+```{r select-features}
+rowData(sce)$use_channel <- !grepl("DNA|H3|Ba138|Xe134|Xe131", rowData(sce)$clean_target)
+```
+
+
+# Heatmap based visualization
+```{r}
+set.seed(22)
+cur_cells <- sample(seq_len(ncol(sce)), 1000)
+
+dittoHeatmap(sce[,cur_cells], genes = rownames(sce)[rowData(sce)$use_channel],
+             assay = "exprs", cluster_cols = TRUE,scale = "none",
+             heatmap.colors = viridis(100),
+             annot.by = "subtype")
+```
+
+# Dimensionality reduction
+
+## Define interesting channels for Dimensionality reduction
+
+```{r}
+rowData(sce)$use_channel_dim <- grepl("SMA|panCK|CD68|CD8|Ca9|CD4|Vim|CD45RO", rowData(sce)$clean_target)
+
+# check
+rowData(sce)$clean_target[rowData(sce)$use_channel_dim=="TRUE"] # check which chaannel == "TRUE"
+```
+
+## Subset to ccRCC 
+```{r}
+sce$subtype <- mcols(images)$subtype[match(sce$sample_id, mcols(images)$sample_id)]
+
+sce_ccRCC <- sce[,!is.na(sce$subtype)]
+sce_ccRCC <- sce[,sce$subtype == "clear_cell_RCC"]
+```
+
+## Run tSNE and UMAP
+```{r}
+## Subsample 10% of cells from each core
+#to save time and not get super crowded dimensionality reduction plots
+set.seed(22)
+
+subcp <- colData(sce_ccRCC) %>% as.data.frame() %>% group_by("sample_id") %>% slice_sample(prop = 0.1) %>% arrange("sample_id") %>% mutate(sub_id = paste(sample_id,ObjectNumber,sep="_")) %>% pull(sub_id)
+sce_sub <- sce_ccRCC[,subcp]
+
+
+#Run UMAP/TSNE
+# cp
+sce_sub <- runUMAP(sce_sub[rowData(sce_sub)$use_channel_dim,], n_neighbors = 30, pca = 50,exprs_values = "exprs", external_neighbors=TRUE, BPPARAM = MulticoreParam())
+sce_sub <- runTSNE(sce_sub[rowData(sce_sub)$use_channel_dim,], exprs_values = "exprs", external_neighbors=TRUE, BPPARAM = MulticoreParam())
+```
+
+## Visualise tSNE and UMAP
+```{r}
+## 1. Visualize TSNE
+
+# # Visualize all marker expression
+all_plots_TSNE <- lapply(c(rownames(sce_sub)[rowData(sce_sub)$use_channel_dim]),
+                    function(x){
+                      p <- plotReducedDim(sce_sub, dimred = "TSNE",
+                                          colour_by = x,
+                                          by_exprs_values = "exprs",
+                                          point_size = 0.5)+
+                        guides(color = "none")+
+                        ggtitle(paste0(x))
+                      return(p)
+                    })
+
+
+
+all_plots_TSNE
+
+
+## 2. Visualize UMAP
+# # Visualize all marker expression
+all_plots_UMAP <- lapply(c(rownames(sce_sub)[rowData(sce_sub)$use_channel_dim]),
+                    function(x){
+                      p <- plotReducedDim(sce_sub, dimred = "UMAP",
+                                          colour_by = x,
+                                          by_exprs_values = "exprs",
+                                          point_size = 0.5)+
+                        guides(color = "none")+
+                        ggtitle(paste0(x))
+                      return(p)
+                    })
+
+
+
+all_plots_UMAP_cp
+```
+
+
+
+
+# Image level quality control
+
+## S/N pixel level
+
+It is often of interest to calculate the signal-to-noise ratio (SNR) for individual channels and markers. Here, we define the SNR as
+```{r}
+library(tidyverse)
+library(ggrepel)
+library(EBImage)
+
+cur_snr <- lapply(names(images), function(x){
+    img <- images[[x]] 
+    mat <- apply(img, 3, function(ch){                                          # the 3rd dimension are the 46 channels
+        # Otsu threshold
+        thres <- otsu(ch, range = c(min(ch), max(ch)), levels = 65536)
+        # Signal-to-noise ratio
+        snr <- mean(ch[ch > thres]) / mean(ch[ch <= thres])
+        # Signal intensity
+        ps <- mean(ch[ch > thres])
+        
+        return(c(snr = snr, ps = ps))
+    })
+    
+    t(mat) %>% as.data.frame() %>% 
+        mutate(image = x,
+               marker = colnames(mat)) %>% 
+        pivot_longer(cols = c(snr, ps))
+})
+
+cur_snr <- do.call(rbind, cur_snr)
+
+cur_snr %>% 
+    group_by(marker, name) %>%
+    summarize(log_mean = log2(mean(value))) %>%
+    pivot_wider(names_from = name, values_from = log_mean) %>%
+    ggplot() +
+    geom_point(aes(ps, snr)) +
+    geom_label_repel(aes(ps, snr, label = marker), max.overlaps = 50) +
+    theme_minimal(base_size = 15) + ylab("Signal-to-noise ratio [log2]") +
+    xlab("Signal intensity [log2]")
+```
+
+
+Otsu thesholding and SNR calculation does not perform well if the markers are lowly abundant. In the next code chunk, we will remove markers that have a positive signal of below 2 per image.
+
+```{r}
+cur_snr <- cur_snr %>% 
+    pivot_wider(names_from = name, values_from = value) %>%
+    filter(ps > 2) %>%
+    pivot_longer(cols = c(snr, ps))
+
+cur_snr %>% 
+    group_by(marker, name) %>%
+    summarize(log_mean = log2(mean(value))) %>%
+    pivot_wider(names_from = name, values_from = log_mean) %>%
+    ggplot() +
+    geom_point(aes(ps, snr)) +
+    geom_label_repel(aes(ps, snr, label = marker), max.overlaps = 50) +
+    theme_minimal(base_size = 15) + ylab("Signal-to-noise ratio [log2]") +
+    xlab("Signal intensity [log2]")
+```
+
+
+## Image area covered by cells
+
+Another quality indicator is the image area covered by cells (or biological tissue).
+
+```{r}
+cell_density <- colData(sce) %>%
+    as.data.frame() %>%
+    group_by(sample_id) %>%
+    # Compute the number of pixels covered by cells and 
+    # the total number of pixels
+    summarize(cell_area = sum(area),
+              no_pixels = mean(width_px) * mean(height_px)) %>%
+    # Divide the total number of pixels 
+    # by the number of pixels covered by cells
+    mutate(covered_area = cell_area / no_pixels)
+
+
+# Visualize the image area covered by cells per image
+ggplot(cell_density) +
+        geom_point(aes(reorder(sample_id,covered_area), covered_area)) + 
+        theme_minimal(base_size = 15) +
+        theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 15)) +
+        ylim(c(0, 1)) +
+        ylab("% covered area") + xlab("")
+
+
+# look at critical images
+cimg <- cell_density$sample_id[cell_density$covered_area<0.1]
+
+# extract TMA_id
+mcols(images)$TMA_id[mcols(images)$sample_id %in% cimg]
+# look at their segmentation
+```
+
+
+
+## Mean marker expression per image 
+
+to identify images with outlying marker expression
+```{r}
+image_mean <- aggregateAcrossCells(sce, 
+                                   ids = sce$sample_id, 
+                                   statistics="mean",
+                                   use.assay.type = "counts")
+assay(image_mean, "exprs") <- asinh(counts(image_mean))
+
+
+dittoHeatmap(image_mean, genes = rownames(sce)[rowData(sce)$use_channel],
+             assay = "exprs", cluster_cols = TRUE, scale = "none",
+             heatmap.colors = viridis(100),
+             show_colnames = TRUE)
+
+```
+

@@ -1,0 +1,3199 @@
+---
+title: "Untitled"
+output: html_document
+date: "2024-06-25"
+---
+# A spatial multi-omic portrait of survival outcome for clear cell renal cell carcinoma, Meyer et al., 2026
+
+**DISCLAIMER**: The study is currently undergoing peer-review. Therefore, the code base is under active development. It includes code for all data presented in the manuscript but also exploratory data analysis parts. File paths have to be adjusted by the user. 
+
+## Software requirements
+
+```{r lib, message=FALSE,warning=FALSE}
+#Data containers
+library(SpatialExperiment)
+library(SingleCellExperiment)
+
+#Data processing
+library(scuttle)
+library(scater)
+library(scran)
+library(imcRtools)
+
+#Data visualization
+library(cytomapper)
+library(dittoSeq)
+library(pheatmap)
+library(cowplot)
+library(ComplexHeatmap)
+library(circlize)
+
+#Utilities
+library(tidyverse)
+library(openxlsx)
+library(stringr)
+library(patchwork)
+library(parallel)
+library(BiocParallel)
+library(BiocNeighbors)
+library(BiocSingular)
+library(tiff)
+library(ggrepel)
+library(EBImage)
+library(viridis)
+library(mclust)
+library(Rphenograph)
+library(igraph)
+library(RColorBrewer)
+library(foreach)
+library(clValid)
+library(bluster)
+library(psych)
+library(corrplot)
+library(psych)
+
+#Batch correction
+library(batchelor)
+```
+
+# Read in Data
+
+```{r}
+sce <- readRDS("/mnt/central_nas/users/marllu/T_panel/data_analysis/sce_ccRCC_T_07.rds")
+```
+
+
+# Create spatial CD8 phenotypes
+
+```{r}
+sce <- aggregateNeighbors(sce, colPairName = "neighborhood", aggregate_by = "metadata", count_by = "celltype_combined_broad", proportions = FALSE, name = "count_neighbors")
+```
+
+#  ## Spatial CD8 Pattern ##
+based on Ruben Casanova and Hammerl et al., 2022
+
+### Definition
+```{r}
+## Step 1: CD8 T cell type scoring 
+cur_dat <- sce$count_neighbors %>% as.data.frame
+rownames(cur_dat) <- sce$cell_id
+cur_dat$PID <- sce$PID
+
+cur_dat$celltype_combined_broad <- sce$celltype_combined_broad
+
+# Define CD8+ T cells as infiltrating, bystanding, ignored
+cur_dat <- cur_dat %>% filter(celltype_combined_broad == "CD8") %>%
+  mutate(CD8Tcell_type = ifelse(tumor >= 3, "infiltrating", 
+                                ifelse(tumor < 3 & tumor > 0, "bystanding", "ignored")))
+
+sce$CD8Tcell_type <- cur_dat$CD8Tcell_type[match(sce$cell_id, rownames(cur_dat))]
+
+# Define a combined score for CD8+ and CD4+ T cells as infiltrating, bystanding, ignored
+cur_dat <- cur_dat %>% filter(celltype_combined_broad == "CD4") %>%
+  mutate(CD4Tcell_type = ifelse(tumor >= 3, "infiltrating", 
+                                ifelse(tumor < 3 & tumor > 0, "bystanding", "ignored")))
+
+sce$CD4Tcell_type <- cur_dat$CD4Tcell_type[match(sce$cell_id, rownames(cur_dat))]
+
+sce$Tcell_type <- ifelse(sce$celltype_combined_broad == "CD8", sce$CD8Tcell_type,
+                         ifelse(sce$celltype_combined_broad == "CD4", sce$CD4Tcell_type, NA))
+```
+
+
+### Visualization 
+
+```{r}
+out_test <- colData(sce) %>% as.data.frame() %>% group_by(sample_id, CD8Tcell_type) %>% dplyr::count() %>% filter(!is.na(CD8Tcell_type)) %>% filter(CD8Tcell_type == "infiltrating")
+ 
+## Fraction and count of CD8Tcell_type per PID
+p1 <- dittoBarPlot(sce[,!is.na(sce$CD8Tcell_type)], var = "CD8Tcell_type", group.by = "PID")+
+  theme(axis.text.x = element_blank(), axis.title.x = element_blank())
+
+p2 <- dittoBarPlot(sce[,!is.na(sce$CD8Tcell_type)], var = "CD8Tcell_type", group.by = "PID", scale = "count")+
+  theme(axis.text.x = element_blank())+
+  ggtitle("")
+
+p1 / p2
+```
+
+```{r}
+plotSpatial(
+  object = sce[, sce$sample_id == "ZTMA224.1_BlockA_SE_125" & sce$celltype_combined_broad %in% c("tumor", "CD8")], 
+  img_id = "sample_id", 
+  node_color_by = "CD8Tcell_type", 
+  node_shape_by = "celltype_combined_broad", 
+  colPairName = "neighborhood", 
+  coords = c("Pos_X", "Pos_Y"),
+  draw_edges = TRUE, 
+  nodes_first = FALSE, 
+  directed = FALSE)+
+  scale_color_manual(values = c("navy", "darkolivegreen4", "firebrick"))
+```
+
+### Differential Expression Analysis
+
+Function
+```{r}
+library(EnhancedVolcano)
+
+# Function
+DE_analysis <- function(sce, x, group, MOC) {
+  
+  category_name <- paste0(x, "_other")
+  
+  sce[[category_name]] <- ifelse(sce[[group]] == x, x, "other")
+  
+  # 1. Aggregate expression per PID and category 
+  mean_sce <- aggregateAcrossCells(sce,
+                                   ids = DataFrame(sce$PID, sce[[category_name]]),
+                                   statistics = "mean",
+                                   use.assay.type = "exprs")
+  
+  
+  # 2. Calculate log2FC 
+  ## Aggregate per category 
+  mean_sce_1 <- aggregateAcrossCells(mean_sce,
+                       ids = mean_sce$sce..category_name.., 
+                       statistics = "mean",
+                       use.assay.type = "exprs")
+  
+  
+  logFC <- log2(assay(mean_sce_1, "exprs")[,mean_sce_1$sce..category_name.. == x]/
+                assay(mean_sce_1, "exprs")[,mean_sce_1$sce..category_name.. == "other"])
+  
+
+  # 3. Calculate p-value (based on t-test)
+  exprs <- as.data.frame(t(assay(mean_sce)))
+  
+  exprs[[category_name]] <- mean_sce[[category_name]]
+  
+  p_value <- c()
+  for (i in 1:(length(colnames(exprs))-1)) {
+    t <- t.test(exprs[exprs[[category_name]] == x,i], exprs[exprs[[category_name]] == "other",i])
+    p_value[i] <- t$p.value
+  }
+  ## Adjust p.value 
+  p_value_adj <- p.adjust(p_value, method = "BH")
+  names(p_value_adj) <- colnames(exprs)[1:(length(colnames(exprs))-1)]
+  
+  # 4. Plot VolcanoPlot 
+  data <- as.data.frame(cbind(logFC, p_value_adj))
+  data <- data[which(rownames(data) %in% MOC),] # choose markers
+  
+  keyvals <- ifelse(
+     data$logFC < -0.2, "#E41A1C",
+        ifelse(data$logFC > 0.2, "#377EB8",
+          'black'))
+    keyvals[is.na(keyvals)] <- 'black'
+    names(keyvals)[keyvals == "#E41A1C"] <- 'High other'
+    names(keyvals)[keyvals == 'black'] <- 'Not Sig'
+    names(keyvals)[keyvals == "#377EB8"] <- paste("High", x)
+    
+  return(EnhancedVolcano(data,
+      lab = rownames(data),
+      x = 'logFC',
+      y = 'p_value_adj',
+      title = '',
+      boxedLabels = TRUE,
+      pCutoff = 0.05,
+      FCcutoff = 0.2,
+      drawConnectors = TRUE,
+      pointSize = 8.0,
+      labSize = 8.0, 
+      colCustom = keyvals))
+}
+```
+
+Function calls
+```{r}
+# subset to CD8 T cells
+cur_sce <- sce[, !is.na(sce$immune_metacluster) & sce$immune_metacluster == "CD8_T_cell"]
+
+# define markers
+type_markers <- rownames(cur_sce)[rowData(cur_sce)$Tcell_cluster_channel]
+
+## infiltrating
+DE_analysis(cur_sce, "infiltrating", "CD8Tcell_type", type_markers)
+
+## bystanding
+DE_analysis(cur_sce, "bystanding", "CD8Tcell_type", type_markers)
+
+## ignoring
+DE_analysis(cur_sce, "ignoring", "CD8Tcell_type", type_markers)
+```
+
+### Cell types
+
+Barplot of fractions
+```{r}
+df <- colData(sce) %>% as.data.frame() %>% dplyr::select(celltype_combined, CD8Tcell_type) %>% filter(!is.na(CD8Tcell_type)) %>% group_by(celltype_combined, CD8Tcell_type) %>% count() %>% group_by(celltype_combined) %>% mutate(fra = n/sum(n)) %>% ungroup()
+
+df$CD8Tcell_type <- factor(df$CD8Tcell_type, levels = c("ignored", "bystanding", "infiltrating"))
+
+df_infiltrating <- df %>%
+  filter(CD8Tcell_type == "infiltrating") %>%
+  select(celltype_combined, fra) %>%
+  distinct()
+
+df <- df %>%
+  left_join(df_infiltrating, by = "celltype_combined", suffix = c("", "_infiltrating"))
+
+
+ggplot(df %>% filter(!celltype_combined %in% c("Unknown/Other_CD8", "Activated-like_CD8", "Inhibitory-like_CD8")), aes(x = reorder(celltype_combined, -fra_infiltrating), y = fra, fill = CD8Tcell_type)) +
+  geom_bar(stat = "identity", position = "stack") +
+  theme_classic() +
+  scale_fill_brewer(palette = "Set1") +
+  labs(
+    x = "Celltype Combined",
+    y = "Fraction",
+    fill = "CD8 T Cell Type"
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1), 
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 14)
+  )
+```
+
+Boxplot of fracitons
+```{r}
+df <- colData(sce) %>% as.data.frame() %>% dplyr::select(celltype_combined, CD8Tcell_type, PID) %>% filter(!is.na(CD8Tcell_type)) %>% group_by(celltype_combined, CD8Tcell_type, PID) %>% count() %>%
+  group_by(celltype_combined, PID) %>%
+  mutate(fra = n / sum(n)) %>%  
+  ungroup()
+
+df$CD8Tcell_type <- factor(df$CD8Tcell_type, levels = c("ignored", "bystanding", "infiltrating"))
+
+ggplot(df %>% filter(!celltype_combined %in% c("Unknown/Other_CD8", "Activated-like_CD8", "Inhibitory-like_CD8")), 
+       aes(x = celltype_combined, y = fra, fill = CD8Tcell_type)) +
+  geom_boxplot() +
+  theme_classic() +
+  scale_fill_brewer(palette = "Set1") +
+  labs(
+    x = "Celltype Combined",
+    y = "Cell Count",
+    fill = "CD8 T Cell Type"
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),  
+  )+
+  ylim(c(0,1))
+
+ggplot(df %>% filter(!celltype_combined %in% c("Unknown/Other_CD8", "Activated-like_CD8", "Inhibitory-like_CD8")),
+       aes(x = CD8Tcell_type, y = fra, fill = celltype_combined)) +
+  geom_boxplot() +
+  theme_classic() +
+  scale_fill_brewer(palette = "Set1") +
+  labs(
+    x = "Celltype Combined",
+    y = "Cell Count",
+    fill = "CD8 T Cell Type"
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),  
+  )+
+  ylim(c(0,1))
+```
+
+#### Fisher test
+
+```{r}
+cur_sce <- sce[, !is.na(sce$immune_metacluster) & sce$immune_metacluster == "CD8_T_cell"]
+contingency_table <- table(cur_sce$celltype_combined, cur_sce$CD8Tcell_type)
+
+col = colorRamp2(c(0, max(contingency_table)), c("#443A83FF", "#FDE725FF"))
+Heatmap(contingency_table %>% as.matrix(), name = "n cells", col = col)
+
+# fractions
+for_plot <- prop.table(contingency_table, margin = 2) # fraction spatial CD8 phenotype
+col = colorRamp2(c(0, max(for_plot)), c("#443A83FF", "#FDE725FF"))
+Heatmap(for_plot %>% as.matrix(), name = "p(celltype)", col = col)
+
+for_plot <- prop.table(contingency_table, margin = 1)# fraction of celltypes
+col = colorRamp2(c(0, max(for_plot)), c("#443A83FF", "#FDE725FF"))
+Heatmap(for_plot %>% as.matrix(), name = "p(spatial phenotype)", col = col)
+```
+
+##### CD8 T cell score
+```{r}
+cur_sce <- sce[, !is.na(sce$immune_metacluster) & sce$immune_metacluster == "CD8_T_cell"]
+
+cur_sce$infiltrating <- ifelse(cur_sce$CD8Tcell_type == "infiltrating", 1, 0)
+cur_sce$bystanding <- ifelse(cur_sce$CD8Tcell_type == "bystanding", 1, 0)
+cur_sce$ignored <- ifelse(cur_sce$CD8Tcell_type == "ignored", 1, 0)
+
+cur_sce$Memory_like_CD8 <- ifelse(cur_sce$celltype_combined == "Memory-like_CD8", 1, 0)
+cur_sce$Exhausted_like_CD8 <- ifelse(cur_sce$celltype_combined == "Exhausted-like_CD8", 1, 0)
+cur_sce$Cytotoxic_like_CD8 <- ifelse(cur_sce$celltype_combined == "Cytotoxic-like_CD8", 1, 0)
+cur_sce$CXCL13_like_CD8 <- ifelse(cur_sce$celltype_combined == "CXCL13-like_CD8", 1, 0)
+cur_sce$Naive_like_CD8 <- ifelse(cur_sce$celltype_combined == "Naive-like_CD8", 1, 0)
+cur_sce$Exhausted_cytotoxic_like_CD8 <- ifelse(cur_sce$celltype_combined == "Exhausted_cytotoxic-like_CD8", 1, 0)
+# cur_sce$Unknown_Other_CD8 <- ifelse(cur_sce$celltype_combined == "Unknown/Other_CD8", 1, 0)
+# cur_sce$Activated_like_CD8 <- ifelse(cur_sce$celltype_combined == "Activated-like_CD8", 1, 0)
+# cur_sce$Inhibitory_like_CD8 <- ifelse(cur_sce$celltype_combined == "Inhibitory-like_CD8", 1, 0)
+```
+
+```{r}
+# Patient group info 
+cur_groups <- colData(cur_sce) %>% as.data.frame %>% dplyr::select(Memory_like_CD8, Exhausted_like_CD8, Cytotoxic_like_CD8, CXCL13_like_CD8, Naive_like_CD8, Exhausted_cytotoxic_like_CD8,
+                                                     # Unknown_Other_CD8, Activated_like_CD8, Inhibitory_like_CD8
+                                                                   )
+
+# Binary mutation matrix
+cur_mut <- colData(cur_sce) %>% as.data.frame %>% dplyr::select(infiltrating, bystanding, ignored) %>% t()
+
+# Function to perform Fisher exact test for each gene
+perform_fisher_test <- function(gene_row, group1_cols, group2_cols) {
+    contingency_table <- matrix(0, nrow = 2, ncol = 2)
+    contingency_table[1, 1] <- sum(gene_row[group1_cols] == 1)
+    contingency_table[1, 2] <- sum(gene_row[group2_cols] == 1)
+    contingency_table[2, 1] <- sum(gene_row[group1_cols] == 0)
+    contingency_table[2, 2] <- sum(gene_row[group2_cols] == 0)
+    test_result <- fisher.test(contingency_table)
+    return(c(odds_ratio = test_result$estimate, p_value = test_result$p.value))
+  }
+  
+fisher_full <- foreach(i = c("Memory_like_CD8", "Exhausted_like_CD8", "Cytotoxic_like_CD8", "CXCL13_like_CD8", "Naive_like_CD8", "Exhausted_cytotoxic_like_CD8",
+                             # "Unknown_Other_CD8", "Activated_like_CD8", "Inhibitory_like_CD8"
+                             ), .combine = "rbind")%do%{
+
+  PID_high <- rownames(cur_groups[cur_groups[, i] == "1",])
+  PID_low <- rownames(cur_groups[cur_groups[, i] == "0",])
+  
+  fisher_results <- apply(cur_mut, 1, perform_fisher_test, group1_cols = PID_high, group2_cols = PID_low)
+  
+  fisher_results <- as.data.frame(fisher_results)
+  fisher_results <- as.data.frame(t(fisher_results)) %>% rownames_to_column("gene")
+  fisher_results$p_adj <- p.adjust(fisher_results$p_value, method = "BH")
+  fisher_results$category <- i
+  
+  return(fisher_results)
+  }
+
+isGreater <- fisher_full$odds_ratio > 1
+pVal <- log10(fisher_full$p_value)
+pVal[isGreater] <- abs(pVal[isGreater])
+fisher_full$p_out <- pVal
+colnames(fisher_full) <- c("spatial_phenotype", "odds_ratio", "p_value", "p_adj", "celltype", "p_out")
+```
+
+```{r}
+library(ggnewscale)
+
+# FDR at 0.05
+fisher_full$result <- ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_adj < 0.05, "UP",
+                                    ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_adj < 0.05, "DOWN","NOTSIG"))
+
+## hierarchical clustering on odds_ratio
+cur_df <- fisher_full %>% dplyr::select(spatial_phenotype, celltype, odds_ratio) %>% pivot_wider(values_from = odds_ratio, names_from = spatial_phenotype)
+
+# rows 
+dd <- dist(cur_df[2:ncol(cur_df)], method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+row_sorted <- hc$order
+fisher_full$celltype <- factor(fisher_full$celltype, levels = cur_df[row_sorted,]$celltype)
+
+# columns 
+dd <- dist(t(cur_df[2:ncol(cur_df)]), method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+column_sorted <- hc$order
+fisher_full$spatial_phenotype <- factor(fisher_full$spatial_phenotype, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
+
+
+CD8Pheno_fisher <- ggplot(fisher_full, aes(x=celltype, y = spatial_phenotype,col = odds_ratio, size = -log10(p_adj)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = fisher_full,shape = 1,aes(size = -log10(p_adj), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+Save as PDF
+```{r}
+# Define the desired ratio in cm
+width_ratio <- 35
+height_ratio <- 40
+
+scale <- 0.3
+
+width_cm <- width_ratio * scale
+height_cm <- height_ratio * scale
+
+width_in <- width_cm / 2.54
+height_in <- height_cm / 2.54
+
+pdf("/mnt/central_nas/users/marllu/T_panel/data_analysis/07_comb/02_CD8_pheno/Figures/Main/fisher_spatial_pheno.pdf", width = width_in, height = height_in, onefile = FALSE)
+CD8Pheno_fisher
+dev.off()
+```
+
+
+##### CD4 T cell score
+```{r}
+cur_sce <- sce[, !is.na(sce$CD4Tcell_type) & sce$immune_metacluster == "CD4_T_cell"]
+
+cur_sce$CD4Tcell_type_inf <- ifelse(cur_sce$CD4Tcell_type == "infiltrating", 1, 0)
+cur_sce$CD4Tcell_type_by <- ifelse(cur_sce$CD4Tcell_type == "bystanding", 1, 0)
+cur_sce$CD4Tcell_type_ign <- ifelse(cur_sce$CD4Tcell_type == "ignored", 1, 0)
+
+cur_sce$Activated <- ifelse(cur_sce$celltype_combined == "Activated-like_CD4", 1, 0)
+cur_sce$CXCL13_CD4 <- ifelse(cur_sce$celltype_combined == "CXCL13-like_CD4", 1, 0)
+cur_sce$Naive_CD4 <- ifelse(cur_sce$celltype_combined == "Naive-like_CD4", 1, 0)
+cur_sce$Exhausted_CD4 <- ifelse(cur_sce$celltype_combined == "Exhausted-like_CD4", 1, 0)
+cur_sce$Treg <- ifelse(cur_sce$celltype_combined == "Treg-like_CD4", 1, 0)
+cur_sce$Th1 <- ifelse(cur_sce$celltype_combined == "Th1-like_CD4", 1, 0)
+```
+
+```{r}
+# Patient group info 
+cur_groups <- colData(cur_sce) %>% as.data.frame %>% dplyr::select(Activated, CXCL13_CD4, Naive_CD4, Exhausted_CD4, Treg, Th1)
+
+# Binary mutation matrix
+cur_mut <- colData(cur_sce) %>% as.data.frame %>% dplyr::select(CD4Tcell_type_ign, CD4Tcell_type_by, CD4Tcell_type_inf) %>% t()
+
+# Function to perform Fisher exact test for each gene
+perform_fisher_test <- function(gene_row, group1_cols, group2_cols) {
+    contingency_table <- matrix(0, nrow = 2, ncol = 2)
+    contingency_table[1, 1] <- sum(gene_row[group1_cols] == 1)
+    contingency_table[1, 2] <- sum(gene_row[group2_cols] == 1)
+    contingency_table[2, 1] <- sum(gene_row[group1_cols] == 0)
+    contingency_table[2, 2] <- sum(gene_row[group2_cols] == 0)
+    test_result <- fisher.test(contingency_table)
+    return(c(odds_ratio = test_result$estimate, p_value = test_result$p.value))
+  }
+  
+fisher_full <- foreach(i = c("Activated", "CXCL13_CD4", "Naive_CD4", "Exhausted_CD4", "Treg", "Th1"), .combine = "rbind")%do%{
+
+  PID_high <- rownames(cur_groups[cur_groups[, i] == "1",])
+  PID_low <- rownames(cur_groups[cur_groups[, i] == "0",])
+  
+  fisher_results <- apply(cur_mut, 1, perform_fisher_test, group1_cols = PID_high, group2_cols = PID_low)
+  
+  fisher_results <- as.data.frame(fisher_results)
+  fisher_results <- as.data.frame(t(fisher_results)) %>% rownames_to_column("gene")
+  fisher_results$p_adj <- p.adjust(fisher_results$p_value, method = "BH")
+  fisher_results$category <- i
+  
+  return(fisher_results)
+  }
+
+isGreater <- fisher_full$odds_ratio > 1
+pVal <- log10(fisher_full$p_value)
+pVal[isGreater] <- abs(pVal[isGreater])
+fisher_full$p_out <- pVal
+colnames(fisher_full) <- c("spatial_pattern", "odds_ratio", "p_value", "p_adj", "category", "p_out")
+```
+
+```{r}
+library(ggnewscale)
+
+# FDR at 0.1 with trends
+fisher_full$result <- ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_adj < 0.05, "UP",
+                                    ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_adj < 0.05, "DOWN","NOTSIG"))
+
+## hierarchical clustering on odds_ratio
+cur_df <- fisher_full %>% dplyr::select(spatial_pattern, category, odds_ratio) %>% pivot_wider(values_from = odds_ratio, names_from = spatial_pattern)
+
+# rows 
+dd <- dist(cur_df[2:ncol(cur_df)], method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+row_sorted <- hc$order
+fisher_full$category <- factor(fisher_full$category, levels = cur_df[row_sorted,]$category)
+
+# columns 
+dd <- dist(t(cur_df[2:ncol(cur_df)]), method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+column_sorted <- hc$order
+fisher_full$spatial_pattern <- factor(fisher_full$spatial_pattern, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
+
+
+ggplot(fisher_full, aes(x=category, y = spatial_pattern,col = odds_ratio, size = -log10(p_adj)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = fisher_full,shape = 1,aes(size = -log10(p_adj), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+### MinDistTo
+
+#### Run function
+```{r}
+sce <- minDistToCells(sce, 
+               x_cells = sce$celltype_combined == "Exhausted-like_CD8", 
+               img_id = "sample_id", 
+               name = "DistToExCD8", 
+               BPPARAM = MulticoreParam(workers = 10))
+
+sce <- minDistToCells(sce, 
+               x_cells = sce$celltype_combined == "Exhausted_cytotoxic-like_CD8", 
+               img_id = "sample_id", 
+               name = "DistToEx_ctxCD8", 
+               BPPARAM = MulticoreParam(workers = 10))
+
+sce <- minDistToCells(sce, 
+               x_cells = sce$celltype_combined == "Exhausted-like_CD4", 
+               img_id = "sample_id", 
+               name = "DistToExCD4", 
+               BPPARAM = MulticoreParam(workers = 10))
+
+sce <- minDistToCells(sce, 
+               x_cells = sce$celltype_combined == "Activated-like_CD4", 
+               img_id = "sample_id", 
+               name = "DistToAct", 
+               BPPARAM = MulticoreParam(workers = 10))
+
+sce <- minDistToCells(sce, 
+               x_cells = sce$celltype_combined == "Memory-like_CD8", 
+               img_id = "sample_id", 
+               name = "DistToMem", 
+               BPPARAM = MulticoreParam(workers = 10))
+
+sce <- minDistToCells(sce, 
+               x_cells = sce$celltype_combined == "Naive-like_CD8", 
+               img_id = "sample_id", 
+               name = "DistToNaiveCD8", 
+               BPPARAM = MulticoreParam(workers = 10))
+
+sce <- minDistToCells(sce, 
+               x_cells = sce$celltype_combined == "Naive-like_CD4", 
+               img_id = "sample_id", 
+               name = "DistToNaiveCD4", 
+               BPPARAM = MulticoreParam(workers = 10))
+
+sce <- minDistToCells(sce, 
+               x_cells = sce$celltype_combined == "Th1-like_CD4", 
+               img_id = "sample_id", 
+               name = "DistToTh1", 
+               BPPARAM = MulticoreParam(workers = 10))
+
+sce <- minDistToCells(sce, 
+               x_cells = sce$celltype_combined == "Treg-like_CD4", 
+               img_id = "sample_id", 
+               name = "DistToTreg", 
+               BPPARAM = MulticoreParam(workers = 10))
+
+sce <- minDistToCells(sce, 
+               x_cells = sce$celltype_combined == "CXCL13-like_CD4", 
+               img_id = "sample_id", 
+               name = "DistToCXCL13CD4", 
+               BPPARAM = MulticoreParam(workers = 10))
+
+sce <- minDistToCells(sce, 
+               x_cells = sce$celltype_combined == "CXCL13-like_CD8", 
+               img_id = "sample_id", 
+               name = "DistToCXCL13CD8", 
+               BPPARAM = MulticoreParam(workers = 10))
+
+sce <- minDistToCells(sce, 
+               x_cells = sce$celltype_combined == "Macrophage", 
+               img_id = "sample_id", 
+               name = "DistToMacro", 
+               BPPARAM = MulticoreParam(workers = 10))
+
+
+saveRDS(sce, "/mnt/central_nas/users/marllu/T_panel/data_analysis/sce_ccRCC_T_07.rds")
+```
+
+#### compare between spatial CD8 phenotypes
+
+```{r}
+dist_vec <- c("DistToExCD8", "DistToEx_ctxCD8", "DistToExCD4", "DistToAct", "DistToMem", "DistToNaiveCD8", "DistToNaiveCD4", "DistToTh1", "DistToTreg", "DistToCXCL13CD4", "DistToCXCL13CD8", "DistToMacro")
+
+plot_list <- list()
+plot_counter <- 1
+
+for (col_name in dist_vec) {
+  # Prepare the data
+  df <- colData(sce) %>% 
+    as.data.frame() %>%
+    select(!!sym(col_name), celltype_combined, CD8Tcell_type) %>%
+    filter(!is.na(!!sym(col_name)) & !is.na(CD8Tcell_type))
+  
+  kruskal_results <- df %>% group_by(celltype_combined) %>%
+    summarize(p.value = kruskal.test(as.formula(paste0(col_name, " ~ CD8Tcell_type")))$p.value)%>%
+    mutate(adj_p_value = p.adjust(p.value, method = "BH"))
+  
+  # Create the plot
+  p <- ggplot(df, aes(x = CD8Tcell_type, y = !!sym(col_name), fill = celltype_combined)) +
+    geom_boxplot() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    facet_wrap(~celltype_combined, scales = "free_y") +
+    labs(y = col_name, 
+         title = col_name) +
+    geom_text(data = kruskal_results, aes(x = 1.5, y = max(df[[col_name]], na.rm = TRUE), 
+                                          label = paste0("Adj p = ", signif(adj_p_value, 3))),
+              inherit.aes = FALSE, hjust = 0)
+  
+  # Save the plot in the list
+  plot_list[[plot_counter]] <- p
+  plot_counter <- plot_counter + 1
+}
+
+# Display the plots
+plot_list
+
+df <- colData(sce) %>% as.data.frame() %>% select(DistToTreg, celltype_combined, CD8Tcell_type)
+
+df <- df %>% filter(!is.na(DistToTreg) & !is.na(CD8Tcell_type))
+
+p <- ggplot(df, aes(x = CD8Tcell_type, y = DistToTreg, fill = celltype_combined)) +
+  geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  facet_wrap(~celltype_combined, scales = "free_y") +
+  labs(y = col_name, title = col_name)
+```
+
+
+
+#### Dist to Spatial Pattern
+
+Run distance function
+```{r}
+sce$celltype_CD8celltype <- ifelse(is.na(sce$CD8Tcell_type), sce$celltype_combined, sce$CD8Tcell_type)
+
+
+sce <- minDistToCells(sce, 
+               x_cells = sce$celltype_CD8celltype == "bystanding", 
+               img_id = "sample_id", 
+               name = "DistToBystanding", 
+               BPPARAM = MulticoreParam(workers = 10))
+
+saveRDS(sce, "/mnt/central_nas/users/marllu/T_panel/data_analysis/sce_ccRCC_T_07.rds")
+
+
+sce <- minDistToCells(sce, 
+               x_cells = sce$celltype_CD8celltype == "infiltrating", 
+               img_id = "sample_id", 
+               name = "DistToInf", 
+               BPPARAM = MulticoreParam(workers = 10))
+
+saveRDS(sce, "/mnt/central_nas/users/marllu/T_panel/data_analysis/sce_ccRCC_T_07.rds")
+
+sce <- minDistToCells(sce, 
+               x_cells = sce$celltype_CD8celltype == "ignored", 
+               img_id = "sample_id", 
+               name = "DistToIgnored", 
+               BPPARAM = MulticoreParam(workers = 10))
+
+saveRDS(sce, "/mnt/central_nas/users/marllu/T_panel/data_analysis/sce_ccRCC_T_07.rds")
+```
+
+Plot
+```{r}
+dist_vec <- c("DistToBystanding", "DistToInf", "DistToIgnored")
+
+df <- colData(sce) %>% 
+  as.data.frame() %>%
+  dplyr::select(celltype_combined, all_of(dist_vec)) %>%
+  pivot_longer(
+    cols = all_of(dist_vec), 
+    names_to = "DistToWhat", 
+    values_to = "Dist"
+  )
+
+ggplot(df, aes(x = celltype_combined, y = Dist, fill = celltype_combined)) +
+    geom_boxplot() +
+    facet_wrap(~DistToWhat, scales = "free_y") +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    labs(y = col_name, title = col_name)
+
+
+kruskal_results <- df %>% 
+  group_by(celltype_combined) %>% 
+  summarize(p.value = kruskal.test(Dist ~ DistToWhat)$p.value)
+
+ggplot(df, aes(x = DistToWhat, y = Dist, fill = celltype_combined)) +
+    geom_boxplot() +
+    facet_wrap(~celltype_combined, scales = "free_y") +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    labs(y = col_name, title = col_name)+
+    geom_text(data=kruskal_results, aes(x=1, y=400, label=paste0("Kruskal-Wallis\n p=",p.value, 6)))
+
+
+# Between SIGs
+for (col_name in dist_vec) {
+  df <- colData(sce) %>% as.data.frame() %>% dplyr::select(.data[[col_name]], celltype_combined, average_graph_cluster_named)
+  
+  p <- ggplot(df %>% filter(average_graph_cluster_named %in% c("ex_act_immune_excluded", "ex_act_inflamed")), aes(x = average_graph_cluster_named, y = .data[[col_name]], fill = celltype_combined)) +
+    geom_boxplot() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    facet_wrap(~celltype_combined, scales = "free_y") +
+    labs(y = col_name, title = col_name)
+  
+  plot_list[[plot_counter]] <- p
+  plot_counter <- plot_counter + 1
+}
+
+# Display the plots
+plot_list
+```
+
+#### Dist across SIGs
+
+```{r}
+dist_vec <- c("DistToExCD8", "DistToEx_ctxCD8", "DistToExCD4", "DistToAct", "DistToMem", "DistToNaiveCD8", "DistToNaiveCD4", "DistToTh1", "DistToTreg", "DistToCXCL13CD4", "DistToCXCL13CD8", "DistToMacro")
+
+cur_df <- colData(sce) %>% as.data.frame() %>% filter(immune_metacluster == "CD8_T_cell") %>% select(sample_id, celltype_combined, CD8Tcell_type, dist_vec) %>% group_by(celltype_combined, sample_id, CD8Tcell_type)
+
+
+mean_df <- cur_df %>% 
+  group_by(sample_id, celltype_combined, CD8Tcell_type) %>% 
+  summarise(across(all_of(dist_vec), ~ mean(.x, na.rm = TRUE), .names = "mean_{.col}")) %>% 
+  ungroup()
+
+mean_df[is.na(mean_df)] <- 0
+
+mean_df$average_graph_cluster_named <- sce$average_graph_cluster_named[match(mean_df$sample_id, sce$sample_id)]
+
+long_df <- mean_df %>% 
+  pivot_longer(cols = starts_with("mean_"), 
+               names_to = "distance_type", 
+               values_to = "mean_distance")
+
+# Calculate the y-axis limits based on quantiles
+lower_limit <- quantile(long_df$mean_distance, probs = 0.05)
+upper_limit <- quantile(long_df$mean_distance, probs = 0.95)
+
+# Plot
+ggplot(data=long_df, aes(x=celltype_combined, y=mean_distance, color=celltype_combined)) +
+  geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  facet_grid(CD8Tcell_type ~ distance_type, scales = "free_y") +
+  scale_color_manual(values = metadata(sce)$colors$celltype_combined) +
+  coord_cartesian(ylim = c(lower_limit, upper_limit))
+
+
+# Plot
+ggplot(data=long_df, aes(x=celltype_combined, y=mean_distance, color=celltype_combined)) +
+  geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  facet_grid(CD8Tcell_type + average_graph_cluster_named ~ distance_type, scales = "free_y") +
+  scale_color_manual(values = metadata(sce)$colors$celltype_combined) +
+  coord_cartesian(ylim = c(lower_limit, upper_limit))
+
+
+# Sub Plot
+ggplot(data=long_df %>% filter(average_graph_cluster_named %in% c("ex_act_immune_excluded", "ex_act_inflamed")), aes(x=celltype_combined, y=mean_distance, color=celltype_combined)) +
+  geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  facet_grid(CD8Tcell_type + average_graph_cluster_named ~ distance_type, scales = "free_y") +
+  scale_color_manual(values = metadata(sce)$colors$celltype_combined) +
+  coord_cartesian(ylim = c(lower_limit, upper_limit))
+
+
+```
+
+### Correlation Analysis
+
+```{r}
+# Proportion of infiltrating cells
+cur_df <- colData(sce) %>%
+  as.data.frame() %>%
+  filter(immune_metacluster == "CD8_T_cell") %>%
+  group_by(sample_id, CD8Tcell_type) %>%
+  summarise(n = n(), .groups = 'drop')
+
+proportion_inf <- cur_df %>%
+  pivot_wider(names_from = CD8Tcell_type, values_from = n, values_fill = list(n = 0)) %>%
+  mutate(
+    proportion_infiltrating = infiltrating / (ignored + bystanding),
+    total_cells = infiltrating + ignored + bystanding
+  ) %>%
+  dplyr::select(sample_id, proportion_infiltrating, total_cells)
+
+# Proportion of Exhausted cells
+cur_df <- colData(sce) %>%
+  as.data.frame() %>%
+  filter(immune_metacluster != "tumor") %>%
+  group_by(sample_id, celltype_combined) %>%
+  summarise(n = n(), .groups = 'drop')
+
+proportion_ex <- cur_df %>%
+  pivot_wider(names_from = celltype_combined, values_from = n, values_fill = list(n = 0)) %>%
+  mutate(
+    total_exhausted = `Exhausted-like_CD4` + `Exhausted-like_CD8` + `Exhausted_cytotoxic-like_CD8`,
+    total_other = rowSums(dplyr::select(., -sample_id, -`Exhausted-like_CD4`, -`Exhausted-like_CD8`, -`Exhausted_cytotoxic-like_CD8`)),
+    proportion_exhausted = total_exhausted / (total_other + total_exhausted)
+  ) %>%
+  dplyr::select(sample_id, proportion_exhausted, total_other)
+
+# merge
+merged_df <- left_join(proportion_inf, proportion_ex, by = "sample_id")
+
+merged_df <- merged_df %>%
+  filter(
+         # !is.na(proportion_exhausted) | 
+         # !is.na(proportion_infiltrating) | 
+         # !is.nan(proportion_exhausted) | 
+         # !is.nan(proportion_infiltrating) | 
+         # !is.infinite(proportion_exhausted)|
+         !is.infinite(proportion_infiltrating))
+
+cor_test <- cor.test(merged_df$proportion_exhausted, merged_df$proportion_infiltrating, method = "spearman")
+
+# Create a scatter plot with the correlation information
+ggplot(merged_df, aes(x = proportion_exhausted, y = proportion_infiltrating)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "blue") + # Add a trendline
+  labs(
+    # title = paste("Correlation between Proportion of Exhausted and Infiltrating Cells"),
+    subtitle = paste("Spearman r =", round(cor_test$estimate, 2), ", p-value =", signif(cor_test$p.value, 3)),
+    x = "Proportion Exhausted Cells",
+    y = "Proportion Infiltrating Cells"
+  ) +
+  theme_minimal()+
+  ggtitle(paste0("p value (corr.test) = ", cor.test(merged_df$proportion_infiltrating, merged_df$proportion_exhausted, method = "spearman")$p.value))
+```
+
+
+
+# ## Spatial CD8 Group ##
+
+## Constructing Group -per sample-
+
+### Parameter sweep
+
+1. first assignment done per sample
+
+- based on parameters: ratio_inf_ex, infiltrating, number_inf_ex_threshold, ignored
+
+2. patients with multiple assignments are assigned to a category according to this scheme
+
+- patients having inflamed & excluded images =(assigned to)=> inflamed or excluded
+- patients having inflamed & cold images =(assigned to)=> inflamed or cold
+- patients having excluded & cold images =(assigned to)=> excluded or cold
+- patients having images from all =(assigned to)=> inflamed or excluded
+
+
+```{r}
+cur_dat <- sce$count_neighbors %>% as.data.frame
+rownames(cur_dat) <- sce$cell_id
+cur_dat$sample_id <- sce$sample_id
+cur_dat$celltype_combined_broad <- sce$celltype_combined_broad
+
+# Define CD8+ T cells as infiltrating, bystanding, ignored
+cur_dat <- cur_dat %>% filter(celltype_combined_broad == "CD8") %>% 
+  mutate(CD8Tcell_type = ifelse(tumor >= 3, "infiltrating", 
+                                ifelse(tumor < 3 & tumor > 0, "bystanding", "ignored")))
+
+# try per sample_id
+out <- cur_dat %>% group_by(sample_id, CD8Tcell_type) %>% dplyr::count() %>% 
+  pivot_wider(id_cols = sample_id, values_from = n, names_from = CD8Tcell_type, values_fill = list(n = 0)) %>% # add values_fill 
+  mutate(ratio_inf_ex = ifelse(infiltrating == 0, 0, bystanding / infiltrating), number_inf_ex = bystanding + infiltrating) %>% # ratio = 0 if inf == 0
+  mutate(spatial_grouptype = ifelse(ratio_inf_ex >= 7 | infiltrating <= 5, "excluded", "inflamed")) %>% 
+  mutate(spatial_grouptype = ifelse((number_inf_ex <= 5 & ignored < 20) | is.na(number_inf_ex), "cold", spatial_grouptype))
+
+
+out$PID <- sce$PID[match(out$sample_id, sce$sample_id)]
+cur_df <- out %>% 
+  dplyr::select(PID, spatial_grouptype, ratio_inf_ex) %>%
+  group_by(PID, spatial_grouptype) %>%
+  summarize(ratio_inf_ex = mean(ratio_inf_ex, na.rm = TRUE), .groups = 'drop')
+
+
+cur_df <- cur_df%>% pivot_wider(id_cols = PID, names_from = spatial_grouptype, values_from = ratio_inf_ex, values_fill = list(ratio_inf_ex = 0))
+
+pid_inflamed_excluded <- cur_df %>% filter(cold == 0 & excluded != 0 & inflamed != 0) %>% pull(PID)
+pid_excluded_cold <- cur_df %>% filter(inflamed == 0 & cold != 0 & excluded != 0) %>% pull(PID)
+pid_inflamed_cold <- cur_df %>% filter(excluded == 0 & cold != 0 & inflamed != 0) %>% pull(PID)
+pid_all <- cur_df %>% filter(excluded != 0 & cold != 0 & inflamed != 0) %>% pull(PID)
+
+keep_track <- out %>% dplyr::select(sample_id, PID, spatial_grouptype)
+colnames(keep_track) <- c("sample_id", "PID", "first_annotation_ratio")
+
+out$spatial_grouptype <- ifelse(
+  out$PID %in% pid_inflamed_excluded, "inflamed", 
+  ifelse(out$PID %in% pid_inflamed_cold, "inflamed",
+  ifelse(out$PID %in% pid_all, "excluded",
+  ifelse(out$PID %in% pid_excluded_cold, "cold", out$spatial_grouptype)))
+      )
+
+keep_track$second_annotation <- ifelse(keep_track$PID %in% c(pid_inflamed_excluded, pid_excluded_cold, pid_inflamed_cold, pid_all),
+                                       out$spatial_grouptype[match(keep_track$PID, out$PID)], 
+                                       FALSE) # FALSE if the PID has samples uniquely belonging to one phenotype
+
+# Add to sce
+sce$spatial_group <- out$spatial_grouptype[match(sce$sample_id, out$sample_id)]
+
+sce[,is.na(sce$spatial_group)]$spatial_group <- "cold"
+
+spatial_group_col <- setNames(c("navy", "firebrick","darkolivegreen3"), unique(sce$spatial_group)) 
+metadata(sce)$colors$spatial_group <- spatial_group_col
+
+sce$spatial_group_merg <- ifelse(sce$spatial_group == "inflamed", "inflamed", "cold_excluded")
+  
+spatial_group_merg_col <- setNames(c("darkolivegreen3", "firebrick"), unique(sce$spatial_group_merg)) 
+metadata(sce)$colors$spatial_group_merg <- spatial_group_merg_col
+```
+```{r}
+# save sce
+saveRDS(sce, "/mnt/central_nas/users/marllu/T_panel/data_analysis/sce_ccRCC_T_07.rds")
+```
+
+QC
+```{r}
+# 424 Patients uniquely annotated
+keep_track %>% filter(second_annotation == FALSE, first_annotation_ratio == "excluded") %>% pull(PID) %>% unique # 133
+keep_track %>% filter(second_annotation == FALSE, first_annotation_ratio == "inflamed") %>% pull(PID) %>% unique # 188
+keep_track %>% filter(second_annotation == FALSE, first_annotation_ratio == "cold") %>% pull(PID) %>% unique # 103
+
+# How many PID from each cateogry have double assignments? => 120 Patients with multiple assignments
+pid_inflamed_excluded %>% length # 91 => into inflamed
+pid_excluded_cold %>% length # 14 => into cold
+pid_inflamed_cold %>% length # 13 => into inflamed
+pid_all %>% length # 2 => into excluded
+```
+
+```{r}
+cur_pid <- pid_inflamed_excluded
+
+i <- 5
+plotSpatial(
+  object = sce[,sce$celltype_combined_broad %in% c("tumor", "CD8") & sce$PID == cur_pid[i]], 
+  img_id = "sample_id", 
+  node_color_by = "CD8Tcell_type", 
+  node_shape_by = "celltype_combined_broad", 
+  colPairName = "neighborhood", 
+  coords = c("Pos_X", "Pos_Y"),
+  draw_edges = TRUE, 
+  nodes_first = FALSE, 
+  directed = FALSE)+
+  scale_color_manual(values = c("navy", "darkolivegreen3", "firebrick"))
+```
+
+```{r}
+colData(sce) %>% as.data.frame() %>% filter(PID %in% pid_inflamed_excluded) %>% group_by(PID, CD8Tcell_type) %>% dplyr::count() %>% filter(!is.na(CD8Tcell_type))
+
+# inflamed excluded
+data <- colData(sce) %>%
+  as.data.frame() %>%
+  filter(PID %in% pid_inflamed_excluded) %>%
+  filter(!is.na(CD8Tcell_type)) %>%
+  group_by(PID, CD8Tcell_type) %>%
+  dplyr::count() %>%
+  spread(CD8Tcell_type, n, fill = 0) %>%
+  mutate(proportion_infiltrating_bystanding = infiltrating / bystanding)
+
+# Plotting the boxplot
+ggplot(data, aes(y = proportion_infiltrating_bystanding)) +
+  geom_boxplot() +
+  labs(title = "Proportion of Infiltrating to Bystanding CD8 T Cells per PID",
+       y = "Proportion (Infiltrating / Bystanding)",
+       x = "PID") +
+  theme_minimal() +
+  theme(axis.text.x = element_blank())
+
+# inflamed
+data <- colData(sce) %>%
+  as.data.frame() %>%
+  filter(!(PID %in% pid_inflamed_excluded) & spatial_CD8_pheno == "inflamed") %>%
+  filter(!is.na(CD8Tcell_type)) %>%
+  group_by(PID, CD8Tcell_type) %>%
+  dplyr::count() %>%
+  spread(CD8Tcell_type, n, fill = 0) %>%
+  mutate(proportion_infiltrating_bystanding = infiltrating / bystanding)
+
+# Plotting the boxplot
+ggplot(data, aes(y = proportion_infiltrating_bystanding)) +
+  geom_boxplot() +
+  labs(title = "Proportion of Infiltrating to Bystanding CD8 T Cells per PID",
+       y = "Proportion (Infiltrating / Bystanding)",
+       x = "PID") +
+  theme_minimal() +
+  theme(axis.text.x = element_blank())
+
+# excluded
+data <- colData(sce) %>%
+  as.data.frame() %>%
+  filter(!(PID %in% pid_inflamed_excluded) & spatial_CD8_pheno == "excluded") %>%
+  filter(!is.na(CD8Tcell_type)) %>%
+  group_by(PID, CD8Tcell_type) %>%
+  dplyr::count() %>%
+  spread(CD8Tcell_type, n, fill = 0) %>%
+  mutate(proportion_infiltrating_bystanding = infiltrating / bystanding)
+
+# Plotting the boxplot
+ggplot(data, aes(y = proportion_infiltrating_bystanding)) +
+  geom_boxplot() +
+  labs(title = "Proportion of Infiltrating to Bystanding CD8 T Cells per PID",
+       y = "Proportion (Infiltrating / Bystanding)",
+       x = "PID") +
+  theme_minimal() +
+  theme(axis.text.x = element_blank())+
+  ylim(0,2)
+```
+
+```{r}
+# Inflamed + excluded
+data <- colData(sce) %>%
+  as.data.frame() %>%
+  filter(PID %in% pid_inflamed_excluded) %>%
+  filter(!is.na(CD8Tcell_type)) %>%
+  group_by(PID, CD8Tcell_type) %>%
+  dplyr::count(name = "cell_count") %>%
+  filter(CD8Tcell_type %in% c("infiltrating", "bystanding"))
+
+ggplot(data, aes(x = CD8Tcell_type, y = cell_count)) +
+  geom_boxplot() + 
+  geom_jitter(aes(color = PID), width = 0.2, size = 2) +
+  labs(title = "Number of Infiltrating and Excluded Cells per Patient",
+       x = "CD8 T Cell Type",
+       y = "Cell Count") +
+  theme_minimal() +
+  theme(legend.position = "none")+
+  ylim(0,300)
+
+
+# Inflamed
+data <- colData(sce) %>%
+  as.data.frame() %>%
+  filter(!(PID %in% pid_inflamed_excluded) & spatial_CD8_pheno == "inflamed") %>%
+  filter(!is.na(CD8Tcell_type)) %>%
+  group_by(PID, CD8Tcell_type) %>%
+  dplyr::count(name = "cell_count") %>%
+  filter(CD8Tcell_type %in% c("infiltrating", "bystanding"))
+
+ggplot(data, aes(x = CD8Tcell_type, y = cell_count)) +
+  geom_boxplot() + 
+  geom_jitter(aes(color = PID), width = 0.2, size = 2) +
+  labs(title = "Number of Infiltrating and Excluded Cells per Patient",
+       x = "CD8 T Cell Type",
+       y = "Cell Count") +
+  theme_minimal() +
+  theme(legend.position = "none")+
+  ylim(0,300)
+
+# excluded
+data <- colData(sce) %>%
+  as.data.frame() %>%
+  filter(!(PID %in% pid_inflamed_excluded) & spatial_CD8_pheno == "excluded") %>%
+  filter(!is.na(CD8Tcell_type)) %>%
+  group_by(PID, CD8Tcell_type) %>%
+  dplyr::count(name = "cell_count") %>%
+  filter(CD8Tcell_type %in% c("infiltrating", "bystanding"))
+
+ggplot(data, aes(x = CD8Tcell_type, y = cell_count)) +
+  geom_boxplot() + 
+  geom_jitter(aes(color = PID), width = 0.2, size = 2) +
+  labs(title = "Number of Infiltrating and Excluded Cells per Patient",
+       x = "CD8 T Cell Type",
+       y = "Cell Count") +
+  theme_minimal() +
+  theme(legend.position = "none")+
+  ylim(0,300)
+```
+
+#### Compare Inflamed_excluded patients
+```{r}
+# bystanding
+both <- colData(sce) %>%
+  as.data.frame() %>%
+  filter(PID %in% pid_inflamed_excluded) %>%
+  filter(!is.na(CD8Tcell_type)) %>%
+  group_by(PID, CD8Tcell_type) %>%
+  dplyr::count(name = "n_bystanding_cells") %>%
+  filter(CD8Tcell_type %in% c("bystanding")) %>%
+  mutate(cat = "Inflamed_Excluded")
+
+excluded <- colData(sce) %>%
+  as.data.frame() %>%
+  filter(!(PID %in% pid_inflamed_excluded) & spatial_CD8_pheno == "excluded") %>%
+  filter(!is.na(CD8Tcell_type)) %>%
+  group_by(PID, CD8Tcell_type) %>%
+  dplyr::count(name = "n_bystanding_cells") %>%
+  filter(CD8Tcell_type %in% c("bystanding")) %>%
+  mutate(cat = "Excluded")
+
+data <- rbind(both, excluded)
+
+p1 <- ggplot(data, aes(x = cat, y = n_bystanding_cells, fill = cat)) +
+  geom_boxplot(alpha = 0) + 
+  geom_jitter(aes(color = PID), width = 0.2, size = 2, alpha = 0.7) + 
+  theme_classic() +
+  theme(legend.position = "none") +
+  stat_compare_means() +
+  scale_color_hue()
+
+# infiltrating
+both <- colData(sce) %>%
+  as.data.frame() %>%
+  filter(PID %in% pid_inflamed_excluded) %>%
+  filter(!is.na(CD8Tcell_type)) %>%
+  group_by(PID, CD8Tcell_type) %>%
+  dplyr::count(name = "n_infiltrating_cells") %>%
+  filter(CD8Tcell_type %in% c("infiltrating")) %>%
+  mutate(cat = "Inflamed_Excluded")
+
+excluded <- colData(sce) %>%
+  as.data.frame() %>%
+  filter(!(PID %in% pid_inflamed_excluded) & spatial_CD8_pheno == "excluded") %>%
+  filter(!is.na(CD8Tcell_type)) %>%
+  group_by(PID, CD8Tcell_type) %>%
+  dplyr::count(name = "n_infiltrating_cells") %>%
+  filter(CD8Tcell_type %in% c("infiltrating")) %>%
+  mutate(cat = "Excluded")
+
+data <- rbind(both, excluded)
+
+p2 <- ggplot(data, aes(x = cat, y = n_infiltrating_cells, fill = cat)) +
+  geom_boxplot(alpha = 0) + 
+  geom_jitter(aes(color = PID), width = 0.2, size = 2, alpha = 0.7) + 
+  theme_classic() +
+  theme(legend.position = "none") +
+  stat_compare_means() +
+  scale_color_hue()
+```
+
+```{r}
+# Define the desired ratio in cm
+width_ratio <- 20
+height_ratio <- 15
+
+scale <- 0.3
+
+width_cm <- width_ratio * scale
+height_cm <- height_ratio * scale
+
+width_in <- width_cm / 2.54
+height_in <- height_cm / 2.54
+
+pdf("/mnt/central_nas/users/marllu/T_panel/data_analysis/07_comb/02_CD8_pheno/Figures/Sub/compare_inflamed_excluded_PID_p1.pdf", width = width_in, height = height_in, onefile = FALSE)
+p1
+dev.off()
+
+pdf("/mnt/central_nas/users/marllu/T_panel/data_analysis/07_comb/02_CD8_pheno/Figures/Sub/compare_inflamed_excluded_PID_p2.pdf", width = width_in, height = height_in, onefile = FALSE)
+p2
+dev.off()
+```
+
+
+#### Compare Inflamed_cold patients
+```{r}
+# infiltrating
+both <- colData(sce) %>%
+  as.data.frame() %>%
+  filter(PID %in% pid_inflamed_cold) %>%
+  filter(!is.na(CD8Tcell_type)) %>%
+  group_by(PID, CD8Tcell_type) %>%
+  dplyr::count(name = "n_ignored_cells") %>%
+  filter(CD8Tcell_type %in% c("ignored")) %>%
+  mutate(cat = "Inflamed_Cold")
+
+cold <- colData(sce) %>%
+  as.data.frame() %>%
+  filter(!(PID %in% pid_inflamed_cold) & spatial_CD8_pheno == "cold") %>%
+  filter(!is.na(CD8Tcell_type)) %>%
+  group_by(PID, CD8Tcell_type) %>%
+  dplyr::count(name = "n_ignored_cells") %>%
+  filter(CD8Tcell_type %in% c("ignored")) %>%
+  mutate(cat = "Cold")
+
+data <- rbind(both, cold)
+
+p1 <- ggplot(data, aes(x = cat, y = n_ignored_cells, fill = cat)) +
+  geom_boxplot(alpha = 0) + 
+  geom_jitter(aes(color = PID), width = 0.2, size = 2, alpha = 0.7) + 
+  theme_classic() +
+  theme(legend.position = "none") +
+  stat_compare_means() +
+  scale_color_hue()
+
+# infiltrating
+both <- colData(sce) %>%
+  as.data.frame() %>%
+  filter(PID %in% pid_inflamed_cold) %>%
+  filter(!is.na(CD8Tcell_type)) %>%
+  group_by(PID, CD8Tcell_type) %>%
+  dplyr::count(name = "n_infiltrating_cells") %>%
+  filter(CD8Tcell_type %in% c("infiltrating")) %>%
+  mutate(cat = "Inflamed_Cold")
+
+cold <- colData(sce) %>%
+  as.data.frame() %>%
+  filter(!(PID %in% pid_inflamed_cold) & spatial_CD8_pheno == "cold") %>%
+  filter(!is.na(CD8Tcell_type)) %>%
+  group_by(PID, CD8Tcell_type) %>%
+  dplyr::count(name = "n_infiltrating_cells") %>%
+  filter(CD8Tcell_type %in% c("infiltrating")) %>%
+  mutate(cat = "cold")
+
+data <- rbind(both, cold)
+
+p2 <- ggplot(data, aes(x = cat, y = n_infiltrating_cells, fill = cat)) +
+  geom_boxplot(alpha = 0) + 
+  geom_jitter(aes(color = PID), width = 0.2, size = 2, alpha = 0.7) + 
+  theme_classic() +
+  theme(legend.position = "none") +
+  stat_compare_means() +
+  scale_color_hue()
+```
+
+```{r}
+# Define the desired ratio in cm
+width_ratio <- 20
+height_ratio <- 15
+
+scale <- 0.3
+
+width_cm <- width_ratio * scale
+height_cm <- height_ratio * scale
+
+width_in <- width_cm / 2.54
+height_in <- height_cm / 2.54
+
+pdf("/mnt/central_nas/users/marllu/T_panel/data_analysis/07_comb/02_CD8_pheno/Figures/Sub/compare_inflamed_cold_PID_p1.pdf", width = width_in, height = height_in, onefile = FALSE)
+p1
+dev.off()
+
+pdf("/mnt/central_nas/users/marllu/T_panel/data_analysis/07_comb/02_CD8_pheno/Figures/Sub/compare_inflamed_cold_PID_p2.pdf", width = width_in, height = height_in, onefile = FALSE)
+p2
+dev.off()
+```
+
+
+#### Compare excluded_cold patients
+```{r}
+# Visualise the number of ignored cells per patient group
+both <- colData(sce) %>%
+  as.data.frame() %>%
+  filter(PID %in% pid_excluded_cold) %>%
+  filter(!is.na(CD8Tcell_type)) %>%
+  group_by(PID, CD8Tcell_type) %>%
+  dplyr::count(name = "n_ignored_cells") %>%
+  filter(CD8Tcell_type %in% c("ignored")) %>%
+  mutate(cat = "Cold_Excluded")
+
+cold <- colData(sce) %>%
+  as.data.frame() %>%
+  filter(!(PID %in% pid_excluded_cold) & spatial_CD8_pheno == "cold") %>%
+  filter(!is.na(CD8Tcell_type)) %>%
+  group_by(PID, CD8Tcell_type) %>%
+  dplyr::count(name = "n_ignored_cells") %>%
+  filter(CD8Tcell_type %in% c("ignored")) %>%
+  mutate(cat = "Cold")
+
+excluded <- colData(sce) %>%
+  as.data.frame() %>%
+  filter(!(PID %in% pid_excluded_cold) & spatial_CD8_pheno == "excluded") %>%
+  filter(!is.na(CD8Tcell_type)) %>%
+  group_by(PID, CD8Tcell_type) %>%
+  dplyr::count(name = "n_ignored_cells") %>%
+  filter(CD8Tcell_type %in% c("ignored")) %>%
+  mutate(cat = "Excluded")
+
+data <- rbind(both, cold, excluded)
+
+p1 <-ggplot(data, aes(x = cat, y = n_ignored_cells, fill = cat)) +
+  geom_boxplot(alpha = 0) + 
+  geom_jitter(aes(color = PID), width = 0.2, size = 2, alpha = 0.7) + 
+  theme_classic() +
+  theme(legend.position = "none") +
+  stat_compare_means() +
+  scale_color_hue()
+
+
+# Visualise the number of bystanding cells per patient group
+both <- colData(sce) %>%
+  as.data.frame() %>%
+  filter(PID %in% pid_excluded_cold) %>%
+  filter(!is.na(CD8Tcell_type)) %>%
+  group_by(PID, CD8Tcell_type) %>%
+  dplyr::count(name = "n_bystanding_cells") %>%
+  filter(CD8Tcell_type %in% c("bystanding")) %>%
+  mutate(cat = "Excluded_Cold")
+
+cold <- colData(sce) %>%
+  as.data.frame() %>%
+  filter(!(PID %in% pid_excluded_cold) & spatial_CD8_pheno == "cold") %>%
+  filter(!is.na(CD8Tcell_type)) %>%
+  group_by(PID, CD8Tcell_type) %>%
+  dplyr::count(name = "n_bystanding_cells") %>%
+  filter(CD8Tcell_type %in% c("bystanding")) %>%
+  mutate(cat = "Cold")
+
+excluded <- colData(sce) %>%
+  as.data.frame() %>%
+  filter(!(PID %in% pid_excluded_cold) & spatial_CD8_pheno == "excluded") %>%
+  filter(!is.na(CD8Tcell_type)) %>%
+  group_by(PID, CD8Tcell_type) %>%
+  dplyr::count(name = "n_bystanding_cells") %>%
+  filter(CD8Tcell_type %in% c("bystanding")) %>%
+  mutate(cat = "Excluded")
+
+data <- rbind(both, cold, excluded)
+data$cat <- factor(data$cat, levels = c("Excluded_Cold", "Cold", "Excluded"))
+
+p2 <- ggplot(data, aes(x = cat, y = n_bystanding_cells, fill = cat)) +
+  geom_boxplot(alpha = 0) + 
+  geom_jitter(aes(color = PID), width = 0.2, size = 2, alpha = 0.7) + 
+  theme_classic() +
+  theme(legend.position = "none") +
+  stat_compare_means() +
+  scale_color_hue()
+
+# the excluded patients have statistically a higher number of bystanding and ignored cells and the trend of the "both" group aligns with the "cold" group, which makes it reasonable to but the excluded_cold patients into the cold group.
+```
+
+```{r}
+# Define the desired ratio in cm
+width_ratio <- 30
+height_ratio <- 15
+
+scale <- 0.3
+
+width_cm <- width_ratio * scale
+height_cm <- height_ratio * scale
+
+width_in <- width_cm / 2.54
+height_in <- height_cm / 2.54
+
+pdf("/mnt/central_nas/users/marllu/T_panel/data_analysis/07_comb/02_CD8_pheno/Figures/Sub/compare_cold_excluded_PID_p1.pdf", width = width_in, height = height_in, onefile = FALSE)
+p1
+dev.off()
+
+pdf("/mnt/central_nas/users/marllu/T_panel/data_analysis/07_comb/02_CD8_pheno/Figures/Sub/compare_cold_excluded_PID_p2.pdf", width = width_in, height = height_in, onefile = FALSE)
+p2
+dev.off()
+```
+
+
+
+### Visualise on images
+
+```{r}
+i <- 7 # i = 7 good example for inflation
+
+cur_pid <- sce$PID[sce$spatial_group == "inflamed"] %>% unique()
+
+img_inflamed <- plotSpatial(
+  object = sce[,sce$celltype_combined_broad %in% c("tumor", "CD8") & sce$PID == cur_pid[i]], 
+  img_id = "sample_id", 
+  node_color_by = "CD8Tcell_type", 
+  node_shape_by = "celltype_combined_broad", 
+  colPairName = "neighborhood", 
+  coords = c("Pos_X", "Pos_Y"),
+  draw_edges = TRUE, 
+  nodes_first = FALSE, 
+  directed = FALSE)+
+  scale_color_manual(values = c("navy", "darkolivegreen3", "firebrick"))
+
+i <- 1 # i = 1 good example for exclusion
+cur_pid <- sce$PID[sce$spatial_group == "excluded"] %>% unique()
+
+img_excluded <- plotSpatial(
+  object = sce[,sce$celltype_combined_broad %in% c("tumor", "CD8") & sce$PID == cur_pid[i]], 
+  img_id = "sample_id", 
+  node_color_by = "CD8Tcell_type", 
+  node_shape_by = "celltype_combined_broad", 
+  colPairName = "neighborhood", 
+  coords = c("Pos_X", "Pos_Y"),
+  draw_edges = TRUE, 
+  nodes_first = FALSE, 
+  directed = FALSE)+
+  scale_color_manual(values = c("navy", "darkolivegreen3", "firebrick"))
+
+
+i <- 1 # i = 1 good example for cold
+cur_pid <- sce$PID[sce$spatial_group == "cold"] %>% unique()
+
+img_cold <- plotSpatial(
+  object = sce[,sce$celltype_combined_broad %in% c("tumor", "CD8") & sce$PID == cur_pid[i]], 
+  img_id = "sample_id", 
+  node_color_by = "CD8Tcell_type", 
+  node_shape_by = "celltype_combined_broad", 
+  colPairName = "neighborhood", 
+  coords = c("Pos_X", "Pos_Y"),
+  draw_edges = TRUE, 
+  nodes_first = FALSE, 
+  directed = FALSE)+
+  scale_color_manual(values = c("navy", "darkolivegreen3", "firebrick"))
+```
+
+```{r}
+# Define the desired ratio in cm
+width_ratio <- 65
+height_ratio <- 30
+
+scale <- 0.3
+
+width_cm <- width_ratio * scale
+height_cm <- height_ratio * scale
+
+width_in <- width_cm / 2.54
+height_in <- height_cm / 2.54
+
+pdf("/mnt/central_nas/users/marllu/T_panel/data_analysis/07_comb/02_CD8_pheno/Figures/Main/spatial_inflamed.pdf", width = width_in, height = height_in, onefile = FALSE)
+img_inflamed
+dev.off()
+
+pdf("/mnt/central_nas/users/marllu/T_panel/data_analysis/07_comb/02_CD8_pheno/Figures/Main/spatial_excluded.pdf", width = width_in, height = height_in, onefile = FALSE)
+img_excluded
+dev.off()
+
+pdf("/mnt/central_nas/users/marllu/T_panel/data_analysis/07_comb/02_CD8_pheno/Figures/Main/spatial_cold.pdf", width = width_in, height = height_in, onefile = FALSE)
+img_cold
+dev.off()
+```
+
+#### Visualise patients with samples from all groups
+
+These patients have samples classified as inflamed, cold and excluded and they were ultimately classified as Excluded.
+
+```{r}
+cur_pid <- c("B1997.28921", "B2003.02978")
+
+pid1 <- plotSpatial(
+  object = sce[,sce$celltype_combined_broad %in% c("tumor", "CD8") & sce$PID == cur_pid[1]], 
+  img_id = "sample_id", 
+  node_color_by = "CD8Tcell_type", 
+  node_shape_by = "celltype_combined_broad", 
+  colPairName = "neighborhood", 
+  coords = c("Pos_X", "Pos_Y"),
+  draw_edges = TRUE, 
+  nodes_first = FALSE, 
+  directed = FALSE)+
+  scale_color_manual(values = c("navy", "darkolivegreen3", "firebrick"))
+
+pid2 <- plotSpatial(
+  object = sce[,sce$celltype_combined_broad %in% c("tumor", "CD8") & sce$PID == cur_pid[2]], 
+  img_id = "sample_id", 
+  node_color_by = "CD8Tcell_type", 
+  node_shape_by = "celltype_combined_broad", 
+  colPairName = "neighborhood", 
+  coords = c("Pos_X", "Pos_Y"),
+  draw_edges = TRUE, 
+  nodes_first = FALSE, 
+  directed = FALSE)+
+  scale_color_manual(values = c("navy", "darkolivegreen3", "firebrick"))
+```
+
+```{r}
+# Define the desired ratio in cm
+width_ratio <- 65
+height_ratio <- 30
+
+scale <- 0.3
+
+width_cm <- width_ratio * scale
+height_cm <- height_ratio * scale
+
+width_in <- width_cm / 2.54
+height_in <- height_cm / 2.54
+
+pdf("/mnt/central_nas/users/marllu/T_panel/data_analysis/07_comb/02_CD8_pheno/Figures/Sub/pid_all1.pdf", width = width_in, height = height_in, onefile = FALSE)
+pid1
+dev.off()
+
+pdf("/mnt/central_nas/users/marllu/T_panel/data_analysis/07_comb/02_CD8_pheno/Figures/Sub/pid_all2.pdf", width = width_in, height = height_in, onefile = FALSE)
+pid2
+dev.off()
+```
+
+
+#### cytoviewer
+```{r}
+images <- readRDS("/mnt/central_nas/users/marllu/T_panel/data_analysis/images.rds")
+masks <- readRDS("/mnt/central_nas/users/marllu/T_panel/data_analysis/masks_ccRCC")
+```
+
+```{r}
+cur_PID <- "B1993.10878"
+
+# subset object
+cur_sce <- sce[,sce$PID %in% cur_PID]
+
+#Subset data
+cur_images <- images[mcols(images)$sample_id %in% cur_sce$sample_id]
+cur_masks <- masks[mcols(masks)$sample_id %in% cur_sce$sample_id]
+
+library(cytoviewer)
+cytoviewer(getChannels(cur_images, rownames(cur_sce)), mask = cur_masks, object = cur_sce, img_id = "sample_id", cell_id = "ObjectNumber")
+
+```
+
+## Differential Abundance Analysis
+### clinical information
+```{r}
+### Differential abundance analysis based on edgeR
+library(edgeR)
+
+DA <- lapply(c("ISUP_combined", "pT_combined","necrose","PDL1_score"), function(x){
+abundances <- table(sce$spatial_group, sce$PID)
+
+abundances <- unclass(abundances) 
+
+#relevant patient metadata (Re-level for baseline)
+meta <- colData(sce)[match(colnames(abundances), sce$PID),]
+
+if(x %in% c("necrose","PDL1_score")){
+meta[,x] <- relevel(x=factor(meta[,x]), ref = "0")
+}else{
+meta[,x] <- relevel(x=factor(meta[,x]), ref = "1/2")
+}
+
+#filter
+meta <- meta[!is.na(meta[,x]),]
+abundances <- abundances[,colnames(abundances) %in% meta$PID]
+
+#create DGEList - based on edgeR package
+y.ab <- DGEList(abundances, samples=meta, group = meta[,x])
+
+#Design matrix
+design <- model.matrix(~group, data = y.ab$samples)
+
+#Visualize
+# logCPM of abundances per cluster
+cur_mat <- edgeR::cpm(abundances,prior.count = 1,log = TRUE)
+
+# Estimate NB and QL dispersion 
+y.ab <- estimateDisp(y.ab, design, trend="none")
+
+fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
+
+# Test for differential abundance of clusters between tumor stages
+res <- glmQLFTest(fit.ab, coef=ncol(design))
+
+DA <- res$table
+
+DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
+
+DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.05, result = ifelse(DA$logFC > 0 & DA$FDR < 0.05, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.05, "DOWN", "NOTSIG"))) %>% 
+  arrange(desc(logFC))
+
+DA$cluster <- factor(DA$cluster, levels = DA$cluster)
+DA$category <- x
+
+return(DA)
+})
+
+DA_out <- do.call(rbind, DA)
+```
+
+```{r}
+library(ggnewscale)
+
+DA_out$category <- factor(DA_out$category,levels = c("necrose","pT_combined","ISUP_combined", "PDL1_score"))
+
+DA_out$result <- ifelse(DA_out$logFC > 0 & DA_out$FDR < 0.1, "UP",
+                             ifelse(DA_out$logFC > 0 & DA_out$PValue < 0.05, "UP_trend", 
+                                    ifelse(DA_out$logFC < 0 & DA_out$FDR < 0.1, "DOWN", 
+                                           ifelse(DA_out$logFC < 0 & DA_out$PValue < 0.05, "DOWN_trend","NOTSIG"))))
+
+
+p <- ggplot(DA_out, aes(x=cluster, y=category, col=logFC, size=-log10(FDR))) +
+  geom_point() +
+  theme_classic() +
+  scale_color_gradient2(high="#E41A1C", mid="white", low="#377EB8") +
+  scale_size(range=c(2,10)) +
+  new_scale_colour() +
+  geom_point(data=DA_out, shape=1, aes(size=-log10(FDR), col=result), stroke=1.5) +
+  scale_color_manual(values=c("UP"="#9f1214", "UP_trend"="#e73032", "NOTSIG"="snow2", "DOWN_trend"="#428bc7", "DOWN"="#25567d"), name="Direction") +
+  theme(axis.text.x=element_text(angle=90, hjust=1))
+```
+
+```{r}
+# Define the desired ratio in cm
+width_ratio <- 30
+height_ratio <- 25
+
+scale <- 0.3
+
+width_cm <- width_ratio * scale
+height_cm <- height_ratio * scale
+
+width_in <- width_cm / 2.54
+height_in <- height_cm / 2.54
+
+pdf("/mnt/central_nas/users/marllu/T_panel/data_analysis/07_comb/02_CD8_pheno/Figures/Sub/clinical_cat.pdf", width = width_in, height = height_in, onefile = FALSE)
+p
+dev.off()
+```
+
+
+### Immune celltypes
+
+```{r}
+# Subset sce to only contain immune cell types 
+sce_immune <- sce[,sce$celltype_combined != "tumor"]
+sce_immune
+```
+
+```{r}
+### Differential abundance analysis based on edgeR
+library(edgeR)
+
+sce_immune$excluded <- ifelse(sce_immune$spatial_group == "excluded", 1, 0)
+sce_immune$inflamed <- ifelse(sce_immune$spatial_group == "inflamed", 1, 0)
+sce_immune$cold <- ifelse(sce_immune$spatial_group == "cold", 1, 0)
+
+
+DA <- lapply(c("excluded", "inflamed", "cold"), function(x){
+
+abundances <- table(sce_immune$immune_metacluster, sce_immune$PID)
+abundances <- unclass(abundances) 
+
+#relevant patient metadata (Re-level for baseline)
+meta <- colData(sce_immune)[match(colnames(abundances), sce_immune$PID),]
+
+meta[,x] <- relevel(x=factor(meta[,x]), ref = "0")
+
+#filter
+meta <- meta[!is.na(meta[,x]),]
+abundances <- abundances[,colnames(abundances) %in% meta$PID]
+
+#create DGEList - based on edgeR package
+y.ab <- DGEList(abundances, samples=meta, group = meta[,x])
+
+#Design matrix
+design <- model.matrix(~group, data = y.ab$samples)
+
+#Visualize
+# logCPM of abundances per cluster
+cur_mat <- edgeR::cpm(abundances,prior.count = 1,log = TRUE)
+
+# Estimate NB and QL dispersion 
+y.ab <- estimateDisp(y.ab, design, trend="none")
+
+fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
+
+# Test for differential abundance of clusters between tumor stages
+res <- glmQLFTest(fit.ab, coef=ncol(design))
+
+DA <- res$table
+
+DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
+
+DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.05, result = ifelse(DA$logFC > 0 & DA$FDR < 0.05, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.05, "DOWN", "NOTSIG"))) %>% 
+  arrange(desc(logFC))
+
+DA$cluster <- factor(DA$cluster, levels = DA$cluster)
+DA$category <- x
+
+return(DA)
+})
+
+DA_out <- do.call(rbind, DA)
+```
+
+
+```{r, fig.width=7, fig.height=5}
+library(ggnewscale)
+
+# FDR at 0.05
+DA_out$category <- factor(DA_out$category,levels = c("excluded", "inflamed", "cold"))
+
+## hierarchical clustering on logFC
+cur_df <- DA_out %>% dplyr::select(cluster, category, logFC) %>% pivot_wider(values_from = logFC, names_from = cluster)
+
+# rows
+dd <- dist(cur_df[2:ncol(cur_df)], method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+row_sorted <- hc$order
+DA_out$category <- factor(DA_out$category, levels = cur_df[row_sorted,]$category)
+
+# columns
+dd <- dist(t(cur_df[2:ncol(cur_df)]), method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+column_sorted <- hc$order
+
+DA_out$cluster <- factor(DA_out$cluster, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
+
+DA_immune <- ggplot(DA_out, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8")+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = DA_out,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+```{r}
+# Define the desired ratio in cm
+width_ratio <- 32
+height_ratio <- 38
+
+scale <- 0.3
+
+width_cm <- width_ratio * scale
+height_cm <- height_ratio * scale
+
+width_in <- width_cm / 2.54
+height_in <- height_cm / 2.54
+
+pdf("/mnt/central_nas/users/marllu/T_panel/data_analysis/07_comb/02_CD8_pheno/Figures/Main/DA_immune.pdf", width = width_in, height = height_in, onefile = FALSE)
+DA_immune
+dev.off()
+```
+
+### T cells 
+
+#### based on all immune cells for proportions 
+
+```{r}
+# Subset sce to only contain immune cell types 
+sce_immune <- sce[,sce$celltype_combined != "tumor"]
+sce_immune
+```
+
+```{r}
+### Differential abundance analysis based on edgeR
+library(edgeR)
+
+sce_immune$excluded <- ifelse(sce_immune$spatial_group == "excluded", 1, 0)
+sce_immune$inflamed <- ifelse(sce_immune$spatial_group == "inflamed", 1, 0)
+sce_immune$cold <- ifelse(sce_immune$spatial_group == "cold", 1, 0)
+
+DA <- lapply(c("excluded", "inflamed", "cold"), function(x){
+
+abundances <- table(sce_immune$celltype_combined, sce_immune$PID)
+abundances <- unclass(abundances) 
+
+#relevant patient metadata (Re-level for baseline)
+meta <- colData(sce_immune)[match(colnames(abundances), sce_immune$PID),]
+
+meta[,x] <- relevel(x=factor(meta[,x]), ref = "0")
+
+#filter
+meta <- meta[!is.na(meta[,x]),]
+abundances <- abundances[,colnames(abundances) %in% meta$PID]
+
+#create DGEList - based on edgeR package
+y.ab <- DGEList(abundances, samples=meta, group = meta[,x])
+
+#Design matrix
+design <- model.matrix(~group, data = y.ab$samples)
+
+#Visualize
+# logCPM of abundances per cluster
+cur_mat <- edgeR::cpm(abundances,prior.count = 1,log = TRUE)
+
+# Estimate NB and QL dispersion 
+y.ab <- estimateDisp(y.ab, design, trend="none")
+
+fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
+
+# Test for differential abundance of clusters between tumor stages
+res <- glmQLFTest(fit.ab, coef=ncol(design))
+
+DA <- res$table
+
+DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
+
+DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.05, result = ifelse(DA$logFC > 0 & DA$FDR < 0.05, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.05, "DOWN", "NOTSIG"))) %>% 
+  arrange(desc(logFC))
+
+DA$cluster <- factor(DA$cluster, levels = DA$cluster)
+DA$category <- x
+
+return(DA)
+})
+
+DA_out <- do.call(rbind, DA)
+```
+
+```{r}
+# FDR at 0.05
+DA_out$category <- factor(DA_out$category,levels = c("excluded", "inflamed", "cold"))
+
+# dplyr::select T cells only 
+# DA_plot <- DA_out[str_detect(DA_out$cluster, "CD4|CD8"),]
+# DA_plot <- DA_out[str_detect(DA_out$cluster, "CD4"),]
+DA_plot <- DA_out[str_detect(DA_out$cluster, "CD8"),]
+DA_plot <- DA_plot[complete.cases(DA_plot),]
+
+## hierarchical clustering on logFC
+cur_df <- DA_plot %>% dplyr::select(cluster, category, logFC) %>% pivot_wider(values_from = logFC, names_from = cluster)
+
+# rows 
+dd <- dist(cur_df[2:ncol(cur_df)], method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+row_sorted <- hc$order
+DA_plot$category <- factor(DA_plot$category, levels = cur_df[row_sorted,]$category)
+
+# columns 
+dd <- dist(t(cur_df[2:ncol(cur_df)]), method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+column_sorted <- hc$order
+
+
+DA_plot$cluster <- factor(DA_plot$cluster, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
+
+
+DA_CD8 <- ggplot(DA_plot, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8")+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = DA_plot,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+SAVE PDF for CD8
+```{r}
+# Define the desired ratio in cm
+width_ratio <- 35
+height_ratio <- 45
+
+scale <- 0.3
+
+width_cm <- width_ratio * scale
+height_cm <- height_ratio * scale
+
+width_in <- width_cm / 2.54
+height_in <- height_cm / 2.54
+
+pdf("/mnt/central_nas/users/marllu/T_panel/data_analysis/07_comb/02_CD8_pheno/Figures/Main/DA_CD8.pdf", width = width_in, height = height_in, onefile = FALSE)
+DA_CD8
+dev.off()
+```
+
+SAVE PDF for CD4
+```{r}
+# Define the desired ratio in cm
+width_ratio <- 32
+height_ratio <- 40
+
+scale <- 0.3
+
+width_cm <- width_ratio * scale
+height_cm <- height_ratio * scale
+
+width_in <- width_cm / 2.54
+height_in <- height_cm / 2.54
+
+pdf("/mnt/central_nas/users/marllu/T_panel/data_analysis/07_comb/02_CD8_pheno/Figures/Main/DA_CD4.pdf", width = width_in, height = height_in, onefile = FALSE)
+DA_CD4
+dev.off()
+```
+
+#### based on T cell proportion
+
+##### CD8 T cells
+```{r}
+### Differential abundance analysis based on edgeR
+library(edgeR)
+
+sce_sub <- sce
+
+sce_sub$inflamed <- ifelse(sce_sub$spatial_group == "inflamed", 1, 0)
+sce_sub$excluded <- ifelse(sce_sub$spatial_group == "excluded", 1, 0)
+sce_sub$cold <- ifelse(sce_sub$spatial_group == "cold", 1, 0)
+
+
+sce_sub <- sce_sub[, sce_sub$immune_metacluster == "CD8_T_cell" & !is.na(sce_sub$immune_metacluster)]
+
+cur_sce <- sce_sub
+
+DA <- lapply(c("inflamed",
+                        "excluded",
+                        "cold"
+               ), function(x){
+abundances <- table(cur_sce$celltype_combined, cur_sce$PID)
+abundances <- unclass(abundances) 
+
+#relevant patient metadata (Re-level for baseline)
+meta <- colData(cur_sce)[match(colnames(abundances), cur_sce$PID),]
+meta[,x] <- relevel(x=factor(meta[,x]), ref = "0")
+
+#filter
+meta <- meta[!is.na(meta[,x]),]
+abundances <- abundances[,colnames(abundances) %in% meta$PID]
+
+#create DGEList - based on edgeR package
+y.ab <- DGEList(abundances, samples=meta, group = meta[,x])
+
+#Design matrix
+design <- model.matrix(~group, data = y.ab$samples)
+
+#Visualize
+# logCPM of abundances per cluster
+cur_mat <- edgeR::cpm(abundances,prior.count = 1,log = TRUE)
+
+# Estimate NB and QL dispersion 
+y.ab <- estimateDisp(y.ab, design, trend="none")
+
+fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
+
+# Test for differential abundance of clusters between tumor stages
+res <- glmQLFTest(fit.ab, coef=ncol(design))
+
+DA <- res$table
+
+DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
+
+DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.05, result = ifelse(DA$logFC > 0 & DA$FDR < 0.05, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.05, "DOWN", "NOTSIG"))) %>% 
+  arrange(desc(logFC))
+
+DA$cluster <- factor(DA$cluster, levels = DA$cluster)
+DA$category <- x
+
+return(DA)
+})
+
+DA_out <- do.call(rbind, DA)
+```
+
+```{r}
+library(ggnewscale)
+
+DA_out$category <- factor(DA_out$category,levels = c("inflamed",
+                        "excluded",
+                        "cold"
+                        ))
+
+
+ggplot(DA_out, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
+    geom_point()+
+    theme_classic()+
+    scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8")+
+    scale_size(range = c(2,10))+
+    new_scale_colour() +
+    geom_point(data = DA_out,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
+    scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  xlab("CD8 broad clusters")+
+  ylab("Clinical Categories")+
+    theme(    axis.text.x = element_text(angle = 90, size = 14, face = "bold"),
+              axis.text.y = element_text(size = 14, face = "bold"),
+              axis.title.x = element_text(size = 16, face = "bold"),
+              axis.title.y = element_text(size = 16, face = "bold"),
+              legend.text = element_text(size = 14),  
+              legend.title = element_text(size = 16, face = "bold"),  
+              plot.title = element_text(size = 18, face = "bold", hjust = 0.5))
+```
+
+##### CD8 T cells fine
+```{r}
+### Differential abundance analysis based on edgeR
+library(edgeR)
+
+sce_sub <- sce
+
+sce_sub$inflamed <- ifelse(sce_sub$spatial_group == "inflamed", 1, 0)
+sce_sub$excluded <- ifelse(sce_sub$spatial_group == "excluded", 1, 0)
+sce_sub$cold <- ifelse(sce_sub$spatial_group == "cold", 1, 0)
+
+sce_sub <- sce_sub[, sce_sub$immune_metacluster == "CD8_T_cell" & !is.na(sce_sub$immune_metacluster)]
+
+cur_sce <- sce_sub
+
+DA <- lapply(c("inflamed",
+                        "excluded",
+                        "cold"
+               ), function(x){
+abundances <- table(cur_sce$Tcell_fine_cluster, cur_sce$PID)
+abundances <- unclass(abundances) 
+
+#relevant patient metadata (Re-level for baseline)
+meta <- colData(cur_sce)[match(colnames(abundances), cur_sce$PID),]
+meta[,x] <- relevel(x=factor(meta[,x]), ref = "0")
+
+#filter
+meta <- meta[!is.na(meta[,x]),]
+abundances <- abundances[,colnames(abundances) %in% meta$PID]
+
+#create DGEList - based on edgeR package
+y.ab <- DGEList(abundances, samples=meta, group = meta[,x])
+
+#Design matrix
+design <- model.matrix(~group, data = y.ab$samples)
+
+#Visualize
+# logCPM of abundances per cluster
+cur_mat <- edgeR::cpm(abundances,prior.count = 1,log = TRUE)
+
+# Estimate NB and QL dispersion 
+y.ab <- estimateDisp(y.ab, design, trend="none")
+
+fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
+
+# Test for differential abundance of clusters between tumor stages
+res <- glmQLFTest(fit.ab, coef=ncol(design))
+
+DA <- res$table
+
+DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
+
+DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.05, result = ifelse(DA$logFC > 0 & DA$FDR < 0.05, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.05, "DOWN", "NOTSIG"))) %>% 
+  arrange(desc(logFC))
+
+DA$cluster <- factor(DA$cluster, levels = DA$cluster)
+DA$category <- x
+
+return(DA)
+})
+
+DA_out <- do.call(rbind, DA)
+```
+
+```{r}
+library(ggnewscale)
+
+DA_out$category <- factor(DA_out$category,levels = c("inflamed",
+                        "excluded",
+                        "cold"
+                        ))
+
+
+ggplot(DA_out, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
+    geom_point()+
+    theme_classic()+
+    scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8")+
+    scale_size(range = c(2,10))+
+    new_scale_colour() +
+    geom_point(data = DA_out,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
+    scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  xlab("CD8 fine clusters")+
+  ylab("Clinical Categories")+
+    theme(    axis.text.x = element_text(angle = 90, size = 14, face = "bold"),
+              axis.text.y = element_text(size = 14, face = "bold"),
+              axis.title.x = element_text(size = 16, face = "bold"),
+              axis.title.y = element_text(size = 16, face = "bold"),
+              legend.text = element_text(size = 14),  
+              legend.title = element_text(size = 16, face = "bold"),  
+              plot.title = element_text(size = 18, face = "bold", hjust = 0.5))
+```
+
+##### CD4 T cells
+```{r}
+### Differential abundance analysis based on edgeR
+library(edgeR)
+
+sce_sub <- sce
+
+sce_sub$inflamed <- ifelse(sce_sub$spatial_group == "inflamed", 1, 0)
+sce_sub$excluded <- ifelse(sce_sub$spatial_group == "excluded", 1, 0)
+sce_sub$cold <- ifelse(sce_sub$spatial_group == "cold", 1, 0)
+
+sce_sub <- sce_sub[, sce_sub$immune_metacluster == "CD4_T_cell" & !is.na(sce_sub$immune_metacluster)]
+
+cur_sce <- sce_sub
+
+DA <- lapply(c("inflamed",
+                        "excluded",
+                        "cold"
+               ), function(x){
+abundances <- table(cur_sce$celltype_combined, cur_sce$PID)
+abundances <- unclass(abundances) 
+
+#relevant patient metadata (Re-level for baseline)
+meta <- colData(cur_sce)[match(colnames(abundances), cur_sce$PID),]
+meta[,x] <- relevel(x=factor(meta[,x]), ref = "0")
+
+#filter
+meta <- meta[!is.na(meta[,x]),]
+abundances <- abundances[,colnames(abundances) %in% meta$PID]
+
+#create DGEList - based on edgeR package
+y.ab <- DGEList(abundances, samples=meta, group = meta[,x])
+
+#Design matrix
+design <- model.matrix(~group, data = y.ab$samples)
+
+#Visualize
+# logCPM of abundances per cluster
+cur_mat <- edgeR::cpm(abundances,prior.count = 1,log = TRUE)
+
+# Estimate NB and QL dispersion 
+y.ab <- estimateDisp(y.ab, design, trend="none")
+
+fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
+
+# Test for differential abundance of clusters between tumor stages
+res <- glmQLFTest(fit.ab, coef=ncol(design))
+
+DA <- res$table
+
+DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
+
+DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.05, result = ifelse(DA$logFC > 0 & DA$FDR < 0.05, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.05, "DOWN", "NOTSIG"))) %>% 
+  arrange(desc(logFC))
+
+DA$cluster <- factor(DA$cluster, levels = DA$cluster)
+DA$category <- x
+
+return(DA)
+})
+
+DA_out <- do.call(rbind, DA)
+```
+
+```{r}
+library(ggnewscale)
+
+DA_out$category <- factor(DA_out$category,levels = c("inflamed",
+                        "excluded",
+                        "cold"
+                        ))
+
+
+ggplot(DA_out, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
+    geom_point()+
+    theme_classic()+
+    scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8")+
+    scale_size(range = c(2,10))+
+    new_scale_colour() +
+    geom_point(data = DA_out,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
+    scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  xlab("CD4 broad clusters")+
+  ylab("Clinical Categories")+
+    theme(    axis.text.x = element_text(angle = 90, size = 14, face = "bold"),
+              axis.text.y = element_text(size = 14, face = "bold"),
+              axis.title.x = element_text(size = 16, face = "bold"),
+              axis.title.y = element_text(size = 16, face = "bold"),
+              legend.text = element_text(size = 14),  
+              legend.title = element_text(size = 16, face = "bold"),  
+              plot.title = element_text(size = 18, face = "bold", hjust = 0.5))
+```
+
+##### CD4 T cells
+```{r}
+### Differential abundance analysis based on edgeR
+library(edgeR)
+
+sce_sub <- sce
+
+sce_sub$inflamed <- ifelse(sce_sub$spatial_group == "inflamed", 1, 0)
+sce_sub$excluded <- ifelse(sce_sub$spatial_group == "excluded", 1, 0)
+sce_sub$cold <- ifelse(sce_sub$spatial_group == "cold", 1, 0)
+
+sce_sub <- sce_sub[, sce_sub$immune_metacluster == "CD4_T_cell" & !is.na(sce_sub$immune_metacluster)]
+
+cur_sce <- sce_sub
+
+DA <- lapply(c("inflamed",
+                        "excluded",
+                        "cold"
+               ), function(x){
+abundances <- table(cur_sce$Tcell_fine_cluster, cur_sce$PID)
+abundances <- unclass(abundances) 
+
+#relevant patient metadata (Re-level for baseline)
+meta <- colData(cur_sce)[match(colnames(abundances), cur_sce$PID),]
+meta[,x] <- relevel(x=factor(meta[,x]), ref = "0")
+
+#filter
+meta <- meta[!is.na(meta[,x]),]
+abundances <- abundances[,colnames(abundances) %in% meta$PID]
+
+#create DGEList - based on edgeR package
+y.ab <- DGEList(abundances, samples=meta, group = meta[,x])
+
+#Design matrix
+design <- model.matrix(~group, data = y.ab$samples)
+
+#Visualize
+# logCPM of abundances per cluster
+cur_mat <- edgeR::cpm(abundances,prior.count = 1,log = TRUE)
+
+# Estimate NB and QL dispersion 
+y.ab <- estimateDisp(y.ab, design, trend="none")
+
+fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
+
+# Test for differential abundance of clusters between tumor stages
+res <- glmQLFTest(fit.ab, coef=ncol(design))
+
+DA <- res$table
+
+DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
+
+DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.05, result = ifelse(DA$logFC > 0 & DA$FDR < 0.05, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.05, "DOWN", "NOTSIG"))) %>% 
+  arrange(desc(logFC))
+
+DA$cluster <- factor(DA$cluster, levels = DA$cluster)
+DA$category <- x
+
+return(DA)
+})
+
+DA_out <- do.call(rbind, DA)
+```
+
+```{r}
+library(ggnewscale)
+
+DA_out$category <- factor(DA_out$category,levels = c("inflamed",
+                        "excluded",
+                        "cold"
+                        ))
+
+
+ggplot(DA_out, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
+    geom_point()+
+    theme_classic()+
+    scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8")+
+    scale_size(range = c(2,10))+
+    new_scale_colour() +
+    geom_point(data = DA_out,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
+    scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  xlab("CD4 fine clusters")+
+  ylab("Clinical Categories")+
+    theme(    axis.text.x = element_text(angle = 90, size = 14, face = "bold"),
+              axis.text.y = element_text(size = 14, face = "bold"),
+              axis.title.x = element_text(size = 16, face = "bold"),
+              axis.title.y = element_text(size = 16, face = "bold"),
+              legend.text = element_text(size = 14),  
+              legend.title = element_text(size = 16, face = "bold"),  
+              plot.title = element_text(size = 18, face = "bold", hjust = 0.5))
+```
+
+### T cell District
+
+```{r}
+### Differential abundance analysis based on edgeR
+# library(edgeR)
+
+
+cur_sce <- sce
+
+cur_sce$excluded <- ifelse(sce$spatial_group == "excluded", 1, 0)
+cur_sce$cold <- ifelse(sce$spatial_group == "cold", 1, 0)
+cur_sce$inflamed <- ifelse(sce$spatial_group == "inflamed", 1, 0)
+
+# subset to T cells
+cur_sce <- sce[,!is.na(sce$Tcell_district_names)]
+
+DA <- lapply(c("excluded", "cold", "inflamed"
+               ), function(x){
+abundances <- table(cur_sce$Tcell_district_names, cur_sce$PID)
+abundances <- unclass(abundances) 
+
+#relevant patient metadata (Re-level for baseline)
+meta <- colData(cur_sce)[match(colnames(abundances), cur_sce$PID),]
+meta[,x] <- relevel(x=factor(meta[,x]), ref = "0")
+
+#filter
+meta <- meta[!is.na(meta[,x]),]
+abundances <- abundances[,colnames(abundances) %in% meta$PID]
+
+#create DGEList - based on edgeR package
+y.ab <- DGEList(abundances, samples=meta, group = meta[,x])
+
+#Design matrix
+design <- model.matrix(~group, data = y.ab$samples)
+
+#Visualize
+# logCPM of abundances per cluster
+cur_mat <- edgeR::cpm(abundances,prior.count = 1,log = TRUE)
+
+# Estimate NB and QL dispersion 
+y.ab <- estimateDisp(y.ab, design, trend="none")
+
+fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
+
+# Test for differential abundance of clusters between tumor stages
+res <- glmQLFTest(fit.ab, coef=ncol(design))
+
+DA <- res$table
+
+DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
+
+DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.05, result = ifelse(DA$logFC > 0 & DA$FDR < 0.05, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.05, "DOWN", "NOTSIG"))) %>% 
+  arrange(desc(logFC))
+
+DA$cluster <- factor(DA$cluster, levels = DA$cluster)
+DA$category <- x
+
+return(DA)
+})
+
+DA_out <- do.call(rbind, DA)
+```
+
+```{r}
+# FDR at 0.1 with trends
+DA_out$result <- ifelse(DA_out$logFC > 0 & DA_out$FDR < 0.1, "UP",
+                             ifelse(DA_out$logFC > 0 & DA_out$PValue < 0.05, "UP_trend", 
+                                    ifelse(DA_out$logFC < 0 & DA_out$FDR < 0.1, "DOWN", 
+                                           ifelse(DA_out$logFC < 0 & DA_out$PValue < 0.05, "DOWN_trend","NOTSIG"))))
+
+## hierarchical clustering on logFC
+cur_df <- DA_out %>% dplyr::select(cluster, category, logFC) %>% pivot_wider(values_from = logFC, names_from = cluster)
+
+# rows 
+dd <- dist(cur_df[2:ncol(cur_df)], method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+row_sorted <- hc$order
+DA_out$category <- factor(DA_out$category, levels = cur_df[row_sorted,]$category)
+
+# columns 
+dd <- dist(t(cur_df[2:ncol(cur_df)]), method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+column_sorted <- hc$order
+
+
+DA_out$cluster <- factor(DA_out$cluster, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
+
+
+ggplot(DA_out, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8")+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = DA_out,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+## Fisher based testing
+### Clinical Categories
+```{r}
+cur_sce <- sce
+
+cur_sce$excluded <- ifelse(sce$spatial_group == "excluded", 1, 0)
+cur_sce$cold <- ifelse(sce$spatial_group == "cold", 1, 0)
+cur_sce$inflamed <- ifelse(sce$spatial_group == "inflamed", 1, 0)
+```
+
+```{r}
+# Patient group info 
+cur_groups <- colData(cur_sce) %>% as.data.frame %>% dplyr::select(PID, ISUP_combined, pT_combined, necrose, PDL1_score) %>% unique()
+
+# Binary mutation matrix
+cur_mut <- colData(cur_sce) %>% as.data.frame %>% dplyr::select(PID, excluded, cold, inflamed) %>% unique() %>% remove_rownames %>% column_to_rownames("PID") %>% t()
+
+# Function to perform Fisher exact test for each gene
+perform_fisher_test <- function(gene_row, group1_cols, group2_cols) {
+    contingency_table <- matrix(0, nrow = 2, ncol = 2)
+    contingency_table[1, 1] <- sum(gene_row[group1_cols] == 1)
+    contingency_table[1, 2] <- sum(gene_row[group2_cols] == 1)
+    contingency_table[2, 1] <- sum(gene_row[group1_cols] == 0)
+    contingency_table[2, 2] <- sum(gene_row[group2_cols] == 0)
+    test_result <- fisher.test(contingency_table)
+    return(c(odds_ratio = test_result$estimate, p_value = test_result$p.value))
+  }
+  
+fisher_full <- foreach(i = c("ISUP_combined", "pT_combined","PDL1_score","necrose"), .combine = "rbind")%do%{
+
+  if(i %in% c("necrose","PDL1_score")){
+    PID_high <- unique(cur_groups[cur_groups[, i] == "1",]$PID)
+    PID_low <- unique(cur_groups[cur_groups[, i] == "0",]$PID)
+  }else{
+    PID_high <- unique(cur_groups[cur_groups[, i] == "3/4",]$PID)
+    PID_low <- unique(cur_groups[cur_groups[, i] == "1/2",]$PID)
+  }  
+  
+  PID_high <- PID_high[!is.na(PID_high)]
+  PID_low <- PID_low[!is.na(PID_low)]
+  
+  fisher_results <- apply(cur_mut, 1, perform_fisher_test, group1_cols = PID_high, group2_cols = PID_low)
+  
+  fisher_results <- as.data.frame(fisher_results)
+  fisher_results <- as.data.frame(t(fisher_results)) %>% rownames_to_column("gene")
+  fisher_results$p_adj <- p.adjust(fisher_results$p_value, method = "BH")
+  fisher_results$category <- i
+  return(fisher_results)
+  }
+
+isGreater <- fisher_full$odds_ratio > 1
+pVal <- log10(fisher_full$p_value)
+pVal[isGreater] <- abs(pVal[isGreater])
+fisher_full$p_out <- pVal
+colnames(fisher_full) <- c("gene", "odds_ratio", "p_value", "p_adj", "category", "p_out")
+```
+
+```{r}
+# FDR at 0.1 with trends
+fisher_full$result <- ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_adj < 0.05, "UP",
+                             ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_adj < 0.05, "DOWN","NOTSIG"))
+
+## hierarchical clustering on odds_ratio
+cur_df <- fisher_full %>% dplyr::select(gene, category, odds_ratio) %>% pivot_wider(values_from = odds_ratio, names_from = gene)
+
+# rows
+dd <- dist(cur_df[2:ncol(cur_df)], method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+row_sorted <- hc$order
+fisher_full$category <- factor(fisher_full$category, levels = cur_df[row_sorted,]$category)
+
+# columns
+dd <- dist(t(cur_df[2:ncol(cur_df)]), method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+column_sorted <- hc$order
+fisher_full$gene <- factor(fisher_full$gene, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
+
+p <- ggplot(fisher_full, aes(x=gene, y = category,col = odds_ratio, size = -log10(p_adj)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = fisher_full,shape = 1,aes(size = -log10(p_adj), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#e73032", "NOTSIG" = "snow2","DOWN" = "#428bc7"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+SAVE PDF
+```{r}
+# Define the desired ratio in cm
+width_ratio <- 30
+height_ratio <- 25
+
+scale <- 0.3
+
+width_cm <- width_ratio * scale
+height_cm <- height_ratio * scale
+
+width_in <- width_cm / 2.54
+height_in <- height_cm / 2.54
+
+pdf("/mnt/central_nas/users/marllu/T_panel/data_analysis/07_comb/02_CD8_pheno/Figures/Sub/fisher_clinical_cat.pdf", width = width_in, height = height_in, onefile = FALSE)
+p
+dev.off()
+```
+
+### Distribution of Spatial Pattern across Spatial Groups
+
+```{r}
+# run for each spatial group separately
+spatial_group <- "excluded" # choose "inflamed", "cold" or "excluded"
+cur_sce <- sce[, !is.na(sce$CD8Tcell_type) &!sce$celltype_combined %in% c("Unknown/Other_CD8", "Activated-like_CD8", "Inhibitory-like_CD8") & (sce$spatial_group == spatial_group)]
+
+cur_sce$infiltrating <- ifelse(cur_sce$CD8Tcell_type == "infiltrating", 1, 0)
+cur_sce$bystanding <- ifelse(cur_sce$CD8Tcell_type == "bystanding", 1, 0)
+cur_sce$ignored <- ifelse(cur_sce$CD8Tcell_type == "ignored", 1, 0)
+
+cur_sce$Memory_like_CD8 <- ifelse(cur_sce$celltype_combined == "Memory-like_CD8", 1, 0)
+cur_sce$Exhausted_like_CD8 <- ifelse(cur_sce$celltype_combined == "Exhausted-like_CD8", 1, 0)
+cur_sce$Cytotoxic_like_CD8 <- ifelse(cur_sce$celltype_combined == "Cytotoxic-like_CD8", 1, 0)
+cur_sce$CXCL13_like_CD8 <- ifelse(cur_sce$celltype_combined == "CXCL13-like_CD8", 1, 0)
+cur_sce$Naive_like_CD8 <- ifelse(cur_sce$celltype_combined == "Naive-like_CD8", 1, 0)
+cur_sce$Exhausted_cytotoxic_like_CD8 <- ifelse(cur_sce$celltype_combined == "Exhausted_cytotoxic-like_CD8", 1, 0)
+# cur_sce$Unknown_Other_CD8 <- ifelse(cur_sce$celltype_combined == "Unknown/Other_CD8", 1, 0)
+# cur_sce$Activated_like_CD8 <- ifelse(cur_sce$celltype_combined == "Activated-like_CD8", 1, 0)
+# cur_sce$Inhibitory_like_CD8 <- ifelse(cur_sce$celltype_combined == "Inhibitory-like_CD8", 1, 0)
+```
+
+```{r}
+# Patient group info 
+cur_groups <- colData(cur_sce) %>% as.data.frame %>% dplyr::select(Memory_like_CD8, Exhausted_like_CD8, Cytotoxic_like_CD8, CXCL13_like_CD8, Naive_like_CD8, Exhausted_cytotoxic_like_CD8, 
+                                                                   # Unknown_Other_CD8, Activated_like_CD8, Inhibitory_like_CD8
+                                                                   )
+
+# Binary mutation matrix
+cur_mut <- colData(cur_sce) %>% as.data.frame %>% dplyr::select(infiltrating, bystanding, ignored) %>% t()
+
+# Function to perform Fisher exact test for each gene
+perform_fisher_test <- function(gene_row, group1_cols, group2_cols) {
+    contingency_table <- matrix(0, nrow = 2, ncol = 2)
+    contingency_table[1, 1] <- sum(gene_row[group1_cols] == 1)
+    contingency_table[1, 2] <- sum(gene_row[group2_cols] == 1)
+    contingency_table[2, 1] <- sum(gene_row[group1_cols] == 0)
+    contingency_table[2, 2] <- sum(gene_row[group2_cols] == 0)
+    test_result <- fisher.test(contingency_table)
+    return(c(odds_ratio = test_result$estimate, p_value = test_result$p.value))
+  }
+  
+fisher_full <- foreach(i = c("Memory_like_CD8", "Exhausted_like_CD8", "Cytotoxic_like_CD8", "CXCL13_like_CD8", "Naive_like_CD8", "Exhausted_cytotoxic_like_CD8",
+                             # "Unknown_Other_CD8", "Activated_like_CD8", "Inhibitory_like_CD8"
+                             ), .combine = "rbind")%do%{
+
+  PID_high <- rownames(cur_groups[cur_groups[, i] == "1",])
+  PID_low <- rownames(cur_groups[cur_groups[, i] == "0",])
+  
+  fisher_results <- apply(cur_mut, 1, perform_fisher_test, group1_cols = PID_high, group2_cols = PID_low)
+  
+  fisher_results <- as.data.frame(fisher_results)
+  fisher_results <- as.data.frame(t(fisher_results)) %>% rownames_to_column("gene")
+  fisher_results$p_adj <- p.adjust(fisher_results$p_value, method = "BH")
+  fisher_results$category <- i
+  
+  return(fisher_results)
+  }
+
+isGreater <- fisher_full$odds_ratio > 1
+pVal <- log10(fisher_full$p_value)
+pVal[isGreater] <- abs(pVal[isGreater])
+fisher_full$p_out <- pVal
+colnames(fisher_full) <- c("spatial_phenotype", "odds_ratio", "p_value", "p_adj", "celltype", "p_out")
+```
+
+```{r}
+library(ggnewscale)
+
+# FDR at 0.05
+fisher_full$result <- ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_adj < 0.05, "UP",
+                                    ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_adj < 0.05, "DOWN","NOTSIG"))
+
+## hierarchical clustering on odds_ratio
+cur_df <- fisher_full %>% dplyr::select(spatial_phenotype, celltype, odds_ratio) %>% pivot_wider(values_from = odds_ratio, names_from = spatial_phenotype)
+
+# rows 
+dd <- dist(cur_df[2:ncol(cur_df)], method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+row_sorted <- hc$order
+fisher_full$celltype <- factor(fisher_full$celltype, levels = cur_df[row_sorted,]$celltype)
+
+# columns 
+dd <- dist(t(cur_df[2:ncol(cur_df)]), method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+plot(hc)
+column_sorted <- hc$order
+fisher_full$spatial_phenotype <- factor(fisher_full$spatial_phenotype, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
+
+
+excluded_fisher <- ggplot(fisher_full, aes(x=celltype, y = spatial_phenotype,col = odds_ratio, size = -log10(p_adj)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = fisher_full,shape = 1,aes(size = -log10(p_adj), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+
+## Fraction of tumor/non-tumor per group
+### per PID
+```{r}
+cur_df <- colData(sce) %>% as.data.frame() %>% dplyr::select(PID, analysis_cat) %>% group_by(PID,analysis_cat) %>% summarise(n= n())
+cur_df <- cur_df %>% pivot_wider(id_cols = PID, names_from = analysis_cat, values_from = n)
+cur_df <- cur_df %>% mutate(proportion = tumor/(tumor+non_tumor))
+
+sce$prop_tumor_non_tumor_PID <- cur_df$proportion[match(sce$PID, cur_df$PID)]
+
+library(ggpubr)
+
+cur_df <- colData(sce)%>% as.data.frame() %>% dplyr::select(PID, prop_tumor_non_tumor_PID,spatial_group, survival_months) %>% group_by(PID) %>% slice(1) %>%  ungroup()
+
+# spatial_group
+ggplot(data = cur_df, aes(x = reorder(spatial_group, -prop_tumor_non_tumor_PID), y = prop_tumor_non_tumor_PID, fill = spatial_group)) +
+  geom_jitter(width = 0.2, alpha = 0.5) +
+  geom_boxplot() +
+  scale_fill_manual(values = metadata(sce)$colors$spatial_group) +
+  labs(y = "Tumor/Non-Tumor Proportion") +
+  theme_classic()+
+  stat_compare_means()
+```
+
+SAVE PDF
+```{r}
+# Define the desired ratio in cm
+width_ratio <- 40
+height_ratio <- 30
+
+scale <- 0.3
+
+width_cm <- width_ratio * scale
+height_cm <- height_ratio * scale
+
+width_in <- width_cm / 2.54
+height_in <- height_cm / 2.54
+
+pdf("/mnt/central_nas/users/marllu/T_panel/data_analysis/07_comb/02_CD8_pheno/Figures/Sub/tumor_prop.pdf", width = width_in, height = height_in, onefile = FALSE)
+ggplot(data = cur_df, aes(x = reorder(spatial_group, -prop_tumor_non_tumor_PID), y = prop_tumor_non_tumor_PID, fill = spatial_group)) +
+  geom_boxplot() +
+  geom_jitter(width = 0.2, alpha = 0.5) +
+  scale_fill_manual(values = metadata(sce)$colors$spatial_group) +
+  labs(y = "Tumor/Non-Tumor Proportion") +
+  theme_classic()+
+  stat_compare_means()
+dev.off()
+```
+
+## Survival Analysis
+
+### Kaplan Meier
+
+Adding Spatial Gorup
+
+```{r}
+cur_surv <- colData(sce) %>% as.data.frame() %>% dplyr::select(PID, OS_months, status_OS, spatial_group) %>% unique()
+
+
+#Plot specific survival curves
+fit <- survfit(Surv(OS_months, status_OS) ~ spatial_group, data = cur_surv)
+print(fit)
+
+surv_curve <- ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_classic(), # Change ggplot2 theme
+          conf.int = FALSE,
+          color = "spatial_group",
+          palette = metadata(sce)$colors$spatial_group,
+)
+
+```
+
+SAVE PDF
+```{r}
+# Define the desired ratio in cm
+width_ratio <- 32
+height_ratio <- 40
+
+scale <- 0.3
+
+width_cm <- width_ratio * scale
+height_cm <- height_ratio * scale
+
+width_in <- width_cm / 2.54
+height_in <- height_cm / 2.54
+
+pdf("/mnt/central_nas/users/marllu/T_panel/data_analysis/07_comb/02_CD8_pheno/Figures/Main/kaplan.pdf", width = width_in, height = height_in, onefile = FALSE)
+surv_curve
+dev.off()
+```
+
+Each Spatial Group category against the other categories
+
+```{r}
+# library(survival)
+# library(survminer)
+
+sce$excluded <- ifelse(sce$spatial_group == "excluded", 1, 0)
+sce$inflamed <-ifelse(sce$spatial_group == "inflamed", 1, 0)
+sce$cold <- ifelse(sce$spatial_group == "cold", 1, 0)
+
+
+cur_surv <- colData(sce) %>% as.data.frame() %>% dplyr::select(PID, OS_months, status_OS, "excluded", "inflamed", "cold"
+                        ) %>% unique()
+
+plot_list <- list()
+plot_counter <- 1
+
+
+for (category in colnames(cur_surv)[4:length(colnames(cur_surv))]) {
+    cur_surv_category <- cur_surv[c("OS_months", "status_OS", category)]
+    names(cur_surv_category)[3] <- "group"
+    
+    # Perform the survival fit using the renamed column
+    fit <- survfit(Surv(OS_months, status_OS) ~ group, data = cur_surv_category)
+    print(fit)
+    
+    # Plotting the survival curve
+    surv_plot <- ggsurvplot(fit,
+                            pval = TRUE,
+                            risk.table = TRUE,
+                            risk.table.col = "strata",
+                            linetype = "strata",
+                            surv.median.line = "hv",
+                            ggtheme = theme_classic(),
+                            palette = "Set1",
+                            conf.int = TRUE,
+                            title = paste("Survival Analysis for", category))
+    
+    # Add the plot to the list
+    plot_list[[plot_counter]] <- surv_plot$plot
+    plot_counter <- plot_counter + 1
+}
+
+plot_list
+
+```
+
+### Cox
+```{r}
+
+# inflamed left out as it represents the reference
+surv_df <- colData(sce) %>% as.data.frame() %>% dplyr::select(PID, OS_months, status_OS, "cold", "excluded") %>% unique()
+
+out_df <- surv_df
+
+for(i in (4:length(out_df))){
+  out_df[,i] <- as.factor(out_df[,i])
+  out_df[,i] <- relevel(out_df[,i], ref = "0")
+}
+
+#Based on proportions
+covariates <- out_df %>% select(-status_OS,-OS_months,-PID) %>% colnames
+
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + ")))
+
+multi_model <- coxph(multi_formula, data = out_df)
+
+multi_res <- summary(multi_model)
+
+plot_df_mean <- data.frame(group = rownames(multi_res$coefficients),
+                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],2),
+                      HR = signif(multi_res$coefficients[,"exp(coef)"],2),
+                      CI_low = signif(multi_res$conf.int[,"lower .95"],2),
+                      CI_high = signif(multi_res$conf.int[,"upper .95"],2),
+                      wald_test = signif(multi_res$waldtest["pvalue"],2))
+
+
+#Plot hazard ratios
+hr_mean <- ggplot(plot_df_mean, aes(x = reorder(group,HR), y = HR, color = p_value < 0.05))+
+geom_point(size = 4)+
+geom_errorbar(aes(ymax = CI_high, ymin = CI_low))+
+geom_hline(yintercept = 1,color = "black",linetype = "dashed")+
+scale_color_brewer(palette = "Set1")+
+xlab("spatial CD8 phenotype")+
+ylab("HR")+
+theme_classic()+
+theme(axis.text.x = element_text(angle = 90))
+
+hr_mean
+```
+
+
+### nested Cox model
+#### covariates only
+```{r}
+
+out_df <- colData(sce) %>% as.data.frame() %>% dplyr::select(PID, OS_months, status_OS) %>% unique()
+
+# Add covariates
+out_df$age <- sce$age[match(out_df$PID,sce$PID)]
+out_df$age_high <- ifelse(out_df$age >= mean(out_df$age), "age_high", "age_low")
+# out_df$age_bin <- sce$age_bin[match(out_df$PID,sce$PID)]
+out_df$gender <- sce$gender[match(out_df$PID,sce$PID)]
+# out_df$ISUP <- sce$ISUP[match(out_df$PID,sce$PID)]
+out_df$pT <- sce$pT_combined[match(out_df$PID,sce$PID)]
+# out_df$necrose <- sce$necrose[match(out_df$PID,sce$PID)]
+
+
+#Based on proportions
+covariates <- out_df %>% dplyr::select(-status_OS,-OS_months,-PID, -age) %>% colnames
+
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + ")))
+
+multi_model_1 <- coxph(multi_formula, data = out_df)
+
+multi_res <- summary(multi_model_1)
+
+plot_df <- data.frame(group = rownames(multi_res$coefficients),
+                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],2),
+                      HR = signif(multi_res$coefficients[,"exp(coef)"],2),
+                      CI_low = signif(multi_res$conf.int[,"lower .95"],2),
+                      CI_high = signif(multi_res$conf.int[,"upper .95"],2),
+                      wald_test = signif(multi_res$waldtest["pvalue"],2))
+
+
+plot_df$group <- factor(plot_df$group) 
+
+#Plot hazard ratios
+hr_plot <- ggplot(plot_df, aes(x = reorder(group, -HR), y = HR, color = p_value < 0.05))+
+geom_point(size = 4)+
+geom_errorbar(aes(ymax = CI_high, ymin = CI_low))+
+#coord_cartesian(ylim=c(0,20))+
+geom_hline(yintercept = 1,color = "black",linetype = "dashed")+
+scale_color_brewer(palette = "Set1")+
+xlab("")+
+ylab("HR")+
+theme_classic()+
+theme(axis.text.x = element_text(angle = 90))
+
+hr_plot
+
+```
+
+#### plus patient group
+```{r}
+sce$excluded <- ifelse(sce$spatial_group == "excluded", 1, 0)
+sce$cold <- ifelse(sce$spatial_group == "cold", 1, 0)
+sce$inflamed <- ifelse(sce$spatial_group == "inflamed", 1, 0)
+
+# inflamed as ref
+surv_df <- colData(sce) %>% as.data.frame() %>% dplyr::select(PID, OS_months, status_OS, "excluded","cold") %>% unique()
+
+out_df <- surv_df
+
+for(i in c(4:(length(colnames(out_df))))){
+  out_df[,i] <- as.factor(out_df[,i])
+  out_df[,i] <- relevel(out_df[,i], ref = "0")
+}
+
+
+# Add covariates
+out_df$age <- sce$age[match(out_df$PID,sce$PID)]
+out_df$age_high <- ifelse(out_df$age >= mean(out_df$age), "age_high", "age_low")
+# out_df$age_bin <- sce$age_bin[match(out_df$PID,sce$PID)]
+out_df$gender <- sce$gender[match(out_df$PID,sce$PID)]
+# out_df$ISUP <- sce$ISUP[match(out_df$PID,sce$PID)]
+out_df$pT <- sce$pT_combined[match(out_df$PID,sce$PID)]
+# out_df$necrose <- sce$necrose[match(out_df$PID,sce$PID)]
+
+
+
+#Based on proportions
+covariates <- out_df %>% dplyr::select(-status_OS,-OS_months,-PID, -age) %>% colnames
+
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + ")))
+
+multi_model_2 <- coxph(multi_formula, data = out_df)
+
+multi_res <- summary(multi_model_2)
+
+plot_df <- data.frame(group = rownames(multi_res$coefficients),
+                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],2),
+                      HR = signif(multi_res$coefficients[,"exp(coef)"],2),
+                      CI_low = signif(multi_res$conf.int[,"lower .95"],2),
+                      CI_high = signif(multi_res$conf.int[,"upper .95"],2),
+                      wald_test = signif(multi_res$waldtest["pvalue"],2))
+
+
+plot_df$group <- factor(plot_df$group) 
+
+#Plot hazard ratios
+hr_plot <- ggplot(plot_df, aes(x = reorder(group, -HR), y = HR, color = p_value < 0.05))+
+geom_point(size = 4)+
+geom_errorbar(aes(ymax = CI_high, ymin = CI_low))+
+#coord_cartesian(ylim=c(0,20))+
+geom_hline(yintercept = 1,color = "black",linetype = "dashed")+
+scale_color_brewer(palette = "Set1")+
+xlab("")+
+ylab("HR")+
+theme_classic()+
+theme(axis.text.x = element_text(angle = 90))
+
+hr_plot
+```
+
+#### Log likelihood ratio test
+```{r}
+anova_res <- anova(multi_model_1, multi_model_2, test = "Chisq")
+
+anova_res
+```
+
+SAVE PDF
+```{r}
+# Define the desired ratio in cm
+width_ratio <- 50
+height_ratio <- 30
+
+scale <- 0.3
+
+width_cm <- width_ratio * scale
+height_cm <- height_ratio * scale
+
+width_in <- width_cm / 2.54
+height_in <- height_cm / 2.54
+
+pdf("/mnt/central_nas/users/marllu/T_panel/data_analysis/07_comb/02_CD8_pheno/Figures/Main/log_likelihood_surv.pdf", width = width_in, height = height_in, onefile = FALSE)
+capture.output(print(anova_res), file = "/mnt/central_nas/users/marllu/T_panel/data_analysis/07_comb/02_CD8_pheno/Figures/Main/log_likelihood_surv.txt")
+dev.off()
+```
+
+### log Rank Test
+```{r}
+#Assess survival impact across categories
+library(survival)
+library(survminer)
+
+out_df <- colData(sce) %>% as.data.frame() %>% dplyr::select(PID, OS_months, status_OS, "excluded", "inflamed", "cold") %>% unique() 
+
+# Extract p-values from log-rank / direction of trend
+cur_surv_out <- foreach(x = colnames(out_df %>% dplyr::select(-PID, -status_OS, -OS_months)), .combine = "rbind")%do%{
+  formula <- as.formula(paste("Surv(OS_months, status_OS) ~ ", x))
+  fit <- survdiff(formula, data = out_df)
+  p_value <- 1 - pchisq(fit$chisq, length(fit$n) - 1)
+  data.frame(group = x, p = p_value, obs_2 = fit$obs[1], exp_2 = fit$exp[1])
+}
+
+# Adjust p-values using BH 
+cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
+
+# Create and plot heatmap 
+cur_surv_plot <- cur_surv_out %>% mutate(sign = p < 0.05, direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% mutate(p_out = ifelse(sign == TRUE & direction == "high",  -log10(p_adj), ifelse(sign == TRUE & direction == "low", log10(p_adj), 0))) %>% arrange(desc(p_out)) %>% filter(p < 0.05)
+
+cur_surv_plot <- cur_surv_plot %>% pivot_wider(id_cols = type, names_from = group, values_from = p_out) %>% column_to_rownames("type")
+
+col = colorRamp2(c(min(cur_surv_plot), 0, max(cur_surv_plot)), c("blue", "white", "#D73027"))
+
+Heatmap(cur_surv_plot, col = col, border = FALSE, cluster_columns = FALSE, rect_gp = gpar(col = "black", lwd = 1), name = "log10(p)")
+```
+
+
+
+## Distance Analysis
+### plot
+
+per spatial group and celltype
+```{r}
+# library(ggridges)
+
+dist_vec <- c("DistToExCD8", "DistToEx_ctxCD8", "DistToExCD4", "DistToAct", "DistToMem", "DistToNaiveCD8", "DistToNaiveCD4", "DistToTh1", "DistToTreg", "DistToCXCL13CD4", "DistToCXCL13CD8", "DistToMacro")
+
+plot_list <- list()
+plot_counter <- 1
+
+for (col_name in dist_vec) {
+  df <- colData(sce) %>% as.data.frame() %>% select(.data[[col_name]], celltype_combined, spatial_group)
+  
+  p <- ggplot(df, aes(x = spatial_group, y = .data[[col_name]], fill = celltype_combined)) +
+    geom_boxplot() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    facet_wrap(~celltype_combined, scales = "free_y") +
+    labs(y = col_name, title = col_name)
+  
+  plot_list[[plot_counter]] <- p
+  plot_counter <- plot_counter + 1
+}
+
+# Display the plots
+plot_list
+```
+
+Visualise the difference in distance between Inflamed and excluded
+```{r}
+# create placeholder matrix for excluded and inflamed
+rownames <- sce$celltype_combined %>% unique
+colnames <- c("DistToExCD8", "DistToEx_ctxCD8", "DistToExCD4", "DistToAct", "DistToMem", "DistToNaiveCD8", "DistToNaiveCD4", "DistToTh1", "DistToTreg", "DistToCXCL13CD4", "DistToCXCL13CD8", "DistToMacro")
+na_matrix <- matrix(NA, nrow = length(rownames), ncol = length(colnames))
+excluded_df <- data.frame(na_matrix, row.names = rownames)
+colnames(excluded_df) <- colnames
+inflamed_df <- data.frame(na_matrix, row.names = rownames)
+colnames(inflamed_df) <- colnames
+
+# function
+add_mean <- function(col_name, phenotype, df){
+cur_df <- colData(sce) %>% as.data.frame %>% filter(spatial_group == phenotype) %>% select(.data[[col_name]], celltype_combined, spatial_group) %>% group_by(celltype_combined) %>% summarise(mean = mean(.data[[col_name]], na.rm = TRUE))
+df[[col_name]] <- cur_df$mean[match(rownames(excluded_df), cur_df$celltype_combined)]
+return(df)
+}
+
+# calculate excluded df
+for (col in colnames) {
+  excluded_df <- add_mean(col, "excluded", excluded_df)
+}
+
+
+# calculate inflames df
+for (col in colnames) {
+  inflamed_df <- add_mean(col, "inflamed", inflamed_df)
+}
+
+
+dist_df <- inflamed_df - excluded_df
+
+
+Heatmap(as.matrix(dist_df))
+```
+
+### Macrophage T cell distances
+
+#### Mean per patient
+
+```{r}
+cur_df <- colData(sce) %>% as.data.frame() %>% group_by(PID, celltype_combined) %>% summarise(mean=mean(DistToMacro, na.rm = TRUE)) %>% filter(str_detect(celltype_combined, "CD4|CD8"))
+
+cur_df$average_graph <- sce$average_graph_cluster_named[match(cur_df$PID, sce$PID)]
+cur_df$spatial_group <- sce$spatial_group[match(cur_df$PID, sce$PID)]
+
+# Calculate the y-axis limits based on quantiles
+lower_limit <- quantile(cur_df$mean, probs = 0.05, na.rm = TRUE)
+upper_limit <- quantile(cur_df$mean, probs = 0.95, na.rm = TRUE)
+
+sub_df <- cur_df %>% filter(spatial_group!= "cold", !celltype_combined %in% c("Unknown/Other_CD4", "Unknown/Other_CD8", "Activated-like_CD8", "Inhibitory-like_CD8"))
+
+# Calculate the y-axis limits based on quantiles
+lower_limit <- quantile(sub_df$mean, probs = 0.05, na.rm = TRUE)
+upper_limit <- quantile(sub_df$mean, probs = 0.95, na.rm = TRUE)
+
+
+# Plot
+ggplot(data=sub_df, aes(x=spatial_group, y=mean, color=celltype_combined)) +
+  geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  facet_wrap(~celltype_combined, scales = "free_y") +
+  scale_color_manual(values = metadata(sce)$colors$celltype_combined) +
+  coord_cartesian(ylim = c(lower_limit, upper_limit))
+
+
+sub_df <- cur_df %>% filter(average_graph!= "tumor_cold", !celltype_combined %in% c("Unknown/Other_CD4", "Unknown/Other_CD8", "Activated-like_CD8", "Inhibitory-like_CD8"))
+
+# Calculate the y-axis limits based on quantiles
+lower_limit <- quantile(sub_df$mean, probs = 0.05, na.rm = TRUE)
+upper_limit <- quantile(sub_df$mean, probs = 0.95, na.rm = TRUE)
+
+
+ggplot(data=sub_df, aes(x=average_graph, y=mean, color=celltype_combined)) +
+  geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  facet_wrap(~celltype_combined, scales = "free_y") +
+  scale_color_manual(values = metadata(sce)$colors$celltype_combined) +
+  coord_cartesian(ylim = c(lower_limit, upper_limit))
+
+
+```
+
+#### Mean per CD8 cell phenotpye
+```{r}
+cur_df <- colData(sce) %>% as.data.frame() %>% filter(celltype_combined_broad == "CD8") %>% group_by(PID, CD8Tcell_type, celltype_combined) %>% summarise(mean=mean(DistToMacro, na.rm = TRUE))
+
+cur_df$average_graph <- sce$average_graph_cluster_named[match(cur_df$PID, sce$PID)]
+cur_df$spatial_group <- sce$spatial_group[match(cur_df$PID, sce$PID)]
+
+# Calculate the y-axis limits based on quantiles
+lower_limit <- quantile(cur_df$mean, probs = 0.05, na.rm = TRUE)
+upper_limit <- quantile(cur_df$mean, probs = 0.95, na.rm = TRUE)
+
+
+ggplot(data=cur_df, aes(x=celltype_combined, y=mean, color=celltype_combined)) +
+  geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  facet_wrap(~CD8Tcell_type, scales = "free_y") +
+  scale_color_manual(values = metadata(sce)$colors$celltype_combined) +
+  coord_cartesian(ylim = c(lower_limit, upper_limit))
+
+ggplot(data=cur_df, aes(x=CD8Tcell_type, y=mean, color=celltype_combined)) +
+  geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  facet_wrap(~celltype_combined, scales = "free_y") +
+  scale_color_manual(values = metadata(sce)$colors$celltype_combined) +
+  coord_cartesian(ylim = c(lower_limit, upper_limit))
+
+# Sub Plot
+ggplot(data=cur_df, aes(x=celltype_combined, y=mean, color=celltype_combined)) +
+  geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  facet_grid(CD8Tcell_type ~ spatial_group, scales = "free_y") +
+  scale_color_manual(values = metadata(sce)$colors$celltype_combined) +
+  coord_cartesian(ylim = c(lower_limit, upper_limit))
+
+
+ggplot(data=cur_df, aes(x=CD8Tcell_type, y=mean, color=celltype_combined)) +
+  geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  facet_grid(celltype_combined ~ spatial_group, scales = "free_y") +
+  scale_color_manual(values = metadata(sce)$colors$celltype_combined) +
+  coord_cartesian(ylim = c(lower_limit, upper_limit))
+
+ggplot(data=cur_df, aes(x=average_graph, y=mean, color=celltype_combined)) +
+  geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  facet_grid(celltype_combined ~ spatial_group, scales = "free_y") +
+  scale_color_manual(values = metadata(sce)$colors$celltype_combined) +
+  coord_cartesian(ylim = c(lower_limit, upper_limit))
+
+sub_df <- cur_df %>% filter(CD8Tcell_type!= "cold", average_graph %in% c("ex_act_immune_excluded", "ex_act_inflamed"), !celltype_combined %in% c("Unknown/Other_CD4", "Unknown/Other_CD8", "Activated-like_CD8", "Inhibitory-like_CD8"))
+
+# Calculate the y-axis limits based on quantiles
+lower_limit <- quantile(sub_df$mean, probs = 0.05, na.rm = TRUE)
+upper_limit <- quantile(sub_df$mean, probs = 0.95, na.rm = TRUE)
+
+ggplot(data=sub_df, aes(x=CD8Tcell_type, y=mean, color=celltype_combined)) +
+  geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  facet_grid(average_graph ~ celltype_combined, scales = "free_y") +
+  scale_color_manual(values = metadata(sce)$colors$celltype_combined) +
+  coord_cartesian(ylim = c(lower_limit, upper_limit))
+
+ggplot(data=sub_df, aes(x=celltype_combined, y=mean, color=celltype_combined)) +
+  geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  facet_grid(average_graph ~ CD8Tcell_type, scales = "free_y") +
+  scale_color_manual(values = metadata(sce)$colors$celltype_combined) +
+  coord_cartesian(ylim = c(lower_limit, upper_limit))
+
+```
+
+### Treg distances
+```{r}
+cur_df <- colData(sce) %>% as.data.frame() %>% group_by(PID, celltype_combined) %>% summarise(mean=mean(DistToTreg, na.rm = TRUE)) %>% filter(!is.na(mean))
+
+cur_df$average_graph <- sce$average_graph_cluster_named[match(cur_df$PID, sce$PID)]
+cur_df$spatial_group <- sce$spatial_group[match(cur_df$PID, sce$PID)]
+
+# Calculate the y-axis limits based on quantiles
+lower_limit <- quantile(cur_df$mean, probs = 0.05, na.rm = TRUE)
+upper_limit <- quantile(cur_df$mean, probs = 0.95, na.rm = TRUE)
+
+
+sub_df <- cur_df %>% filter(spatial_group!= "cold", !celltype_combined %in% c("Unknown/Other_CD4", "Unknown/Other_CD8", "Activated-like_CD8", "Inhibitory-like_CD8"))
+
+# Calculate the y-axis limits based on quantiles
+lower_limit <- quantile(sub_df$mean, probs = 0.05, na.rm = TRUE)
+upper_limit <- quantile(sub_df$mean, probs = 0.95, na.rm = TRUE)
+
+
+# Plot
+ggplot(data=sub_df, aes(x=spatial_group, y=mean, color=celltype_combined)) +
+  geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  facet_wrap(~celltype_combined, scales = "free_y") +
+  scale_color_manual(values = metadata(sce)$colors$celltype_combined) +
+  coord_cartesian(ylim = c(lower_limit, upper_limit))
+
+```
+
+### Th1 distances
+```{r}
+cur_df <- colData(sce) %>% as.data.frame() %>% group_by(PID, celltype_combined) %>% summarise(mean=mean(DistToTh1, na.rm = TRUE)) %>% filter(!is.na(mean))
+
+cur_df$average_graph <- sce$average_graph_cluster_named[match(cur_df$PID, sce$PID)]
+cur_df$spatial_group <- sce$spatial_group[match(cur_df$PID, sce$PID)]
+
+# Calculate the y-axis limits based on quantiles
+lower_limit <- quantile(cur_df$mean, probs = 0.05, na.rm = TRUE)
+upper_limit <- quantile(cur_df$mean, probs = 0.95, na.rm = TRUE)
+
+
+sub_df <- cur_df %>% filter(spatial_group!= "cold", !celltype_combined %in% c("Unknown/Other_CD4", "Unknown/Other_CD8", "Activated-like_CD8", "Inhibitory-like_CD8"))
+
+# Calculate the y-axis limits based on quantiles
+lower_limit <- quantile(sub_df$mean, probs = 0.05, na.rm = TRUE)
+upper_limit <- quantile(sub_df$mean, probs = 0.95, na.rm = TRUE)
+
+
+# Plot
+ggplot(data=sub_df, aes(x=spatial_group, y=mean, color=celltype_combined)) +
+  geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  facet_wrap(~celltype_combined, scales = "free_y") +
+  scale_color_manual(values = metadata(sce)$colors$celltype_combined) +
+  coord_cartesian(ylim = c(lower_limit, upper_limit))
+
+```
+
+
+### ExCD8 distances
+```{r}
+cur_df <- colData(sce) %>% as.data.frame() %>% group_by(PID, celltype_combined) %>% summarise(mean=mean(DistToExCD8, na.rm = TRUE)) %>% filter(!is.na(mean))
+
+cur_df$average_graph <- sce$average_graph_cluster_named[match(cur_df$PID, sce$PID)]
+cur_df$spatial_group <- sce$spatial_group[match(cur_df$PID, sce$PID)]
+
+# Calculate the y-axis limits based on quantiles
+lower_limit <- quantile(cur_df$mean, probs = 0.05, na.rm = TRUE)
+upper_limit <- quantile(cur_df$mean, probs = 0.95, na.rm = TRUE)
+
+
+sub_df <- cur_df %>% filter(spatial_group!= "cold", !celltype_combined %in% c("Unknown/Other_CD4", "Unknown/Other_CD8", "Activated-like_CD8", "Inhibitory-like_CD8"))
+
+# Calculate the y-axis limits based on quantiles
+lower_limit <- quantile(sub_df$mean, probs = 0.05, na.rm = TRUE)
+upper_limit <- quantile(sub_df$mean, probs = 0.95, na.rm = TRUE)
+
+
+# Plot
+ggplot(data=sub_df, aes(x=spatial_group, y=mean, color=celltype_combined)) +
+  geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  facet_wrap(~celltype_combined, scales = "free_y") +
+  scale_color_manual(values = metadata(sce)$colors$celltype_combined) +
+  coord_cartesian(ylim = c(lower_limit, upper_limit))
+
+```
+
+

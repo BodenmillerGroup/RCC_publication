@@ -9,6 +9,10 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+# A spatial multi-omic portrait of survival outcome for clear cell renal cell carcinoma, Meyer et al., 2026
+
+**DISCLAIMER**: The study is currently undergoing peer-review. Therefore, the code base is under active development. It includes code for all data presented in the manuscript but also exploratory data analysis parts. File paths have to be adjusted by the user. 
+
 # Software requirements 
 
 ```{r lib, message=FALSE,warning=FALSE}
@@ -67,7 +71,7 @@ results_out_folds <- results_folds %>% group_by(PID, TME_archetype) %>% mutate(m
 
 ### Selected fold
 
-Here, we are selecting the best performing model fold (fold 8). 
+Here, we are selecting the best performing model fold. 
 
 ```{r}
 # Mean proportions across images per patient
@@ -293,134 +297,3 @@ jaccard(as.numeric(as.factor(results_combined$TME_archetype_folds)), as.numeric(
 write_csv(results_combined, "/mnt/central_nas/rcc_volume/RCC/HE/CLAM/TCGA_KIRC/TCGA_KIRC_eval_out.csv")
 #write_csv(results_combined, "/Volumes/G_DQBM_BB_Central$/users/lasmey/rcc_volume/RCC/HE/CLAM/TCGA_KIRC/TCGA_KIRC_eval_out.csv")
 ```
-
-
-# 2. CPTAC evaluation from CLAM
-
-## Read in data
-
-```{r}
-library(readxl)
-CPTAC_meta <- read_excel("/mnt/central_nas/rcc_volume/RCC/HE/CLAM/CPTAC/CPTAC_meta_clean.xlsx")
-```
-
-
-```{r}
-out <- list.files("/mnt/central_nas/rcc_volume/RCC/HE/CLAM/CPTAC/eval_results/train_b8_lr1low_do35_s1_CPTAC_EVAL/")
-out <- out[str_detect(out, "fold")]
-
-results <- foreach(i = out, .combine = "rbind")%do%{
-  results <- read_csv(paste0("/mnt/central_nas/rcc_volume/RCC/HE/CLAM/CPTAC/eval_results/train_b8_lr1low_do35_s1_CPTAC_EVAL/", i))
-  results$fold <- str_extract(i, "(\\d)+")
-  return(results)
-}
-```
-
-```{r}
-results$PID <- results$slide_id %>% 
-  str_split("-", simplify = TRUE) %>% 
-  .[, 1:2] %>% 
-  apply(1, paste, collapse = "-")
-```
-
-```{r}
-colnames(results)[colnames(results) == "p_0"] <- "TME_suppressed"
-colnames(results)[colnames(results) == "p_1"] <- "TME_activated"
-colnames(results)[colnames(results) == "p_2"] <- "TME_silent"
-
-results <- results %>% pivot_longer(4:6, names_to = "TME_archetype", values_to = "prop") %>% dplyr::select(-"Y", -"Y_hat")
-```
-
-## Process 
-
-### All folds
-
-```{r}
-# Mean proportions across images per patient
-results_folds <- results %>% group_by(TME_archetype, PID, fold) %>% mutate(prop = mean(prop)) %>% dplyr::select(PID, fold, TME_archetype, prop) %>% unique()
-```
-
-```{r}
-results_out_folds <- results_folds %>% group_by(PID, TME_archetype) %>% mutate(mean = mean(prop)) %>% dplyr::select(PID, TME_archetype, mean) %>% ungroup() %>% group_by(PID) %>% filter(mean == max(mean)) %>% unique()
-```
-
-### Selected fold
-
-Here, we are selecting the best performing model fold (fold 0). 
-
-```{r}
-# Mean proportions across images per patient
-results_selected <- results %>% filter(fold == "7") %>% group_by(TME_archetype, PID, fold) %>% mutate(prop = mean(prop)) %>% dplyr::select(PID, fold, TME_archetype, prop) %>% unique()
-```
-
-```{r}
-results_out_selected <- results_selected %>% group_by(PID, TME_archetype) %>% mutate(mean = mean(prop)) %>% dplyr::select(PID, TME_archetype, mean) %>% ungroup() %>% group_by(PID) %>% filter(mean == max(mean)) %>% unique()
-```
-
-
-## Visualization 
-
-```{r}
-ggplot(results_out_folds, aes(x = TME_archetype, y = mean))+
-  geom_boxplot(outlier.colour = NA)+
-  geom_jitter(aes(color = TME_archetype), position=position_jitter(w=0.1,h=0.1))+
-  theme_classic()+
-  scale_color_manual(values =c("#0571B0", "gold3", "#CA0020"))
-```
-
-```{r}
-ggplot(results_out_selected, aes(x = TME_archetype, y = mean))+
-  geom_boxplot(outlier.colour = NA)+
-  geom_jitter(aes(color = TME_archetype), position=position_jitter(w=0.1,h=0.1))+
-  theme_classic()+
-  scale_color_manual(values =c("#0571B0", "gold3", "#CA0020"))
-```
-
-## Survival analysis
-
-```{r}
-results_combined <- results_out_folds %>% dplyr::select(PID, TME_archetype) %>% transmute(TME_archetype_folds = TME_archetype)
-
-results_combined$TME_archetype_selected <- results_out_selected$TME_archetype[match(results_combined$PID, results_out_selected$PID)]
-```
-
-```{r}
-results_combined$status_OS <- as.numeric(CPTAC_meta$status_OS[match(results_combined$PID, CPTAC_meta$Case_ID)])
-results_combined$OS_days <- as.numeric(CPTAC_meta$OS_days[match(results_combined$PID, CPTAC_meta$Case_ID)])
-```
-
-```{r}
-#Assess survival impact 
-library(survival)
-library(survminer)
-
-#Plot survival curves
-fit <- survfit(Surv(OS_days, status_OS) ~ TME_archetype_selected, data = results_combined)
-print(fit)
-
-ggsurvplot(fit,
-          pval = TRUE,
-          risk.table = TRUE, # Add risk table
-          risk.table.col = "strata", # Change risk table color by groups
-          linetype = "strata", # Change line type by groups
-          surv.median.line = "hv",
-          palette = c("#0571B0", "gold3", "#CA0020"),
-          ggtheme = theme_classic(), 
-          conf.int = FALSE)
-
-#Plot survival curves
-fit <- survfit(Surv(OS_days, status_OS) ~ TME_archetype_folds, data = results_combined)
-print(fit)
-
-ggsurvplot(fit,
-          pval = TRUE,
-          risk.table = TRUE, # Add risk table
-          risk.table.col = "strata", # Change risk table color by groups
-          linetype = "strata", # Change line type by groups
-          surv.median.line = "hv",
-          palette = c("#0571B0", "gold3", "#CA0020"),
-          ggtheme = theme_classic(), 
-          conf.int = FALSE)
-```
-
-
