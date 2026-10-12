@@ -1,0 +1,612 @@
+---
+title: null
+author: "Lasse Meyer"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+# A spatial multi-omic portrait of survival outcome for clear cell renal cell carcinoma, Meyer et al., 2026
+
+# Figure 1 and Figure S1
+
+Data analysis scripts for re-creating Figure 1 and Figure S1. 
+
+# Software requirements
+
+```{r, message=FALSE,warning=FALSE}
+# TO DO
+library(ComplexHeatmap)
+library(foreach)
+library(ggsci)
+library(RColorBrewer)
+library(patchwork)
+library(cytoviewer)
+library(tidyverse)
+library(survival)
+library(survminer)
+library(circlize)
+library(cytomapper)
+library(cytoviewer)
+library(scran)
+library(viridis)
+library(conflicted)
+library(corrplot)
+library(SingleCellExperiment)
+conflicts_prefer(dplyr::count)
+conflicts_prefer(dplyr::filter)
+conflicts_prefer(dplyr::select)
+```
+
+# Read data
+
+```{r}
+# Available from Zenodo - DOI: TO DO
+# File paths have to be adjusted by the user
+
+## SCE objects
+sce_TU <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_SCE_tumor.rds")
+sce_T <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_SCE_tcell.rds")
+sce_MY <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_SCE_myeloid.rds")
+sce_sub_TU <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_SCE_sub_tumor.rds")
+sce_sub_T <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_SCE_sub_tcell.rds")
+sce_sub_MY <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_SCE_sub_myeloid.rds")
+
+## CytoImageList objects
+images_sub_TU <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_images_sub_TU.rds")
+images_sub_T <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_images_sub_T.rds")
+images_sub_MY <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_images_sub_MY.rds")
+masks_sub_TU <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_masks_sub_TU.rds")
+masks_sub_T <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_masks_sub_T.rds")
+masks_sub_MY <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_masks_sub_MY.rds")
+
+## Other
+metadata_selected <- read_csv("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_metadata.csv")
+celltype_density <- read_csv("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_celltype_density.csv")
+colors <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_colors.rds")
+```
+
+# Figure 1
+
+## 1B
+
+```{r}
+# Select metadata to visualize
+Meta_viz <- metadata_selected %>% 
+  select(PID, gender, age_bin, pT_simple, ISUP_simple, necrose, surv_data, n_images, IMC_TU_data, IMC_T_data, IMC_MY_data, HE_data, MSI_data, GEN_data)
+                                         
+Meta_viz <- as.data.frame(lapply(Meta_viz, as.character))
+Meta_viz[is.na(Meta_viz)] <- "Unknown"
+Meta_viz$n_images <- as.numeric(Meta_viz$n_images)
+
+#Arrange
+Meta_viz <- Meta_viz %>% arrange(desc(pT_simple), desc(ISUP_simple), desc(necrose))
+
+#Heatmap annotation
+sample_anno <- HeatmapAnnotation(PID = Meta_viz$PID,
+                                gender = Meta_viz$gender,
+                                age_bin = Meta_viz$age_bin,
+                                pT_simple = Meta_viz$pT_simple,
+                                ISUP_simple = Meta_viz$ISUP_simple,
+                                necrose = Meta_viz$necrose,
+                                surv_data = Meta_viz$surv_data,
+                                IMC_TU_data = Meta_viz$IMC_TU_data,
+                                IMC_T_data = Meta_viz$IMC_T_data, 
+                                IMC_MY_data = Meta_viz$IMC_MY_data,
+                                n_images = Meta_viz$n_images,
+                                HE_data = Meta_viz$HE_data, 
+                                MSI_data = Meta_viz$MSI_data,
+                                GEN_data = Meta_viz$GEN_data,
+                                col = colors,
+                                border = T,
+                                na_col = "black",
+                                gap = unit(5, "points"),
+                                show_annotation_name = T,
+                                show_legend = c(PID = FALSE)
+                                )%v%NULL
+
+#Display plot
+draw(sample_anno)
+```
+
+## 1C
+
+```{r}
+fit <- survfit(Surv(OS_months, status_OS) ~ 1, data = metadata_selected %>% filter(!is.na(survival_ecotype)))
+
+summary(fit)$table["median"]
+summary(fit)$table["0.95LCL"]
+summary(fit)$table["0.95UCL"]
+summary(fit)$table["events"]
+
+ggsurvplot(
+  fit,
+  risk.table = TRUE,
+  conf.int = TRUE,
+  xlab = "Time (Months)",
+  ylab = "Survival probability (OS)",
+  risk.table.col = "strata", 
+  linetype = "strata",
+  surv.median.line = "hv", 
+  palette = "black",
+  ggtheme = theme_classic()
+)
+```
+
+## 1D 
+
+```{r}
+# T stage
+fit_1 <- survfit(Surv(OS_months, status_OS) ~ pT_combined, data = metadata_selected %>% filter(!is.na(survival_ecotype)))
+
+fit_p1 <- ggsurvplot(fit_1,
+          pval = TRUE,
+          risk.table = TRUE, 
+          risk.table.col = "strata", 
+          linetype = "strata", 
+          surv.median.line = "hv", 
+          ggtheme = theme_classic(), 
+          palette = c("#ABCFE5", "#08306B"),
+          conf.int = TRUE)
+
+# ISUP grading
+fit_2 <- survfit(Surv(OS_months, status_OS) ~ ISUP_combined, data = metadata_selected %>% filter(!is.na(survival_ecotype)))
+
+fit_p2 <- ggsurvplot(fit_2,
+          pval = TRUE,
+          risk.table = TRUE, 
+          risk.table.col = "strata", 
+          linetype = "strata", 
+          surv.median.line = "hv", 
+          ggtheme = theme_classic(), 
+          conf.int = TRUE,
+          palette = c("#FC9F81", "#67000D")
+)
+
+# Necrosis
+fit_3 <- survfit(Surv(OS_months, status_OS) ~ necrose, data = metadata_selected %>% filter(!is.na(survival_ecotype)))
+
+fit_p3 <- ggsurvplot(fit_3,
+          pval = TRUE,
+          risk.table = TRUE, 
+          risk.table.col = "strata", 
+          linetype = "strata", 
+          surv.median.line = "hv", 
+          ggtheme = theme_classic(),
+          conf.int = TRUE, 
+          palette = c("#bf8cf0", "#3F007D")
+)
+
+#PDL1-like IMC score
+fit_4 <- survfit(Surv(OS_months, status_OS) ~ PDL1_score, data = metadata_selected %>% filter(!is.na(survival_ecotype)))
+
+fit_p4 <- ggsurvplot(fit_4,
+          pval = TRUE,
+          risk.table = TRUE, 
+          risk.table.col = "strata", 
+          linetype = "strata", 
+          surv.median.line = "hv", 
+          ggtheme = theme_classic(), 
+          palette = c("#AADBAB","#00441B"),
+          conf.int = TRUE
+)
+
+arrange_ggsurvplots(list(fit_p1, fit_p2, fit_p3, fit_p4), 
+                    ncol = 2, nrow = 2)
+```
+
+## 1E 
+
+```{r}
+all_markers <- c(rownames(sce_MY), rownames(sce_T), rownames(sce_TU))
+
+# Align names across panels
+all_markers[all_markers == "Ir191"] <- "DNA1"
+all_markers[all_markers == "Ir193"] <- "DNA2"
+all_markers[all_markers == "PDL1"] <- "CD274"
+all_markers[all_markers == "CD279"] <- "PD1"
+all_markers[all_markers == "Tim-3"] <- "Tim3"
+all_markers[all_markers == "Vim"] <- "Vimentin"
+all_markers[all_markers == "CD45"] <- "CD45RO_RA"
+all_markers[all_markers == "CD45RO"] <- "CD45RO_RA"
+all_markers[all_markers == "CD31"] <- "CD31_vWF"
+all_markers[all_markers == "CD31/vWF"] <- "CD31_vWF"
+all_markers[all_markers == "clCas/PARP"] <- "clCAS_PARP"
+
+panel_anno <- data.frame(marker = all_markers, 
+                         panel = panel <- c(rep("MY",length(rownames(sce_MY))), 
+                                            rep("T",length(rownames(sce_T))), 
+                                            rep("TU",length(rownames(sce_TU))))
+)
+
+count <- as.data.frame(table(all_markers))
+panel_anno$count <- count$Freq[match(panel_anno$marker, count$all_markers)]
+
+panel_anno$panel_shared <- ifelse(panel_anno$count == "3", "shared", panel_anno$panel)
+
+panel_anno_red <- panel_anno %>%
+  group_by(marker) %>%
+  summarise(
+    count = mean(count),
+    panel_combined = paste0(unique(panel), collapse = "_"),
+    .groups = "drop"
+  )
+
+# Create marker categories
+panel_anno_red$marker_cat <- ifelse(panel_anno_red$marker %in% c("H3", "DNA1", "DNA2"), "DNA",
+       ifelse(panel_anno_red$marker %in% c("CA9", "panCK", "VCAM1"), "Tumor_GEN",
+              ifelse(panel_anno_red$marker %in% c("SMA", "CD31_vWF", "Vimentin"), "Non_Immune_GEN",
+                     ifelse(panel_anno_red$marker %in% c("MPO", "CD3", "CD4", "CD8a", "CD20", "CD45RO_RA", "CD11c", "CD68", "CD38", "HLADR", "CD56", "CD274"), "Immune_GEN",
+                            ifelse(panel_anno_red$marker %in% c("TMEM173", "CD73", "IRF4", "CD44", "CXCL12", "CXCL13", "CCL19", "CCL21"), "Immunoregulatory", 
+                                          ifelse(panel_anno_red$marker %in% c("CD16", "CD303","CD163", "DCLAMP", "CD11b", "MMP9", "CCR2", "Arginase", "CD33", "VISTA", "CD209", "CD206", "CD15", "IDO1"), "Myeloid_SPE", 
+                                                 ifelse(panel_anno_red$marker %in% c("GATA3", "4-1BB", "CD45RA", "LAG-3", "PD1", "CD7", "GranB", "EOMES", "FOXP3", "CD278", "GITR", "CD134", "Tbet", "NKG2A", "GranK", "Tim3"), "Tcell_SPE", 
+                                                        ifelse(panel_anno_red$marker %in% c("GPX4", "PDK4", "PKM2", "IDH2", "GLUT1", "Fumarase", "GLUD1_2", "S6")
+, "Tumor_Metabolism_SPE", 
+ifelse(panel_anno_red$marker %in% c("HIF1a", "CD140b", "BRG1", "HIF2a", "VEGFR1", "VHL"), "Tumor_Hypoxia_Angio_SPE", 
+       ifelse(panel_anno_red$marker %in% c("NFKB", "p53", "MYC", "EGFR", "RB1", "mTOR", "CyclinD1"), "Tumor_Oncogenic_SPE", 
+              ifelse(panel_anno_red$marker %in% c("CD44", "ICAM1", "CD10", "AuroraKinaseA"), "Tumor_Other_SPE",
+                     ifelse(panel_anno_red$marker %in% c("clCAS_PARP", "Ki67"), "State", NA))))))))))))
+
+# Create colors
+col <- list(panel = setNames(c("black","#929882","#ba8874","#596db4", "#F2B342", "#317EC2", "#825CA6"), 
+                             c("MY_T_TU", "MY_T", "MY_TU", "T_TU", "MY", "T", "TU")),
+            cat = setNames(c("#33A02C", "#B2DF8A", "#A6CEE3","#FDBF6F", "#B15928", "#1F78B4","#FFFF99","#6A3D9A",  "#E31A1C", "#CAB2D6", "#FB9A99", "#FF7F00"),
+                           c("DNA", "State", "Immune_GEN", "Immunoregulatory", "Non_Immune_GEN", "Tcell_SPE", "Myeloid_SPE", "Tumor_GEN", "Tumor_Hypoxia_Angio_SPE", "Tumor_Metabolism_SPE", "Tumor_Oncogenic_SPE", "Tumor_Other_SPE"
+)),
+count = colorRamp2(c(min(panel_anno_red$count),max(panel_anno_red$count)), c(brewer.pal(3,"Greys")[1],brewer.pal(3,"Greys")[3]))
+)
+
+panel_anno_red <- panel_anno_red %>% arrange(-count, panel_combined, marker_cat)
+
+# Plot
+HeatmapAnnotation(count = panel_anno_red$count,
+                  cat = panel_anno_red$marker_cat,
+                  panel = panel_anno_red$panel_combined,
+                  marker = anno_text(panel_anno_red$marker),
+                  col = col,
+                  border = T,
+                  na_col = "black",
+                  gap = unit(5, "points"),
+                  show_annotation_name = T)%v%NULL
+```
+
+# Figure S1
+
+## S1A 
+
+IMC images, masks and metadata can be viewed and downloaded using 
+[cytoviewer](https://github.com/BodenmillerGroup/cytoviewer) (v1.13.3). An image and 
+mask subset from 50 patients corresponding to around 100 images in form of 
+`CytoImageList` objects is provided directly on Zenodo. For full dataset 
+access, please process the raw data. 
+
+```{r, eval=FALSE}
+# Tumor panel data
+cytoviewer(image = images_sub_TU, 
+           mask = masks_sub_TU, 
+           object = sce_sub_TU, 
+           img_id = "sample_id", 
+           cell_id = "ObjectNumber", 
+           coords = c("Pos_X", "Pos_Y"))
+
+# Myeloid panel data
+cytoviewer(image = images_sub_MY, 
+           mask = masks_sub_MY, 
+           object = sce_sub_MY, 
+           img_id = "sample_id", 
+           cell_id = "ObjectNumber", 
+           coords = c("Pos_X", "Pos_Y"))
+
+
+# T cell panel data
+cytoviewer(image = images_sub_T, 
+           mask = masks_sub_T, 
+           object = sce_sub_T, 
+           img_id = "sample_id", 
+           cell_id = "ObjectNumber", 
+           coords = c("Pos_X", "Pos_Y"))
+```
+
+## S1B 
+
+```{r}
+### 1. Heatmap body
+# Aggregrate across cells with the mean
+mean_sce_MY <- aggregateAcrossCells(sce_MY, ids = sce_MY$analysis_cat,
+                                 statistics = "mean",
+                                 use.assay.type = "min_max",
+                                 subset.row = rowData(sce_MY)$broad_cluster)
+
+### 2. Heatmap annotation
+## 2.1 Spatial features
+spatial <- colData(sce_MY) %>% as.data.frame %>% select(area,eccentricity,n_neighbors, analysis_cat)
+spatial <- spatial %>% select(-analysis_cat) %>% aggregate(by = list(analysis_cat = spatial$analysis_cat), FUN = mean) %>% column_to_rownames("analysis_cat")
+
+area_col <- colorRamp2(c(min(spatial$area),median(spatial$area),max(spatial$area)), c(brewer.pal(3,"Blues")[1],brewer.pal(3,"Blues")[2],brewer.pal(3,"Blues")[3]))
+eccentricity_col <- colorRamp2(c(min(spatial$eccentricity),median(spatial$eccentricity),max(spatial$eccentricity)), c(brewer.pal(3,"Purples")[1],brewer.pal(3,"Purples")[2],brewer.pal(3,"Purples")[3]))
+n_neighbors_col <- colorRamp2(c(min(spatial$n_neighbors),median(spatial$n_neighbors),max(spatial$n_neighbors)), c(brewer.pal(3,"RdPu")[1],brewer.pal(3,"RdPu")[2],brewer.pal(3,"RdPu")[3]))
+
+ha_spatial <- HeatmapAnnotation(
+    area = spatial$area,
+    eccentricity = spatial$eccentricity,
+    n_neighbors = spatial$n_neighbors, 
+    col = list(area = metadata(sce_MY)$colors$area,
+               eccentricity = metadata(sce_MY)$colors$eccentricity,
+               n_neighbors = metadata(sce_MY)$colors$n_neighbors),
+    border = TRUE,
+    which = "row")
+
+## 2.2 Metadata features
+# Number of cells per analysis_cat 
+n_cells <- colData(mean_sce_MY) %>% as.data.frame %>% select(analysis_cat, ncells)
+
+# Number of contributing patients (at least 5 cells)
+cluster_PID <- colData(sce_MY) %>% as.data.frame() %>% select(analysis_cat,PID) %>% group_by(analysis_cat) %>% table() %>% as.data.frame
+n_PID <- cluster_PID %>% filter(Freq>5) %>% group_by(analysis_cat) %>% count(name = "n_PID") %>% column_to_rownames("analysis_cat")
+
+# GMM - non-epithelial GMM
+nr_immune <- colData(sce_MY) %>% as.data.frame %>% select(analysis_cat, non_epithelial_GMM) %>% table()
+fr_immune <- as.data.frame(nr_immune) %>% pivot_wider(names_from = non_epithelial_GMM, values_from = Freq) %>% column_to_rownames("analysis_cat")
+fr_immune <- fr_immune %>% transmute(fr_immune = `TRUE`/rowSums(fr_immune)) %>% as.data.frame()
+
+# Astir - non-epithelial prediction
+nr_astir <- colData(sce_MY) %>% as.data.frame %>% select(analysis_cat, astir_combined) %>% table()
+fr_astir <- as.data.frame(nr_astir) %>% pivot_wider(names_from = astir_combined, values_from = Freq) %>% column_to_rownames("analysis_cat")
+fr_astir <- fr_astir %>% select(-"Unknown/Other") %>% transmute(fr_astir = `Non-Epithelial`/rowSums(fr_astir)) %>% as.data.frame()
+
+ha_meta <- HeatmapAnnotation(GMM_NonEpi = anno_barplot(fr_immune, width = unit(12, "mm"),gp = gpar(fill = "#377EB8", col = 1)),
+                            Astir_NonEpi = anno_barplot(fr_astir, width = unit(12, "mm"),gp = gpar(fill = "#377EB8", col = 1)),
+                            n_cells = anno_barplot(n_cells$ncells, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),n_PID = anno_barplot(n_PID$n_PID, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),
+                            border = TRUE, 
+                            annotation_name_rot = 90,
+                            gap = unit(1,"mm"),
+                            which = "row")
+
+
+### 3. Plot
+h <- Heatmap(t(assay(mean_sce_MY, "min_max")),
+        col = viridis(100),
+        name= "min_max",
+        km = 1,
+        show_row_names = T, 
+        row_names_side = "left",
+        show_column_names =  T, 
+        clustering_method_rows = "ward.D2",
+        clustering_method_columns = "ward.D2")+
+  ha_spatial+
+  ha_meta
+
+draw(h)
+```
+
+## S1C 
+
+
+```{r}
+### 1. Heatmap body 
+# Aggregrate across cells with the mean
+mean_sce_MY <- aggregateAcrossCells(sce_MY, ids = sce_MY$immune_metacluster,
+                                 statistics = "mean",
+                                 use.assay.type = "min_max",
+                                 subset.row = rowData(sce_MY)$immune_cluster_channel)
+
+### 2. Heatmap annotation 
+## 2.1 Spatial features
+spatial <- colData(sce_MY) %>% as.data.frame %>% select(area,eccentricity,n_neighbors, immune_metacluster)
+spatial <- spatial %>% select(-immune_metacluster) %>% aggregate(by = list(immune_metacluster = spatial$immune_metacluster), FUN = mean) %>% column_to_rownames("immune_metacluster")
+
+area_col <- colorRamp2(c(min(spatial$area),median(spatial$area),max(spatial$area)), c(brewer.pal(3,"Blues")[1],brewer.pal(3,"Blues")[2],brewer.pal(3,"Blues")[3]))
+eccentricity_col <- colorRamp2(c(min(spatial$eccentricity),median(spatial$eccentricity),max(spatial$eccentricity)), c(brewer.pal(3,"Purples")[1],brewer.pal(3,"Purples")[2],brewer.pal(3,"Purples")[3]))
+n_neighbors_col <- colorRamp2(c(min(spatial$n_neighbors),median(spatial$n_neighbors),max(spatial$n_neighbors)), c(brewer.pal(3,"RdPu")[1],brewer.pal(3,"RdPu")[2],brewer.pal(3,"RdPu")[3]))
+
+ha_spatial <- HeatmapAnnotation(
+    area = spatial$area,
+    eccentricity = spatial$eccentricity,
+    n_neighbors = spatial$n_neighbors, 
+    col = list(area = metadata(sce_MY)$colors$area,
+               eccentricity = metadata(sce_MY)$colors$eccentricity,
+               n_neighbors = metadata(sce_MY)$colors$n_neighbors),
+    border = TRUE,
+    which = "row")
+
+## 2.2 Predictions
+# Astir cell types
+astir_anno <- colData(sce_MY) %>% as.data.frame() %>% select(immune_metacluster,astir_immune_combined) %>% group_by(immune_metacluster) %>% table() %>% as.data.frame
+astir_anno <- astir_anno %>% group_by(immune_metacluster) %>% mutate(fra = Freq/sum(Freq)) 
+astir_anno <- astir_anno %>% select(-Freq) %>% pivot_wider(id_cols = immune_metacluster,names_from = astir_immune_combined,values_from = fra) %>% column_to_rownames("immune_metacluster")
+
+# GMM cell types
+GMM_anno <- colData(sce_MY) %>% as.data.frame() %>% select(immune_metacluster,GMM_immune_combined) %>% group_by(immune_metacluster) %>% table() %>% as.data.frame
+GMM_anno <- GMM_anno %>% group_by(immune_metacluster) %>% mutate(fra = Freq/sum(Freq)) 
+GMM_anno <- GMM_anno %>% select(-Freq) %>% pivot_wider(id_cols = immune_metacluster,names_from = GMM_immune_combined,values_from = fra) %>% column_to_rownames("immune_metacluster")
+
+ha_astir_GMM <- HeatmapAnnotation(
+  astir_immune_combined = anno_barplot(astir_anno, width = unit(20, "mm"), gp = gpar(fill = metadata(sce_MY)$colors$astir_col)),
+  GMM_immune_combined = anno_barplot(GMM_anno, width = unit(20, "mm"), gp = gpar(fill = metadata(sce_MY)$colors$GMM_col)),
+                            border = TRUE, 
+                            annotation_name_rot = 90,
+                            gap = unit(3,"mm"),
+                            which = "row")
+
+## 2.3 Metadata features
+# Number of cells 
+n_cells <- colData(mean_sce_MY) %>% as.data.frame %>% select(immune_metacluster, ncells)
+
+# Number of contributing patients (at least 5 cells)
+cluster_PID <- colData(sce_MY) %>% as.data.frame() %>% select(immune_metacluster,PID) %>% group_by(immune_metacluster) %>% table() %>% as.data.frame
+n_PID <- cluster_PID %>% filter(Freq>5) %>% group_by(immune_metacluster) %>% count(name = "n_PID") %>% column_to_rownames("immune_metacluster")
+
+ha_meta <- HeatmapAnnotation(n_cells = anno_barplot(n_cells$ncells, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),                        n_PID = anno_barplot(n_PID$n_PID, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),
+                             border = TRUE, 
+                            annotation_name_rot = 90,
+                            gap = unit(1,"mm"),
+                            which = "row")
+
+### 3. Annotation dataframe
+anno <- colData(mean_sce_MY) %>% as.data.frame %>% select(immune_metacluster, ncells)
+
+anno$immune_cat <- ifelse(anno$immune_metacluster %in% c("Stromal","Endothelial"), "Stromal", 
+       ifelse(anno$immune_metacluster == "Unknown_Other", "Undefined", 
+              ifelse(anno$immune_metacluster %in% c("Macrophage", "Neutrophil"), "Macrophage", "Lymphoid")))
+
+
+### 4. Plot
+h <- Heatmap(t(assay(mean_sce_MY, "min_max")),
+        col = viridis(100),
+        name = "min_max",
+        show_row_names = T, 
+        row_names_side = "left",
+        show_column_names =  T, 
+        row_split = anno$immune_cat,
+        cluster_row_slices = FALSE,
+        row_title = NULL,
+        clustering_method_rows = "ward.D2",
+        clustering_method_columns = "ward.D2"
+        )+
+  ha_astir_GMM+
+  ha_spatial+
+  ha_meta
+
+# Create legends for annotation 
+lgd <- Legend(title = "Immune metacluster", at = names(metadata(sce_MY)$colors$immune_metacluster), 
+              legend_gp = gpar(fill = metadata(sce_MY)$colors$immune_metacluster))
+
+# Draw heatmap
+draw(h, annotation_legend_list = list(lgd))
+```
+
+## S1D 
+
+```{r}
+# Myeloid
+PID_analysis_cat <- colData(sce_MY) %>% as.data.frame() %>% select(analysis_cat,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_area <- colData(sce_MY) %>% as.data.frame() %>% select(tissue_area,PID) %>% unique() %>% group_by(PID) %>% mutate(mean_tissue_area = mean(tissue_area))
+PID_analysis_cat$mean_tissue_area <- PID_area$mean_tissue_area[match(PID_analysis_cat$PID, PID_area$PID)]
+MY_analysis_cat <- PID_analysis_cat %>% group_by(PID) %>% mutate(density_tumor_MY = Freq/(mean_tissue_area/1000000)) %>% filter(analysis_cat == "tumor") %>% select(PID, density_tumor_MY)
+
+# Add others
+## T cell
+PID_analysis_cat <- colData(sce_T) %>% as.data.frame() %>% select(analysis_cat,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_area <- colData(sce_T) %>% as.data.frame() %>% select(tissue_area,PID) %>% unique() %>% group_by(PID) %>% mutate(mean_tissue_area = mean(tissue_area))
+PID_analysis_cat$mean_tissue_area <- PID_area$mean_tissue_area[match(PID_analysis_cat$PID, PID_area$PID)]
+T_analysis_cat <- PID_analysis_cat %>% group_by(PID) %>% mutate(density_tumor_T = Freq/(mean_tissue_area/1000000)) %>% filter(analysis_cat == "tumor") %>% select(PID, density_tumor_T)
+
+## Tumor
+PID_analysis_cat <- colData(sce_TU) %>% as.data.frame() %>% select(analysis_cat,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_area <- colData(sce_TU) %>% as.data.frame() %>% select(tissue_area,PID) %>% unique() %>% group_by(PID) %>% mutate(mean_tissue_area = mean(tissue_area))
+PID_analysis_cat$mean_tissue_area <- PID_area$mean_tissue_area[match(PID_analysis_cat$PID, PID_area$PID)]
+TU_analysis_cat <- PID_analysis_cat %>% group_by(PID) %>% mutate(density_tumor_TU = Freq/(mean_tissue_area/1000000)) %>% filter(analysis_cat == "tumor") %>% select(PID, density_tumor_TU)
+
+MY_analysis_cat$density_tumor_T <- T_analysis_cat$density_tumor_T[match(MY_analysis_cat$PID, T_analysis_cat$PID)]
+MY_analysis_cat$density_tumor_TU <- TU_analysis_cat$density_tumor_TU[match(MY_analysis_cat$PID, TU_analysis_cat$PID)]
+MY_analysis_cat <- MY_analysis_cat[complete.cases(MY_analysis_cat),]
+
+# Plot
+cor_sce <- MY_analysis_cat %>% column_to_rownames("PID") %>% as.data.frame
+
+corrplot(cor(cor_sce,method = "spearman"), method="color", col=brewer.pal(n=8, name="RdBu"),  
+         type="upper", order="hclust",hclust.method = "ward.D2", 
+         addCoef.col = "black", addCoefasPercent = F,
+         tl.col="black", tl.srt=40,
+         diag=F
+)
+```
+
+## S1E 
+
+```{r}
+# Per celltype
+celltype_density <- celltype_density %>% filter(!celltype_combined_broad %in% c("Unknown_Other", "tumor"))
+
+out_cor <- foreach(i = unique(celltype_density$celltype_combined_broad), .combine = "rbind")%do%{
+cor_sce <- celltype_density %>% filter(celltype_combined_broad == i) %>% pivot_wider(id_cols = 2,names_from = panel, values_from = density) %>% column_to_rownames("PID") %>% as.data.frame
+cor_sce <- cor_sce[complete.cases(cor_sce),]
+cor_out <- cor(cor_sce,method = "spearman")
+cor_out[cor_out !=1] %>% as.numeric() %>% unique()
+data.frame(immune_metacluster = i, 
+           cor = cor_out[cor_out !=1] %>% as.numeric() %>% unique(), 
+           category = "celltype")
+}
+
+general_dens_out <- celltype_density %>% group_by(celltype_combined_broad) %>% summarise(density = mean(density, na.rm = TRUE))
+out_cor$density_general <- general_dens_out$density[match(out_cor$immune_metacluster, general_dens_out$celltype_combined_broad)]
+
+# Plot
+ggplot(out_cor, aes(x = reorder(immune_metacluster,-cor), y = cor))+  
+  geom_point(aes(color = immune_metacluster, size = density_general))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
+  scale_color_manual(values=metadata(sce_MY)$colors$immune_metacluster)+
+  ylab("SCC")+
+  xlab("Per celltype")+
+  theme_classic()+
+  coord_cartesian(ylim = c(0,1))+
+  ggtitle(paste("Mean SCC = ",round(mean(out_cor$cor), digits = 3)))
+```
+
+
+## S1F
+
+```{r}
+# Per patient
+PID_cor <- foreach(i = unique(celltype_density$PID), .combine = "rbind")%do%{
+cor_sce <- celltype_density %>% filter(PID == i) %>% pivot_wider(id_cols = 1, names_from = panel, values_from = density) %>% column_to_rownames("celltype_combined_broad") %>% as.data.frame
+cor_sce <- cor_sce[complete.cases(cor_sce),]
+cor_out <- cor(cor_sce,method = "spearman")
+diag(cor_out) <- NA
+data.frame(PID = i, 
+           cor = cor_out[upper.tri(cor_out)] %>% as.numeric() %>% unique(), 
+           category = "PID")
+}
+
+PID_cor_out <- PID_cor %>% group_by(PID) %>% summarize(cor_mean = mean(cor, na.rm = TRUE), category = "PID")
+
+# Plot
+ggplot(PID_cor_out, aes(x = category, y = cor_mean))+  
+  geom_point(aes(color = PID))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
+  scale_color_manual(values=metadata(sce_MY)$colors$PID)+
+  guides(color = "none")+
+  ylab("SCC")+
+  xlab("Per PID")+
+  theme_classic()+
+  coord_cartesian(ylim = c(0,1))+
+  ggtitle(paste("Mean SCC = ",round(mean(PID_cor$cor, na.rm = TRUE), digits = 2)))
+```
+
+## S1G
+
+IMC images, masks and metadata can be viewed and downloaded using 
+[cytoviewer](https://github.com/BodenmillerGroup/cytoviewer) (v1.13.3). An image and 
+mask subset from 50 patients corresponding to around 100 images in form of 
+`CytoImageList` objects is provided directly on Zenodo. For full dataset 
+access, please process the raw data. 
+
+```{r, eval=FALSE}
+# Tumor panel data
+cytoviewer(image = images_sub_TU, 
+           mask = masks_sub_TU, 
+           object = sce_sub_TU, 
+           img_id = "sample_id", 
+           cell_id = "ObjectNumber", 
+           coords = c("Pos_X", "Pos_Y"))
+
+# Myeloid panel data
+cytoviewer(image = images_sub_MY, 
+           mask = masks_sub_MY, 
+           object = sce_sub_MY, 
+           img_id = "sample_id", 
+           cell_id = "ObjectNumber", 
+           coords = c("Pos_X", "Pos_Y"))
+
+
+# T cell panel data
+cytoviewer(image = images_sub_T, 
+           mask = masks_sub_T, 
+           object = sce_sub_T, 
+           img_id = "sample_id", 
+           cell_id = "ObjectNumber", 
+           coords = c("Pos_X", "Pos_Y"))
+```
