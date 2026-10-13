@@ -610,3 +610,9 @@ cytoviewer(image = images_sub_T,
            cell_id = "ObjectNumber", 
            coords = c("Pos_X", "Pos_Y"))
 ```
+
+# Session Info 
+
+```{r}
+sessionInfo()
+```
