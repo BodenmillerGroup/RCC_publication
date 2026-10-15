@@ -11,9 +11,9 @@ knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 
 # A spatial multi-omic portrait of survival outcome for clear cell renal cell carcinoma, Meyer et al., 2026
 
-# Figure 1 and Figure S1
+# Figure 2 and Figure S2/S3
 
-Data analysis scripts for re-creating Figure 1 and Figure S1. 
+Data analysis scripts for re-creating Figure 2 and Figure S2/S3. 
 
 # Software requirements
 

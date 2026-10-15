@@ -1,0 +1,40 @@
+---
+title: null
+author: "Lasse Meyer"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+# A spatial multi-omic portrait of survival outcome for clear cell renal cell carcinoma, Meyer et al., 2026
+
+# Figure 3 and Figure S4/S5
+
+Data analysis scripts for re-creating Figure 3 and Figure S4/S5. 
+
+# Software requirements
+
+```{r, message=FALSE,warning=FALSE}
+# TO DO
+```
+
+# Read data
+
+```{r}
+# Available from Zenodo - DOI: TO DO
+# File paths have to be adjusted by the user
+
+## SCE objects
+
+## CytoImageList objects
+
+## Other
+```
+
+# Figure 3
+
+## 3B
+
