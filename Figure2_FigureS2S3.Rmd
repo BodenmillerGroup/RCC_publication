@@ -224,9 +224,9 @@ plot_df_dens_mean <- data.frame(group = rownames(multi_res$coefficients),
 ```{r}
 # 2. MEDIAN
 PID_tumor_metacluster_names <- colData(sce_TU_tumor) %>% as.data.frame() %>% select(tumor_metacluster_names,PID) %>% group_by(PID) %>% table() %>% as.data.frame
-PID_area <- colData(sce_TU_tumor) %>% as.data.frame() %>% select(tissue_area,PID) %>% unique() %>% group_by(PID) %>% mutate(median_tissue_area = median(tissue_area))
-PID_tumor_metacluster_names$median_tissue_area <- PID_area$median_tissue_area[match(PID_tumor_metacluster_names$PID, PID_area$PID)]
-PID_tumor_metacluster_names <- PID_tumor_metacluster_names %>% group_by(PID) %>% mutate(density = Freq/(median_tissue_area/1000000))  
+PID_area <- colData(sce_TU_tumor) %>% as.data.frame() %>% select(tissue_area,PID) %>% unique() %>% group_by(PID) %>% mutate(mean_tissue_area = mean(tissue_area))
+PID_tumor_metacluster_names$mean_tissue_area <- PID_area$mean_tissue_area[match(PID_tumor_metacluster_names$PID, PID_area$PID)]
+PID_tumor_metacluster_names <- PID_tumor_metacluster_names %>% group_by(PID) %>% mutate(density = Freq/(mean_tissue_area/1000000))  
 PID_metagroups <- PID_tumor_metacluster_names %>% pivot_wider(id_cols = "PID",names_from = "tumor_metacluster_names",values_from = "density") %>% column_to_rownames("PID")
 
 ## MULTIVARIABLE COX MODEL
@@ -320,9 +320,9 @@ plot_df_dens_mean <- data.frame(group = rownames(multi_res$coefficients),
 ```{r}
 # 2. MEDIAN
 PID_tumor_district_names <- colData(sce_TU_tumor) %>% as.data.frame() %>% select(tumor_district_names,PID) %>% group_by(PID) %>% table() %>% as.data.frame
-PID_area <- colData(sce_TU_tumor) %>% as.data.frame() %>% select(tissue_area,PID) %>% unique() %>% group_by(PID) %>% mutate(median_tissue_area = median(tissue_area))
-PID_tumor_district_names$median_tissue_area <- PID_area$median_tissue_area[match(PID_tumor_district_names$PID, PID_area$PID)]
-  PID_tumor_district_names <- PID_tumor_district_names %>% group_by(PID) %>% mutate(density = Freq/(median_tissue_area/1000000))  
+PID_area <- colData(sce_TU_tumor) %>% as.data.frame() %>% select(tissue_area,PID) %>% unique() %>% group_by(PID) %>% mutate(mean_tissue_area = mean(tissue_area))
+PID_tumor_district_names$mean_tissue_area <- PID_area$mean_tissue_area[match(PID_tumor_district_names$PID, PID_area$PID)]
+  PID_tumor_district_names <- PID_tumor_district_names %>% group_by(PID) %>% mutate(density = Freq/(mean_tissue_area/1000000))  
 PID_metagroups <- PID_tumor_district_names %>% pivot_wider(id_cols = "PID",names_from = "tumor_district_names",values_from = "density") %>% column_to_rownames("PID")
 
 ## MULTIVARIABLE COX MODEL
@@ -657,9 +657,9 @@ plot_df_dens_mean <- data.frame(group = rownames(multi_res$coefficients),
 ```{r}
 # 2. MEDIAN
 PID_myeloid_metacluster <- colData(sce_MY_myeloid) %>% as.data.frame() %>% select(myeloid_metacluster,PID) %>% group_by(PID) %>% table() %>% as.data.frame
-PID_area <- colData(sce_MY_myeloid) %>% as.data.frame() %>% select(tissue_area,PID) %>% unique() %>% group_by(PID) %>% mutate(median_tissue_area = median(tissue_area))
-PID_myeloid_metacluster$median_tissue_area <- PID_area$median_tissue_area[match(PID_myeloid_metacluster$PID, PID_area$PID)]
-PID_myeloid_metacluster <- PID_myeloid_metacluster %>% group_by(PID) %>% mutate(density = Freq/(median_tissue_area/1000000))  
+PID_area <- colData(sce_MY_myeloid) %>% as.data.frame() %>% select(tissue_area,PID) %>% unique() %>% group_by(PID) %>% mutate(mean_tissue_area = mean(tissue_area))
+PID_myeloid_metacluster$mean_tissue_area <- PID_area$mean_tissue_area[match(PID_myeloid_metacluster$PID, PID_area$PID)]
+PID_myeloid_metacluster <- PID_myeloid_metacluster %>% group_by(PID) %>% mutate(density = Freq/(mean_tissue_area/1000000))  
 PID_metagroups <- PID_myeloid_metacluster %>% pivot_wider(id_cols = "PID",names_from = "myeloid_metacluster",values_from = "density") %>% column_to_rownames("PID")
 
 ## MULTIVARIABLE COX MODEL
@@ -753,9 +753,9 @@ plot_df_dens_mean <- data.frame(group = rownames(multi_res$coefficients),
 ```{r}
 # 2. MEDIAN
 PID_myeloid_district_names <- colData(sce_MY_myeloid) %>% as.data.frame() %>% select(myeloid_district_names,PID) %>% group_by(PID) %>% table() %>% as.data.frame
-PID_area <- colData(sce_MY_myeloid) %>% as.data.frame() %>% select(tissue_area,PID) %>% unique() %>% group_by(PID) %>% mutate(median_tissue_area = median(tissue_area))
-PID_myeloid_district_names$median_tissue_area <- PID_area$median_tissue_area[match(PID_myeloid_district_names$PID, PID_area$PID)]
-PID_myeloid_district_names <- PID_myeloid_district_names %>% group_by(PID) %>% mutate(density = Freq/(median_tissue_area/1000000))  
+PID_area <- colData(sce_MY_myeloid) %>% as.data.frame() %>% select(tissue_area,PID) %>% unique() %>% group_by(PID) %>% mutate(mean_tissue_area = mean(tissue_area))
+PID_myeloid_district_names$mean_tissue_area <- PID_area$mean_tissue_area[match(PID_myeloid_district_names$PID, PID_area$PID)]
+PID_myeloid_district_names <- PID_myeloid_district_names %>% group_by(PID) %>% mutate(density = Freq/(mean_tissue_area/1000000))  
 PID_metagroups <- PID_myeloid_district_names %>% pivot_wider(id_cols = "PID",names_from = "myeloid_district_names",values_from = "density") %>% column_to_rownames("PID")
 
 ## MULTIVARIABLE COX MODEL
@@ -1202,9 +1202,9 @@ plot_df_dens_mean <- data.frame(group = rownames(multi_res$coefficients),
 ```{r}
 # 2. MEDIAN
 PID_celltype_combined <- colData(sce_T_CD8) %>% as.data.frame() %>% select(celltype_combined,PID) %>% group_by(PID) %>% table() %>% as.data.frame
-PID_area <- colData(sce_T_CD8) %>% as.data.frame() %>% select(tissue_area,PID) %>% unique() %>% group_by(PID) %>% mutate(median_tissue_area = median(tissue_area))
-PID_celltype_combined$median_tissue_area <- PID_area$median_tissue_area[match(PID_celltype_combined$PID, PID_area$PID)]
-  PID_celltype_combined <- PID_celltype_combined %>% group_by(PID) %>% mutate(density = Freq/(median_tissue_area/1000000))  
+PID_area <- colData(sce_T_CD8) %>% as.data.frame() %>% select(tissue_area,PID) %>% unique() %>% group_by(PID) %>% mutate(mean_tissue_area = mean(tissue_area))
+PID_celltype_combined$mean_tissue_area <- PID_area$mean_tissue_area[match(PID_celltype_combined$PID, PID_area$PID)]
+  PID_celltype_combined <- PID_celltype_combined %>% group_by(PID) %>% mutate(density = Freq/(mean_tissue_area/1000000))  
 PID_metagroups <- PID_celltype_combined %>% pivot_wider(id_cols = "PID",names_from = "celltype_combined",values_from = "density") %>% column_to_rownames("PID")
 PID_metagroups <- na.omit(PID_metagroups)
 
@@ -1300,9 +1300,9 @@ plot_df_dens_mean <- data.frame(group = rownames(multi_res$coefficients),
 ```{r}
 # 2. MEDIAN
 PID_celltype_combined <- colData(sce_T_CD4) %>% as.data.frame() %>% select(celltype_combined,PID) %>% group_by(PID) %>% table() %>% as.data.frame
-PID_area <- colData(sce_T_CD4) %>% as.data.frame() %>% select(tissue_area,PID) %>% unique() %>% group_by(PID) %>% mutate(median_tissue_area = median(tissue_area))
-PID_celltype_combined$median_tissue_area <- PID_area$median_tissue_area[match(PID_celltype_combined$PID, PID_area$PID)]
-PID_celltype_combined <- PID_celltype_combined %>% group_by(PID) %>% mutate(density = Freq/(median_tissue_area/1000000))  
+PID_area <- colData(sce_T_CD4) %>% as.data.frame() %>% select(tissue_area,PID) %>% unique() %>% group_by(PID) %>% mutate(mean_tissue_area = mean(tissue_area))
+PID_celltype_combined$mean_tissue_area <- PID_area$mean_tissue_area[match(PID_celltype_combined$PID, PID_area$PID)]
+PID_celltype_combined <- PID_celltype_combined %>% group_by(PID) %>% mutate(density = Freq/(mean_tissue_area/1000000))  
 PID_metagroups <- PID_celltype_combined %>% pivot_wider(id_cols = "PID",names_from = "celltype_combined",values_from = "density") %>% column_to_rownames("PID")
 PID_metagroups <- na.omit(PID_metagroups)
 
@@ -1403,9 +1403,9 @@ plot_df_dens_mean <- data.frame(group = rownames(multi_res$coefficients),
 ```{r}
 # 2. MEDIAN
 PID_Tcell_district_names <- colData(sce_T_CD8CD4) %>% as.data.frame() %>% select(Tcell_district_names,PID) %>% group_by(PID) %>% table() %>% as.data.frame
-PID_area <- colData(sce_T_CD8CD4) %>% as.data.frame() %>% select(tissue_area,PID) %>% unique() %>% group_by(PID) %>% mutate(median_tissue_area = median(tissue_area))
-PID_Tcell_district_names$median_tissue_area <- PID_area$median_tissue_area[match(PID_Tcell_district_names$PID, PID_area$PID)]
-PID_Tcell_district_names <- PID_Tcell_district_names %>% group_by(PID) %>% mutate(density = Freq/(median_tissue_area/1000000))  
+PID_area <- colData(sce_T_CD8CD4) %>% as.data.frame() %>% select(tissue_area,PID) %>% unique() %>% group_by(PID) %>% mutate(mean_tissue_area = mean(tissue_area))
+PID_Tcell_district_names$mean_tissue_area <- PID_area$mean_tissue_area[match(PID_Tcell_district_names$PID, PID_area$PID)]
+PID_Tcell_district_names <- PID_Tcell_district_names %>% group_by(PID) %>% mutate(density = Freq/(mean_tissue_area/1000000))  
 PID_metagroups <- PID_Tcell_district_names %>% pivot_wider(id_cols = "PID",names_from = "Tcell_district_names",values_from = "density") %>% column_to_rownames("PID")
 PID_metagroups <- na.omit(PID_metagroups)
 
