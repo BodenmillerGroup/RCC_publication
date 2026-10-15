@@ -2372,7 +2372,7 @@ fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
 res <- glmQLFTest(fit.ab, coef=ncol(design))
 DA <- res$table
 DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
-DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.05, result = ifelse(DA$logFC > 0 & DA$FDR < 0.05, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.05, "DOWN", "NOTSIG"))) %>% 
+DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.1, result = ifelse(DA$logFC > 0 & DA$FDR < 0.1, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.1, "DOWN", "NOTSIG"))) %>% 
   arrange(desc(logFC))
 DA$cluster <- factor(DA$cluster, levels = DA$cluster)
 DA$category <- x
