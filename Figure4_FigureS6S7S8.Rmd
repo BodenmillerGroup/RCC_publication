@@ -1,0 +1,24 @@
+# A spatial multi-omic portrait of survival outcome for clear cell renal cell carcinoma, Meyer et al., 2026
+
+# Figure 4 and Figure S6/S7/S8
+
+Data analysis scripts for re-creating Figure 4 and Figure S6/S7/S8. 
+
+# Software requirements
+
+```{r, message=FALSE,warning=FALSE}
+library(conflicted)
+conflicts_prefer(dplyr::count)
+conflicts_prefer(dplyr::filter)
+conflicts_prefer(dplyr::select)
+# TO DO
+```
+
+# Read data
+
+```{r}
+# Available from Zenodo - DOI: TO DO
+# File paths have to be adjusted by the user
+```
+
+# Figure 4
