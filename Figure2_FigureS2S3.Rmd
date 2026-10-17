@@ -50,10 +50,6 @@ conflicts_prefer(base::union)
 sce_TU <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_SCE_tumor.rds")
 sce_T <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_SCE_tcell.rds")
 sce_MY <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_SCE_myeloid.rds")
-
-## CytoImageList objects
-
-## Other
 ```
 
 # Figure 2
