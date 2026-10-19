@@ -1227,3 +1227,8 @@ ggsurvplot(fit,
 )
 ```
 
+# Session Info 
+
+```{r}
+sessionInfo()
+```

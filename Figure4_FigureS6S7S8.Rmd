@@ -1,3 +1,14 @@
+---
+title: null
+author: "Lasse Meyer"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
 # A spatial multi-omic portrait of survival outcome for clear cell renal cell carcinoma, Meyer et al., 2026
 
 # Figure 4 and Figure S6/S7/S8
@@ -17,6 +28,13 @@ library(survminer)
 library(foreach)
 library(scran)
 library(ggnewscale)
+library(viridis)
+library(ggpubr)
+library(pec)
+library(edgeR)
+library(clValid)
+library(caret)
+library(imcRtools)
 conflicts_prefer(dplyr::count)
 conflicts_prefer(dplyr::filter)
 conflicts_prefer(dplyr::select)
@@ -31,15 +49,37 @@ conflicts_prefer(base::setdiff)
 # File paths have to be adjusted by the user
 
 ## Genomics objects
-mutation_anno <- read_csv("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_genomics_mutations_processed.csv") #formerly mut_anno
+mutation_anno <- read_csv("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_genomics_mutations_processed.csv")
+mutation_all <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_genomics_mutations_all.rds")
 CNV_anno <- read_csv("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_genomics_CNVarms_processed.csv")
-# formerly CNV_arm_sum_out
+CNV_all <- read_csv("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_genomics_CNVarms_all.csv")
+
+## Metabolomics objects 
+metabolites_SE <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_metabolomics_SE.rds") 
+metabolites_anno <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_metabolomics_anno.rds") 
+
+## BlockForest objects 
+BF_MUT_MUT <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_blockforest_MUT_MUT.rds")
+BF_MUT_IMC <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_blockforest_MUT_IMC.rds")
+BF_MUT_IMC_MUT <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_blockforest_MUT_IMC_MUT.rds")
+BF_CNV_CNV <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_blockforest_CNV_CNV.rds")
+BF_CNV_IMC <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_blockforest_CNV_IMC.rds")
+BF_CNV_IMC_CNV <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_blockforest_CNV_IMC_CNV.rds")
+BF_META_META <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_blockforest_META_META.rds")
+BF_META_IMC <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_blockforest_META_IMC.rds")
+BF_META_IMC_META <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_blockforest_META_IMC_META.rds")
+
+## SCE objects 
+sce_TU <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_SCE_tumor.rds")
+sce_T <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_SCE_tcell.rds")
 
 ## Other
 metadata_selected <- read_csv("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_metadata.csv")
 metadata_selected <- metadata_selected %>% filter(!is.na(survival_ecotype))
 metadata_mutation <- as.data.frame(metadata_selected[metadata_selected$PID %in% mutation_anno$PID,])
 metadata_CNV <- as.data.frame(metadata_selected[metadata_selected$PID %in% unique(CNV_anno$PID),])
+metadata_metabolome <- as.data.frame(metadata_selected[metadata_selected$PID %in% unique(metabolites_SE$PID),])
+celltype_density <- read_csv("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_celltype_density.csv")
 GOI <- read_tsv("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_genomics_IntOGen_drivers.tsv") %>% pull(Symbol)
 ```
 
@@ -266,7 +306,7 @@ mut_levels_for_matrix <- cnv %>% pull(mut_level) %>% unique()
 chr_arm_list <- cnv %>% pull(chr_arm) %>% unique()
 
 # Main function
-mut_list <- list()
+CNV_list <- list()
 placeholder_chr_arm <- chr_arm_list[1]
 pids <- unique(cnv$PID)
 placeholder_pid <- pids[1]
@@ -292,29 +332,29 @@ for(mut in mut_levels_for_matrix){
     rownames(y) <- placeholder_chr_arm
   }
   
-  mut_list[[mut]] <- as.matrix(y)
+  CNV_list[[mut]] <- as.matrix(y)
 }
-mut_list_full <- unify_mat_list(mut_list)
-for (i in seq_along(mut_list_full)){
-  dif_gen = setdiff(chr_arm_list,rownames(mut_list_full[[i]]))
-  dif_pat = setdiff(pids,colnames(mut_list_full[[i]]))
-  blank= matrix(ncol=length(dif_pat),nrow=length(rownames(mut_list_full[[i]])),0)
+CNV_list_full <- unify_mat_list(CNV_list)
+for (i in seq_along(CNV_list_full)){
+  dif_gen = setdiff(chr_arm_list,rownames(CNV_list_full[[i]]))
+  dif_pat = setdiff(pids,colnames(CNV_list_full[[i]]))
+  blank= matrix(ncol=length(dif_pat),nrow=length(rownames(CNV_list_full[[i]])),0)
   colnames(blank)=dif_pat
-  rownames(blank)=rownames(mut_list_full[[i]])
-  mut_list_full[[i]]=cbind(mut_list_full[[i]],blank)
-  blank= matrix(ncol=ncol(mut_list_full[[i]]),nrow=length(dif_gen),0)
-  colnames(blank)=colnames(mut_list_full[[i]])
+  rownames(blank)=rownames(CNV_list_full[[i]])
+  CNV_list_full[[i]]=cbind(CNV_list_full[[i]],blank)
+  blank= matrix(ncol=ncol(CNV_list_full[[i]]),nrow=length(dif_gen),0)
+  colnames(blank)=colnames(CNV_list_full[[i]])
   rownames(blank)=dif_gen
-  mut_list_full[[i]]=rbind(mut_list_full[[i]],blank)
+  CNV_list_full[[i]]=rbind(CNV_list_full[[i]],blank)
 }
 
 # Clonality anno
 subclonal_anno <- CNV_anno %>% filter(type_summarized %in% c("loss_neutral", "loss", "gain_neutral", "gain")) %>% pivot_wider(id_cols = PID, names_from = chr_arm, values_from = clonality) %>% column_to_rownames("PID")
 subclonal_anno[is.na(subclonal_anno)] <- "none"
 subclonal_anno <- t(ifelse(subclonal_anno == "subclonal", 1, 0))
-subclonal_anno <- subclonal_anno[match(rownames(mut_list_full$loss), rownames(subclonal_anno)),]
-subclonal_anno <- subclonal_anno[,match(colnames(mut_list_full$loss), colnames(subclonal_anno))]
-mut_list_full$subclonal <- subclonal_anno
+subclonal_anno <- subclonal_anno[match(rownames(CNV_list_full$loss), rownames(subclonal_anno)),]
+subclonal_anno <- subclonal_anno[,match(colnames(CNV_list_full$loss), colnames(subclonal_anno))]
+CNV_list_full$subclonal <- subclonal_anno
 
 ## Step 1: Define alteration function
 col <- c("#E41A1C", "#377EB8")
@@ -327,7 +367,7 @@ fun_alter = list(
 names(col) <- c("gain", "loss") 
 
 ## Step 2: Column Annotation
-c_anno <- data.frame(PID = colnames(mut_list_full[1]$loss))
+c_anno <- data.frame(PID = colnames(CNV_list_full[1]$loss))
 c_anno$cohort <- "old"
 c_anno$survival_ecotype <- metadata_selected$survival_ecotype[match(c_anno$PID, metadata_selected$PID)]
 cohort_col <- setNames("#1F78B4","old")
@@ -341,7 +381,7 @@ ca <- columnAnnotation(
   )
 
 ## Step 4: Print Oncoprint
-ht_all <- oncoPrint(mut_list_full,
+ht_all <- oncoPrint(CNV_list_full,
                   alter_fun = fun_alter,
                   col = col, 
                   show_row_names = TRUE, show_column_names = TRUE, 
@@ -437,15 +477,15 @@ genomic_sub <- genomic_sub %>% filter(PID %in% metadata_selected$PID)
 mut_mat <- genomic_sub %>% column_to_rownames("PID") %>% select(VHL, BAP1, PBRM1, SETD2, PTEN) 
 driver_mat_anno <- genomic_sub
 driver_mat_anno <- driver_mat_anno[match(rownames(mut_mat), driver_mat_anno$PID),]
-driver_mat_anno$BF_PL_TME_archetypes <- metadata_selected$BF_PL_TME_archetypes[match(driver_mat_anno$PID, metadata_selected$PID)]
+driver_mat_anno$survival_ecotype <- metadata_selected$survival_ecotype[match(driver_mat_anno$PID, metadata_selected$PID)]
 driver_mat_anno$status_OS <- metadata_selected$status_OS[match(driver_mat_anno$PID, metadata_selected$PID)]
 driver_mat_anno$OS_months <- metadata_selected$OS_months[match(driver_mat_anno$PID, metadata_selected$PID)]
 
 # Column Annotation
 subtype_col <- setNames(c("#046C9A", "#000000", "#D69C4E", "#ECCBAE", "#ABDDDE"),sort(unique(driver_mat_anno$genomic_subtype)))
-col_group <- setNames(c("#0571B0", "gold3", "#CA0020"),c("TME_activated","TME_silent","TME_suppressed"))
+col_group <- setNames(c("#0571B0", "gold3", "#CA0020"),c("Favorable","Medium","Poor"))
 ca <- columnAnnotation(genomic_subtype = driver_mat_anno$genomic_subtype,
-                       archetype = driver_mat_anno$BF_PL_TME_archetypes,
+                       archetype = driver_mat_anno$survival_ecotype,
                        col = list(genomic_subtype = subtype_col,
                                   archetype = col_group))
 
@@ -542,9 +582,255 @@ ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_a
 
 ## 4H 
 
-# CONTINUE HERE
+```{r}
+# Read data
+ecotype_results <- metabolites_anno$ecotype_results
+col_broad <- metabolites_anno$pathway_color
+pathway_anno <- metabolites_anno$ecotype_pathway_anno
+
+# Based on Mummichog P-values
+ecotype_results <- ecotype_results %>% mutate(log_p = -log10(Mummichog_Pvals))
+result_mat_nes <- ecotype_results %>%
+  dplyr::select(pathway, group, log_p) %>% 
+  filter(log_p != 0) %>%
+  pivot_wider(names_from = group, values_from =log_p, values_fill = 0) %>% column_to_rownames("pathway") %>% t() %>% as.matrix()
+
+# Annotation
+result_mat_sig <- ifelse(result_mat_nes > -log10(0.1),1,
+                         ifelse(result_mat_nes > -log10(0.2),0.5,0))
+col_anno <- data.frame(fine = colnames(result_mat_nes))
+col_anno$broad <- pathway_anno$hsa_class[match(col_anno$fine, pathway_anno$pathway)]
+col_anno_ha <- HeatmapAnnotation(broad = anno_simple(col_anno$broad, col = col_broad),
+                                 fine = anno_text(col_anno$fine))
+
+## Plot
+h_meta <- 
+  Heatmap(result_mat_nes, 
+          col = viridis(100),
+          column_title = NULL,
+          column_split = col_anno$broad,
+          cell_fun = function(j, i, x, y, width, height, fill) {
+            s <- result_mat_sig[i, j]
+            lbl <- if (s == 1) "*" else ""
+            if (nzchar(lbl))
+              grid::grid.text(lbl, x, y,
+                              gp = grid::gpar(col = "white", fontsize = 12, fontface = "bold"))
+          },
+          clustering_method_columns = "ward.D2"
+          )%v%
+  col_anno_ha
+
+lgd_1 <- Legend(title = "Broad pathway",
+                at = names(col_broad),
+                legend_gp = gpar(fill = col_broad))
+
+h_meta <- draw(h_meta, annotation_legend_list = list(lgd_1))
+```
 
 # Figure S6
+
+## S6A 
+
+```{r}
+## Test association of mutations with survival 
+sum_matrix <- Reduce(`+`, mut_list_full)
+sum_matrix <- as.matrix(ifelse(sum_matrix >= 1, 1,0))
+sum_matrix[mut_list_full$subclonal == 1] <- 0.5
+
+# Only clonal
+mut_matrix <- as.data.frame(t(ifelse(sum_matrix == 1, TRUE, FALSE))) %>% rownames_to_column("PID") 
+mut_matrix$status_OS <- metadata_selected$status_OS[match(mut_matrix$PID, metadata_selected$PID)]
+mut_matrix$OS_months <- metadata_selected$OS_months[match(mut_matrix$PID, metadata_selected$PID)]
+
+# KAPLAN-MEIER ESTIMATE 
+# Extract p-values from log-rank / direction of trend
+cur_surv_out <- foreach(x = colnames(mut_matrix %>% select(-PID, -status_OS, -OS_months)), .combine = "rbind")%do%{
+  mut_matrix[[x]] <- factor(mut_matrix[[x]], levels = c(TRUE, FALSE))
+  formula <- as.formula(paste("Surv(OS_months, status_OS) ~ ", x))
+  fit <- survdiff(formula, data = mut_matrix)
+  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[1], exp_2 = fit$exp[1], ratio = fit$obs[1]/fit$exp[1])
+}
+
+cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
+
+# Create and plot heatmap 
+cur_surv_plot <- cur_surv_out %>% mutate(direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% filter(p < 0.05)
+cur_surv_plot$result <- ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p_adj < 0.1, "UP",
+                             ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p < 0.05, "UP_trend", 
+                                    ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p_adj < 0.1, "DOWN", 
+                                           ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p < 0.05, "DOWN_trend",NA))))
+cur_surv_plot$type <- "mutation"
+
+ggplot(cur_surv_plot, aes(x=reorder(group,ratio), y = type, col = ratio, size= -log10(p)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  scale_shape_manual(values = c(16,15,17))+
+  new_scale(new_aes = "shape")+
+  new_scale(new_aes = "color") +
+  geom_point(data = cur_surv_plot, shape = 1, aes(size = -log10(p), col = result), stroke =1.5)+
+  scale_shape_manual(values = c(1,0,2))+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("Cox model")+
+  coord_flip()
+```
+
+## S6B 
+
+```{r}
+# Update for association testing
+metadata_mutation$pT_combined[metadata_mutation$pT_combined == "T1/2"] <- "0"
+metadata_mutation$pT_combined[metadata_mutation$pT_combined == "T3/4"] <- "1"
+metadata_mutation$ISUP_combined[metadata_mutation$ISUP_combined == "G1/2"] <- "0"
+metadata_mutation$ISUP_combined[metadata_mutation$ISUP_combined == "G3/4"] <- "1"
+metadata_mutation$necrose[metadata_mutation$necrose == "NE0"] <- "0"
+metadata_mutation$necrose[metadata_mutation$necrose == "NE1"] <- "1"
+metadata_mutation$PDL1_score[metadata_mutation$PDL1_score == "PD0"] <- "0"
+metadata_mutation$PDL1_score[metadata_mutation$PDL1_score == "PD1"] <- "1"
+
+# Patient group infos
+cur_groups <- metadata_mutation %>% select(PID,all_of(GOI_clonal)) %>% unique()
+cur_test <- metadata_mutation %>% select(PID, pT_combined, ISUP_combined, necrose, PDL1_score) %>% unique() %>% remove_rownames %>% column_to_rownames("PID") %>% filter(complete.cases(.)) %>% t()
+cur_groups <- cur_groups[cur_groups$PID %in% colnames(cur_test),]
+  
+fisher_full <- foreach(i = GOI_clonal, .combine = "rbind")%do%{
+  PID_high <- unique(cur_groups[cur_groups[, i] == "1",]$PID)
+  PID_low <- unique(cur_groups[cur_groups[, i] == "0",]$PID)
+  PID_high <- PID_high[!is.na(PID_high)]
+  PID_low <- PID_low[!is.na(PID_low)]
+  fisher_results <- apply(cur_test, 1, perform_fisher_test, group1_cols = PID_high, group2_cols = PID_low)
+  fisher_results <- as.data.frame(fisher_results)
+  fisher_results <- as.data.frame(t(fisher_results)) %>% rownames_to_column("gene")
+  fisher_results$p_adj <- p.adjust(fisher_results$p_value, method = "BH")
+  fisher_results$category <- i
+  return(fisher_results)
+  }
+
+isGreater <- fisher_full$odds_ratio > 1
+pVal <- log10(fisher_full$p_value)
+pVal[isGreater] <- abs(pVal[isGreater])
+fisher_full$p_out <- pVal
+colnames(fisher_full) <- c("gene", "odds_ratio", "p_value", "p_adj", "category", "p_out")
+
+# FDR at 0.1 with trends
+fisher_full$result <- ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_adj < 0.1, "UP",
+                             ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_value < 0.05, "UP_trend", 
+                                    ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_adj < 0.1, "DOWN", 
+                                           ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_value < 0.05, "DOWN_trend","NOTSIG"))))
+
+fisher_full$odds_ratio[fisher_full$odds_ratio == Inf] <- max(fisher_full$odds_ratio[!fisher_full$odds_ratio == Inf])
+
+## Arrange rows/columns
+cur_df <- fisher_full %>% select(gene, category, odds_ratio) %>% pivot_wider(values_from = odds_ratio, names_from = gene)
+dd <- dist(cur_df[2:ncol(cur_df)], method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+row_sorted <- hc$order
+fisher_full$category <- factor(fisher_full$category, levels = cur_df[row_sorted,]$category)
+dd <- dist(t(cur_df[2:ncol(cur_df)]), method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+column_sorted <- hc$order
+fisher_full$gene <- factor(fisher_full$gene, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
+
+# Filter
+mut_selected <- fisher_full %>% filter(result != "NOTSIG") %>% pull(category) %>% unfactor %>% unique()
+fisher_full_selected <- fisher_full %>% filter(category %in% mut_selected)
+
+ggplot(fisher_full_selected, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_adj)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = fisher_full_selected,shape = 1,aes(size = -log10(p_adj), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  coord_flip()
+```
+
+## S6C 
+
+```{r}
+# Create list from results
+cv_results_list <- list(
+  "MUT" = BF_MUT_MUT,
+  "IMC" = BF_MUT_IMC,
+  "IMC_MUT" = BF_MUT_IMC_MUT
+)
+
+# Define colors 
+col_cv <- setNames(c("grey","firebrick1", "#22b2b2"),
+c("MUT", "IMC", "IMC_MUT"))
+
+# INTEGRATED BRIER SCORE
+# Initialize list to store IBS scores for each cross-validation result
+ibs_scores_list <- list()
+ibs_scores_list <- lapply(cv_results_list, function(res_obj) {
+  sapply(res_obj, function(res) {
+    if (nrow(res$actual_surv) != nrow(res$actual_test)) {
+      stop("Row count mismatch between actual_surv and actual_test")
+    }
+    test_data <- cbind(res$actual_surv, res$actual_test)
+    times_test <- sort(unique(test_data$OS_months))
+    if(!0 %in% times_test){
+    times_test <- c(0, times_test) 
+    }
+    times_pred <- res$predictions$unique.death.times
+    time_indices <- sapply(times_test, function(t) which.min(abs(times_pred - t)))
+    aligned_surv_probs <- res$predictions$survival[, time_indices, drop = FALSE]
+    pec_obj <- pec(
+      object = list("BlockForest" = aligned_surv_probs),
+      formula = Surv(OS_months, status_OS) ~ 1,
+      cens.model = "marginal",
+      exact = TRUE,
+      data = test_data
+    )
+    IBSrange <- quantile(test_data$OS_months, 0.9)
+    crps_val <- crps(pec_obj, start = 0, times = IBSrange)
+    ibs_score <- crps_val[2] 
+    return(ibs_score)
+  })
+})
+out_ibs <- data.frame(fold = 1:10, t(do.call("rbind", ibs_scores_list))[1:10,]) %>% pivot_longer(2:ncol(.), names_to = "model", values_to = "IBS")
+
+# Plot
+ggplot(out_ibs, aes(x = reorder(model,-IBS, FUN = mean), y = IBS, fill = model))+
+  geom_point(aes(color = model))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
+  theme_classic()+
+  stat_compare_means(ref.group = "MUT", paired = FALSE, method = "t.test", method.args = list(alternative = "less", label = "p.format"))+
+  stat_compare_means(vjust = 1, method = "anova")+
+  scale_fill_manual(values = col_cv)+
+  scale_color_manual(values = col_cv)+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  xlab("Models")+
+  ylab("Integrated Brier Score")
+
+# CONCORDANCE
+# Initialize list to store concordance scores for each cross-validation result
+concordance_scores_list <- list()
+concordance_scores_list <- lapply(cv_results_list, function(res_obj) {
+  sapply(res_obj, function(res) {
+    out <- concordance(Surv(res$actual_surv[, 1], res$actual_surv[, 2]) ~ rowSums(res$predictions$survival), timewt = "n/G2")
+    return(out$concordance)
+  })
+})
+out_concordance <- data.frame(fold = 1:10, t(do.call("rbind", concordance_scores_list))[1:10,]) %>% pivot_longer(2:ncol(.), names_to = "model", values_to = "concordance")
+
+# Plot
+ggplot(out_concordance, aes(x = reorder(model,concordance, FUN = median), y = concordance, fill = model))+
+  geom_point(aes(color = model))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
+  theme_classic()+
+  stat_compare_means(ref.group = "MUT", paired = FALSE, method = "t.test", method.args = list(alternative = "greater", label = "p.format"))+
+  stat_compare_means(vjust = 1, method = "anova")+
+  scale_fill_manual(values = col_cv)+
+  scale_color_manual(values = col_cv)+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  xlab("Models")+
+  ylab("Concordance (Uno)")
+```
 
 ## S6D
 
@@ -563,6 +849,325 @@ ggsurvplot(fit,
           palette = c("#0571B0","gold3", "#CA0020"),
           conf.int = FALSE
 )
+```
+
+## S6E
+
+```{r}
+surv_out <- metadata_mutation %>% select(PID, OS_months, status_OS, survival_ecotype, PBRM1_clonal) %>% unique()
+
+fit <- survfit(Surv(OS_months, status_OS) ~ PBRM1_clonal, data = surv_out %>% filter(survival_ecotype == "Medium"))
+
+ggsurvplot(fit, 
+          pval = TRUE,
+          risk.table = TRUE, 
+          risk.table.col = "strata", 
+          linetype = "strata", 
+          surv.median.line = "hv", 
+          ggtheme = theme_classic(), 
+          palette = c("gold", "#da9100"),
+          conf.int = FALSE
+)
+```
+
+## S6F 
+
+```{r}
+celltype_density$celltype_combined_immune <- ifelse(celltype_density$celltype_combined_broad %in% c("B_cell", "CD4_T_cell", "CD8_T_cell", "Macrophage", 
+"Neutrophil", "Plasma_cell"), "Immune", celltype_density$celltype_combined_broad)
+celltype_density <- celltype_density %>% filter(!celltype_combined_broad %in% c("Unknown_Other"))
+
+# Add ecotype and PBRM1 mutation
+celltype_density$survival_ecotype <- metadata_mutation$survival_ecotype[match(celltype_density$PID, metadata_mutation$PID)]
+celltype_density$PBRM1_mut <- as.character(metadata_mutation$PBRM1_clonal[match(celltype_density$PID, metadata_mutation$PID)])
+celltype_density_medium_PBRM1 <- celltype_density %>% filter(!is.na(PBRM1_mut) & survival_ecotype == "Medium")
+general_count_out <- celltype_density_medium_PBRM1 %>% group_by(PID, celltype_combined_immune) %>% summarise(Freq = round(mean(Freq), digits = 0))
+general_count_wide <- general_count_out %>% pivot_wider(id_cols = PID, names_from = celltype_combined_immune, values_from = Freq) %>% ungroup() %>% column_to_rownames("PID") %>% filter(complete.cases(.)) %>% t()
+
+### Differential abundance analysis based on edgeR
+DA <- lapply(c("PBRM1_mut"), function(x){
+abundances <- general_count_wide
+abundances <- unclass(abundances) 
+meta <- celltype_density_medium_PBRM1[match(colnames(abundances), celltype_density_medium_PBRM1$PID),] %>% as.data.frame
+meta[,x] <- relevel(x=factor(meta[,x]), ref = "0")
+meta <- meta[!is.na(meta[,x]),]
+abundances <- abundances[,colnames(abundances) %in% meta$PID]
+y.ab <- DGEList(abundances, samples=meta, group = meta[,x])
+design <- model.matrix(~group, data = y.ab$samples)
+y.ab <- estimateDisp(y.ab, design, trend="none")
+fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
+res <- glmQLFTest(fit.ab, coef=ncol(design))
+DA <- res$table
+DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
+DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$PValue<0.1, result = ifelse(DA$logFC > 0 & DA$PValue < 0.1, "UP",ifelse(DA$logFC < 0 & DA$PValue < 0.1, "DOWN", "NOTSIG"))) %>% 
+  arrange(desc(logFC))
+DA$cluster <- factor(DA$cluster, levels = DA$cluster)
+DA$category <- x
+return(DA)
+})
+DA_out <- do.call(rbind, DA)
+
+# Plot
+ggplot(DA_out, aes(x=cluster, y = category,col = logFC, size= -log10(PValue)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8")+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = DA_out,shape = 1,aes(size = -log10(PValue), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+## S6G 
+
+```{r}
+sum_matrix <- Reduce(`+`, mutation_all)
+sum_matrix <- as.matrix(ifelse(sum_matrix >= 1, 1,0))
+sum_matrix[mutation_all$subclonal == 1] <- 0.5
+save_sum <- as.data.frame(t(sum_matrix)) %>% rownames_to_column("PID")
+
+MUT_burden <- save_sum %>% column_to_rownames("PID") %>% mutate(burden = rowSums(.)) %>% rownames_to_column("PID") %>% select(PID, burden)
+MUT_burden$survival_ecotype <- metadata_selected$survival_ecotype[match(MUT_burden$PID, metadata_selected$PID)]
+MUT_burden <- MUT_burden %>% filter(!is.na(survival_ecotype))
+MUT_burden$status_OS <- metadata_selected$status_OS[match(MUT_burden$PID, metadata_selected$PID)]
+MUT_burden$OS_months <- metadata_selected$OS_months[match(MUT_burden$PID, metadata_selected$PID)]
+MUT_burden$burden_class <- ifelse(MUT_burden$burden > mean(MUT_burden$burden), "high", "low")
+
+fit <- survfit(Surv(OS_months, status_OS) ~ burden_class, data = MUT_burden)
+
+ggsurvplot(fit, 
+          pval = TRUE,
+          risk.table = TRUE, 
+          risk.table.col = "strata", 
+          linetype = "strata", 
+          surv.median.line = "hv", 
+          ggtheme = theme_classic(), 
+          palette = "Set1", 
+          conf.int = FALSE
+)
+```
+
+## S6H 
+
+```{r}
+col_group <- setNames(c("#0571B0", "gold3", "#CA0020"),c("Favorable","Medium","Poor"))
+
+ggplot(MUT_burden, aes(x = survival_ecotype, y = burden, fill = survival_ecotype))+
+  geom_point(aes(color = survival_ecotype))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
+  theme_classic()+
+  stat_compare_means(vjust = 1)+
+  scale_fill_manual(values = col_group)+
+  scale_color_manual(values = col_group)+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  xlab("Models")+
+  ylab("MUT events")+
+  guides(fill = "none", color = "none")
+```
+
+## S6I 
+
+```{r}
+## Test association of mutations with survival 
+sum_matrix <- Reduce(`+`, CNV_list_full)
+sum_matrix <- as.matrix(ifelse(sum_matrix >= 1, 1,0))
+sum_matrix[CNV_list_full$subclonal == 1] <- 0.5
+
+# Only clonal
+mut_matrix <- as.data.frame(t(ifelse(sum_matrix == 1, TRUE, FALSE))) %>% rownames_to_column("PID") 
+mut_matrix$status_OS <- metadata_selected$status_OS[match(mut_matrix$PID, metadata_selected$PID)]
+mut_matrix$OS_months <- metadata_selected$OS_months[match(mut_matrix$PID, metadata_selected$PID)]
+
+# KAPLAN-MEIER ESTIMATE 
+# Extract p-values from log-rank / direction of trend
+cur_surv_out <- foreach(x = colnames(mut_matrix %>% select(-PID, -status_OS, -OS_months)), .combine = "rbind")%do%{
+  mut_matrix[[x]] <- factor(mut_matrix[[x]], levels = c(TRUE, FALSE))
+  formula <- as.formula(paste("Surv(OS_months, status_OS) ~ ", x))
+  fit <- survdiff(formula, data = mut_matrix)
+  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[1], exp_2 = fit$exp[1], ratio = fit$obs[1]/fit$exp[1])
+}
+
+cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
+
+# Create and plot heatmap 
+cur_surv_plot <- cur_surv_out %>% mutate(direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% filter(p < 0.05)
+cur_surv_plot$result <- ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p_adj < 0.1, "UP",
+                             ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p < 0.05, "UP_trend", 
+                                    ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p_adj < 0.1, "DOWN", 
+                                           ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p < 0.05, "DOWN_trend",NA))))
+cur_surv_plot$type <- "mutation"
+
+ggplot(cur_surv_plot, aes(x=reorder(group,ratio), y = type, col = ratio, size= -log10(p)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  scale_shape_manual(values = c(16,15,17))+
+  new_scale(new_aes = "shape")+
+  new_scale(new_aes = "color") +
+  geom_point(data = cur_surv_plot, shape = 1, aes(size = -log10(p), col = result), stroke =1.5)+
+  scale_shape_manual(values = c(1,0,2))+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("Cox model")+
+  coord_flip()
+```
+
+## S6J 
+
+```{r}
+# Update for association testing
+metadata_CNV$pT_combined[metadata_CNV$pT_combined == "T1/2"] <- "0"
+metadata_CNV$pT_combined[metadata_CNV$pT_combined == "T3/4"] <- "1"
+metadata_CNV$ISUP_combined[metadata_CNV$ISUP_combined == "G1/2"] <- "0"
+metadata_CNV$ISUP_combined[metadata_CNV$ISUP_combined == "G3/4"] <- "1"
+metadata_CNV$necrose[metadata_CNV$necrose == "NE0"] <- "0"
+metadata_CNV$necrose[metadata_CNV$necrose == "NE1"] <- "1"
+metadata_CNV$PDL1_score[metadata_CNV$PDL1_score == "PD0"] <- "0"
+metadata_CNV$PDL1_score[metadata_CNV$PDL1_score == "PD1"] <- "1"
+
+# Patient group infos
+cur_groups <- metadata_CNV %>% select(PID,all_of(CNV_clonal)) %>% unique()
+cur_test <- metadata_CNV %>% select(PID, pT_combined, ISUP_combined, necrose, PDL1_score) %>% unique() %>% remove_rownames %>% column_to_rownames("PID") %>% filter(complete.cases(.)) %>% t()
+cur_groups <- cur_groups[cur_groups$PID %in% colnames(cur_test),]
+  
+fisher_full <- foreach(i = CNV_clonal, .combine = "rbind")%do%{
+  PID_high <- unique(cur_groups[cur_groups[, i] == "1",]$PID)
+  PID_low <- unique(cur_groups[cur_groups[, i] == "0",]$PID)
+  PID_high <- PID_high[!is.na(PID_high)]
+  PID_low <- PID_low[!is.na(PID_low)]
+  fisher_results <- apply(cur_test, 1, perform_fisher_test, group1_cols = PID_high, group2_cols = PID_low)
+  fisher_results <- as.data.frame(fisher_results)
+  fisher_results <- as.data.frame(t(fisher_results)) %>% rownames_to_column("gene")
+  fisher_results$p_adj <- p.adjust(fisher_results$p_value, method = "BH")
+  fisher_results$category <- i
+  return(fisher_results)
+  }
+
+isGreater <- fisher_full$odds_ratio > 1
+pVal <- log10(fisher_full$p_value)
+pVal[isGreater] <- abs(pVal[isGreater])
+fisher_full$p_out <- pVal
+colnames(fisher_full) <- c("gene", "odds_ratio", "p_value", "p_adj", "category", "p_out")
+
+# FDR at 0.1 with trends
+fisher_full$result <- ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_adj < 0.1, "UP",
+                             ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_value < 0.05, "UP_trend", 
+                                    ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_adj < 0.1, "DOWN", 
+                                           ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_value < 0.05, "DOWN_trend","NOTSIG"))))
+
+fisher_full$odds_ratio[fisher_full$odds_ratio == Inf] <- max(fisher_full$odds_ratio[!fisher_full$odds_ratio == Inf])
+
+## Arrange rows/columns
+cur_df <- fisher_full %>% select(gene, category, odds_ratio) %>% pivot_wider(values_from = odds_ratio, names_from = gene)
+dd <- dist(cur_df[2:ncol(cur_df)], method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+row_sorted <- hc$order
+fisher_full$category <- factor(fisher_full$category, levels = cur_df[row_sorted,]$category)
+dd <- dist(t(cur_df[2:ncol(cur_df)]), method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+column_sorted <- hc$order
+fisher_full$gene <- factor(fisher_full$gene, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
+
+# Filter
+mut_selected <- fisher_full %>% filter(result != "NOTSIG") %>% pull(category) %>% unfactor %>% unique()
+fisher_full_selected <- fisher_full %>% filter(category %in% mut_selected)
+
+ggplot(fisher_full_selected, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_adj)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = fisher_full_selected,shape = 1,aes(size = -log10(p_adj), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  coord_flip()
+```
+
+## S6K
+
+```{r}
+# Create list from results
+cv_results_list <- list(
+  "CNV" = BF_CNV_CNV,
+  "IMC" = BF_CNV_IMC,
+  "IMC_CNV" = BF_CNV_IMC_CNV
+)
+
+# Define colors 
+col_cv <- setNames(c("grey","firebrick1", "#b2b222"),
+c("CNV", "IMC", "IMC_CNV"))
+
+# INTEGRATED BRIER SCORE
+# Initialize list to store IBS scores for each cross-validation result
+ibs_scores_list <- list()
+ibs_scores_list <- lapply(cv_results_list, function(res_obj) {
+  sapply(res_obj, function(res) {
+    if (nrow(res$actual_surv) != nrow(res$actual_test)) {
+      stop("Row count mismatch between actual_surv and actual_test")
+    }
+    test_data <- cbind(res$actual_surv, res$actual_test)
+    times_test <- sort(unique(test_data$OS_months))
+    if(!0 %in% times_test){
+    times_test <- c(0, times_test)
+    }
+    times_pred <- res$predictions$unique.death.times
+    time_indices <- sapply(times_test, function(t) which.min(abs(times_pred - t)))
+    aligned_surv_probs <- res$predictions$survival[, time_indices, drop = FALSE]
+    pec_obj <- pec(
+      object = list("BlockForest" = aligned_surv_probs),
+      formula = Surv(OS_months, status_OS) ~ 1,
+      cens.model = "marginal",
+      exact = TRUE,
+      data = test_data
+    )
+    IBSrange <- quantile(test_data$OS_months, 0.9)
+    crps_val <- crps(pec_obj, start = 0, times = IBSrange)
+    ibs_score <- crps_val[2] 
+    return(ibs_score)
+  })
+})
+out_ibs <- data.frame(fold = 1:10, t(do.call("rbind", ibs_scores_list))[1:10,]) %>% pivot_longer(2:ncol(.), names_to = "model", values_to = "IBS")
+
+# Plot
+ggplot(out_ibs, aes(x = reorder(model,-IBS, FUN = median), y = IBS, fill = model))+
+  geom_point(aes(color = model))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
+  theme_classic()+
+  stat_compare_means(ref.group = "CNV", paired = FALSE, method = "t.test", method.args = list(alternative = "less", label = "p.format"))+
+  stat_compare_means(vjust = 1, method = "anova")+
+  scale_fill_manual(values = col_cv)+
+  scale_color_manual(values = col_cv)+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  xlab("Models")+
+  ylab("Integrated Brier Score")
+
+# CONCORDANCE
+# Initialize list to store concordance scores for each cross-validation result
+concordance_scores_list <- list()
+concordance_scores_list <- lapply(cv_results_list, function(res_obj) {
+  sapply(res_obj, function(res) {
+    out <- concordance(Surv(res$actual_surv[, 1], res$actual_surv[, 2]) ~ rowSums(res$predictions$survival), timewt = "n/G2")
+    return(out$concordance)
+  })
+})
+
+out_concordance <- data.frame(fold = 1:10, t(do.call("rbind", concordance_scores_list))[1:10,]) %>% pivot_longer(2:ncol(.), names_to = "model", values_to = "concordance")
+
+# Plot
+ggplot(out_concordance, aes(x = model, y = concordance, fill = model))+
+  geom_point(aes(color = model))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
+  theme_classic()+
+  stat_compare_means(ref.group = "CNV", paired = FALSE, method = "t.test", method.args = list(alternative = "greater", label = "p.format"))+
+  stat_compare_means(vjust = 1, method = "anova")+
+  scale_fill_manual(values = col_cv)+
+  scale_color_manual(values = col_cv)+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  xlab("Models")+
+  ylab("Concordance (Uno)")
 ```
 
 ## S6L
@@ -584,3 +1189,772 @@ ggsurvplot(fit,
 )
 ```
 
+## S6M
+
+```{r}
+## All CNV arm-level events
+CNV_all$chr_arm_type <- paste0(CNV_all$chr_arm, "_", CNV_all$type_summarized)
+CNV_per_PID <- CNV_all %>% mutate(binary = ifelse(!type_summarized %in% c("neutral"), 1, 0)) %>% pivot_wider(id_cols = PID, names_from = chr_arm_type, values_from = binary)
+CNV_per_PID[is.na(CNV_per_PID)] <- 0
+
+CNV_burden <- CNV_per_PID %>% column_to_rownames("PID") %>% mutate(burden = rowSums(.)) %>% rownames_to_column("PID") %>% select(PID, burden)
+CNV_burden$survival_ecotype <- metadata_selected$survival_ecotype[match(CNV_burden$PID, metadata_selected$PID)]
+CNV_burden <- CNV_burden %>% filter(!is.na(survival_ecotype))
+
+ggplot(CNV_burden, aes(x = survival_ecotype, y = burden, fill = survival_ecotype))+
+  geom_point(aes(color = survival_ecotype))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
+  theme_classic()+
+  stat_compare_means(vjust = 1)+
+  scale_fill_manual(values = col_group)+
+  scale_color_manual(values = col_group)+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  xlab("Models")+
+  ylab("CNV events")+
+  guides(fill = "none", color = "none")
+```
+
+## S6N
+
+```{r}
+CNV_burden$status_OS <- metadata_selected$status_OS[match(CNV_burden$PID, metadata_selected$PID)]
+CNV_burden$OS_months <- metadata_selected$OS_months[match(CNV_burden$PID, metadata_selected$PID)]
+CNV_burden$burden_class <- ifelse(CNV_burden$burden > mean(CNV_burden$burden), "high", "low")
+
+fit <- survfit(Surv(OS_months, status_OS) ~ burden_class, data = CNV_burden)
+
+ggsurvplot(fit, 
+          pval = TRUE,
+          risk.table = TRUE, 
+          risk.table.col = "strata", 
+          linetype = "strata", 
+          surv.median.line = "hv", 
+          ggtheme = theme_classic(), 
+          palette = "Set1", 
+          conf.int = FALSE
+)
+```
+
+## S6O
+
+```{r}
+# Compare expression of VHL on tumor cells across genomic categories
+sce_TU_tumor <- sce_TU[,sce_TU$analysis_cat %in% c("tumor")]
+archetype_mean_PID <- aggregateAcrossCells(sce_TU_tumor, ids = sce_TU_tumor$PID,
+                                 statistics = "mean",
+                                 use.assay.type = "exprs",
+                                 subset.row = rowData(sce_TU_tumor)$tumor_cluster_1)
+# Mutation data
+VHL_exp <- assay(archetype_mean_PID) %>% as.data.frame %>% rownames_to_column("protein") %>% filter(protein == "VHL") %>% pivot_longer(cols = 2:ncol(.), names_to = "PID", values_to = "mean_VHL_tumor")
+VHL_exp$VHL_mutation <- as.character(metadata_mutation$VHL_clonal[match(VHL_exp$PID, metadata_mutation$PID)])
+VHL_exp$genomic_subtype <- metadata_mutation$genomic_subtype[match(VHL_exp$PID, metadata_mutation$PID)]
+VHL_exp <- VHL_exp %>% filter(!is.na(VHL_mutation))
+
+# CNV data
+VHL_exp_CNV <- VHL_exp
+VHL_exp_CNV$chr3_p_loss <- as.character(metadata_CNV$chr3_p_loss_clonal[match(VHL_exp_CNV$PID, metadata_CNV$PID)])
+VHL_exp_CNV <- VHL_exp_CNV %>% filter(!is.na(chr3_p_loss))
+
+## COMBINED 
+VHL_exp_CNV <- VHL_exp_CNV %>% mutate(VHL_chr3p_comb = ifelse(VHL_exp_CNV$chr3_p_loss == "1" & VHL_exp_CNV$VHL_mutation == "1", "VHLmut_chr3ploss", 
+                                               ifelse(VHL_exp_CNV$chr3_p_loss == "1" & VHL_exp_CNV$VHL_mutation == "0", "chr3ploss", ifelse(VHL_exp_CNV$chr3_p_loss == "0" & VHL_exp_CNV$VHL_mutation == "1","VHLmut", "None"))))
+
+# Plot
+ggplot(VHL_exp_CNV %>% filter(chr3_p_loss == "1"), aes(x = genomic_subtype, y = mean_VHL_tumor, fill =  genomic_subtype))+
+  geom_point(aes(color =  genomic_subtype))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
+  theme_classic()+
+  scale_color_manual(values = subtype_col)+
+  scale_fill_manual(values = subtype_col)+
+  stat_compare_means(vjust = 1)+
+  ggtitle("chr3ploss")
+
+ggplot(VHL_exp_CNV %>% filter(VHL_chr3p_comb == "VHLmut_chr3ploss"), aes(x = genomic_subtype, y = mean_VHL_tumor, fill =  genomic_subtype))+
+  geom_point(aes(color =  genomic_subtype))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
+  theme_classic()+
+  scale_color_manual(values = subtype_col)+
+  scale_fill_manual(values = subtype_col)+
+  stat_compare_means(vjust = 1)+
+  ggtitle("chr3ploss+VHLmut")
+```
+
+# Figure S7 
+
+## S7A
+
+```{r}
+# SURVIVAL 
+# 1. MEAN
+metabo_df <- t(assay(metabolites_SE, "min_max")) %>% as.data.frame 
+metabo_df_mean <- foreach(i = colnames(metabo_df),.combine = "cbind")%do%{
+metabo_df %>% select(all_of(i)) %>% mutate(mean = ifelse(metabo_df[,i] > mean(metabo_df[,i]),"B","A")) %>% pull(mean)
+}
+rownames(metabo_df_mean) <- rownames(metabo_df)
+metabo_df_mean <- as.data.frame(metabo_df_mean)
+metabo_df_mean$status_OS <- metabolites_SE$status_OS[match(rownames(metabo_df), metabolites_SE$PID)]
+metabo_df_mean$OS_months <- metabolites_SE$OS_months[match(rownames(metabo_df), metabolites_SE$PID)]
+
+# KAPLAN-MEIER ESTIMATE 
+# Extract p-values from log-rank / direction of trend
+cur_surv_out <- foreach(x = colnames(metabo_df_mean %>% select(-status_OS, -OS_months)), .combine = "rbind")%do%{
+  metabo_df_mean[[x]] <- factor(metabo_df_mean[[x]], levels = c("B", "A"))
+  formula <- as.formula(paste("Surv(OS_months, status_OS) ~ ", x))
+  fit <- survdiff(formula, data = metabo_df_mean)
+  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[1], exp_2 = fit$exp[1], ratio = fit$obs[1]/fit$exp[1])
+}
+cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
+match <- data.frame(mz = colnames(metabo_df), result = colnames(metabo_df_mean %>% select(-status_OS, -OS_months)))
+cur_surv_out$group <- match$mz[match(cur_surv_out$group, match$result)]
+
+
+# Create output
+cur_surv_plot <- cur_surv_out %>% mutate(direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% filter(p < 0.05)
+cur_surv_plot$result <- ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p_adj < 0.1, "UP",
+                             ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p < 0.05, "UP_trend", 
+                                    ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p_adj < 0.1, "DOWN", 
+                                           ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p < 0.05, "DOWN_trend",NA))))
+cur_surv_plot$type <- "metabolites"
+cur_surv_plot_mean <- cur_surv_plot 
+
+# 2. MEDIAN
+metabo_df <- t(assay(metabolites_SE, "min_max")) %>% as.data.frame 
+metabo_df_mean <- foreach(i = colnames(metabo_df),.combine = "cbind")%do%{
+metabo_df %>% select(all_of(i)) %>% mutate(median = ifelse(metabo_df[,i] > median(metabo_df[,i]),"B","A")) %>% pull(median)
+}
+rownames(metabo_df_mean) <- rownames(metabo_df)
+metabo_df_mean <- as.data.frame(metabo_df_mean)
+metabo_df_mean$status_OS <- metabolites_SE$status_OS[match(rownames(metabo_df), metabolites_SE$PID)]
+metabo_df_mean$OS_months <- metabolites_SE$OS_months[match(rownames(metabo_df), metabolites_SE$PID)]
+
+# KAPLAN-MEIER ESTIMATE
+# Extract p-values from log-rank / direction of trend
+cur_surv_out <- foreach(x = colnames(metabo_df_mean %>% select(-status_OS, -OS_months)), .combine = "rbind")%do%{
+  metabo_df_mean[[x]] <- factor(metabo_df_mean[[x]], levels = c("B", "A"))
+  formula <- as.formula(paste("Surv(OS_months, status_OS) ~ ", x))
+  fit <- survdiff(formula, data = metabo_df_mean)
+  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[1], exp_2 = fit$exp[1], ratio = fit$obs[1]/fit$exp[1])
+}
+cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
+match <- data.frame(mz = colnames(metabo_df), result = colnames(metabo_df_mean %>% select(-status_OS, -OS_months)))
+cur_surv_out$group <- match$mz[match(cur_surv_out$group, match$result)]
+
+# Create outpuz
+cur_surv_plot <- cur_surv_out %>% mutate(direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% filter(p < 0.05)
+cur_surv_plot$result <- ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p_adj < 0.1, "UP",
+                             ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p < 0.05, "UP_trend", 
+                                    ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p_adj < 0.1, "DOWN", 
+                                           ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p < 0.05, "DOWN_trend",NA))))
+cur_surv_plot$type <- "metabolites"
+cur_surv_plot_median <- cur_surv_plot 
+
+
+# Combined visualization
+cur_surv_plot_mean$category <- "mean"
+cur_surv_plot_median$category <- "median"
+plot_exp_combined <- rbind(cur_surv_plot_mean, cur_surv_plot_median)
+both <- plot_exp_combined %>% group_by(group,direction) %>% dplyr::count() %>% dplyr::filter(n > 1) %>% pull(group)
+plot_exp_combined$category <- ifelse(plot_exp_combined$group %in% both, "both", plot_exp_combined$category)
+plot_exp_combined_fil <- plot_exp_combined %>% group_by(group, category) %>% reframe(p = mean(p), 
+                                                                                     result = result, 
+                                                                                     type = type, 
+                                                                                     ratio = mean(ratio),
+                                                                                     direction = direction) %>% unique()
+
+ggplot(plot_exp_combined_fil, aes(x=reorder(group,ratio), y = type, shape = category, col = ratio, size= -log10(p)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  scale_shape_manual(values = c(16,15,17))+
+  new_scale(new_aes = "shape")+
+  new_scale(new_aes = "color") +
+  geom_point(data = plot_exp_combined_fil,aes(size = -log10(p), shape = category, col = result), stroke =1.5)+
+  scale_shape_manual(values = c(1,0,2))+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("Cox model")+
+  coord_flip()
+```
+
+## S7B 
+
+```{r}
+# DISEASE PROGRESSION
+progression_p_test <- function(SE, x, group) {
+  SE_sub <- SE[,!is.na(SE[[group]])]
+  mean_SE <- aggregateAcrossCells(SE_sub,
+                                  ids = SE_sub[[group]],
+                                  statistics = "mean",
+                                  use.assay.type = "min_max")
+  logFC <- log2(assay(mean_SE, "min_max")[, mean_SE[[group]] == x] /
+                assay(mean_SE, "min_max")[, mean_SE[[group]] != x])
+  min_max <- as.data.frame(t(assay(SE_sub, "min_max")))
+  min_max[[group]] <- SE_sub[[group]]
+  p_value <- c()
+  t_score <- c()
+  for (i in 1:(ncol(min_max) - 1)) {
+    t <- wilcox.test(min_max[min_max[[group]] == x, i], 
+                min_max[min_max[[group]] != x, i])
+    p_value[i] <- t$p.value
+  }
+  names(p_value) <- colnames(min_max)[1:(ncol(min_max) - 1)]
+  p_value_adj <- p.adjust(p_value, method = "BH")
+  names(p_value_adj) <- colnames(min_max)[1:(ncol(min_max) - 1)]
+  data <- as.data.frame(cbind(logFC, p_value_adj))
+  data$category <- group
+  data <- data %>% rownames_to_column("mass")
+  return(data)
+}
+
+out_ISUP <- progression_p_test(metabolites_SE, "G3/4", "ISUP_combined")
+out_pT <- progression_p_test(metabolites_SE, "T3/4", "pT_combined")
+out_necrose <- progression_p_test(metabolites_SE, "NE1", "necrose")
+out_PDL1 <- progression_p_test(metabolites_SE, "1", "PDL1_score")
+out_all <- rbind(out_ISUP, out_pT, out_necrose, out_PDL1)
+out_all$direction <- ifelse(out_all$logFC >= 0, "high", "low")
+
+# Filter
+mass_sig <- out_all %>% filter(p_value_adj < 0.05) %>% group_by(mass, direction) %>% dplyr::count() %>% arrange(desc(n)) %>% dplyr::filter(n > 2) %>% pull(mass)
+out_all_sig <- out_all %>% filter(mass %in% mass_sig) 
+out_all_sig$result <- ifelse(out_all_sig$direction == "high" & out_all_sig$p_value_adj < 0.05, "UP",
+                                    ifelse(out_all_sig$direction == "low" & out_all_sig$p_value_adj < 0.05, "DOWN", "NOTSIG"))
+out_all_sig$type <- "metabo"
+
+# Plot
+ggplot(out_all_sig, aes(x=reorder(mass,logFC), y = category, col = logFC, size= -log10(p_value_adj )))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 0)+
+  scale_size(range = c(2,10))+
+  scale_shape_manual(values = c(16,15,17))+
+  new_scale(new_aes = "shape")+
+  new_scale(new_aes = "color") +
+  geom_point(data = out_all_sig, shape = 1, aes(size = -log10(p_value_adj ), col = result), stroke =1.5)+
+  scale_shape_manual(values = c(1,0,2))+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("Cox model")+
+  coord_flip()
+```
+
+## S7C
+
+```{r}
+# Create list from results
+cv_results_list <- list(
+  "META" = BF_META_META,
+  "IMC" = BF_META_IMC,
+  "IMC_META" = BF_META_IMC_META
+)
+
+# Define colors 
+col_cv <- setNames(c("grey","firebrick1", "#b26a22"),
+c("META", "IMC", "IMC_META"))
+
+# INTEGRATED BRIER SCORE
+# Initialize list to store IBS scores for each cross-validation result
+ibs_scores_list <- list()
+ibs_scores_list <- lapply(cv_results_list, function(res_obj) {
+  sapply(res_obj, function(res) {
+    if (nrow(res$actual_surv) != nrow(res$actual_test)) {
+      stop("Row count mismatch between actual_surv and actual_test")
+    }
+    test_data <- cbind(res$actual_surv, res$actual_test)
+    times_test <- sort(unique(test_data$OS_months))
+    if(!0 %in% times_test){
+    times_test <- c(0, times_test) 
+    }
+    times_pred <- res$predictions$unique.death.times
+    time_indices <- sapply(times_test, function(t) which.min(abs(times_pred - t)))
+    aligned_surv_probs <- res$predictions$survival[, time_indices, drop = FALSE]
+    pec_obj <- pec(
+      object = list("BlockForest" = aligned_surv_probs),
+      formula = Surv(OS_months, status_OS) ~ 1,
+      cens.model = "marginal",
+      exact = TRUE,
+      data = test_data
+    )
+    IBSrange <- quantile(test_data$OS_months, 0.9)
+    crps_val <- crps(pec_obj, start = 0, times = IBSrange)
+    ibs_score <- crps_val[2] 
+    
+    return(ibs_score)
+  })
+})
+out_ibs <- data.frame(fold = 1:10, t(do.call("rbind", ibs_scores_list))[1:10,]) %>% pivot_longer(2:ncol(.), names_to = "model", values_to = "IBS")
+
+# Plot
+ggplot(out_ibs, aes(x = reorder(model,-IBS, FUN = median), y = IBS, fill = model))+
+  geom_point(aes(color = model))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
+  theme_classic()+
+  stat_compare_means(ref.group = "META", paired = FALSE, method = "t.test", method.args = list(alternative = "less", label = "p.format"))+
+  stat_compare_means(vjust = 1, method = "anova")+
+  scale_fill_manual(values = col_cv)+
+  scale_color_manual(values = col_cv)+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  xlab("Models")+
+  ylab("Integrated Brier Score")
+
+# CONCORDANCE
+# Initialize list to store concordance scores for each cross-validation result
+concordance_scores_list <- list()
+concordance_scores_list <- lapply(cv_results_list, function(res_obj) {
+  sapply(res_obj, function(res) {
+    out <- concordance(Surv(res$actual_surv[, 1], res$actual_surv[, 2]) ~ rowSums(res$predictions$survival), timewt = "n/G2")
+    return(out$concordance)
+  })
+})
+
+out_concordance <- data.frame(fold = 1:10, t(do.call("rbind", concordance_scores_list))[1:10,]) %>% pivot_longer(2:ncol(.), names_to = "model", values_to = "concordance")
+
+# Plot
+ggplot(out_concordance, aes(x = reorder(model,concordance, FUN = median), y = concordance, fill = model))+
+  geom_point(aes(color = model))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
+  theme_classic()+
+  stat_compare_means(ref.group = "META", paired = FALSE, method = "t.test", method.args = list(alternative = "greater", label = "p.format"))+
+  stat_compare_means(vjust = 1, method = "anova")+
+  scale_fill_manual(values = col_cv)+
+  scale_color_manual(values = col_cv)+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  xlab("Models")+
+  ylab("Concordance (Uno)")
+```
+
+## S7D
+
+```{r, message = FALSE}
+# Metabolite clustering
+met_data <- t(assay(metabolites_SE, "min_max")) %>% as.matrix()
+set.seed(22)
+testCL<- clValid(met_data,
+                 nClust = 10:20,
+                 clMethods = c("kmeans"),
+                 validation="internal", 
+                 metric="euclidean", 
+                 method = "ward", 
+                 maxitems = 5000)
+
+plot(testCL, measures = "Silhouette")
+
+# Pathway enrichment result clustering 
+all_results <- metabolites_anno$subtype_results %>% mutate(log_p = -log10(Mummichog_Pvals))
+result_mat_nes <- all_results %>%
+  dplyr::select(pathway, group, log_p) %>% 
+  pivot_wider(names_from = group, values_from = log_p, values_fill = 0) %>% column_to_rownames("pathway") %>% t() %>% as.matrix()
+result_mat_nes_sig <- ifelse(result_mat_nes > -log10(0.1), result_mat_nes, 0)
+
+set.seed(22)
+testCL<- clValid(result_mat_nes_sig,
+                 nClust = 2:10,
+                 clMethods = c("hierarchical"),
+                 validation="internal", 
+                 metric="euclidean", 
+                 method = "ward", 
+                 maxitems = 5000)
+out_testCL <- as.data.frame(testCL@measures) %>% t() 
+rownames(out_testCL) <- testCL@nClust
+out_testCL <- out_testCL %>% as.data.frame %>% rownames_to_column("nclus")
+
+plot(out_testCL$nclus, out_testCL$Silhouette, type = "b", col = "black", pch = 16,
+     ylab = "Silhouette", xlab = "Number of clusters")
+par(new = TRUE)
+plot(out_testCL$nclus, out_testCL$Dunn, type = "b", col = "grey", pch = 17,
+     axes = FALSE, xlab = "", ylab = "Dunn index")
+axis(side = 4)
+mtext("Dunn index", side = 4, line = 3)
+```
+
+## S7E
+
+```{r}
+result_mat_nes_agg <- as.data.frame(result_mat_nes)
+result_mat_nes_agg$metacluster <- metabolites_SE$metacluster_nes[match(rownames(result_mat_nes_agg), paste0("cluster_",metabolites_SE$cluster_mz))]
+
+result_by_metacluster <- result_mat_nes_agg %>%
+  group_by(metacluster) %>%
+  summarise(across(everything(), mean)) %>% column_to_rownames("metacluster")
+result_by_metacluster_sig <- ifelse(result_by_metacluster > -log10(0.1),1,0)
+
+# Add rowAnno for archetypes
+row_anno <- data.frame(metacluster = rownames(result_by_metacluster))
+row_anno$metabolic_subtype <- metadata_metabolome$metabolic_subtype[match(paste0("ms_", row_anno$metacluster), metadata_metabolome$metabolic_subtype)]
+
+# Archetype fractions
+fraction_arche <- metadata_metabolome %>% group_by(metabolic_subtype) %>% dplyr::count(survival_ecotype) %>% mutate(fra = n/sum(n)) %>% pivot_wider(id_cols = metabolic_subtype, names_from = survival_ecotype, values_from = fra, values_fill = 0) %>% column_to_rownames("metabolic_subtype")
+fraction_arche <- fraction_arche[match(row_anno$metabolic_subtype, rownames(fraction_arche)),] 
+fraction_arche <- fraction_arche[, names(col_group)]
+
+# Number of patients
+n_PID <- metadata_metabolome %>% group_by(metabolic_subtype) %>% dplyr::count()
+n_PID <- n_PID[match(row_anno$metabolic_subtype, n_PID$metabolic_subtype),] 
+
+row_anno_ha <- HeatmapAnnotation(
+  nPID = anno_barplot(n_PID$n, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)), 
+  fraction = anno_barplot(fraction_arche, width = unit(10, "mm"), gp = gpar(fill = col_group)),
+  naming = anno_text(row_anno$metabolic_subtype), 
+  gap = unit(1,"mm"),
+  which = "row")
+
+col_anno <- data.frame(fine = colnames(result_mat_nes))
+pathway_anno <- metabolites_anno$subtype_pathway_anno
+col_anno$broad <- pathway_anno$hsa_class[match(col_anno$fine, pathway_anno$pathway)]
+col_broad <- metabolites_anno$pathway_color
+col_anno_ha <- HeatmapAnnotation(broad = anno_simple(col_anno$broad, col = col_broad),
+                                 fine = anno_text(col_anno$fine))
+
+h <- Heatmap(result_by_metacluster, col = viridis(100),
+        column_split = col_anno$broad, right_annotation = row_anno_ha,
+        cell_fun = function(j, i, x, y, width, height, fill) {
+            s <- result_by_metacluster_sig[i, j]
+            lbl <- if (s == 1) "*" else "" 
+            if (nzchar(lbl))
+              grid::grid.text(lbl, x, y,
+                              gp = grid::gpar(col = "white", fontsize = 12, fontface = "bold"))
+          }
+        )%v%
+  col_anno_ha
+
+draw(h)
+```
+
+## S7F
+
+```{r}
+surv_out <- metadata_metabolome %>% select(PID, OS_months, status_OS, metabolic_subtype) %>% unique()
+
+fit <- survfit(Surv(OS_months, status_OS) ~ metabolic_subtype, data = surv_out)
+
+ggsurvplot(fit, 
+          pval = TRUE,
+          risk.table = TRUE, 
+          risk.table.col = "strata", 
+          linetype = "strata", 
+          surv.median.line = "hv", 
+          ggtheme = theme_classic(),
+          palette = "Paired",
+          conf.int = FALSE
+)
+```
+
+## S7G
+
+```{r}
+# One-hot encoding of groups
+encoded <- as.data.frame(predict(dummyVars(~ metabolic_subtype, data = metadata_metabolome, fullRank = FALSE), newdata = metadata_metabolome))
+colnames(encoded) <- str_split(colnames(encoded), "metabolic_subtype", simplify = TRUE)[,2]
+metadata_metabolome <- cbind(metadata_metabolome, encoded)
+
+# Patient group infos
+cur_groups <- metadata_metabolome %>% select(PID, Favorable, Medium, Poor) %>% unique()
+cur_mut_clonal <- metadata_metabolome %>% as.data.frame %>% select(PID, all_of(unique(metadata_metabolome$metabolic_subtype))) %>% unique() %>% remove_rownames %>% column_to_rownames("PID") %>% t()
+  
+fisher_full <- foreach(i = c("Favorable", "Medium", "Poor"), .combine = "rbind")%do%{
+  PID_high <- unique(cur_groups[cur_groups[, i] == "1",]$PID)
+  PID_low <- unique(cur_groups[cur_groups[, i] == "0",]$PID)
+  PID_high <- PID_high[!is.na(PID_high)]
+  PID_low <- PID_low[!is.na(PID_low)]
+  fisher_results <- apply(cur_mut_clonal, 1, perform_fisher_test, group1_cols = PID_high, group2_cols = PID_low)
+  fisher_results <- as.data.frame(fisher_results)
+  fisher_results <- as.data.frame(t(fisher_results)) %>% rownames_to_column("gene")
+  fisher_results$p_adj <- p.adjust(fisher_results$p_value, method = "BH")
+  fisher_results$category <- i
+  return(fisher_results)
+  }
+isGreater <- fisher_full$odds_ratio > 1
+pVal <- log10(fisher_full$p_value)
+pVal[isGreater] <- abs(pVal[isGreater])
+fisher_full$p_out <- pVal
+colnames(fisher_full) <- c("gene", "odds_ratio", "p_value", "p_adj", "category", "p_out")
+
+# P at 0.1 with trends
+fisher_full$result <- ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_value < 0.1, "UP",
+                                    ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_value < 0.1, "DOWN", 
+                                                  "NOTSIG"))
+fisher_full$odds_ratio[fisher_full$odds_ratio == Inf] <- max(fisher_full$odds_ratio[!fisher_full$odds_ratio == Inf])
+
+# Arrange rows/columns
+cur_df <- fisher_full %>% select(gene, category, odds_ratio) %>% pivot_wider(values_from = odds_ratio, names_from = gene)
+dd <- dist(cur_df[2:ncol(cur_df)], method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+row_sorted <- hc$order
+fisher_full$category <- factor(fisher_full$category, levels = cur_df[row_sorted,]$category)
+fisher_full$category <- factor(fisher_full$category, levels = c("Poor", "Medium", "Favorable"))
+dd <- dist(t(cur_df[2:ncol(cur_df)]), method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+column_sorted <- hc$order
+fisher_full$gene <- factor(fisher_full$gene, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
+
+# Plot
+ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_adj)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = fisher_full,shape = 1,aes(size = -log10(p_adj), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  coord_flip()
+```
+
+# Figure S8 
+
+## S8B 
+
+```{r}
+# Spatial Pattern across Phenotypes 
+cur_sce <- sce_T[, !is.na(sce_T$CD8Tcell_type) &!sce_T$celltype_combined %in% c("Unknown_Other_CD8") ]
+
+cur_sce$infiltrating <- ifelse(cur_sce$CD8Tcell_type == "infiltrating", 1, 0)
+cur_sce$bystanding <- ifelse(cur_sce$CD8Tcell_type == "bystanding", 1, 0)
+cur_sce$ignored <- ifelse(cur_sce$CD8Tcell_type == "ignored", 1, 0)
+cur_sce$Memory_like_CD8 <- ifelse(cur_sce$celltype_combined == "Memory_like_CD8", 1, 0)
+cur_sce$Exhausted_like_CD8 <- ifelse(cur_sce$celltype_combined == "Exhausted_like_CD8", 1, 0)
+cur_sce$Cytotoxic_like_CD8 <- ifelse(cur_sce$celltype_combined == "Cytotoxic_like_CD8", 1, 0)
+cur_sce$CXCL13_like_CD8 <- ifelse(cur_sce$celltype_combined == "CXCL13_like_CD8", 1, 0)
+cur_sce$Naive_like_CD8 <- ifelse(cur_sce$celltype_combined == "Naive_like_CD8", 1, 0)
+cur_sce$Exhausted_cytotoxic_like_CD8 <- ifelse(cur_sce$celltype_combined == "Exhausted_cytotoxic_like_CD8", 1, 0)
+cur_sce$Activated_like_CD8 <- ifelse(cur_sce$celltype_combined == "Activated_like_CD8", 1, 0)
+cur_sce$Inhibitory_like_CD8 <- ifelse(cur_sce$celltype_combined == "Inhibitory_like_CD8", 1, 0)
+
+# Patient group infos
+cur_groups <- colData(cur_sce) %>% as.data.frame %>% dplyr::select(Memory_like_CD8, Exhausted_like_CD8, Cytotoxic_like_CD8, CXCL13_like_CD8, Naive_like_CD8, Exhausted_cytotoxic_like_CD8, Activated_like_CD8, Inhibitory_like_CD8)
+cur_mut <- colData(cur_sce) %>% as.data.frame %>% dplyr::select(infiltrating, bystanding, ignored) %>% t()
+
+fisher_full <- foreach(i = c("Memory_like_CD8", "Exhausted_like_CD8", "Cytotoxic_like_CD8", "CXCL13_like_CD8", "Naive_like_CD8", "Exhausted_cytotoxic_like_CD8", "Activated_like_CD8", "Inhibitory_like_CD8"), .combine = "rbind")%do%{
+  PID_high <- rownames(cur_groups[cur_groups[, i] == "1",])
+  PID_low <- rownames(cur_groups[cur_groups[, i] == "0",])
+  fisher_results <- apply(cur_mut, 1, perform_fisher_test, group1_cols = PID_high, group2_cols = PID_low)
+  fisher_results <- as.data.frame(fisher_results)
+  fisher_results <- as.data.frame(t(fisher_results)) %>% rownames_to_column("gene")
+  fisher_results$p_adj <- p.adjust(fisher_results$p_value, method = "BH")
+  fisher_results$category <- i
+  return(fisher_results)
+  }
+isGreater <- fisher_full$odds_ratio > 1
+pVal <- log10(fisher_full$p_value)
+pVal[isGreater] <- abs(pVal[isGreater])
+fisher_full$p_out <- pVal
+colnames(fisher_full) <- c("spatial_phenotype", "odds_ratio", "p_value", "p_adj", "celltype", "p_out")
+
+# FDR at 0.05
+fisher_full$result <- ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_adj < 0.05, "UP",
+                                    ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_adj < 0.05, "DOWN","NOTSIG"))
+
+## Arrange rows/columns
+cur_df <- fisher_full %>% dplyr::select(spatial_phenotype, celltype, odds_ratio) %>% pivot_wider(values_from = odds_ratio, names_from = spatial_phenotype)
+dd <- dist(cur_df[2:ncol(cur_df)], method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+row_sorted <- hc$order
+fisher_full$celltype <- factor(fisher_full$celltype, levels = cur_df[row_sorted,]$celltype)
+dd <- dist(t(cur_df[2:ncol(cur_df)]), method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+column_sorted <- hc$order
+fisher_full$spatial_phenotype <- factor(fisher_full$spatial_phenotype, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
+fisher_full$spatial_phenotype <- factor(fisher_full$spatial_phenotype, levels = c("ignored", "bystanding", "infiltrating"))
+
+# Plot
+ggplot(fisher_full, aes(x=celltype, y = spatial_phenotype,col = odds_ratio, size = -log10(p_adj)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = fisher_full,shape = 1,aes(size = -log10(p_adj), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+## S8C
+
+```{r}
+cur_sample <- c("ZTMA20.4_Block1_SE_011","ZTMA20.4_Block1_SE_041","ZTMA20.4_Block1_SE_002")
+
+plotSpatial(
+  object = sce_T[,sce_T$celltype_combined_broad %in% c("tumor", "CD8") & sce_T$sample_id %in% cur_sample], 
+  img_id = "sample_id", 
+  node_color_by = "CD8Tcell_type", 
+  node_shape_by = "celltype_combined_broad", 
+  colPairName = "neighborhood", 
+  coords = c("Pos_X", "Pos_Y"),
+  draw_edges = TRUE, 
+  nodes_first = FALSE, 
+  directed = FALSE, 
+  ncols = 1)+
+  scale_color_manual(values = c("#004080", "#636BFF", "#B2226A"))
+```
+
+## S8D
+
+```{r}
+metadata_T <- metadata_selected %>% filter(PID %in% unique(sce_T$PID))
+surv_out <- metadata_T %>% select(PID, OS_months, status_OS, spatial_CD8_group) %>% unique()
+fit <- survfit(Surv(OS_months, status_OS) ~ spatial_CD8_group, data = surv_out)
+
+ggsurvplot(fit, 
+          pval = TRUE,
+          risk.table = TRUE, 
+          risk.table.col = "strata", 
+          linetype = "strata", 
+          surv.median.line = "hv", 
+          ggtheme = theme_classic(), 
+          palette = c("steelblue1", "navy","firebrick"),
+          conf.int = FALSE
+)
+```
+
+## S8E
+
+```{r}
+# Update for association testing
+metadata_T$pT_combined[metadata_T$pT_combined == "T1/2"] <- "0"
+metadata_T$pT_combined[metadata_T$pT_combined == "T3/4"] <- "1"
+metadata_T$ISUP_combined[metadata_T$ISUP_combined == "G1/2"] <- "0"
+metadata_T$ISUP_combined[metadata_T$ISUP_combined == "G3/4"] <- "1"
+metadata_T$necrose[metadata_T$necrose == "NE0"] <- "0"
+metadata_T$necrose[metadata_T$necrose == "NE1"] <- "1"
+metadata_T$PDL1_score[metadata_T$PDL1_score == "PD0"] <- "0"
+metadata_T$PDL1_score[metadata_T$PDL1_score == "PD1"] <- "1"
+
+# Patient group info 
+encoded <- as.data.frame(predict(dummyVars(~ spatial_CD8_group, data = metadata_T, fullRank = FALSE), newdata = metadata_T))
+colnames(encoded) <- str_split(colnames(encoded), "spatial_CD8_group", simplify = TRUE)[,2]
+metadata_T <- cbind(metadata_T, encoded)
+cur_groups <- metadata_T %>% select(PID,inflamed,excluded,cold) %>% unique()
+cur_test <- metadata_T %>% select(PID, pT_combined, ISUP_combined, necrose, PDL1_score) %>% unique() %>% remove_rownames %>% column_to_rownames("PID") %>% filter(complete.cases(.)) %>% t()
+cur_groups <- cur_groups[cur_groups$PID %in% colnames(cur_test),]
+
+fisher_full <- foreach(i = c("inflamed", "excluded","cold"), .combine = "rbind")%do%{
+  PID_high <- unique(cur_groups[cur_groups[, i] == "1",]$PID)
+  PID_low <- unique(cur_groups[cur_groups[, i] == "0",]$PID)
+  PID_high <- PID_high[!is.na(PID_high)]
+  PID_low <- PID_low[!is.na(PID_low)]
+  fisher_results <- apply(cur_test, 1, perform_fisher_test, group1_cols = PID_high, group2_cols = PID_low)
+  fisher_results <- as.data.frame(fisher_results)
+  fisher_results <- as.data.frame(t(fisher_results)) %>% rownames_to_column("gene")
+  fisher_results$p_adj <- p.adjust(fisher_results$p_value, method = "BH")
+  fisher_results$category <- i
+  return(fisher_results)
+  }
+
+isGreater <- fisher_full$odds_ratio > 1
+pVal <- log10(fisher_full$p_value)
+pVal[isGreater] <- abs(pVal[isGreater])
+fisher_full$p_out <- pVal
+colnames(fisher_full) <- c("gene", "odds_ratio", "p_value", "p_adj", "category", "p_out")
+
+# FDR at 0.1 with trends
+fisher_full$result <- ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_adj < 0.05, "UP",
+                                           ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_adj < 0.05, "DOWN","NOTSIG"))
+
+## Arrange rows/columns
+cur_df <- fisher_full %>% select(gene, category, odds_ratio) %>% pivot_wider(values_from = odds_ratio, names_from = gene)
+dd <- dist(cur_df[2:ncol(cur_df)], method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+row_sorted <- hc$order
+fisher_full$category <- factor(fisher_full$category, levels = cur_df$category)
+dd <- dist(t(cur_df[2:ncol(cur_df)]), method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+column_sorted <- hc$order
+fisher_full$gene <- factor(fisher_full$gene, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
+fisher_full$gene <- factor(fisher_full$gene, levels = c("ISUP_combined", "pT_combined", "necrose", "PDL1_score"))
+
+# Plot
+ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_adj)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = fisher_full,shape = 1,aes(size = -log10(p_adj), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  coord_flip()
+```
+
+## S8F
+
+```{r}
+# Compare to number groups
+out <- colData(sce_T) %>% as.data.frame %>% select(PID, sample_id, spatial_CD8_pheno, celltype_combined_broad) %>% filter(celltype_combined_broad == "CD8") %>% group_by(sample_id, spatial_CD8_pheno, PID) %>% dplyr::count() %>% group_by(PID, spatial_CD8_pheno) %>% mutate(n = mean(n)) %>% select(PID, spatial_CD8_pheno, n) %>% unique()
+out$CD8_category <- ifelse(out$n <= quantile(out$n, probs = seq(0,1,0.33))[2], "low", 
+                           ifelse(out$n >= quantile(out$n, probs = seq(0,1,0.33))[3], "high", "medium"))
+out_viz <- out %>% group_by(CD8_category, spatial_CD8_pheno) %>% dplyr::count() %>% ungroup() %>% group_by(CD8_category) %>% mutate(fra = n/sum(n))
+out_viz$CD8_category <- factor(out_viz$CD8_category, levels = c("high","medium","low"))
+sce_T$CD8_number_category <- out$CD8_category[match(sce_T$PID, out$PID)]
+
+# Plot survival curves
+cur_surv <- colData(sce_T) %>% as.data.frame() %>% filter(PID %in% metadata_selected$PID) %>% select(PID, CD8_number_category, OS_months, status_OS) %>% unique()
+fit <- survfit(Surv(OS_months, status_OS) ~ CD8_number_category, data = cur_surv)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE,
+          risk.table.col = "strata", 
+          linetype = "strata", 
+          surv.median.line = "hv", 
+          ggtheme = theme_classic(),
+          palette = "Set1")
+```
+## S8G
+
+```{r}
+# Patient group info 
+cur_groups <- metadata_T %>% select(PID, Favorable, Medium, Poor) %>% unique()
+cur_test <- metadata_T %>% select(PID, inflamed, excluded, cold) %>% unique() %>% remove_rownames %>% column_to_rownames("PID") %>% t()
+  
+fisher_full <- foreach(i = c("Favorable", "Medium","Poor"), .combine = "rbind")%do%{
+  PID_high <- unique(cur_groups[cur_groups[, i] == "1",]$PID)
+  PID_low <- unique(cur_groups[cur_groups[, i] == "0",]$PID)
+  PID_high <- PID_high[!is.na(PID_high)]
+  PID_low <- PID_low[!is.na(PID_low)]
+  fisher_results <- apply(cur_test, 1, perform_fisher_test, group1_cols = PID_high, group2_cols = PID_low)
+  fisher_results <- as.data.frame(fisher_results)
+  fisher_results <- as.data.frame(t(fisher_results)) %>% rownames_to_column("gene")
+  fisher_results$p_adj <- p.adjust(fisher_results$p_value, method = "BH")
+  fisher_results$category <- i
+  return(fisher_results)
+  }
+isGreater <- fisher_full$odds_ratio > 1
+pVal <- log10(fisher_full$p_value)
+pVal[isGreater] <- abs(pVal[isGreater])
+fisher_full$p_out <- pVal
+colnames(fisher_full) <- c("gene", "odds_ratio", "p_value", "p_adj", "category", "p_out")
+
+# FDR at 0.05 with trends
+fisher_full$result <- ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_adj < 0.05, "UP",
+                             ifelse(fisher_full$odds_ratio > 1 & fisher_full$p_value < 0.05, "UP_trend", 
+                                    ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_adj < 0.05, "DOWN", 
+                                           ifelse(fisher_full$odds_ratio < 1 & fisher_full$p_value < 0.05, "DOWN_trend","NOTSIG"))))
+
+## Arrange rows/columns
+cur_df <- fisher_full %>% select(gene, category, odds_ratio) %>% pivot_wider(values_from = odds_ratio, names_from = gene)
+dd <- dist(cur_df[2:ncol(cur_df)], method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+row_sorted <- hc$order
+fisher_full$category <- factor(fisher_full$category, levels = c("Poor", "Medium", "Favorable"))
+dd <- dist(t(cur_df[2:ncol(cur_df)]), method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+column_sorted <- hc$order
+fisher_full$gene <- factor(fisher_full$gene, levels = colnames(cur_df[2:ncol(cur_df)][,column_sorted]))
+fisher_full$gene <- factor(fisher_full$gene, levels = c("inflamed", "excluded", "cold"))
+
+ggplot(fisher_full, aes(x=category, y = gene,col = odds_ratio, size = -log10(p_adj)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = fisher_full,shape = 1,aes(size = -log10(p_adj), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#9f1214","UP_trend" = "#e73032", "NOTSIG" = "snow2", "DOWN_trend" = "#428bc7","DOWN" = "#25567d"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))#+
+```
+
+# Session Info 
+
+```{r}
+sessionInfo()
+```

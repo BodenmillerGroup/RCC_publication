@@ -1,0 +1,298 @@
+---
+title: null
+author: "Lasse Meyer"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+# A spatial multi-omic portrait of survival outcome for clear cell renal cell carcinoma, Meyer et al., 2026
+
+# Figure 5 and Figure S9/S10
+
+Data analysis scripts for re-creating Figure 5 and Figure S9/S10. 
+
+# Software requirements
+
+```{r, message=FALSE,warning=FALSE}
+library(survival)
+library(survminer)
+library(foreach)
+library(tidyverse)
+library(conflicted)
+library(ggnewscale)
+library(scran)
+library(edgeR)
+library(ggpubr)
+library(pec)
+conflicts_prefer(dplyr::count)
+conflicts_prefer(dplyr::filter)
+conflicts_prefer(dplyr::select)
+# TO DO
+```
+
+# Read data
+
+```{r}
+## BlockForest objects 
+BF_HE_HE <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_blockforest_HE_HE.rds")
+BF_HE_IMC <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_blockforest_HE_IMC.rds")
+BF_HE_IMC_HE <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_blockforest_HE_IMC_HE.rds")
+
+## Other
+HE_cluster_anno <- read_csv("/mnt/central_nas/rcc_volume/RCC/00_final_files/HE_cluster_anno.csv")
+metadata_selected <- read_csv("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_metadata.csv")
+```
+
+# Figure 5
+
+## 5B/C
+
+These analyses were performed in Python (3.10.0). See script #TODO for reproducing the plots.
+
+## 5E
+
+## 5F
+
+# Figure S9 
+
+## S9B-D
+
+These analyses were performed in Python (3.10.0). See script #TODO for reproducing the plots.
+
+## S9E
+
+```{r}
+# HE clusters per PID 
+HE_check <- HE_cluster_anno %>% group_by(cluster, PID) %>% dplyr::count() %>% ungroup() %>% group_by(PID) %>% mutate(fra = n/sum(n))
+HE_count <- HE_check %>% pivot_wider(id_cols = PID, names_from = cluster, values_from = n, values_fill = 0) %>% column_to_rownames("PID") %>% ungroup()
+HE_frac <- HE_check %>% pivot_wider(id_cols = PID, names_from = cluster, values_from = fra, values_fill = 0) %>% column_to_rownames("PID") %>% ungroup()
+
+# 1. MEAN
+## MULTIVARIABLE COX MODEL
+Cox_df <- HE_frac
+Cox_df_mean <- foreach(i = Cox_df %>% colnames,.combine = "cbind")%do%{
+Cox_df %>% select(i) %>% mutate(mean = ifelse(Cox_df[,i] > mean(Cox_df[,i]),"B","A")) %>% pull(mean)
+}
+colnames(Cox_df_mean) <- colnames(Cox_df)
+rownames(Cox_df_mean) <- rownames(Cox_df)
+Cox_df_mean <- as.data.frame(Cox_df_mean)
+Cox_df_mean$status_OS <- metadata_selected$status_OS[match(rownames(Cox_df_mean),metadata_selected$PID)]
+Cox_df_mean$OS_months <- metadata_selected$OS_months[match(rownames(Cox_df_mean),metadata_selected$PID)]
+
+covariates <- Cox_df_mean %>% select(-status_OS,-OS_months) %>% colnames
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + ")))
+multi_model <- coxph(multi_formula, data = Cox_df_mean)
+multi_res <- summary(multi_model)
+plot_df_dens_mean <- data.frame(group = rownames(multi_res$coefficients),
+                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],3),
+                      HR = signif(multi_res$coefficients[,"exp(coef)"],3),
+                      CI_low = signif(multi_res$conf.int[,"lower .95"],3),
+                      CI_high = signif(multi_res$conf.int[,"upper .95"],3),
+                      wald_test = signif(multi_res$waldtest["pvalue"],3))
+
+# 2. MEDIAN
+## MULTIVARIABLE COX MODEL
+Cox_df_median <- foreach(i = Cox_df %>% colnames,.combine = "cbind")%do%{
+Cox_df %>% select(i) %>% mutate(median = ifelse(Cox_df[,i] > median(Cox_df[,i]),"B","A")) %>% pull(median)
+}
+colnames(Cox_df_median) <- colnames(Cox_df)
+rownames(Cox_df_median) <- rownames(Cox_df)
+Cox_df_median <- as.data.frame(Cox_df_median)
+Cox_df_median$status_OS <- metadata_selected$status_OS[match(rownames(Cox_df_median),metadata_selected$PID)]
+Cox_df_median$OS_months <- metadata_selected$OS_months[match(rownames(Cox_df_median),metadata_selected$PID)]
+
+covariates <- Cox_df_median %>% select(-status_OS,-OS_months) %>% colnames
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + ")))
+multi_model <- coxph(multi_formula, data = Cox_df_median)
+multi_res <- summary(multi_model)
+plot_df_dens_median <- data.frame(group = rownames(multi_res$coefficients),
+                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],3),
+                      HR = signif(multi_res$coefficients[,"exp(coef)"],3),
+                      CI_low = signif(multi_res$conf.int[,"lower .95"],3),
+                      CI_high = signif(multi_res$conf.int[,"upper .95"],3),
+                      wald_test = signif(multi_res$waldtest["pvalue"],3))
+
+# Combined visualization
+cox_median <- plot_df_dens_median %>% mutate(sign = p_value < 0.05, result = ifelse(plot_df_dens_median$HR > 1 & plot_df_dens_median$p_value < 0.05, "UP",ifelse(plot_df_dens_median$HR < 1 & plot_df_dens_median$p_value < 0.05, "DOWN", "NOTSIG"))) %>% mutate(category = "median") %>% arrange(desc(HR))
+cox_median$group <- factor(cox_median$group, levels = cox_median$group)
+cox_mean <- plot_df_dens_mean %>% mutate(sign = p_value < 0.05, result = ifelse(plot_df_dens_mean$HR > 1 & plot_df_dens_mean$p_value < 0.05, "UP",ifelse(plot_df_dens_mean$HR < 1 & plot_df_dens_mean$p_value < 0.05, "DOWN", "NOTSIG"))) %>% mutate(category = "mean") %>% arrange(desc(HR))
+cox_mean$group <- factor(cox_mean$group, levels = cox_mean$group)
+
+plot_cox_combined <- rbind(cox_mean, cox_median)
+plot_cox_combined$type <- "HE clusters"
+plot_cox_combined_fil <- plot_cox_combined %>% filter(result != "NOTSIG")
+both <- plot_cox_combined_fil %>% group_by(group,result) %>% dplyr::count() %>% filter(n > 1) %>% pull(group) %>% unfactor()
+plot_cox_combined_fil$category <- ifelse(plot_cox_combined_fil$group %in% both, "both", plot_cox_combined_fil$category)
+plot_cox_combined_fil <- plot_cox_combined_fil %>% group_by(group, category) %>% reframe(HR = mean(HR), p_value = mean(p_value), result = result, type = type) %>% unique()
+
+ggplot(plot_cox_combined_fil, aes(x=reorder(group,HR), y = type, shape = category, col = HR, size= -log10(p_value)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  scale_shape_manual(values = c(15,17))+
+  new_scale(new_aes = "shape")+
+  new_scale(new_aes = "color") +
+  geom_point(data = plot_cox_combined_fil,aes(size = -log10(p_value), shape = category, col = result), stroke =1.5)+
+  scale_shape_manual(values = c(0,2))+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("Cox model")+
+  coord_flip()
+```
+
+## S9F
+
+```{r}
+### Differential abundance analysis based on edgeR
+general_count_wide <- HE_count %>% t() 
+
+DA <- lapply(c("ISUP_combined", "pT_combined","necrose","PDL1_score"), function(x){
+abundances <- general_count_wide
+abundances <- unclass(abundances) 
+meta <- as.data.frame(metadata_selected[match(colnames(abundances), metadata_selected$PID),])
+ref_levels <- c(
+  "necrose"       = "NE0",
+  "ISUP_combined" = "G1/2",
+  "pT_combined"   = "T1/2",
+  "PDL1_score"    = "PD0"
+)
+if (x %in% names(ref_levels)) {
+  meta[, x] <- relevel(x = factor(meta[, x]), ref = ref_levels[[x]])
+}
+meta <- meta[!is.na(meta[,x]),]
+abundances <- abundances[,colnames(abundances) %in% meta$PID]
+y.ab <- DGEList(abundances, samples=meta, group = as.matrix(meta[,x]))
+design <- model.matrix(~group, data = y.ab$samples)
+y.ab <- estimateDisp(y.ab, design, trend="none")
+fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
+res <- glmQLFTest(fit.ab, coef=ncol(design))
+DA <- res$table
+DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
+DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.05, result = ifelse(DA$logFC > 0 & DA$FDR < 0.05, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.05, "DOWN", "NOTSIG"))) %>% 
+  arrange(desc(logFC))
+DA$cluster <- factor(DA$cluster, levels = DA$cluster)
+DA$category <- x
+return(DA)
+})
+DA_out <- do.call(rbind, DA)
+
+# Filter
+HE_diff_abun <- DA_out %>% filter(sign == TRUE) %>% group_by(cluster, result) %>% dplyr::count() %>% filter(n >= 2) %>% pull(cluster) %>% unique() %>% unfactor()
+DA_out$category <- factor(DA_out$category,levels = c("PDL1_score", "necrose","pT_combined","ISUP_combined"))
+DA_out_fil <- DA_out[DA_out$cluster %in% HE_diff_abun, ]
+
+ggplot(DA_out_fil, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8")+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = DA_out_fil,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("Disease progression")
+```
+
+## S9G
+
+```{r}
+# Create list from results
+cv_results_list <- list(
+  "HE" = BF_HE_HE,
+  "IMC" = BF_HE_IMC,
+  "IMC_HE" = BF_HE_IMC_HE
+)
+
+# Define colors 
+col_cv <- setNames(c("grey","firebrick1", "purple4"),
+c("HE", "IMC", "IMC_HE"))
+
+# INTEGRATED BRIER SCORE
+# Initialize list to store IBS scores for each cross-validation result
+ibs_scores_list <- list()
+ibs_scores_list <- lapply(cv_results_list, function(res_obj) {
+  sapply(res_obj, function(res) {
+    if (nrow(res$actual_surv) != nrow(res$actual_test)) {
+      stop("Row count mismatch between actual_surv and actual_test")
+    }
+    test_data <- cbind(res$actual_surv, res$actual_test)
+    times_test <- sort(unique(test_data$OS_months))
+    if(!0 %in% times_test){
+    times_test <- c(0, times_test) 
+    }
+    times_pred <- res$predictions$unique.death.times
+    time_indices <- sapply(times_test, function(t) which.min(abs(times_pred - t)))
+    aligned_surv_probs <- res$predictions$survival[, time_indices, drop = FALSE]
+    pec_obj <- pec(
+      object = list("BlockForest" = aligned_surv_probs),
+      formula = Surv(OS_months, status_OS) ~ 1,
+      cens.model = "marginal",
+      exact = TRUE,
+      data = test_data
+    )
+    IBSrange <- quantile(test_data$OS_months, 0.9)
+    crps_val <- crps(pec_obj, start = 0, times = IBSrange)
+    ibs_score <- crps_val[2] #
+    return(ibs_score)
+  })
+})
+out_ibs <- data.frame(fold = 1:10, t(do.call("rbind", ibs_scores_list))[1:10,]) %>% pivot_longer(2:ncol(.), names_to = "model", values_to = "IBS")
+
+# Plot
+ggplot(out_ibs, aes(x = reorder(model,-IBS, FUN = median), y = IBS, fill = model))+
+  geom_point(aes(color = model))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
+  theme_classic()+
+  stat_compare_means(ref.group = "HE", paired = FALSE, method = "t.test", method.args = list(alternative = "less", label = "p.format"))+
+  stat_compare_means(vjust = 1, method = "anova")+
+  scale_fill_manual(values = col_cv)+
+  scale_color_manual(values = col_cv)+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  xlab("Models")+
+  ylab("Integrated Brier Score")
+
+# CONCORDANCE
+# Initialize list to store concordance scores for each cross-validation result
+concordance_scores_list <- list()
+concordance_scores_list <- lapply(cv_results_list, function(res_obj) {
+  sapply(res_obj, function(res) {
+    out <- concordance(Surv(res$actual_surv[, 1], res$actual_surv[, 2]) ~ rowSums(res$predictions$survival), timewt = "n/G2")
+    return(out$concordance)
+  })
+})
+out_concordance <- data.frame(fold = 1:10, t(do.call("rbind", concordance_scores_list))[1:10,]) %>% pivot_longer(2:ncol(.), names_to = "model", values_to = "concordance")
+
+ggplot(out_concordance, aes(x = reorder(model,concordance, FUN = median), y = concordance, fill = model))+
+  geom_point(aes(color = model))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
+  theme_classic()+
+  stat_compare_means(ref.group = "HE", paired = FALSE, method = "t.test", method.args = list(alternative = "greater", label = "p.format"))+
+  stat_compare_means(vjust = 1, method = "anova")+
+  scale_fill_manual(values = col_cv)+
+  scale_color_manual(values = col_cv)+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  xlab("Models")+
+  ylab("Concordance (Uno)")
+```
+
+
+## S9H
+
+## S9I
+
+## S9J
+
+
+
+# Figure S10
+
+# Session Info 
+
+```{r}
+sessionInfo()
+```
