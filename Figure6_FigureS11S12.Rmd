@@ -1,0 +1,330 @@
+---
+title: null
+author: "Lasse Meyer"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+# A spatial multi-omic portrait of survival outcome for clear cell renal cell carcinoma, Meyer et al., 2026
+
+# Figure 6 and Figure S11/S12
+
+Data analysis scripts for re-creating Figure 6 and Figure S11/S12. 
+
+# Software requirements
+
+```{r, message=FALSE,warning=FALSE}
+library(SummarizedExperiment)
+library(conflicted)
+library(CMScaller)
+library(survival)
+library(survminer)
+library(RColorBrewer)
+library(ComplexHeatmap)
+library(dittoSeq)
+conflicts_prefer(dplyr::count)
+conflicts_prefer(dplyr::filter)
+conflicts_prefer(dplyr::select)
+conflicts_prefer(base::intersect)
+# TO DO
+```
+
+# Read data
+
+```{r}
+## JAVELIN 101
+JAVELIN_SE <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/validation_JAVELIN_SE.rds") 
+
+## Other
+gene_signatures <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/validation_genesignatures.rds") 
+POORUP <- gene_signatures$survival_ecotype_poor
+FAVUP <- gene_signatures$survival_ecotype_favorable
+col_group <- setNames(c("#0571B0", "gold3", "#CA0020"),c("Favorable","Medium","Poor"))
+```
+
+# Figure 6 
+
+## 6A
+
+```{r}
+# Perform nearest template prediction for survival ecotypes in full TCGA KIRC cohort
+## Step 1: Prepare expression matrix (genes x samples, log2 scale)
+tpm_mat <- assays(JAVELIN_SE)$tpm
+log2_tpm <- log2(tpm_mat + 1)
+expr_mat_JAV <- ematAdjust(log2_tpm, method = "RLE")
+rownames(expr_mat_JAV) <- rowData(JAVELIN_SE)$gene
+
+# Step 2: Create subtype templates (Gene signatures)
+names(FAVUP) <- rep("FAV", length(FAVUP))
+names(POORUP) <- rep("POOR", length(POORUP))
+keyup <- c(FAVUP, POORUP)
+template_mat <- data.frame(class = factor(names(keyup)), 
+           probe = unname(keyup))
+
+# Step 3: Run NTP classification with permutations
+set.seed(22)
+ntp_result <- ntp(
+  emat = expr_mat_JAV,           
+  template = template_mat,
+  distance = "cosine",
+  nPerm = 1000,              
+  seed = 22,                 
+  doPlot = FALSE
+)
+
+# Step 4: Convert predictions into groups
+ntp_out <- ntp_result %>% rownames_to_column("PID") %>% mutate(group_predict = ifelse(FDR < 0.05, as.character(prediction), "NOT"))
+JAVELIN_SE$survival_ecotype_gene <- ntp_out$group_predict[match(JAVELIN_SE$UUID, ntp_out$PID)]
+JAVELIN_SE$survival_ecotype_gene[JAVELIN_SE$survival_ecotype_gene == "POOR"] <- "Poor"
+JAVELIN_SE$survival_ecotype_gene[JAVELIN_SE$survival_ecotype_gene == "NOT"] <- "Medium"
+JAVELIN_SE$survival_ecotype_gene[JAVELIN_SE$survival_ecotype_gene == "FAV"] <- "Favorable"
+
+# Step 5: Show survival trends
+# Combined
+surv_out <- colData(JAVELIN_SE) %>% as.data.frame %>% select(UUID, OS, OS_CNSR, PFS, PFS_CNSR, survival_ecotype_gene) %>% unique()
+
+fit <- survfit(Surv(OS, OS_CNSR) ~ survival_ecotype_gene, data = surv_out)
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, 
+          risk.table.col = "strata", 
+          linetype = "strata", 
+          surv.median.line = "hv", 
+          ggtheme = theme_classic(), 
+          palette = c("#0571B0", "gold3","#CA0020"),
+          conf.int = FALSE
+)
+
+fit <- survfit(Surv(PFS, PFS_CNSR) ~ survival_ecotype_gene, data = surv_out)
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, 
+          risk.table.col = "strata", 
+          linetype = "strata", 
+          surv.median.line = "hv", 
+          ggtheme = theme_classic(), 
+          palette = c("#0571B0", "gold3","#CA0020"),
+          conf.int = FALSE
+)
+```
+
+## 6B
+
+```{r}
+# MULTIVARIABLE COX MODEL 
+## Treatment benefit for survival ecotypes
+
+# 1. OS 
+Cox_df <- as.data.frame(colData(JAVELIN_SE)) %>%
+  dplyr::select(UUID, survival_ecotype_gene, Treatment, Tumor_Location) %>% 
+  mutate(
+    Treatment = factor(Treatment, levels = c("TKI", "IO+VEGF")),
+    OS_months = JAVELIN_SE$OS[match(UUID, JAVELIN_SE$UUID)],
+    status_OS = JAVELIN_SE$OS_CNSR[match(UUID, JAVELIN_SE$UUID)]
+  )
+tme_groups <- unique(Cox_df$survival_ecotype_gene)
+cox_results <- lapply(tme_groups, function(group) {
+  df_group <- Cox_df %>% filter(survival_ecotype_gene == group & !is.na(Treatment))
+  model <- coxph(Surv(OS_months, status_OS) ~ Treatment, data = df_group)
+  summary(model)
+  })
+names(cox_results) <- tme_groups
+plot_df_prop <- rbind(data.frame(group = rownames(cox_results[[1]]$coefficients),
+                      p_value = signif(cox_results[[1]]$coefficients[,"Pr(>|z|)"],3),
+                      HR = signif(cox_results[[1]]$coefficients[,"exp(coef)"],3),
+                      CI_low = signif(cox_results[[1]]$conf.int[,"lower .95"],3),
+                      CI_high = signif(cox_results[[1]]$conf.int[,"upper .95"],3),
+                      wald_test = signif(cox_results[[1]]$waldtest["pvalue"],3), 
+                      type = names(cox_results[1])),
+      data.frame(group = rownames(cox_results[[2]]$coefficients),
+                      p_value = signif(cox_results[[2]]$coefficients[,"Pr(>|z|)"],3),
+                      HR = signif(cox_results[[2]]$coefficients[,"exp(coef)"],3),
+                      CI_low = signif(cox_results[[2]]$conf.int[,"lower .95"],3),
+                      CI_high = signif(cox_results[[2]]$conf.int[,"upper .95"],3),
+                      wald_test = signif(cox_results[[2]]$waldtest["pvalue"],3),
+                      type = names(cox_results[2])),
+      data.frame(group = rownames(cox_results[[3]]$coefficients),
+                      p_value = signif(cox_results[[3]]$coefficients[,"Pr(>|z|)"],3),
+                      HR = signif(cox_results[[3]]$coefficients[,"exp(coef)"],3),
+                      CI_low = signif(cox_results[[3]]$conf.int[,"lower .95"],3),
+                      CI_high = signif(cox_results[[3]]$conf.int[,"upper .95"],3),
+                      wald_test = signif(cox_results[[3]]$waldtest["pvalue"],3),
+                      type = names(cox_results[3]))
+)
+
+ggplot(plot_df_prop, aes(x = reorder(type,dplyr::desc(HR)), y = HR, color = p_value < 0.05))+
+geom_point(size = 4)+
+geom_errorbar(aes(ymax = CI_high, ymin = CI_low))+
+geom_hline(yintercept = 1,color = "black",linetype = "dashed")+
+scale_color_brewer(palette = "Set1")+
+xlab("Covariates")+
+ylab("HR (OS) for PID groups")+
+theme_classic()+
+scale_y_log10()+
+theme(axis.text.x = element_text(angle = 90))
+
+# 2. PFS
+Cox_df <- as.data.frame(colData(JAVELIN_SE)) %>%
+  dplyr::select(UUID, survival_ecotype_gene, Treatment, Tumor_Location) %>% 
+  mutate(
+    Treatment = factor(Treatment, levels = c("TKI", "IO+VEGF")),
+    PFS_months = JAVELIN_SE$PFS[match(UUID, JAVELIN_SE$UUID)],
+    status_PFS = JAVELIN_SE$PFS_CNSR[match(UUID, JAVELIN_SE$UUID)]
+  )
+tme_groups <- unique(Cox_df$survival_ecotype_gene)
+cox_results <- lapply(tme_groups, function(group) {
+  df_group <- Cox_df %>% filter(survival_ecotype_gene == group & !is.na(Treatment))
+  model <- coxph(Surv(PFS_months, status_PFS) ~ Treatment, data = df_group)
+  summary(model)
+  })
+names(cox_results) <- tme_groups
+plot_df_prop <- rbind(data.frame(group = rownames(cox_results[[1]]$coefficients),
+                      p_value = signif(cox_results[[1]]$coefficients[,"Pr(>|z|)"],3),
+                      HR = signif(cox_results[[1]]$coefficients[,"exp(coef)"],3),
+                      CI_low = signif(cox_results[[1]]$conf.int[,"lower .95"],3),
+                      CI_high = signif(cox_results[[1]]$conf.int[,"upper .95"],3),
+                      wald_test = signif(cox_results[[1]]$waldtest["pvalue"],3), 
+                      type = names(cox_results[1])),
+      data.frame(group = rownames(cox_results[[2]]$coefficients),
+                      p_value = signif(cox_results[[2]]$coefficients[,"Pr(>|z|)"],3),
+                      HR = signif(cox_results[[2]]$coefficients[,"exp(coef)"],3),
+                      CI_low = signif(cox_results[[2]]$conf.int[,"lower .95"],3),
+                      CI_high = signif(cox_results[[2]]$conf.int[,"upper .95"],3),
+                      wald_test = signif(cox_results[[2]]$waldtest["pvalue"],3),
+                      type = names(cox_results[2])),
+      data.frame(group = rownames(cox_results[[3]]$coefficients),
+                      p_value = signif(cox_results[[3]]$coefficients[,"Pr(>|z|)"],3),
+                      HR = signif(cox_results[[3]]$coefficients[,"exp(coef)"],3),
+                      CI_low = signif(cox_results[[3]]$conf.int[,"lower .95"],3),
+                      CI_high = signif(cox_results[[3]]$conf.int[,"upper .95"],3),
+                      wald_test = signif(cox_results[[3]]$waldtest["pvalue"],3),
+                      type = names(cox_results[3]))
+)
+
+ggplot(plot_df_prop, aes(x = reorder(type,dplyr::desc(HR)), y = HR, color = p_value < 0.05))+
+geom_point(size = 4)+
+geom_errorbar(aes(ymax = CI_high, ymin = CI_low))+
+geom_hline(yintercept = 1,color = "black",linetype = "dashed")+
+scale_color_brewer(palette = "Set1")+
+xlab("Covariates")+
+ylab("HR (PFS) for PID groups")+
+theme_classic()+
+scale_y_log10()+
+theme(axis.text.x = element_text(angle = 90))
+```
+
+## 6C
+
+```{r}
+#ORR
+se_sub <- JAVELIN_SE[, JAVELIN_SE$ORR %in% c("PR", "PD", "CR")]
+se_sub$ORR_comb <- ifelse(se_sub$ORR == "PD", "PD", "PR/CR")
+
+df <- as.data.frame(colData(se_sub)[!is.na(se_sub$survival_ecotype_gene), c("Treatment", "ORR_comb", "survival_ecotype_gene")])
+fisher_out <- c(paste0("Medium p = ",fisher.test(table(df[df$survival_ecotype_gene == "Medium",]$Treatment, df[df$survival_ecotype_gene == "Medium",]$ORR_comb))$p, "Poor p = ",fisher.test(table(df[df$survival_ecotype_gene == "Poor",]$Treatment, df[df$survival_ecotype_gene == "Poor",]$ORR_comb))$p, "Favorable p = ",fisher.test(table(df[df$survival_ecotype_gene == "Favorable",]$Treatment, df[df$survival_ecotype_gene == "Favorable",]$ORR_comb))$p))
+
+dittoBarPlot(se_sub, var = "ORR_comb", group.by = "Treatment", split.by = "survival_ecotype_gene")+
+  ggtitle(fisher_out)+
+  scale_fill_brewer(palette = "Set1")
+```
+
+# Figure S11
+
+## S11A
+
+```{r}
+# Heatmap from predictions
+probes_val <- template_mat$probe[template_mat$probe %in% rownames(expr_mat_JAV)]
+gen_mat <- expr_mat_JAV[probes_val,]
+
+# Annotations
+row_anno <- data.frame(gene = rownames(gen_mat))
+row_anno$cat <- template_mat$class[match(row_anno$gene, template_mat$probe)]
+gene_col <- setNames(brewer.pal(3,"Set1")[1:2], rev(unfactor(unique(row_anno$cat))))
+ra <- columnAnnotation(cat = row_anno$cat, col = list(cat = gene_col))
+col_anno <- data.frame(PID = colnames(gen_mat))
+col_anno$group <- JAVELIN_SE$survival_ecotype_gene[match(col_anno$PID, ntp_out$PID)]
+col_anno_ob <- rowAnnotation(group = col_anno$group, 
+                                col = list(group = col_group)) 
+
+# Plot
+Heatmap(t(gen_mat), 
+        column_split = row_anno$cat,
+        row_split = col_anno$group,
+        right_annotation = col_anno_ob, 
+        show_row_names = FALSE, 
+        show_row_dend = TRUE, 
+        show_column_dend = TRUE
+        )%v%
+  ra
+```
+
+
+## S11B
+
+```{r}
+surv_out <- colData(JAVELIN_SE) %>% as.data.frame %>% select(UUID, OS, OS_CNSR, PFS, PFS_CNSR, Treatment, survival_ecotype_gene) %>% unique()
+
+# IO+VEGF
+fit <- survfit(Surv(OS, OS_CNSR) ~ survival_ecotype_gene, data = surv_out %>% filter(Treatment == "IO+VEGF"))
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = FALSE, 
+          risk.table.col = "strata", 
+          linetype = "strata", 
+          surv.median.line = "hv", 
+          ggtheme = theme_classic(), 
+          palette = c("#0571B0", "gold3","#CA0020"),
+          conf.int = FALSE
+)
+
+fit <- survfit(Surv(PFS, PFS_CNSR) ~ survival_ecotype_gene, data = surv_out %>% filter(Treatment == "IO+VEGF"))
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = FALSE, 
+          risk.table.col = "strata", 
+          linetype = "strata", 
+          surv.median.line = "hv", 
+          ggtheme = theme_classic(), 
+          palette = c("#0571B0", "gold3","#CA0020"),
+          conf.int = FALSE
+)
+
+# TKI
+fit <- survfit(Surv(OS, OS_CNSR) ~ survival_ecotype_gene, data = surv_out %>% filter(Treatment == "TKI"))
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = FALSE, 
+          risk.table.col = "strata", 
+          linetype = "strata", 
+          surv.median.line = "hv", 
+          ggtheme = theme_classic(), 
+          palette = c("#0571B0", "gold3","#CA0020"),
+          conf.int = FALSE
+)
+
+fit <- survfit(Surv(PFS, PFS_CNSR) ~ survival_ecotype_gene, data = surv_out %>% filter(Treatment == "TKI"))
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = FALSE, 
+          risk.table.col = "strata", 
+          linetype = "strata", 
+          surv.median.line = "hv", 
+          ggtheme = theme_classic(), 
+          palette = c("#0571B0", "gold3","#CA0020"),
+          conf.int = FALSE
+)
+```
+
+## S11C
+
+## S11D
+
+## S11E
+
+## S11F
+
