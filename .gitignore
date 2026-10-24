@@ -43,3 +43,4 @@ vignettes/*.pdf
 # Claude Code local state (not shared project config)
 .claude/
 CLAUDE.md
+Clean_Objects_For_Upload.Rmd
