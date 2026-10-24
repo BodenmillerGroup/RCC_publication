@@ -13,7 +13,7 @@ knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 
 # Figure 4 and Figure S6/S7/S8
 
-Data analysis scripts for re-creating Figure 4 and Figure S6/S7/S8. 
+R data analysis scripts for re-creating Figure 4 and Figure S6/S7/S8. 
 
 # Software requirements
 
