@@ -18,7 +18,6 @@ R data analysis scripts for re-creating Figure 1 and Figure S1.
 # Software requirements
 
 ```{r, message=FALSE,warning=FALSE}
-# TO DO
 library(ComplexHeatmap)
 library(foreach)
 library(ggsci)
@@ -38,7 +37,6 @@ library(corrplot)
 library(SingleCellExperiment)
 conflicts_prefer(dplyr::count)
 conflicts_prefer(dplyr::filter)
-conflicts_prefer(dplyr::select)
 ```
 
 # Read data

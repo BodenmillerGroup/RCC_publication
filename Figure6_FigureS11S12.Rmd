@@ -23,6 +23,7 @@ library(conflicted)
 library(CMScaller)
 library(survival)
 library(survminer)
+library(ggpubr)
 library(RColorBrewer)
 library(ComplexHeatmap)
 library(dittoSeq)
@@ -33,9 +34,7 @@ library(readxl)
 library(scran)
 conflicts_prefer(dplyr::count)
 conflicts_prefer(dplyr::filter)
-conflicts_prefer(dplyr::select)
 conflicts_prefer(base::intersect)
-# TO DO
 ```
 
 # Read data

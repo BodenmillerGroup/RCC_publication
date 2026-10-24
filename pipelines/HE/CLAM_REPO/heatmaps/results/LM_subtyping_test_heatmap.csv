@@ -1,7 +1,0 @@
-slide_id,label,process,status,seg_level,sthresh,mthresh,close,use_otsu,keep_ids,exclude_ids,a_t,a_h,max_n_holes,vis_level,line_thickness,use_padding,contour_fn,bag_size,Pred_0,p_0,Pred_1,p_1,Pred_2,p_2
-ZTMA224.1_AX5Y9,ccRCC,1,tbp,-1,35,5,2,False,none,none,1.0,1.0,2,-1,50,True,four_pt,108.0,ccRCC,0.99920374,chrRCC,0.0006680077,pRCC,0.00012830028
-ZTMA224.1_BX4Y3,ccRCC,1,tbp,-1,35,5,2,False,none,none,1.0,1.0,2,-1,50,True,four_pt,106.0,ccRCC,0.9599359,pRCC,0.039932106,chrRCC,0.00013203511
-ZTMA224.1_BX8Y10,ccRCC,1,tbp,-1,35,5,2,False,none,none,1.0,1.0,2,-1,50,True,four_pt,103.0,ccRCC,0.8405686,pRCC,0.13090874,chrRCC,0.028522646
-ZTMA224.2_AX5Y9,ccRCC,1,tbp,-1,35,5,2,False,none,none,1.0,1.0,2,-1,50,True,four_pt,54.0,ccRCC,0.9858884,chrRCC,0.013112011,pRCC,0.0009995365
-ZTMA224.2_BX4Y3,ccRCC,1,tbp,-1,35,5,2,False,none,none,1.0,1.0,2,-1,50,True,four_pt,100.0,ccRCC,0.97792643,pRCC,0.014866996,chrRCC,0.007206556
-ZTMA224.2_BX8Y10,ccRCC,1,tbp,-1,35,5,2,False,none,none,1.0,1.0,2,-1,50,True,four_pt,122.0,ccRCC,0.9750683,chrRCC,0.0131232925,pRCC,0.0118083665

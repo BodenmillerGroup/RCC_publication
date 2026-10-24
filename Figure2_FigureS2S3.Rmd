@@ -18,7 +18,6 @@ R data analysis scripts for re-creating Figure 2 and Figure S2/S3.
 # Software requirements
 
 ```{r, message=FALSE,warning=FALSE}
-# TO DO
 library(tidyverse)
 library(ggnewscale)
 library(cytoviewer)
@@ -36,7 +35,6 @@ library(RColorBrewer)
 library(edgeR)
 conflicts_prefer(dplyr::count)
 conflicts_prefer(dplyr::filter)
-conflicts_prefer(dplyr::select)
 conflicts_prefer(base::union)
 ```
 

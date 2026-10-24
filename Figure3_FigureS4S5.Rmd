@@ -37,8 +37,6 @@ library(patchwork)
 library(clValid)
 conflicts_prefer(dplyr::count)
 conflicts_prefer(dplyr::filter)
-conflicts_prefer(dplyr::select)
-# TO DO
 ```
 
 # Read data
