@@ -18,6 +18,7 @@ R data analysis scripts for re-creating Figure 5 and Figure S9/S10.
 # Software requirements
 
 ```{r, message=FALSE,warning=FALSE}
+# Run with R version 4.3.2
 library(survival)
 library(survminer)
 library(foreach)
@@ -55,10 +56,11 @@ TCGA_DST <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/validation_T
 CPTAC_SE <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/validation_CPTAC_SE.rds")
 CPTAC_DST <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/validation_CPTAC_DST.rds")
 
-## BlockForest objects 
-BF_HE_HE <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_blockforest_HE_HE.rds")
-BF_HE_IMC <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_blockforest_HE_IMC.rds")
-BF_HE_IMC_HE <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_blockforest_HE_IMC_HE.rds")
+## BlockForest objects
+blockforest_all <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_blockforest_all.rds")
+BF_HE_HE <- blockforest_all$HE_HE
+BF_HE_IMC <- blockforest_all$HE_IMC
+BF_HE_IMC_HE <- blockforest_all$HE_IMC_HE
 
 ## Other
 HE_cluster_anno <- read_csv("/mnt/central_nas/rcc_volume/RCC/00_final_files/HE_cluster_anno.csv")

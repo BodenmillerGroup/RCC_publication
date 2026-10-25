@@ -18,6 +18,7 @@ R data analysis scripts for re-creating Figure 3 and Figure S4/S5.
 # Software requirements
 
 ```{r, message=FALSE,warning=FALSE}
+# Run with R version 4.3.2
 library(survival)
 library(survminer)
 library(pec)
@@ -46,15 +47,16 @@ conflicts_prefer(dplyr::filter)
 # File paths have to be adjusted by the user
 
 ## BlockForest objects
-BF_IMC <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_blockforest_IMC.rds")
-BF_IMC_all <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_blockforest_IMC_all.rds")
-BF_IMC_GEN <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_blockforest_IMC_general.rds")
-BF_IMC_MY <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_blockforest_IMC_myeloid.rds")
-BF_IMC_T <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_blockforest_IMC_Tcell.rds")
-BF_IMC_TU <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_blockforest_IMC_tumor.rds")
-BF_CLIN <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_blockforest_CLIN.rds")
-BF_IMC_CLIN <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_blockforest_IMC_CLIN.rds")
-BF_IMC_time <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_blockforest_IMC_time.rds")
+blockforest_all <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_blockforest_all.rds")
+BF_IMC <- blockforest_all$IMC
+BF_IMC_all <- blockforest_all$IMC_all
+BF_IMC_GEN <- blockforest_all$IMC_GEN
+BF_IMC_MY <- blockforest_all$IMC_MY
+BF_IMC_T <- blockforest_all$IMC_T
+BF_IMC_TU <- blockforest_all$IMC_TU
+BF_CLIN <- blockforest_all$CLIN
+BF_IMC_CLIN <- blockforest_all$IMC_CLIN
+BF_IMC_time <- blockforest_all$IMC_time
 
 ## SCE objects 
 sce_TU <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_SCE_tumor.rds")

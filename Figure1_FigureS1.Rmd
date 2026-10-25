@@ -18,6 +18,7 @@ R data analysis scripts for re-creating Figure 1 and Figure S1.
 # Software requirements
 
 ```{r, message=FALSE,warning=FALSE}
+# Run with R version 4.3.2
 library(ComplexHeatmap)
 library(foreach)
 library(ggsci)
@@ -200,19 +201,6 @@ arrange_ggsurvplots(list(fit_p1, fit_p2, fit_p3, fit_p4),
 
 ```{r}
 all_markers <- c(rownames(sce_MY), rownames(sce_T), rownames(sce_TU))
-
-# Align names across panels
-all_markers[all_markers == "Ir191"] <- "DNA1"
-all_markers[all_markers == "Ir193"] <- "DNA2"
-all_markers[all_markers == "PDL1"] <- "CD274"
-all_markers[all_markers == "CD279"] <- "PD1"
-all_markers[all_markers == "Tim-3"] <- "Tim3"
-all_markers[all_markers == "Vim"] <- "Vimentin"
-all_markers[all_markers == "CD45"] <- "CD45RO_RA"
-all_markers[all_markers == "CD45RO"] <- "CD45RO_RA"
-all_markers[all_markers == "CD31"] <- "CD31_vWF"
-all_markers[all_markers == "CD31/vWF"] <- "CD31_vWF"
-all_markers[all_markers == "clCas/PARP"] <- "clCAS_PARP"
 
 panel_anno <- data.frame(marker = all_markers, 
                          panel = panel <- c(rep("MY",length(rownames(sce_MY))), 
