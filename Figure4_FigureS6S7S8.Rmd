@@ -18,6 +18,7 @@ R data analysis scripts for re-creating Figure 4 and Figure S6/S7/S8.
 # Software requirements
 
 ```{r, message=FALSE,warning=FALSE}
+# Run with R version 4.3.2
 library(tidyverse)
 library(conflicted)
 library(ComplexHeatmap)
@@ -37,9 +38,7 @@ library(caret)
 library(imcRtools)
 conflicts_prefer(dplyr::count)
 conflicts_prefer(dplyr::filter)
-conflicts_prefer(dplyr::select)
 conflicts_prefer(base::setdiff)
-# TO DO
 ```
 
 # Read data
@@ -58,16 +57,17 @@ CNV_all <- read_csv("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_ge
 metabolites_SE <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_metabolomics_SE.rds") 
 metabolites_anno <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_metabolomics_anno.rds") 
 
-## BlockForest objects 
-BF_MUT_MUT <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_blockforest_MUT_MUT.rds")
-BF_MUT_IMC <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_blockforest_MUT_IMC.rds")
-BF_MUT_IMC_MUT <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_blockforest_MUT_IMC_MUT.rds")
-BF_CNV_CNV <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_blockforest_CNV_CNV.rds")
-BF_CNV_IMC <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_blockforest_CNV_IMC.rds")
-BF_CNV_IMC_CNV <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_blockforest_CNV_IMC_CNV.rds")
-BF_META_META <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_blockforest_META_META.rds")
-BF_META_IMC <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_blockforest_META_IMC.rds")
-BF_META_IMC_META <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_blockforest_META_IMC_META.rds")
+## BlockForest objects
+blockforest_all <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_blockforest_all.rds")
+BF_MUT_MUT <- blockforest_all$MUT_MUT
+BF_MUT_IMC <- blockforest_all$MUT_IMC
+BF_MUT_IMC_MUT <- blockforest_all$MUT_IMC_MUT
+BF_CNV_CNV <- blockforest_all$CNV_CNV
+BF_CNV_IMC <- blockforest_all$CNV_IMC
+BF_CNV_IMC_CNV <- blockforest_all$CNV_IMC_CNV
+BF_META_META <- blockforest_all$META_META
+BF_META_IMC <- blockforest_all$META_IMC
+BF_META_IMC_META <- blockforest_all$META_IMC_META
 
 ## SCE objects 
 sce_TU <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_SCE_tumor.rds")
