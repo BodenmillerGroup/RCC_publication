@@ -66,8 +66,9 @@ BF_HE_IMC_HE <- blockforest_all$HE_IMC_HE
 HE_cluster_anno <- read_csv("/mnt/central_nas/rcc_volume/RCC/00_final_files/HE_cluster_anno.csv")
 metadata_selected <- read_csv("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_metadata.csv")
 gene_signatures <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/validation_genesignatures.rds") 
-TCGA_MCP <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/validation_TCGAKIRC_MCP.rds") 
-TCGA_quanti <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/validation_TCGAKIRC_quantiseq.rds") 
+immune_deconv <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/validation_TCGAKIRC_immunedeconv.rds") 
+TCGA_MCP <- immune_deconv$TCGA_MCP
+TCGA_quanti <- immune_deconv$TCGA_quanti
 ```
 
 # Figure 5
