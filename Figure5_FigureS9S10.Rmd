@@ -414,7 +414,6 @@ ggsurvplot(fit,
 ddsSE_1 <- DESeqDataSet(TCGA_SE_HE, design = ~ survival_ecotype_HE)
 # Filter genes
 ## 1: Lowly expressed genes
-summary(rowSums(counts(ddsSE_1)) >= 10)
 keep <- rowSums(counts(ddsSE_1)) >= 10
 ddsSE_1 <- ddsSE_1[keep, ]
 ## 2: Filter for protein-coding genes
