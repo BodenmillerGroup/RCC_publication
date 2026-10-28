@@ -19,23 +19,23 @@ R data analysis scripts for re-creating Figure 4 and Figure S6/S7/S8.
 
 ```{r, message=FALSE,warning=FALSE}
 # Run with R version 4.3.2
-library(tidyverse)
-library(conflicted)
-library(ComplexHeatmap)
-library(circlize)
-library(RColorBrewer)
-library(survival)
-library(survminer)
-library(foreach)
-library(scran)
-library(ggnewscale)
-library(viridis)
-library(ggpubr)
-library(pec)
-library(edgeR)
-library(clValid)
-library(caret)
-library(imcRtools)
+library(tidyverse) #v.2.0.0
+library(conflicted) #v.1.2.0
+library(ComplexHeatmap) #v.2.18.0
+library(circlize) #v.0.4.15
+library(RColorBrewer) #v.1.1-3
+library(survival) #v.3.5-7
+library(survminer) #v.0.4.9
+library(foreach) #v.1.5.2
+library(scran) #v.1.30.0
+library(ggnewscale) #v.0.4.9
+library(viridis) #v.0.6.4
+library(ggpubr) #v.0.6.0
+library(pec) #v.2023.04.12
+library(edgeR) #v.4.0.2
+library(clValid) #v.0.7
+library(caret) #v.6.0-94
+library(imcRtools) #v.1.15.2
 conflicts_prefer(dplyr::count)
 conflicts_prefer(dplyr::filter)
 conflicts_prefer(base::setdiff)
@@ -44,21 +44,39 @@ conflicts_prefer(base::setdiff)
 # Read data
 
 ```{r}
-# Available from Zenodo - DOI: TO DO
-# File paths have to be adjusted by the user
+# Available from Zenodo - DOI: https://doi.org/10.5281/zenodo.23661454
+# File paths ("PATH_TO") have to be adjusted by the user
+PATH_TO <- "PATH_TO"
+
+# # EXAMPLE DOWNLOAD CODE
+# dir.create(PATH_TO, showWarnings = FALSE, recursive = TRUE)
+# zenodo_files <- c(
+#   "discovery_genomics_mutations_processed.csv", "discovery_genomics_mutations_all.rds",
+#   "discovery_genomics_CNVarms_processed.csv", "discovery_genomics_CNVarms_all.csv",
+#   "discovery_metabolomics_SE.rds", "discovery_metabolomics_anno.rds",
+#   "discovery_blockforest_all.rds", "discovery_SCE_tumor.rds", "discovery_SCE_tcell.rds",
+#   "discovery_metadata.csv", "discovery_celltype_density.csv", "discovery_genomics_IntOGen_drivers.tsv"
+# )
+# invisible(lapply(zenodo_files, function(f) {
+#   local_path <- file.path(PATH_TO, f)
+#   if (!file.exists(local_path)) {
+#     download.file(paste0("https://zenodo.org/records/23661454/files/", f, "?download=1"),
+#                   destfile = local_path, mode = "wb")
+#   }
+# }))
 
 ## Genomics objects
-mutation_anno <- read_csv("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_genomics_mutations_processed.csv")
-mutation_all <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_genomics_mutations_all.rds")
-CNV_anno <- read_csv("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_genomics_CNVarms_processed.csv")
-CNV_all <- read_csv("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_genomics_CNVarms_all.csv")
+mutation_anno <- read_csv(file.path(PATH_TO, "discovery_genomics_mutations_processed.csv"))
+mutation_all <- readRDS(file.path(PATH_TO, "discovery_genomics_mutations_all.rds"))
+CNV_anno <- read_csv(file.path(PATH_TO, "discovery_genomics_CNVarms_processed.csv"))
+CNV_all <- read_csv(file.path(PATH_TO, "discovery_genomics_CNVarms_all.csv"))
 
-## Metabolomics objects 
-metabolites_SE <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_metabolomics_SE.rds") 
-metabolites_anno <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_metabolomics_anno.rds") 
+## Metabolomics objects
+metabolites_SE <- readRDS(file.path(PATH_TO, "discovery_metabolomics_SE.rds"))
+metabolites_anno <- readRDS(file.path(PATH_TO, "discovery_metabolomics_anno.rds"))
 
 ## BlockForest objects
-blockforest_all <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_blockforest_all.rds")
+blockforest_all <- readRDS(file.path(PATH_TO, "discovery_blockforest_all.rds"))
 BF_MUT_MUT <- blockforest_all$MUT_MUT
 BF_MUT_IMC <- blockforest_all$MUT_IMC
 BF_MUT_IMC_MUT <- blockforest_all$MUT_IMC_MUT
@@ -69,18 +87,18 @@ BF_META_META <- blockforest_all$META_META
 BF_META_IMC <- blockforest_all$META_IMC
 BF_META_IMC_META <- blockforest_all$META_IMC_META
 
-## SCE objects 
-sce_TU <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_SCE_tumor.rds")
-sce_T <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_SCE_tcell.rds")
+## SCE objects
+sce_TU <- readRDS(file.path(PATH_TO, "discovery_SCE_tumor.rds"))
+sce_T <- readRDS(file.path(PATH_TO, "discovery_SCE_tcell.rds"))
 
 ## Other
-metadata_selected <- read_csv("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_metadata.csv")
+metadata_selected <- read_csv(file.path(PATH_TO, "discovery_metadata.csv"))
 metadata_selected <- metadata_selected %>% filter(!is.na(survival_ecotype))
 metadata_mutation <- as.data.frame(metadata_selected[metadata_selected$PID %in% mutation_anno$PID,])
 metadata_CNV <- as.data.frame(metadata_selected[metadata_selected$PID %in% unique(CNV_anno$PID),])
 metadata_metabolome <- as.data.frame(metadata_selected[metadata_selected$PID %in% unique(metabolites_SE$PID),])
-celltype_density <- read_csv("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_celltype_density.csv")
-GOI <- read_tsv("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_genomics_IntOGen_drivers.tsv") %>% pull(Symbol)
+celltype_density <- read_csv(file.path(PATH_TO, "discovery_celltype_density.csv"))
+GOI <- read_tsv(file.path(PATH_TO, "discovery_genomics_IntOGen_drivers.tsv")) %>% pull(Symbol)
 ```
 
 # Figure 4

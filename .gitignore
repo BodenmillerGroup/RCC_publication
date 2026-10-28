@@ -44,3 +44,4 @@ vignettes/*.pdf
 .claude/
 CLAUDE.md
 Clean_Objects_For_Upload.Rmd
+*.html 

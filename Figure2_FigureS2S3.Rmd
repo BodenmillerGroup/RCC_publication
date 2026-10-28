@@ -19,21 +19,21 @@ R data analysis scripts for re-creating Figure 2 and Figure S2/S3.
 
 ```{r, message=FALSE,warning=FALSE}
 # Run with R version 4.3.2
-library(tidyverse)
-library(ggnewscale)
-library(cytoviewer)
-library(survival)
-library(survminer)
-library(conflicted)
-library(SingleCellExperiment)
-library(scran)
-library(foreach)
-library(imcRtools)
-library(viridis)
-library(circlize)
-library(ComplexHeatmap)
-library(RColorBrewer)
-library(edgeR)
+library(tidyverse) #v.2.0.0
+library(ggnewscale) #v.0.4.9
+library(cytoviewer) #v.1.13.3
+library(survival) #v.3.5-7
+library(survminer) #v.0.4.9
+library(conflicted) #v.1.2.0
+library(SingleCellExperiment) #v.1.24.0
+library(scran) #v.1.30.0
+library(foreach) #v.1.5.2
+library(imcRtools) #v.1.15.2
+library(viridis) #v.0.6.4
+library(circlize) #v.0.4.15
+library(ComplexHeatmap) #v.2.18.0
+library(RColorBrewer) #v.1.1-3
+library(edgeR) #v.4.0.2
 conflicts_prefer(dplyr::count)
 conflicts_prefer(dplyr::filter)
 conflicts_prefer(base::union)
@@ -42,13 +42,25 @@ conflicts_prefer(base::union)
 # Read data
 
 ```{r}
-# Available from Zenodo - DOI: TO DO
-# File paths have to be adjusted by the user
+# Available from Zenodo - DOI: https://doi.org/10.5281/zenodo.23661454
+# File paths ("PATH_TO") have to be adjusted by the user
+PATH_TO <- "PATH_TO"
+
+# # EXAMPLE DOWNLOAD CODE
+# dir.create(PATH_TO, showWarnings = FALSE, recursive = TRUE)
+# zenodo_files <- c("discovery_SCE_tumor.rds", "discovery_SCE_tcell.rds", "discovery_SCE_myeloid.rds")
+# invisible(lapply(zenodo_files, function(f) {
+#   local_path <- file.path(PATH_TO, f)
+#   if (!file.exists(local_path)) {
+#     download.file(paste0("https://zenodo.org/records/23661454/files/", f, "?download=1"),
+#                   destfile = local_path, mode = "wb")
+#   }
+# }))
 
 ## SCE objects
-sce_TU <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_SCE_tumor.rds")
-sce_T <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_SCE_tcell.rds")
-sce_MY <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_SCE_myeloid.rds")
+sce_TU <- readRDS(file.path(PATH_TO, "discovery_SCE_tumor.rds"))
+sce_T <- readRDS(file.path(PATH_TO, "discovery_SCE_tcell.rds"))
+sce_MY <- readRDS(file.path(PATH_TO, "discovery_SCE_myeloid.rds"))
 ```
 
 # Figure 2

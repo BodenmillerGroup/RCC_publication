@@ -1,13 +1,6 @@
 # A spatial multi-omic portrait of survival outcome for clear cell renal cell carcinoma, Meyer et al., 2026
 
 [![Preprint](https://img.shields.io/badge/Preprint-medRxiv-blue.svg)](https://doi.org/10.64898/2026.03.02.26347390)
-![R](https://img.shields.io/badge/R-4.3.2-blue.svg)
-![Python](https://img.shields.io/badge/Python-3.10.0-blue.svg)
-[![Issues](https://img.shields.io/github/issues/BodenmillerGroup/RCC_publication)](https://github.com/BodenmillerGroup/RCC_publication/issues)
-![Zenodo](https://img.shields.io/badge/Zenodo-DOI%20pending-blue.svg)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-<!-- TODO: once a DOI is assigned, replace the badge above with a linked one, e.g.
-[![Zenodo](https://zenodo.org/badge/DOI/10.5281/zenodo.XXXXXXX.svg)](https://doi.org/10.5281/zenodo.XXXXXXX) -->
 
 This repository contains analysis code for the clear cell renal cell carcinoma 
 study from Meyer et al., 2026. Read the **preprint** here: <https://doi.org/10.64898/2026.03.02.26347390>
@@ -15,8 +8,7 @@ study from Meyer et al., 2026. Read the **preprint** here: <https://doi.org/10.6
 **DISCLAIMER:**
 The study is currently undergoing peer-review.
 Therefore, the code base is under active development.
-It includes code for presented figures in the manuscript.
-File paths have to be adjusted by the user.
+It includes code for all presented figures in the manuscript.
 
 <p align="center">
   <img src="images/GraphicalAbstract.png" width="800">
@@ -38,33 +30,39 @@ These analyses highlight distinct treatment responses and survival benefits acro
 In summary, our study distills the survival-relevant information encoded in the ccRCC tumor microenvironment into prognostic survival ecotypes, which may inform clinical decision making in the future.
 
 ## Repository structure
+[![Zenodo](https://zenodo.org/badge/DOI/10.5281/zenodo.23661454.svg)](https://doi.org/10.5281/zenodo.23661454)
 
-This repository contains data analysis scripts for **re-creating all manuscript figures** based on provided data analysis objects from **zenodo** (<https://zenodo.org/records/TODO>).
-
-## Software note
-
-Scripts are written in the programming languages **R** and **Python**.
-**R code** was run with `R version 4.3.2` on Ubuntu 20.04.4.
-**Python code** was run with `Python 3.10.0`.
+This repository contains data analysis scripts for **re-creating all manuscript figures** based on provided data analysis objects from **Zenodo**. Example download code is provided across scripts. File paths have to be adjusted by the user.
 
 ## Data access
 
-Data is provided on **Zenodo** and the **European Nucleotide Archive** and will be 
-publicly released upon publication:
+Data is provided on **Zenodo** and the **European Nucleotide Archive**, and will be 
+publicly released upon publication.
 
 | Data type | Repository | Link |
 |---|---|---|
-| Analysis objects (incl. processed *SingleCellExperiment* objects) | Zenodo | <https://zenodo.org/records/TODO> |
-| Raw IMC tumor panel | Zenodo | <https://zenodo.org/records/TODO> |
-| Raw IMC myeloid panel | Zenodo | <https://zenodo.org/records/TODO> |
-| Raw IMC T cell panel | Zenodo | <https://zenodo.org/records/TODO> |
-| Raw H&E data | Zenodo | <https://zenodo.org/records/TODO> |
-| Raw genomics data | Zenodo | <https://zenodo.org/records/TODO> |
-| Raw targeted sequencing data | European Nucleotide Archive | <https://www.ebi.ac.uk/ena/browser/view/TODO> |
+| Data analysis objects | Zenodo | [![Zenodo](https://zenodo.org/badge/DOI/10.5281/zenodo.23661454.svg)](https://doi.org/10.5281/zenodo.23661454) |
+| IMC data | Zenodo | [![Zenodo](https://zenodo.org/badge/DOI/10.5281/zenodo.23695612.svg)](https://doi.org/10.5281/zenodo.23695612) |
+| H&E data | Zenodo | [![Zenodo](https://zenodo.org/badge/DOI/10.5281/zenodo.18702258.svg)](https://doi.org/10.5281/zenodo.18702258) |
+| Genomics/metabolomics data | Zenodo | [![Zenodo](https://zenodo.org/badge/DOI/10.5281/zenodo.23692521.svg)](https://doi.org/10.5281/zenodo.23692521) |
+| Raw genomics data | European Nucleotide Archive | [![ENA](https://img.shields.io/badge/ENA-PRJEB129033-blue.svg)](https://www.ebi.ac.uk/ena/browser/view/PRJEB129033) |
 
-**NOTE:** We plan to add the processed IMC datasets to the **imcdatasets** R/Bioconductor package (<https://github.com/BodenmillerGroup/imcdatasets>) upon publication.
+**NOTE:** Processed IMC datasets will be added to the **imcdatasets** R/Bioconductor package upon publication.
+[![GitHub](https://img.shields.io/badge/GitHub-imcdatasets-181717.svg?logo=github&logoColor=white)](https://github.com/BodenmillerGroup/imcdatasets)
+
+## Software note
+![R](https://img.shields.io/badge/R-4.3.2-181717.svg)
+![Python](https://img.shields.io/badge/Python-3.10.0-181717.svg)
+
+Scripts are written in the programming languages **R** and **Python**.
+**R code** was run with `R version 4.3.2` on Ubuntu 20.04.4.
+**Python code** was run with `Python 3.10.0` using conda. Package versions are provided across scripts.
+
+## License 
+[![License: MIT](https://img.shields.io/badge/License-MIT-181717.svg)](LICENSE)
 
 ## Issues
+[![GitHub](https://img.shields.io/badge/GitHub-issues-181717.svg?logo=github&logoColor=white)](https://github.com/BodenmillerGroup/RCC_publication/issues)
 
 For problems and questions, please open an issue [here](https://github.com/BodenmillerGroup/RCC_publication/issues).
 

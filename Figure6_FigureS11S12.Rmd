@@ -19,20 +19,20 @@ R data analysis scripts for re-creating Figure 6 and Figure S11/S12.
 
 ```{r, message=FALSE,warning=FALSE}
 # Run with R version 4.3.2
-library(SummarizedExperiment)
-library(conflicted)
-library(CMScaller)
-library(survival)
-library(survminer)
-library(ggpubr)
-library(RColorBrewer)
-library(ComplexHeatmap)
-library(dittoSeq)
-library(patchwork)
-library(tidyverse)
-library(viridis)
-library(readxl)
-library(scran)
+library(SummarizedExperiment) #v.1.32.0
+library(conflicted) #v.1.2.0
+library(CMScaller) #v.2.0.1
+library(survival) #v.3.5-7
+library(survminer) #v.0.4.9
+library(ggpubr) #v.0.6.0
+library(RColorBrewer) #v.1.1-3
+library(ComplexHeatmap) #v.2.18.0
+library(dittoSeq) #v.1.14.0
+library(patchwork) #v.1.1.3
+library(tidyverse) #v.2.0.0
+library(viridis) #v.0.6.4
+library(readxl) #v.1.4.3
+library(scran) #v.1.30.0
 conflicts_prefer(dplyr::count)
 conflicts_prefer(dplyr::filter)
 conflicts_prefer(base::intersect)
@@ -41,21 +41,41 @@ conflicts_prefer(base::intersect)
 # Read data
 
 ```{r}
-## Clinical trial datasets
-JAVELIN_SE <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/validation_JAVELIN_SE.rds") 
-IMmotion_SE <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/validation_IMmotion_SE.rds") 
-Checkmate_SE <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/validation_Checkmate_SE.rds") 
+# Available from Zenodo - DOI: https://doi.org/10.5281/zenodo.23661454
+# File paths ("PATH_TO") have to be adjusted by the user
+PATH_TO <- "PATH_TO"
 
-## TCGA KIRC objects 
-TCGA_SE <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/validation_TCGAKIRC_SE.rds")
+# # EXAMPLE DOWNLOAD CODE
+# dir.create(PATH_TO, showWarnings = FALSE, recursive = TRUE)
+# 
+# ## Download required files from Zenodo (skips files already present locally)
+# zenodo_files <- c(
+#   "validation_JAVELIN_SE.rds", "validation_IMmotion_SE.rds", "validation_Checkmate_SE.rds",
+#   "validation_TCGAKIRC_SE.rds", "validation_genesignatures.rds", "validation_molsub_comp.xlsx"
+# )
+# invisible(lapply(zenodo_files, function(f) {
+#   local_path <- file.path(PATH_TO, f)
+#   if (!file.exists(local_path)) {
+#     download.file(paste0("https://zenodo.org/records/23661454/files/", f, "?download=1"),
+#                   destfile = local_path, mode = "wb")
+#   }
+# }))
+
+## Clinical trial datasets
+JAVELIN_SE <- readRDS(file.path(PATH_TO, "validation_JAVELIN_SE.rds"))
+IMmotion_SE <- readRDS(file.path(PATH_TO, "validation_IMmotion_SE.rds"))
+Checkmate_SE <- readRDS(file.path(PATH_TO, "validation_Checkmate_SE.rds"))
+
+## TCGA KIRC objects
+TCGA_SE <- readRDS(file.path(PATH_TO, "validation_TCGAKIRC_SE.rds"))
 
 ## Other
-gene_signatures <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/validation_genesignatures.rds") 
+gene_signatures <- readRDS(file.path(PATH_TO, "validation_genesignatures.rds"))
 POORUP <- gene_signatures$survival_ecotype_poor
 FAVUP <- gene_signatures$survival_ecotype_favorable
 col_group <- setNames(c("#0571B0", "gold3", "#CA0020"),c("Favorable","Medium","Poor"))
-comp_surv <- read_excel("/mnt/central_nas/rcc_volume/RCC/00_final_files/validation_molsub_comp.xlsx", sheet = 1) 
-comp_IO <- read_excel("/mnt/central_nas/rcc_volume/RCC/00_final_files/validation_molsub_comp.xlsx", sheet = 2) 
+comp_surv <- read_excel(file.path(PATH_TO, "validation_molsub_comp.xlsx"), sheet = 1)
+comp_IO <- read_excel(file.path(PATH_TO, "validation_molsub_comp.xlsx"), sheet = 2)
 ```
 
 # Figure 6 

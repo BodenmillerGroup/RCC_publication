@@ -19,23 +19,23 @@ R data analysis scripts for re-creating Figure 1 and Figure S1.
 
 ```{r, message=FALSE,warning=FALSE}
 # Run with R version 4.3.2
-library(ComplexHeatmap)
-library(foreach)
-library(ggsci)
-library(RColorBrewer)
-library(patchwork)
-library(cytoviewer)
-library(tidyverse)
-library(survival)
-library(survminer)
-library(circlize)
-library(cytomapper)
-library(cytoviewer)
-library(scran)
-library(viridis)
-library(conflicted)
-library(corrplot)
-library(SingleCellExperiment)
+library(ComplexHeatmap) #v.2.18.0
+library(foreach) #v.1.5.2
+library(ggsci) #v.3.0.0
+library(RColorBrewer) #v.1.1-3
+library(patchwork) #v.1.1.3
+library(cytoviewer) #v.1.13.3
+library(tidyverse) #v.2.0.0
+library(survival) #v.3.5-7
+library(survminer) #v.0.4.9
+library(circlize) #v.0.4.15
+library(cytomapper) #v.1.14.0
+library(cytoviewer) #v.1.13.3
+library(scran) #v.1.30.0
+library(viridis) #v.0.6.4
+library(conflicted) #v.1.2.0
+library(corrplot) #v.0.92
+library(SingleCellExperiment) #v.1.24.0
 conflicts_prefer(dplyr::count)
 conflicts_prefer(dplyr::filter)
 ```
@@ -43,29 +43,47 @@ conflicts_prefer(dplyr::filter)
 # Read data
 
 ```{r}
-# Available from Zenodo - DOI: TO DO
-# File paths have to be adjusted by the user
+# Available from Zenodo - DOI: https://doi.org/10.5281/zenodo.23661454
+# File paths ("PATH_TO") have to be adjusted by the user
+PATH_TO <- "PATH_TO"
+
+# # EXAMPLE DOWNLOAD CODE
+# dir.create(PATH_TO, showWarnings = FALSE, recursive = TRUE)
+# zenodo_files <- c(
+#   "discovery_SCE_tumor.rds", "discovery_SCE_tcell.rds", "discovery_SCE_myeloid.rds",
+#   "discovery_SCE_sub_tumor.rds", "discovery_SCE_sub_tcell.rds", "discovery_SCE_sub_myeloid.rds",
+#   "discovery_images_sub_TU.rds", "discovery_images_sub_T.rds", "discovery_images_sub_MY.rds",
+#   "discovery_masks_sub_TU.rds", "discovery_masks_sub_T.rds", "discovery_masks_sub_MY.rds",
+#   "discovery_metadata.csv", "discovery_celltype_density.csv", "discovery_colors.rds"
+# )
+# invisible(lapply(zenodo_files, function(f) {
+#   local_path <- file.path(PATH_TO, f)
+#   if (!file.exists(local_path)) {
+#     download.file(paste0("https://zenodo.org/records/23661454/files/", f, "?download=1"),
+#                   destfile = local_path, mode = "wb")
+#   }
+# }))
 
 ## SCE objects
-sce_TU <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_SCE_tumor.rds")
-sce_T <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_SCE_tcell.rds")
-sce_MY <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_SCE_myeloid.rds")
-sce_sub_TU <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_SCE_sub_tumor.rds")
-sce_sub_T <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_SCE_sub_tcell.rds")
-sce_sub_MY <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_SCE_sub_myeloid.rds")
+sce_TU <- readRDS(file.path(PATH_TO, "discovery_SCE_tumor.rds"))
+sce_T <- readRDS(file.path(PATH_TO, "discovery_SCE_tcell.rds"))
+sce_MY <- readRDS(file.path(PATH_TO, "discovery_SCE_myeloid.rds"))
+sce_sub_TU <- readRDS(file.path(PATH_TO, "discovery_SCE_sub_tumor.rds"))
+sce_sub_T <- readRDS(file.path(PATH_TO, "discovery_SCE_sub_tcell.rds"))
+sce_sub_MY <- readRDS(file.path(PATH_TO, "discovery_SCE_sub_myeloid.rds"))
 
 ## CytoImageList objects
-images_sub_TU <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_images_sub_TU.rds")
-images_sub_T <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_images_sub_T.rds")
-images_sub_MY <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_images_sub_MY.rds")
-masks_sub_TU <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_masks_sub_TU.rds")
-masks_sub_T <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_masks_sub_T.rds")
-masks_sub_MY <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_masks_sub_MY.rds")
+images_sub_TU <- readRDS(file.path(PATH_TO, "discovery_images_sub_TU.rds"))
+images_sub_T <- readRDS(file.path(PATH_TO, "discovery_images_sub_T.rds"))
+images_sub_MY <- readRDS(file.path(PATH_TO, "discovery_images_sub_MY.rds"))
+masks_sub_TU <- readRDS(file.path(PATH_TO, "discovery_masks_sub_TU.rds"))
+masks_sub_T <- readRDS(file.path(PATH_TO, "discovery_masks_sub_T.rds"))
+masks_sub_MY <- readRDS(file.path(PATH_TO, "discovery_masks_sub_MY.rds"))
 
 ## Other
-metadata_selected <- read_csv("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_metadata.csv")
-celltype_density <- read_csv("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_celltype_density.csv")
-colors <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_colors.rds")
+metadata_selected <- read_csv(file.path(PATH_TO, "discovery_metadata.csv"))
+celltype_density <- read_csv(file.path(PATH_TO, "discovery_celltype_density.csv"))
+colors <- readRDS(file.path(PATH_TO, "discovery_colors.rds"))
 ```
 
 # Figure 1

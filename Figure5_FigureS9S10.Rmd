@@ -19,26 +19,26 @@ R data analysis scripts for re-creating Figure 5 and Figure S9/S10.
 
 ```{r, message=FALSE,warning=FALSE}
 # Run with R version 4.3.2
-library(survival)
-library(survminer)
-library(foreach)
-library(tidyverse)
-library(conflicted)
-library(ggnewscale)
-library(scran)
-library(edgeR)
-library(ggpubr)
-library(pec)
-library(DESeq2)
-library(tidytext)
-library(biomaRt)
-library(clusterProfiler)
-library(enrichplot)
-library(org.Hs.eg.db)
-library(ComplexHeatmap)
-library(CMScaller)
-library(RColorBrewer)
-library(dittoSeq)
+library(survival) #v.3.5-7
+library(survminer) #v.0.4.9
+library(foreach) #v.1.5.2
+library(tidyverse) #v.2.0.0
+library(conflicted) #v.1.2.0
+library(ggnewscale) #v.0.4.9
+library(scran) #v.1.30.0
+library(edgeR) #v.4.0.2
+library(ggpubr) #v.0.6.0
+library(pec) #v.2023.04.12
+library(DESeq2) #v.1.42.0
+library(tidytext) #v.0.4.3
+library(biomaRt) #v.2.58.0
+library(clusterProfiler) #v.4.10.0
+library(enrichplot) #v.1.22.0
+library(org.Hs.eg.db) #v.3.18.0
+library(ComplexHeatmap) #v.2.18.0
+library(CMScaller) #v.2.0.1
+library(RColorBrewer) #v.1.1-3
+library(dittoSeq) #v.1.14.0
 conflicts_prefer(dplyr::count)
 conflicts_prefer(dplyr::filter)
 conflicts_prefer(dplyr::select)
@@ -48,25 +48,47 @@ conflicts_prefer(base::intersect)
 # Read data
 
 ```{r}
-## TCGA KIRC objects 
-TCGA_SE <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/validation_TCGAKIRC_SE.rds")
-TCGA_DST <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/validation_TCGAKIRC_DST.rds")
+# Available from Zenodo - DOI: https://doi.org/10.5281/zenodo.23661454
+# File paths ("PATH_TO") have to be adjusted by the user
+PATH_TO <- "PATH_TO"
 
-## CPTAC RCC objects 
-CPTAC_SE <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/validation_CPTAC_SE.rds")
-CPTAC_DST <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/validation_CPTAC_DST.rds")
+# # EXAMPLE DOWNLOAD CODE
+# dir.create(PATH_TO, showWarnings = FALSE, recursive = TRUE)
+# 
+# ## Download required files from Zenodo (skips files already present locally)
+# zenodo_files <- c(
+#   "validation_TCGAKIRC_SE.rds", "validation_TCGAKIRC_DST.rds",
+#   "validation_CPTAC_SE.rds", "validation_CPTAC_DST.rds",
+#   "discovery_blockforest_all.rds", "HE_cluster_anno.csv", "discovery_metadata.csv",
+#   "validation_genesignatures.rds", "validation_TCGAKIRC_immunedeconv.rds"
+# )
+# invisible(lapply(zenodo_files, function(f) {
+#   local_path <- file.path(PATH_TO, f)
+#   if (!file.exists(local_path)) {
+#     download.file(paste0("https://zenodo.org/records/23661454/files/", f, "?download=1"),
+#                   destfile = local_path, mode = "wb")
+#   }
+# }))
+
+## TCGA KIRC objects
+TCGA_SE <- readRDS(file.path(PATH_TO, "validation_TCGAKIRC_SE.rds"))
+TCGA_DST <- readRDS(file.path(PATH_TO, "validation_TCGAKIRC_DST.rds"))
+
+## CPTAC RCC objects
+CPTAC_SE <- readRDS(file.path(PATH_TO, "validation_CPTAC_SE.rds"))
+CPTAC_DST <- readRDS(file.path(PATH_TO, "validation_CPTAC_DST.rds"))
 
 ## BlockForest objects
-blockforest_all <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_blockforest_all.rds")
+blockforest_all <- readRDS(file.path(PATH_TO, "discovery_blockforest_all.rds"))
 BF_HE_HE <- blockforest_all$HE_HE
 BF_HE_IMC <- blockforest_all$HE_IMC
 BF_HE_IMC_HE <- blockforest_all$HE_IMC_HE
 
 ## Other
-HE_cluster_anno <- read_csv("/mnt/central_nas/rcc_volume/RCC/00_final_files/HE_cluster_anno.csv")
-metadata_selected <- read_csv("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_metadata.csv")
-gene_signatures <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/validation_genesignatures.rds") 
-immune_deconv <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/validation_TCGAKIRC_immunedeconv.rds") 
+HE_cluster_anno <- read_csv(file.path(PATH_TO, "HE_cluster_anno.csv"))
+metadata_selected <- read_csv(file.path(PATH_TO, "discovery_metadata.csv"))
+gene_signatures <- readRDS(file.path(PATH_TO, "validation_genesignatures.rds"))
+immune_deconv <- readRDS(file.path(PATH_TO, "validation_TCGAKIRC_immunedeconv.rds"))
 TCGA_MCP <- immune_deconv$TCGA_MCP
 TCGA_quanti <- immune_deconv$TCGA_quanti
 ```

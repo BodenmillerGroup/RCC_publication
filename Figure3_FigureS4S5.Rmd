@@ -19,23 +19,23 @@ R data analysis scripts for re-creating Figure 3 and Figure S4/S5.
 
 ```{r, message=FALSE,warning=FALSE}
 # Run with R version 4.3.2
-library(survival)
-library(survminer)
-library(pec)
-library(tidyverse)
-library(easyalluvial)
-library(ggnewscale)
-library(ComplexHeatmap)
-library(circlize)
-library(viridis)
-library(RColorBrewer)
-library(conflicted)
-library(ggpubr)
-library(foreach)
-library(scran)
-library(edgeR)
-library(patchwork)
-library(clValid)
+library(survival) #v.3.5-7
+library(survminer) #v.0.4.9
+library(pec) #v.2023.04.12
+library(tidyverse) #v.2.0.0
+library(easyalluvial) #v.0.3.2
+library(ggnewscale) #v.0.4.9
+library(ComplexHeatmap) #v.2.18.0
+library(circlize) #v.0.4.15
+library(viridis) #v.0.6.4
+library(RColorBrewer) #v.1.1-3
+library(conflicted) #v.1.2.0
+library(ggpubr) #v.0.6.0
+library(foreach) #v.1.5.2
+library(scran) #v.1.30.0
+library(edgeR) #v.4.0.2
+library(patchwork) #v.1.1.3
+library(clValid) #v.0.7
 conflicts_prefer(dplyr::count)
 conflicts_prefer(dplyr::filter)
 ```
@@ -43,11 +43,26 @@ conflicts_prefer(dplyr::filter)
 # Read data
 
 ```{r}
-# Available from Zenodo - DOI: TO DO
-# File paths have to be adjusted by the user
+# Available from Zenodo - DOI: https://doi.org/10.5281/zenodo.23661454
+# File paths ("PATH_TO") have to be adjusted by the user
+PATH_TO <- "PATH_TO"
+
+# # EXAMPLE DOWNLOAD CODE
+# dir.create(PATH_TO, showWarnings = FALSE, recursive = TRUE)
+# zenodo_files <- c(
+#   "discovery_blockforest_all.rds", "discovery_SCE_tumor.rds",
+#   "discovery_celltype_density.csv", "discovery_metadata.csv", "discovery_features_selected.rds"
+# )
+# invisible(lapply(zenodo_files, function(f) {
+#   local_path <- file.path(PATH_TO, f)
+#   if (!file.exists(local_path)) {
+#     download.file(paste0("https://zenodo.org/records/23661454/files/", f, "?download=1"),
+#                   destfile = local_path, mode = "wb")
+#   }
+# }))
 
 ## BlockForest objects
-blockforest_all <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_blockforest_all.rds")
+blockforest_all <- readRDS(file.path(PATH_TO, "discovery_blockforest_all.rds"))
 BF_IMC <- blockforest_all$IMC
 BF_IMC_all <- blockforest_all$IMC_all
 BF_IMC_GEN <- blockforest_all$IMC_GEN
@@ -58,13 +73,13 @@ BF_CLIN <- blockforest_all$CLIN
 BF_IMC_CLIN <- blockforest_all$IMC_CLIN
 BF_IMC_time <- blockforest_all$IMC_time
 
-## SCE objects 
-sce_TU <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_SCE_tumor.rds")
+## SCE objects
+sce_TU <- readRDS(file.path(PATH_TO, "discovery_SCE_tumor.rds"))
 
-## Other 
-celltype_density <- read_csv("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_celltype_density.csv")
-metadata_selected <- read_csv("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_metadata.csv")
-features_selected <- readRDS("/mnt/central_nas/rcc_volume/RCC/00_final_files/discovery_features_selected.rds")
+## Other
+celltype_density <- read_csv(file.path(PATH_TO, "discovery_celltype_density.csv"))
+metadata_selected <- read_csv(file.path(PATH_TO, "discovery_metadata.csv"))
+features_selected <- readRDS(file.path(PATH_TO, "discovery_features_selected.rds"))
 ```
 
 # Figure 3
