@@ -1,0 +1,2463 @@
+---
+title: null
+author: "Lasse Meyer"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+# A spatial multi-omic portrait of survival outcome for clear cell renal cell carcinoma, Meyer et al., 2026
+
+# Figure 2 and Figure S2/S3
+
+R data analysis scripts for re-creating Figure 2 and Figure S2/S3. 
+
+# Software requirements
+
+```{r, message=FALSE,warning=FALSE}
+# Run with R version 4.3.2
+library(tidyverse) #v.2.0.0
+library(ggnewscale) #v.0.4.9
+library(cytoviewer) #v.1.13.3
+library(survival) #v.3.5-7
+library(survminer) #v.0.4.9
+library(conflicted) #v.1.2.0
+library(SingleCellExperiment) #v.1.24.0
+library(scran) #v.1.30.0
+library(foreach) #v.1.5.2
+library(imcRtools) #v.1.15.2
+library(viridis) #v.0.6.4
+library(circlize) #v.0.4.15
+library(ComplexHeatmap) #v.2.18.0
+library(RColorBrewer) #v.1.1-3
+library(edgeR) #v.4.0.2
+conflicts_prefer(dplyr::count)
+conflicts_prefer(dplyr::filter)
+conflicts_prefer(base::union)
+```
+
+# Read data
+
+```{r}
+# Available from Zenodo - DOI: https://doi.org/10.5281/zenodo.23661454
+# File paths ("PATH_TO") have to be adjusted by the user
+PATH_TO <- "PATH_TO"
+
+# # EXAMPLE DOWNLOAD CODE
+# dir.create(PATH_TO, showWarnings = FALSE, recursive = TRUE)
+# zenodo_files <- c("discovery_SCE_tumor.rds", "discovery_SCE_tcell.rds", "discovery_SCE_myeloid.rds")
+# invisible(lapply(zenodo_files, function(f) {
+#   local_path <- file.path(PATH_TO, f)
+#   if (!file.exists(local_path)) {
+#     download.file(paste0("https://zenodo.org/records/23661454/files/", f, "?download=1"),
+#                   destfile = local_path, mode = "wb")
+#   }
+# }))
+
+## SCE objects
+sce_TU <- readRDS(file.path(PATH_TO, "discovery_SCE_tumor.rds"))
+sce_T <- readRDS(file.path(PATH_TO, "discovery_SCE_tcell.rds"))
+sce_MY <- readRDS(file.path(PATH_TO, "discovery_SCE_myeloid.rds"))
+```
+
+# Figure 2
+
+## 2A
+
+Tumor panel
+
+### EXPRESSION
+
+```{r}
+sce_TU_tumor <- sce_TU[,sce_TU$analysis_cat == "tumor"]
+
+# Add CD44 tumor expression from T cell panel
+sce_T_tumor <- sce_T[,sce_T$analysis_cat == "tumor"]
+
+# Aggregate across cells 
+mean_sce <- aggregateAcrossCells(sce_TU_tumor, ids = sce_TU_tumor$PID,
+                                 statistics = "mean",
+                                 use.assay.type = "min_max",
+                                 subset.row = rowData(sce_TU_tumor)$TU_cluster_channel)
+
+mean_sce_T <- aggregateAcrossCells(sce_T_tumor, ids = sce_T_tumor$PID,
+                                 statistics = "mean",
+                                 use.assay.type = "min_max",
+                                 subset.row = rownames(sce_T_tumor) %in% c("CD44"))
+
+mean_exp_df <- assay(mean_sce, "min_max") %>% t() %>% as.data.frame
+mean_exp_df_T <- assay(mean_sce_T, "min_max") %>% t() %>% as.data.frame
+mean_exp_df$CD44 <- mean_exp_df_T$CD44[match(rownames(mean_exp_df), rownames(mean_exp_df_T))]
+```
+
+```{r}
+# 1. MEAN
+out_df <- data.frame(PID = unique(sce_TU_tumor$PID))
+
+for(i in colnames(mean_exp_df)){
+mean_exp_new <- mean_exp_df %>% select(all_of(i)) %>% mutate(mean = mean(mean_exp_df[[i]])) %>% mutate(cat = ifelse(mean > mean_exp_df[[i]], "low", "high")) %>% rownames_to_column("PID")
+
+out_df[,i] <- mean_exp_new$cat[match(out_df$PID, mean_exp_new$PID)]
+}
+
+out_df$status_OS <- sce_TU_tumor$status_OS[match(out_df$PID, sce_TU_tumor$PID)]
+out_df$OS_months <- sce_TU_tumor$OS_months[match(out_df$PID, sce_TU_tumor$PID)]
+
+# KAPLAN-MEIER ESTIMATE 
+# Extract p-values from log-rank / direction of trend
+cur_surv_out <- foreach(x = colnames(out_df %>% select(-PID, -status_OS, -OS_months)), .combine = "rbind")%do%{
+  formula <- as.formula(paste("Surv(OS_months, status_OS) ~ ", x))
+  fit <- survdiff(formula, data = out_df)
+  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[1], exp_2 = fit$exp[1], ratio = fit$obs[1]/fit$exp[1])
+}
+
+# Adjust p-values using BH 
+cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
+
+# Create output
+cur_surv_plot <- cur_surv_out %>% mutate(direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% filter(p_adj < 0.05)
+
+cur_surv_plot$result <- ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p_adj < 0.05, "UP",
+                             ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p < 0.05, "UP_trend", 
+                                    ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p_adj < 0.05, "DOWN", 
+                                           ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p < 0.05, "DOWN_trend",NA))))
+
+mean_exp_results <- cur_surv_plot
+```
+
+```{r}
+# 2. MEDIAN
+out_df <- data.frame(PID = unique(sce_TU_tumor$PID))
+
+for(i in colnames(mean_exp_df)){
+mean_exp_new <- mean_exp_df %>% select(all_of(i)) %>% mutate(median = median(mean_exp_df[[i]])) %>% mutate(cat = ifelse(median > mean_exp_df[[i]], "low", "high")) %>% rownames_to_column("PID")
+
+out_df[,i] <- mean_exp_new$cat[match(out_df$PID, mean_exp_new$PID)]
+}
+
+out_df$status_OS <- sce_TU_tumor$status_OS[match(out_df$PID, sce_TU_tumor$PID)]
+out_df$OS_months <- sce_TU_tumor$OS_months[match(out_df$PID, sce_TU_tumor$PID)]
+
+# KAPLAN-MEIER ESTIMATE 
+# Extract p-values from log-rank / direction of trend
+cur_surv_out <- foreach(x = colnames(out_df %>% select(-PID, -status_OS, -OS_months)), .combine = "rbind")%do%{
+  formula <- as.formula(paste("Surv(OS_months, status_OS) ~ ", x))
+  fit <- survdiff(formula, data = out_df)
+  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[1], exp_2 = fit$exp[1], ratio = fit$obs[1]/fit$exp[1])
+}
+
+# Adjust p-values using BH 
+cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
+
+# Create output
+cur_surv_plot <- cur_surv_out %>% mutate(direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% filter(p_adj < 0.05)
+
+cur_surv_plot$result <- ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p_adj < 0.05, "UP",
+                             ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p < 0.05, "UP_trend", 
+                                    ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p_adj < 0.05, "DOWN", 
+                                           ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p < 0.05, "DOWN_trend",NA))))
+
+median_exp_results <- cur_surv_plot
+```
+
+```{r}
+# Combined visualization
+mean_exp_results$category <- "mean"
+median_exp_results$category <- "median"
+
+plot_exp_combined <- rbind(mean_exp_results, median_exp_results)
+plot_exp_combined$type <- "expression"
+both <- plot_exp_combined %>% group_by(group,direction) %>% count() %>% filter(n > 1) %>% pull(group)
+plot_exp_combined$category <- ifelse(plot_exp_combined$group %in% both, "both", plot_exp_combined$category)
+plot_exp_combined_fil <- plot_exp_combined %>% group_by(group, category) %>% reframe(p = mean(p), 
+                                                                                     result = result, 
+                                                                                     type = type, 
+                                                                                     ratio = mean(ratio),
+                                                                                     direction = direction) %>% unique()
+
+ggplot(plot_exp_combined_fil, aes(x=reorder(group,ratio), y = type, shape = category, col = ratio, size= -log10(p)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  scale_shape_manual(values = c(16,15,17))+
+  new_scale(new_aes = "shape")+
+  new_scale(new_aes = "color") +
+  geom_point(data = plot_exp_combined_fil,aes(size = -log10(p), shape = category, col = result), stroke =1.5)+
+  scale_shape_manual(values = c(1,0,2))+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("Cox model")+
+  coord_flip()
+```
+
+### PHENOTYPE
+
+```{r}
+# 1. MEAN
+PID_tumor_metacluster_names <- colData(sce_TU_tumor) %>% as.data.frame() %>% select(tumor_metacluster_names,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_area <- colData(sce_TU_tumor) %>% as.data.frame() %>% select(tissue_area,PID) %>% unique() %>% group_by(PID) %>% mutate(mean_tissue_area = mean(tissue_area))
+PID_tumor_metacluster_names$mean_tissue_area <- PID_area$mean_tissue_area[match(PID_tumor_metacluster_names$PID, PID_area$PID)]
+PID_tumor_metacluster_names <- PID_tumor_metacluster_names %>% group_by(PID) %>% mutate(density = Freq/(mean_tissue_area/1000000))
+PID_metagroups <- PID_tumor_metacluster_names %>% pivot_wider(id_cols = "PID",names_from = "tumor_metacluster_names",values_from = "density") %>% column_to_rownames("PID")
+
+## MULTIVARIABLE COX MODEL
+Cox_df <- PID_metagroups
+Cox_df_mean <- foreach(i = Cox_df %>% colnames,.combine = "cbind")%do%{
+Cox_df %>% select(i) %>% mutate(mean = ifelse(Cox_df[,i] > mean(Cox_df[,i]),"B","A")) %>% pull(mean)
+}
+colnames(Cox_df_mean) <- colnames(Cox_df)
+rownames(Cox_df_mean) <- rownames(Cox_df)
+Cox_df_mean <- as.data.frame(Cox_df_mean)
+Cox_df_mean$status_OS <- sce_TU_tumor$status_OS[match(rownames(Cox_df_mean),sce_TU_tumor$PID)]
+Cox_df_mean$OS_months <- sce_TU_tumor$OS_months[match(rownames(Cox_df_mean),sce_TU_tumor$PID)]
+covariates <- Cox_df_mean %>% select(-status_OS,-OS_months) %>% colnames
+
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + ")))
+multi_model <- coxph(multi_formula, data = Cox_df_mean)
+multi_res <- summary(multi_model)
+
+plot_df_dens_mean <- data.frame(group = rownames(multi_res$coefficients),
+                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],3),
+                      HR = signif(multi_res$coefficients[,"exp(coef)"],3),
+                      CI_low = signif(multi_res$conf.int[,"lower .95"],3),
+                      CI_high = signif(multi_res$conf.int[,"upper .95"],3),
+                      wald_test = signif(multi_res$waldtest["pvalue"],3))
+```
+
+```{r}
+# 2. MEDIAN
+PID_tumor_metacluster_names <- colData(sce_TU_tumor) %>% as.data.frame() %>% select(tumor_metacluster_names,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_area <- colData(sce_TU_tumor) %>% as.data.frame() %>% select(tissue_area,PID) %>% unique() %>% group_by(PID) %>% mutate(mean_tissue_area = mean(tissue_area))
+PID_tumor_metacluster_names$mean_tissue_area <- PID_area$mean_tissue_area[match(PID_tumor_metacluster_names$PID, PID_area$PID)]
+PID_tumor_metacluster_names <- PID_tumor_metacluster_names %>% group_by(PID) %>% mutate(density = Freq/(mean_tissue_area/1000000))  
+PID_metagroups <- PID_tumor_metacluster_names %>% pivot_wider(id_cols = "PID",names_from = "tumor_metacluster_names",values_from = "density") %>% column_to_rownames("PID")
+
+## MULTIVARIABLE COX MODEL
+Cox_df <- PID_metagroups
+Cox_df_median <- foreach(i = Cox_df %>% colnames,.combine = "cbind")%do%{
+Cox_df %>% select(i) %>% mutate(median = ifelse(Cox_df[,i] > median(Cox_df[,i]),"B","A")) %>% pull(median)
+}
+colnames(Cox_df_median) <- colnames(Cox_df)
+rownames(Cox_df_median) <- rownames(Cox_df)
+Cox_df_median <- as.data.frame(Cox_df_median)
+Cox_df_median$status_OS <- sce_TU_tumor$status_OS[match(rownames(Cox_df_median),sce_TU_tumor$PID)]
+Cox_df_median$OS_months <- sce_TU_tumor$OS_months[match(rownames(Cox_df_median),sce_TU_tumor$PID)]
+
+covariates <- Cox_df_median %>% select(-status_OS,-OS_months) %>% colnames
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + ")))
+multi_model <- coxph(multi_formula, data = Cox_df_median)
+multi_res <- summary(multi_model)
+
+plot_df_dens_median <- data.frame(group = rownames(multi_res$coefficients),
+                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],3),
+                      HR = signif(multi_res$coefficients[,"exp(coef)"],3),
+                      CI_low = signif(multi_res$conf.int[,"lower .95"],3),
+                      CI_high = signif(multi_res$conf.int[,"upper .95"],3),
+                      wald_test = signif(multi_res$waldtest["pvalue"],3))
+```
+
+```{r}
+# Combined visualization
+cox_median <- plot_df_dens_median %>% mutate(sign = p_value < 0.05, result = ifelse(plot_df_dens_median$HR > 1 & plot_df_dens_median$p_value < 0.05, "UP",ifelse(plot_df_dens_median$HR < 1 & plot_df_dens_median$p_value < 0.05, "DOWN", "NOTSIG"))) %>% mutate(category = "median") %>% arrange(desc(HR))
+cox_median$group <- factor(cox_median$group, levels = cox_median$group)
+cox_mean <- plot_df_dens_mean %>% mutate(sign = p_value < 0.05, result = ifelse(plot_df_dens_mean$HR > 1 & plot_df_dens_mean$p_value < 0.05, "UP",ifelse(plot_df_dens_mean$HR < 1 & plot_df_dens_mean$p_value < 0.05, "DOWN", "NOTSIG"))) %>% mutate(category = "mean") %>% arrange(desc(HR))
+cox_mean$group <- factor(cox_mean$group, levels = cox_mean$group)
+
+plot_cox_combined <- rbind(cox_mean, cox_median)
+plot_cox_combined$type <- "phenotypes"
+plot_cox_combined_fil <- plot_cox_combined %>% filter(result != "NOTSIG")
+both <- plot_cox_combined_fil %>% group_by(group,result) %>% count() %>% filter(n > 1) %>% pull(group) %>% unfactor()
+plot_cox_combined_fil$category <- ifelse(plot_cox_combined_fil$group %in% both, "both", plot_cox_combined_fil$category)
+plot_cox_combined_fil <- plot_cox_combined_fil %>% group_by(group, category) %>% reframe(HR = mean(HR), p_value = mean(p_value), result = result, type = type) %>% unique()
+
+ggplot(plot_cox_combined_fil, aes(x=reorder(group,HR), y = type, shape = category, col = HR, size= -log10(p_value)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  scale_shape_manual(values = c(16,15,17))+
+  new_scale(new_aes = "shape")+
+  new_scale(new_aes = "color") +
+  geom_point(data = plot_cox_combined_fil,aes(size = -log10(p_value), shape = category, col = result), stroke =1.5)+
+  scale_shape_manual(values = c(1,0,2))+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("Cox model")+
+  coord_flip()
+```
+
+### DISTRICT
+
+```{r}
+# 1. MEAN
+PID_tumor_district_names <- colData(sce_TU_tumor) %>% as.data.frame() %>% select(tumor_district_names,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_area <- colData(sce_TU_tumor) %>% as.data.frame() %>% select(tissue_area,PID) %>% unique() %>% group_by(PID) %>% mutate(mean_tissue_area = mean(tissue_area))
+PID_tumor_district_names$mean_tissue_area <- PID_area$mean_tissue_area[match(PID_tumor_district_names$PID, PID_area$PID)]
+  PID_tumor_district_names <- PID_tumor_district_names %>% group_by(PID) %>% mutate(density = Freq/(mean_tissue_area/1000000))  
+PID_metagroups <- PID_tumor_district_names %>% pivot_wider(id_cols = "PID",names_from = "tumor_district_names",values_from = "density") %>% column_to_rownames("PID")
+
+## MULTIVARIABLE COX MODEL
+Cox_df <- PID_metagroups
+Cox_df_mean <- foreach(i = Cox_df %>% colnames,.combine = "cbind")%do%{
+Cox_df %>% select(i) %>% mutate(mean = ifelse(Cox_df[,i] > mean(Cox_df[,i]),"B","A")) %>% pull(mean)
+}
+colnames(Cox_df_mean) <- colnames(Cox_df)
+rownames(Cox_df_mean) <- rownames(Cox_df)
+Cox_df_mean <- as.data.frame(Cox_df_mean)
+Cox_df_mean$status_OS <- sce_TU_tumor$status_OS[match(rownames(Cox_df_mean),sce_TU_tumor$PID)]
+Cox_df_mean$OS_months <- sce_TU_tumor$OS_months[match(rownames(Cox_df_mean),sce_TU_tumor$PID)]
+
+covariates <- Cox_df_mean %>% select(-status_OS,-OS_months) %>% colnames
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + ")))
+multi_model <- coxph(multi_formula, data = Cox_df_mean)
+multi_res <- summary(multi_model)
+
+plot_df_dens_mean <- data.frame(group = rownames(multi_res$coefficients),
+                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],3),
+                      HR = signif(multi_res$coefficients[,"exp(coef)"],3),
+                      CI_low = signif(multi_res$conf.int[,"lower .95"],3),
+                      CI_high = signif(multi_res$conf.int[,"upper .95"],3),
+                      wald_test = signif(multi_res$waldtest["pvalue"],3))
+```
+
+```{r}
+# 2. MEDIAN
+PID_tumor_district_names <- colData(sce_TU_tumor) %>% as.data.frame() %>% select(tumor_district_names,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_area <- colData(sce_TU_tumor) %>% as.data.frame() %>% select(tissue_area,PID) %>% unique() %>% group_by(PID) %>% mutate(mean_tissue_area = mean(tissue_area))
+PID_tumor_district_names$mean_tissue_area <- PID_area$mean_tissue_area[match(PID_tumor_district_names$PID, PID_area$PID)]
+  PID_tumor_district_names <- PID_tumor_district_names %>% group_by(PID) %>% mutate(density = Freq/(mean_tissue_area/1000000))  
+PID_metagroups <- PID_tumor_district_names %>% pivot_wider(id_cols = "PID",names_from = "tumor_district_names",values_from = "density") %>% column_to_rownames("PID")
+
+## MULTIVARIABLE COX MODEL
+Cox_df <- PID_metagroups
+Cox_df_median <- foreach(i = Cox_df %>% colnames,.combine = "cbind")%do%{
+Cox_df %>% select(i) %>% mutate(median = ifelse(Cox_df[,i] > median(Cox_df[,i]),"B","A")) %>% pull(median)
+}
+
+colnames(Cox_df_median) <- colnames(Cox_df)
+rownames(Cox_df_median) <- rownames(Cox_df)
+Cox_df_median <- as.data.frame(Cox_df_median)
+Cox_df_median$status_OS <- sce_TU_tumor$status_OS[match(rownames(Cox_df_median),sce_TU_tumor$PID)]
+Cox_df_median$OS_months <- sce_TU_tumor$OS_months[match(rownames(Cox_df_median),sce_TU_tumor$PID)]
+
+covariates <- Cox_df_median %>% select(-status_OS,-OS_months) %>% colnames
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + ")))
+multi_model <- coxph(multi_formula, data = Cox_df_median)
+multi_res <- summary(multi_model)
+
+plot_df_dens_median <- data.frame(group = rownames(multi_res$coefficients),
+                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],3),
+                      HR = signif(multi_res$coefficients[,"exp(coef)"],3),
+                      CI_low = signif(multi_res$conf.int[,"lower .95"],3),
+                      CI_high = signif(multi_res$conf.int[,"upper .95"],3),
+                      wald_test = signif(multi_res$waldtest["pvalue"],3))
+```
+
+```{r}
+# Combined visualization in dot plot
+cox_median <- plot_df_dens_median %>% mutate(sign = p_value < 0.05, result = ifelse(plot_df_dens_median$HR > 1 & plot_df_dens_median$p_value < 0.05, "UP",ifelse(plot_df_dens_median$HR < 1 & plot_df_dens_median$p_value < 0.05, "DOWN", "NOTSIG"))) %>% mutate(category = "median") %>% arrange(desc(HR))
+cox_median$group <- factor(cox_median$group, levels = cox_median$group)
+cox_mean <- plot_df_dens_mean %>% mutate(sign = p_value < 0.05, result = ifelse(plot_df_dens_mean$HR > 1 & plot_df_dens_mean$p_value < 0.05, "UP",ifelse(plot_df_dens_mean$HR < 1 & plot_df_dens_mean$p_value < 0.05, "DOWN", "NOTSIG"))) %>% mutate(category = "mean") %>% arrange(desc(HR))
+cox_mean$group <- factor(cox_mean$group, levels = cox_mean$group)
+
+plot_cox_combined <- rbind(cox_mean, cox_median)
+plot_cox_combined$type <- "districts"
+plot_cox_combined_fil <- plot_cox_combined %>% filter(result != "NOTSIG")
+both <- plot_cox_combined_fil %>% group_by(group,result) %>% count() %>% filter(n > 1) %>% pull(group) %>% unfactor()
+plot_cox_combined_fil$category <- ifelse(plot_cox_combined_fil$group %in% both, "both", plot_cox_combined_fil$category)
+plot_cox_combined_fil <- plot_cox_combined_fil %>% group_by(group, category) %>% reframe(HR = mean(HR), p_value = mean(p_value), result = result, type = type) %>% unique()
+
+ggplot(plot_cox_combined_fil, aes(x=reorder(group,HR), y = type, shape = category, col = HR, size= -log10(p_value)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  scale_shape_manual(values = c(16,15,17))+
+  new_scale(new_aes = "shape")+
+  new_scale(new_aes = "color") +
+  geom_point(data = plot_cox_combined_fil,aes(size = -log10(p_value), shape = category, col = result), stroke =1.5)+
+  scale_shape_manual(values = c(1,2,0))+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("Cox model")+
+  coord_flip()
+```
+
+### INTERACTION
+
+```{r}
+sce_fil <- sce_TU[,!is.na(sce_TU$celltype_combined)]
+
+count_TU <- countInteractions(sce_fil, 
+                  group_by = "sample_id", 
+                  label = "celltype_combined", 
+                  colPairName = "neighborhood", 
+                  method = "interaction")
+
+out <- count_TU
+out$cellpair <- paste0(out$from_label, "__", out$to_label)
+count_out <- out %>% as.data.frame() %>% select(group_by, cellpair, ct) %>% pivot_wider(names_from = cellpair, values_from = ct) %>% as.data.frame()
+colnames(count_out) <- gsub("-", "_", colnames(count_out)) 
+colnames(count_out) <- gsub("/", "_", colnames(count_out)) 
+count_out <- count_out %>% column_to_rownames("group_by")
+
+## Select from "TU" interactions - Heterotypic only
+selected_pairs <- (str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,1], "TU") &
+  (!str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,2], "TU"))) & (!str_detect(colnames(count_out), "Unknown"))
+
+count_out_selected <- count_out[,selected_pairs]
+count_out_selected <- count_out_selected %>% rownames_to_column("sample_id")
+count_out_selected$PID <- sce_TU$PID[match(count_out_selected$sample_id, sce_TU$sample_id)]
+count_out_selected_long <- count_out_selected %>% pivot_longer(cols = 2:(ncol(count_out_selected)-1), names_to = "pair", values_to = "coef")
+```
+
+```{r}
+# 1. MEAN
+out_df <- data.frame(PID = unique(sce_TU$PID))
+
+for(i in unique(count_out_selected_long$pair)){
+count_out_loop <- count_out_selected_long %>% filter(pair == i) %>% group_by(PID) %>% mutate(mean_coef = mean(coef,na.rm = TRUE)) %>% select(PID, mean_coef) %>% unique()
+count_out_loop <- count_out_loop %>% mutate(cat = ifelse(mean_coef < mean(count_out_loop$mean_coef, na.rm = TRUE), "low", "high"))
+out_df[,i] <- count_out_loop$cat[match(out_df$PID, count_out_loop$PID)]
+}
+out_df$status_OS <- sce_TU$status_OS[match(out_df$PID, sce_TU$PID)]
+out_df$OS_months <- sce_TU$OS_months[match(out_df$PID, sce_TU$PID)]
+
+# Filter
+include <- c("PID", "status_OS", "OS_months", 
+             out_df %>% filter(!is.na(status_OS)) %>% select(-PID, -status_OS, -OS_months) %>% pivot_longer(1:ncol(.), names_to = "int", values_to = "value") %>% group_by(int) %>% dplyr::count(value) %>% dplyr::count(value) %>% mutate(sum = sum(n)) %>% filter(sum > 2) %>% pull("int") %>% unique())
+out_df <- out_df[, colnames(out_df) %in% include]
+
+# KAPLAN-MEIER ESTIMATE 
+# Extract p-values from log-rank / direction of trend
+cur_surv_out <- foreach(x = colnames(out_df %>% select(-PID, -status_OS, -OS_months)), .combine = "rbind")%do%{
+  formula <- as.formula(paste("Surv(OS_months, status_OS) ~ ", x))
+  fit <- survdiff(formula, data = out_df)
+  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[1], exp_2 = fit$exp[1], ratio = fit$obs[1]/fit$exp[1])
+}
+
+# Adjust p-values using BH 
+cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
+
+# Create output
+cur_surv_plot <- cur_surv_out %>% mutate(direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% filter(p < 0.05)
+cur_surv_plot$result <- ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p < 0.05, "UP",
+                               ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p < 0.05, "DOWN",NA))
+cur_surv_countInt_results_mean <- cur_surv_plot 
+```
+
+```{r}
+# 2. MEDIAN
+out_df <- data.frame(PID = unique(sce_TU$PID))
+
+for(i in unique(count_out_selected_long$pair)){
+count_out_loop <- count_out_selected_long %>% filter(pair == i) %>% group_by(PID) %>% mutate(mean_coef = median(coef,na.rm = TRUE)) %>% select(PID, mean_coef) %>% unique()
+count_out_loop <- count_out_loop %>% mutate(cat = ifelse(mean_coef < mean(count_out_loop$mean_coef, na.rm = TRUE), "low", "high"))
+out_df[,i] <- count_out_loop$cat[match(out_df$PID, count_out_loop$PID)]
+}
+out_df$status_OS <- sce_TU$status_OS[match(out_df$PID, sce_TU$PID)]
+out_df$OS_months <- sce_TU$OS_months[match(out_df$PID, sce_TU$PID)]
+
+# Filter
+include <- c("PID", "status_OS", "OS_months", 
+             out_df %>% filter(!is.na(status_OS)) %>% select(-PID, -status_OS, -OS_months) %>% pivot_longer(1:ncol(.), names_to = "int", values_to = "value") %>% group_by(int) %>% dplyr::count(value) %>% dplyr::count(value) %>% mutate(sum = sum(n)) %>% filter(sum > 2) %>% pull("int") %>% unique())
+out_df <- out_df[, colnames(out_df) %in% include]
+
+# KAPLAN-MEIER ESTIMATE 
+# Extract p-values from log-rank / direction of trend
+cur_surv_out <- foreach(x = colnames(out_df %>% select(-PID, -status_OS, -OS_months)), .combine = "rbind")%do%{
+  formula <- as.formula(paste("Surv(OS_months, status_OS) ~ ", x))
+  fit <- survdiff(formula, data = out_df)
+  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[1], exp_2 = fit$exp[1], ratio = fit$obs[1]/fit$exp[1])
+}
+
+# Adjust p-values using BH 
+cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
+
+# Create output
+cur_surv_plot <- cur_surv_out %>% mutate(direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% filter(p < 0.05)
+cur_surv_plot$result <- ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p < 0.05, "UP",
+                                           ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p < 0.05, "DOWN",NA))
+cur_surv_countInt_results_median <- cur_surv_plot 
+```
+
+```{r}
+# Combined visualization 
+cur_surv_countInt_results_mean$category <- "mean"
+cur_surv_countInt_results_median$category <- "median"
+
+plot_int_combined <- rbind(cur_surv_countInt_results_mean, cur_surv_countInt_results_median)
+plot_int_combined$type <- "interaction"
+both <- plot_int_combined %>% group_by(group,direction) %>% count() %>% filter(n > 1) %>% pull(group)
+plot_int_combined$category <- ifelse(plot_int_combined$group %in% both, "both", plot_int_combined$category)
+plot_int_combined_fil <- plot_int_combined %>% group_by(group, category) %>% reframe(p = mean(p), 
+                                                                                     result = result, 
+                                                                                     type = type, 
+                                                                                     ratio = mean(ratio),
+                                                                                     direction = direction) %>% unique()
+
+ggplot(plot_int_combined_fil, aes(x=reorder(group,ratio), y = type, shape = category, col = ratio, size= -log10(p)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  scale_shape_manual(values = c(16,17))+
+  new_scale(new_aes = "shape")+
+  new_scale(new_aes = "color") +
+  geom_point(data = plot_int_combined_fil,aes(size = -log10(p), shape = category, col = result), stroke =1.5)+
+  scale_shape_manual(values = c(1,2))+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("Cox model")+
+  coord_flip()
+```
+
+## 2B 
+
+Myeloid panel
+
+### EXPRESSION
+
+```{r}
+sce_MY_myeloid <- sce_MY[,str_detect(sce_MY$celltype_combined, "MY_")]
+
+# Aggregrate across cells
+mean_sce_MY_myeloid <- aggregateAcrossCells(sce_MY_myeloid, ids = sce_MY_myeloid$PID,
+                                 statistics = "mean",
+                                 use.assay.type = "min_max",
+                                 subset.row = rowData(sce_MY_myeloid)$MY_expression_channel)
+```
+
+```{r}
+# 1. MEAN
+mean_exp_df <- assay(mean_sce_MY_myeloid, "min_max") %>% t() %>% as.data.frame
+
+out_df <- data.frame(PID = unique(sce_MY_myeloid$PID))
+for(i in colnames(mean_exp_df)){
+mean_exp_new <- mean_exp_df %>% select(all_of(i)) %>% mutate(mean = mean(mean_exp_df[[i]])) %>% mutate(cat = ifelse(mean > mean_exp_df[[i]], "low", "high")) %>% rownames_to_column("PID")
+out_df[,i] <- mean_exp_new$cat[match(out_df$PID, mean_exp_new$PID)]
+}
+out_df$status_OS <- sce_MY_myeloid$status_OS[match(out_df$PID, sce_MY_myeloid$PID)]
+out_df$OS_months <- sce_MY_myeloid$OS_months[match(out_df$PID, sce_MY_myeloid$PID)]
+
+# KAPLAN-MEIER ESTIMATE 
+# Extract p-values from log-rank / direction of trend
+cur_surv_out <- foreach(x = colnames(out_df %>% select(-PID, -status_OS, -OS_months)), .combine = "rbind")%do%{
+  formula <- as.formula(paste("Surv(OS_months, status_OS) ~ ", x))
+  fit <- survdiff(formula, data = out_df)
+  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[1], exp_2 = fit$exp[1], ratio = fit$obs[1]/fit$exp[1])
+}
+
+# Adjust p-values using BH 
+cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
+
+# Create output 
+cur_surv_plot <- cur_surv_out %>% mutate(direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% filter(p_adj < 0.05)
+cur_surv_plot$result <- ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p_adj < 0.05, "UP",
+                             ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p < 0.05, "UP_trend", 
+                                    ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p_adj < 0.05, "DOWN", 
+                                           ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p < 0.05, "DOWN_trend",NA))))
+mean_exp_results <- cur_surv_plot
+```
+
+```{r}
+# 2. MEDIAN
+median_exp_df <- assay(mean_sce_MY_myeloid, "min_max") %>% t() %>% as.data.frame
+
+out_df <- data.frame(PID = unique(sce_MY_myeloid$PID))
+for(i in colnames(median_exp_df)){
+median_exp_new <- median_exp_df %>% select(all_of(i)) %>% mutate(median = median(median_exp_df[[i]])) %>% mutate(cat = ifelse(median > median_exp_df[[i]], "low", "high")) %>% rownames_to_column("PID")
+out_df[,i] <- median_exp_new$cat[match(out_df$PID, median_exp_new$PID)]
+}
+out_df$status_OS <- sce_MY_myeloid$status_OS[match(out_df$PID, sce_MY_myeloid$PID)]
+out_df$OS_months <- sce_MY_myeloid$OS_months[match(out_df$PID, sce_MY_myeloid$PID)]
+
+# KAPLAN-MEIER ESTIMATE 
+# Extract p-values from log-rank / direction of trend
+cur_surv_out <- foreach(x = colnames(out_df %>% select(-PID, -status_OS, -OS_months)), .combine = "rbind")%do%{
+  formula <- as.formula(paste("Surv(OS_months, status_OS) ~ ", x))
+  fit <- survdiff(formula, data = out_df)
+  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[1], exp_2 = fit$exp[1], ratio = fit$obs[1]/fit$exp[1])
+}
+
+# Adjust p-values using BH 
+cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
+
+# Create output
+cur_surv_plot <- cur_surv_out %>% mutate(direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% filter(p_adj < 0.05)
+cur_surv_plot$result <- ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p_adj < 0.05, "UP",
+                             ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p < 0.05, "UP_trend", 
+                                    ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p_adj < 0.05, "DOWN", 
+                                           ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p < 0.05, "DOWN_trend",NA))))
+median_exp_results <- cur_surv_plot
+```
+
+```{r}
+# Combined visualization
+mean_exp_results$category <- "mean"
+median_exp_results$category <- "median"
+
+plot_exp_combined <- rbind(mean_exp_results, median_exp_results)
+plot_exp_combined$type <- "expression"
+both <- plot_exp_combined %>% group_by(group,direction) %>% count() %>% filter(n > 1) %>% pull(group)
+plot_exp_combined$category <- ifelse(plot_exp_combined$group %in% both, "both", plot_exp_combined$category)
+plot_exp_combined_fil <- plot_exp_combined %>% group_by(group, category) %>% reframe(p = mean(p), 
+                                                                                     result = result, 
+                                                                                     type = type, 
+                                                                                     ratio = mean(ratio),
+                                                                                     direction = direction) %>% unique()
+
+ggplot(plot_exp_combined_fil, aes(x=reorder(group,ratio), y = type, shape = category, col = ratio, size= -log10(p)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  scale_shape_manual(values = c(16,15,17))+
+  new_scale(new_aes = "shape")+
+  new_scale(new_aes = "color") +
+  geom_point(data = plot_exp_combined_fil,aes(size = -log10(p), shape = category, col = result), stroke =1.5)+
+  scale_shape_manual(values = c(1,0,2))+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("Cox model")+
+  coord_flip()
+```
+
+### PHENOTYPE
+
+```{r}
+# 1. MEAN
+PID_myeloid_metacluster <- colData(sce_MY_myeloid) %>% as.data.frame() %>% select(myeloid_metacluster,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_area <- colData(sce_MY_myeloid) %>% as.data.frame() %>% select(tissue_area,PID) %>% unique() %>% group_by(PID) %>% mutate(mean_tissue_area = mean(tissue_area))
+PID_myeloid_metacluster$mean_tissue_area <- PID_area$mean_tissue_area[match(PID_myeloid_metacluster$PID, PID_area$PID)]
+PID_myeloid_metacluster <- PID_myeloid_metacluster %>% group_by(PID) %>% mutate(density = Freq/(mean_tissue_area/1000000))  
+PID_metagroups <- PID_myeloid_metacluster %>% pivot_wider(id_cols = "PID",names_from = "myeloid_metacluster",values_from = "density") %>% column_to_rownames("PID")
+
+## MULTIVARIABLE COX MODEL
+Cox_df <- PID_metagroups
+Cox_df_mean <- foreach(i = Cox_df %>% colnames,.combine = "cbind")%do%{
+Cox_df %>% select(i) %>% mutate(mean = ifelse(Cox_df[,i] > mean(Cox_df[,i]),"B","A")) %>% pull(mean)
+}
+colnames(Cox_df_mean) <- colnames(Cox_df)
+rownames(Cox_df_mean) <- rownames(Cox_df)
+Cox_df_mean <- as.data.frame(Cox_df_mean)
+Cox_df_mean$status_OS <- sce_MY_myeloid$status_OS[match(rownames(Cox_df_mean),sce_MY_myeloid$PID)]
+Cox_df_mean$OS_months <- sce_MY_myeloid$OS_months[match(rownames(Cox_df_mean),sce_MY_myeloid$PID)]
+
+covariates <- Cox_df_mean %>% select(-status_OS,-OS_months) %>% colnames
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + ")))
+multi_model <- coxph(multi_formula, data = Cox_df_mean)
+multi_res <- summary(multi_model)
+
+plot_df_dens_mean <- data.frame(group = rownames(multi_res$coefficients),
+                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],3),
+                      HR = signif(multi_res$coefficients[,"exp(coef)"],3),
+                      CI_low = signif(multi_res$conf.int[,"lower .95"],3),
+                      CI_high = signif(multi_res$conf.int[,"upper .95"],3),
+                      wald_test = signif(multi_res$waldtest["pvalue"],3))
+```
+
+```{r}
+# 2. MEDIAN
+PID_myeloid_metacluster <- colData(sce_MY_myeloid) %>% as.data.frame() %>% select(myeloid_metacluster,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_area <- colData(sce_MY_myeloid) %>% as.data.frame() %>% select(tissue_area,PID) %>% unique() %>% group_by(PID) %>% mutate(mean_tissue_area = mean(tissue_area))
+PID_myeloid_metacluster$mean_tissue_area <- PID_area$mean_tissue_area[match(PID_myeloid_metacluster$PID, PID_area$PID)]
+PID_myeloid_metacluster <- PID_myeloid_metacluster %>% group_by(PID) %>% mutate(density = Freq/(mean_tissue_area/1000000))  
+PID_metagroups <- PID_myeloid_metacluster %>% pivot_wider(id_cols = "PID",names_from = "myeloid_metacluster",values_from = "density") %>% column_to_rownames("PID")
+
+## MULTIVARIABLE COX MODEL
+Cox_df <- PID_metagroups
+Cox_df_median <- foreach(i = Cox_df %>% colnames,.combine = "cbind")%do%{
+Cox_df %>% select(i) %>% mutate(median = ifelse(Cox_df[,i] > median(Cox_df[,i]),"B","A")) %>% pull(median)
+}
+colnames(Cox_df_median) <- colnames(Cox_df)
+rownames(Cox_df_median) <- rownames(Cox_df)
+Cox_df_median <- as.data.frame(Cox_df_median)
+Cox_df_median$status_OS <- sce_MY_myeloid$status_OS[match(rownames(Cox_df_median),sce_MY_myeloid$PID)]
+Cox_df_median$OS_months <- sce_MY_myeloid$OS_months[match(rownames(Cox_df_median),sce_MY_myeloid$PID)]
+
+covariates <- Cox_df_median %>% select(-status_OS,-OS_months) %>% colnames
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + ")))
+multi_model <- coxph(multi_formula, data = Cox_df_median)
+multi_res <- summary(multi_model)
+
+plot_df_dens_median <- data.frame(group = rownames(multi_res$coefficients),
+                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],3),
+                      HR = signif(multi_res$coefficients[,"exp(coef)"],3),
+                      CI_low = signif(multi_res$conf.int[,"lower .95"],3),
+                      CI_high = signif(multi_res$conf.int[,"upper .95"],3),
+                      wald_test = signif(multi_res$waldtest["pvalue"],3))
+```
+
+```{r}
+# Combined visualization
+cox_median <- plot_df_dens_median %>% mutate(sign = p_value < 0.05, result = ifelse(plot_df_dens_median$HR > 1 & plot_df_dens_median$p_value < 0.05, "UP",ifelse(plot_df_dens_median$HR < 1 & plot_df_dens_median$p_value < 0.05, "DOWN", "NOTSIG"))) %>% mutate(category = "median") %>% arrange(desc(HR))
+cox_median$group <- factor(cox_median$group, levels = cox_median$group)
+cox_mean <- plot_df_dens_mean %>% mutate(sign = p_value < 0.05, result = ifelse(plot_df_dens_mean$HR > 1 & plot_df_dens_mean$p_value < 0.05, "UP",ifelse(plot_df_dens_mean$HR < 1 & plot_df_dens_mean$p_value < 0.05, "DOWN", "NOTSIG"))) %>% mutate(category = "mean") %>% arrange(desc(HR))
+cox_mean$group <- factor(cox_mean$group, levels = cox_mean$group)
+
+plot_cox_combined <- rbind(cox_mean, cox_median)
+plot_cox_combined$type <- "phenotypes"
+plot_cox_combined_fil <- plot_cox_combined %>% filter(result != "NOTSIG")
+both <- plot_cox_combined_fil %>% group_by(group,result) %>% count() %>% filter(n > 1) %>% pull(group) %>% unfactor()
+plot_cox_combined_fil$category <- ifelse(plot_cox_combined_fil$group %in% both, "both", plot_cox_combined_fil$category)
+plot_cox_combined_fil <- plot_cox_combined_fil %>% group_by(group, category) %>% reframe(HR = mean(HR), p_value = mean(p_value), result = result, type = type) %>% unique()
+
+ggplot(plot_cox_combined_fil, aes(x=reorder(group,HR), y = type, shape = category, col = HR, size= -log10(p_value)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  scale_shape_manual(values = c(16,15,17))+
+  new_scale(new_aes = "shape")+
+  new_scale(new_aes = "color") +
+  geom_point(data = plot_cox_combined_fil,aes(size = -log10(p_value), shape = category, col = result), stroke =1.5)+
+  scale_shape_manual(values = c(1,0,2))+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("Cox model")+
+  coord_flip()
+```
+
+### DISTRICT
+
+```{r}
+# 1. MEAN
+PID_myeloid_district_names <- colData(sce_MY_myeloid) %>% as.data.frame() %>% select(myeloid_district_names,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_area <- colData(sce_MY_myeloid) %>% as.data.frame() %>% select(tissue_area,PID) %>% unique() %>% group_by(PID) %>% mutate(mean_tissue_area = mean(tissue_area))
+PID_myeloid_district_names$mean_tissue_area <- PID_area$mean_tissue_area[match(PID_myeloid_district_names$PID, PID_area$PID)]
+PID_myeloid_district_names <- PID_myeloid_district_names %>% group_by(PID) %>% mutate(density = Freq/(mean_tissue_area/1000000))  
+PID_metagroups <- PID_myeloid_district_names %>% pivot_wider(id_cols = "PID",names_from = "myeloid_district_names",values_from = "density") %>% column_to_rownames("PID")
+
+## MULTIVARIABLE COX MODEL
+Cox_df <- PID_metagroups
+Cox_df_mean <- foreach(i = Cox_df %>% colnames,.combine = "cbind")%do%{
+Cox_df %>% select(i) %>% mutate(mean = ifelse(Cox_df[,i] > mean(Cox_df[,i]),"B","A")) %>% pull(mean)
+}
+colnames(Cox_df_mean) <- colnames(Cox_df)
+rownames(Cox_df_mean) <- rownames(Cox_df)
+Cox_df_mean <- as.data.frame(Cox_df_mean)
+Cox_df_mean$status_OS <- sce_MY_myeloid$status_OS[match(rownames(Cox_df_mean),sce_MY_myeloid$PID)]
+Cox_df_mean$OS_months <- sce_MY_myeloid$OS_months[match(rownames(Cox_df_mean),sce_MY_myeloid$PID)]
+
+covariates <- Cox_df_mean %>% select(-status_OS,-OS_months) %>% colnames
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + ")))
+multi_model <- coxph(multi_formula, data = Cox_df_mean)
+multi_res <- summary(multi_model)
+
+plot_df_dens_mean <- data.frame(group = rownames(multi_res$coefficients),
+                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],3),
+                      HR = signif(multi_res$coefficients[,"exp(coef)"],3),
+                      CI_low = signif(multi_res$conf.int[,"lower .95"],3),
+                      CI_high = signif(multi_res$conf.int[,"upper .95"],3),
+                      wald_test = signif(multi_res$waldtest["pvalue"],3))
+```
+
+```{r}
+# 2. MEDIAN
+PID_myeloid_district_names <- colData(sce_MY_myeloid) %>% as.data.frame() %>% select(myeloid_district_names,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_area <- colData(sce_MY_myeloid) %>% as.data.frame() %>% select(tissue_area,PID) %>% unique() %>% group_by(PID) %>% mutate(mean_tissue_area = mean(tissue_area))
+PID_myeloid_district_names$mean_tissue_area <- PID_area$mean_tissue_area[match(PID_myeloid_district_names$PID, PID_area$PID)]
+PID_myeloid_district_names <- PID_myeloid_district_names %>% group_by(PID) %>% mutate(density = Freq/(mean_tissue_area/1000000))  
+PID_metagroups <- PID_myeloid_district_names %>% pivot_wider(id_cols = "PID",names_from = "myeloid_district_names",values_from = "density") %>% column_to_rownames("PID")
+
+## MULTIVARIABLE COX MODEL
+Cox_df <- PID_metagroups
+Cox_df_median <- foreach(i = Cox_df %>% colnames,.combine = "cbind")%do%{
+Cox_df %>% select(i) %>% mutate(median = ifelse(Cox_df[,i] > median(Cox_df[,i]),"B","A")) %>% pull(median)
+}
+colnames(Cox_df_median) <- colnames(Cox_df)
+rownames(Cox_df_median) <- rownames(Cox_df)
+Cox_df_median <- as.data.frame(Cox_df_median)
+Cox_df_median$status_OS <- sce_MY_myeloid$status_OS[match(rownames(Cox_df_median),sce_MY_myeloid$PID)]
+Cox_df_median$OS_months <- sce_MY_myeloid$OS_months[match(rownames(Cox_df_median),sce_MY_myeloid$PID)]
+
+covariates <- Cox_df_median %>% select(-status_OS,-OS_months) %>% colnames
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + ")))
+multi_model <- coxph(multi_formula, data = Cox_df_median)
+multi_res <- summary(multi_model)
+
+plot_df_dens_median <- data.frame(group = rownames(multi_res$coefficients),
+                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],3),
+                      HR = signif(multi_res$coefficients[,"exp(coef)"],3),
+                      CI_low = signif(multi_res$conf.int[,"lower .95"],3),
+                      CI_high = signif(multi_res$conf.int[,"upper .95"],3),
+                      wald_test = signif(multi_res$waldtest["pvalue"],3))
+```
+
+```{r}
+# Combined visualization
+cox_median <- plot_df_dens_median %>% mutate(sign = p_value < 0.05, result = ifelse(plot_df_dens_median$HR > 1 & plot_df_dens_median$p_value < 0.05, "UP",ifelse(plot_df_dens_median$HR < 1 & plot_df_dens_median$p_value < 0.05, "DOWN", "NOTSIG"))) %>% mutate(category = "median") %>% arrange(desc(HR))
+cox_median$group <- factor(cox_median$group, levels = cox_median$group)
+cox_mean <- plot_df_dens_mean %>% mutate(sign = p_value < 0.05, result = ifelse(plot_df_dens_mean$HR > 1 & plot_df_dens_mean$p_value < 0.05, "UP",ifelse(plot_df_dens_mean$HR < 1 & plot_df_dens_mean$p_value < 0.05, "DOWN", "NOTSIG"))) %>% mutate(category = "mean") %>% arrange(desc(HR))
+cox_mean$group <- factor(cox_mean$group, levels = cox_mean$group)
+
+plot_cox_combined <- rbind(cox_mean, cox_median)
+plot_cox_combined$type <- "districts"
+plot_cox_combined_fil <- plot_cox_combined %>% filter(result != "NOTSIG")
+both <- plot_cox_combined_fil %>% group_by(group,result) %>% count() %>% filter(n > 1) %>% pull(group) %>% unfactor()
+plot_cox_combined_fil$category <- ifelse(plot_cox_combined_fil$group %in% both, "both", plot_cox_combined_fil$category)
+plot_cox_combined_fil <- plot_cox_combined_fil %>% group_by(group, category) %>% reframe(HR = mean(HR), p_value = mean(p_value), result = result, type = type) %>% unique()
+
+ggplot(plot_cox_combined_fil, aes(x=reorder(group,HR), y = type, shape = category, col = HR, size= -log10(p_value)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  scale_shape_manual(values = c(16,15,17))+
+  new_scale(new_aes = "shape")+
+  new_scale(new_aes = "color") +
+  geom_point(data = plot_cox_combined_fil,aes(size = -log10(p_value), shape = category, col = result), stroke =1.5)+
+  scale_shape_manual(values = c(1,2,0))+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("Cox model")+
+  coord_flip()
+```
+
+### INTERACTION
+
+```{r}
+sce_fil <- sce_MY[,!is.na(sce_MY$celltype_combined)]
+
+count_MY <- countInteractions(sce_fil, 
+                  group_by = "sample_id", 
+                  label = "celltype_combined", 
+                  colPairName = "neighborhood", 
+                  method = "interaction")
+
+out <- count_MY
+out$cellpair <- paste0(out$from_label, "__", out$to_label)
+count_out <- out %>% as.data.frame() %>% select(group_by, cellpair, ct) %>% pivot_wider(names_from = cellpair, values_from = ct) %>% as.data.frame()
+colnames(count_out) <- gsub("-", "_", colnames(count_out)) 
+colnames(count_out) <- gsub("/", "_", colnames(count_out)) 
+count_out <- count_out %>% column_to_rownames("group_by")
+
+## Select from "MY" interactions - Heterotypic only
+selected_pairs <- (str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,1], "MY") &
+  (!str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,2], "MY"))) & (!str_detect(colnames(count_out), "Unknown"))
+
+count_out_selected <- count_out[,selected_pairs]
+count_out_selected <- count_out_selected %>% rownames_to_column("sample_id")
+count_out_selected$PID <- sce_MY$PID[match(count_out_selected$sample_id, sce_MY$sample_id)]
+count_out_selected_long <- count_out_selected %>% pivot_longer(cols = 2:(ncol(count_out_selected)-1), names_to = "pair", values_to = "coef")
+```
+
+```{r}
+# 1. MEAN
+out_df <- data.frame(PID = unique(sce_MY$PID))
+for(i in unique(count_out_selected_long$pair)){
+count_out_loop <- count_out_selected_long %>% filter(pair == i) %>% group_by(PID) %>% mutate(mean_coef = mean(coef,na.rm = TRUE)) %>% select(PID, mean_coef) %>% unique()
+count_out_loop <- count_out_loop %>% mutate(cat = ifelse(mean_coef < mean(count_out_loop$mean_coef, na.rm = TRUE), "low", "high"))
+out_df[,i] <- count_out_loop$cat[match(out_df$PID, count_out_loop$PID)]
+}
+
+out_df$status_OS <- sce_MY$status_OS[match(out_df$PID, sce_MY$PID)]
+out_df$OS_months <- sce_MY$OS_months[match(out_df$PID, sce_MY$PID)]
+
+# Filter
+include <- c("PID", "status_OS", "OS_months", 
+             out_df %>% filter(!is.na(status_OS)) %>% select(-PID, -status_OS, -OS_months) %>% pivot_longer(1:ncol(.), names_to = "int", values_to = "value") %>% group_by(int) %>% dplyr::count(value) %>% dplyr::count(value) %>% mutate(sum = sum(n)) %>% filter(sum > 2) %>% pull("int") %>% unique())
+out_df <- out_df[, colnames(out_df) %in% include]
+
+# KAPLAN-MEIER ESTIMATE 
+# Extract p-values from log-rank / direction of trend
+cur_surv_out <- foreach(x = colnames(out_df %>% select(-PID, -status_OS, -OS_months)), .combine = "rbind")%do%{
+  formula <- as.formula(paste("Surv(OS_months, status_OS) ~ ", x))
+  fit <- survdiff(formula, data = out_df)
+  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[1], exp_2 = fit$exp[1], ratio = fit$obs[1]/fit$exp[1])
+}
+
+# Adjust p-values using BH 
+cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
+
+# Create output
+cur_surv_plot <- cur_surv_out %>% mutate(direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% filter(p < 0.05)
+cur_surv_plot$result <- ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p < 0.05, "UP",
+                                           ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p < 0.05, "DOWN",NA))
+cur_surv_countInt_results_mean <- cur_surv_plot 
+```
+
+```{r}
+# 2. MEDIAN
+out_df <- data.frame(PID = unique(sce_MY$PID))
+for(i in unique(count_out_selected_long$pair)){
+count_out_loop <- count_out_selected_long %>% filter(pair == i) %>% group_by(PID) %>% mutate(mean_coef = median(coef,na.rm = TRUE)) %>% select(PID, mean_coef) %>% unique()
+count_out_loop <- count_out_loop %>% mutate(cat = ifelse(mean_coef < mean(count_out_loop$mean_coef, na.rm = TRUE), "low", "high"))
+out_df[,i] <- count_out_loop$cat[match(out_df$PID, count_out_loop$PID)]
+}
+out_df$status_OS <- sce_MY$status_OS[match(out_df$PID, sce_MY$PID)]
+out_df$OS_months <- sce_MY$OS_months[match(out_df$PID, sce_MY$PID)]
+
+# Filter
+include <- c("PID", "status_OS", "OS_months", 
+             out_df %>% filter(!is.na(status_OS)) %>% select(-PID, -status_OS, -OS_months) %>% pivot_longer(1:ncol(.), names_to = "int", values_to = "value") %>% group_by(int) %>% dplyr::count(value) %>% dplyr::count(value) %>% mutate(sum = sum(n)) %>% filter(sum > 2) %>% pull("int") %>% unique())
+out_df <- out_df[, colnames(out_df) %in% include]
+
+# KAPLAN-MEIER ESTIMATE 
+# Extract p-values from log-rank / direction of trend
+cur_surv_out <- foreach(x = colnames(out_df %>% select(-PID, -status_OS, -OS_months)), .combine = "rbind")%do%{
+  formula <- as.formula(paste("Surv(OS_months, status_OS) ~ ", x))
+  fit <- survdiff(formula, data = out_df)
+  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[1], exp_2 = fit$exp[1], ratio = fit$obs[1]/fit$exp[1])
+}
+
+# Adjust p-values using BH 
+cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
+
+# Create output
+cur_surv_plot <- cur_surv_out %>% mutate(direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% filter(p < 0.05)
+cur_surv_plot$result <- ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p < 0.05, "UP",
+                                           ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p < 0.05, "DOWN",NA))
+cur_surv_countInt_results_median <- cur_surv_plot 
+```
+
+```{r}
+# Combined visualization 
+cur_surv_countInt_results_mean$category <- "mean"
+cur_surv_countInt_results_median$category <- "median"
+
+plot_int_combined <- rbind(cur_surv_countInt_results_mean, cur_surv_countInt_results_median)
+plot_int_combined$type <- "interaction"
+both <- plot_int_combined %>% group_by(group,direction) %>% count() %>% filter(n > 1) %>% pull(group)
+plot_int_combined$category <- ifelse(plot_int_combined$group %in% both, "both", plot_int_combined$category)
+plot_int_combined_fil <- plot_int_combined %>% group_by(group, category) %>% reframe(p = mean(p), 
+                                                                                     result = result, 
+                                                                                     type = type, 
+                                                                                     ratio = mean(ratio),
+                                                                                     direction = direction) %>% unique()
+
+ggplot(plot_int_combined_fil, aes(x=reorder(group,ratio), y = type, shape = category, col = ratio, size= -log10(p)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  scale_shape_manual(values = c(16,15,17))+
+  new_scale(new_aes = "shape")+
+  new_scale(new_aes = "color") +
+  geom_point(data = plot_int_combined_fil,aes(size = -log10(p), shape = category, col = result), stroke =1.5)+
+  scale_shape_manual(values = c(1,0,2))+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("Cox model")+
+  coord_flip()
+````
+
+## 2C
+
+T cell panel 
+
+### EXPRESSION 
+
+#### CD8 
+
+```{r}
+sce_T_CD8 <- sce_T[, sce_T$celltype_combined_broad %in% c("CD8")]
+
+# Aggregrate across cells
+mean_sce_8 <- aggregateAcrossCells(sce_T_CD8, ids = sce_T_CD8$PID,
+                                 statistics = "mean",
+                                 use.assay.type = "min_max",
+                                 subset.row = rowData(sce_T_CD8)$CD8_cluster_channel)
+```
+
+```{r}
+# 1. MEAN 
+mean_exp_df <- assay(mean_sce_8, "min_max") %>% t() %>% as.data.frame
+
+out_df <- data.frame(PID = unique(sce_T_CD8$PID))
+for(i in colnames(mean_exp_df)){
+mean_exp_new <- mean_exp_df %>% select(all_of(i)) %>% mutate(mean = mean(mean_exp_df[[i]])) %>% mutate(cat = ifelse(mean > mean_exp_df[[i]], "low", "high")) %>% rownames_to_column("PID")
+out_df[,i] <- mean_exp_new$cat[match(out_df$PID, mean_exp_new$PID)]
+}
+out_df$status_OS <- sce_T_CD8$status_OS[match(out_df$PID, sce_T_CD8$PID)]
+out_df$OS_months <- sce_T_CD8$OS_months[match(out_df$PID, sce_T_CD8$PID)]
+colnames(out_df) <- gsub("-", "_", colnames(out_df)) 
+
+# KAPLAN-MEIER ESTIMATE
+# Extract p-values from log-rank / direction of trend
+cur_surv_out <- foreach(x = colnames(out_df %>% select(-PID, -status_OS, -OS_months)), .combine = "rbind")%do%{
+  formula <- as.formula(paste("Surv(OS_months, status_OS) ~ ", x))
+  fit <- survdiff(formula, data = out_df)
+  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[1], exp_2 = fit$exp[1], ratio = fit$obs[1]/fit$exp[1])
+}
+
+# Adjust p-values using BH 
+cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
+
+# Create output
+# NOTE: For the T cells we use p < 0.05 and not FDR < 0.05
+cur_surv_plot <- cur_surv_out %>% mutate(direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% filter(p < 0.05)
+cur_surv_plot$result <- ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p < 0.05, "UP",
+                                           ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p < 0.05, "DOWN",NA))
+mean_exp_results <- cur_surv_plot
+```
+
+```{r}
+# 2. MEDIAN
+mean_exp_df <- assay(mean_sce_8, "min_max") %>% t() %>% as.data.frame
+
+out_df <- data.frame(PID = unique(sce_T_CD8$PID))
+
+for(i in colnames(mean_exp_df)){
+mean_exp_new <- mean_exp_df %>% select(all_of(i)) %>% mutate(mean = median(mean_exp_df[[i]])) %>% mutate(cat = ifelse(mean > mean_exp_df[[i]], "low", "high")) %>% rownames_to_column("PID")
+
+out_df[,i] <- mean_exp_new$cat[match(out_df$PID, mean_exp_new$PID)]
+}
+
+## Add survival information 
+out_df$status_OS <- sce_T_CD8$status_OS[match(out_df$PID, sce_T_CD8$PID)]
+out_df$OS_months <- sce_T_CD8$OS_months[match(out_df$PID, sce_T_CD8$PID)]
+colnames(out_df) <- gsub("-", "_", colnames(out_df)) 
+
+# KAPLAN-MEIER ESTIMATE 
+# Extract p-values from log-rank / direction of trend
+cur_surv_out <- foreach(x = colnames(out_df %>% select(-PID, -status_OS, -OS_months)), .combine = "rbind")%do%{
+  formula <- as.formula(paste("Surv(OS_months, status_OS) ~ ", x))
+  fit <- survdiff(formula, data = out_df)
+  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[1], exp_2 = fit$exp[1], ratio = fit$obs[1]/fit$exp[1])
+}
+
+# Adjust p-values using BH 
+cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
+
+# Create output
+# NOTE: For the T cells we use p < 0.05 and not FDR < 0.05
+cur_surv_plot <- cur_surv_out %>% mutate(direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% filter(p < 0.05)
+cur_surv_plot$result <- ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p < 0.05, "UP",
+                                           ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p < 0.05, "DOWN",NA))
+median_exp_results <- cur_surv_plot
+```
+
+```{r}
+# Combined visualization
+mean_exp_results$category <- "mean"
+median_exp_results$category <- "median"
+
+plot_exp_combined <- rbind(mean_exp_results, median_exp_results)
+plot_exp_combined$type <- "expression"
+both <- plot_exp_combined %>% group_by(group,direction) %>% count() %>% filter(n > 1) %>% pull(group)
+plot_exp_combined$category <- ifelse(plot_exp_combined$group %in% both, "both", plot_exp_combined$category)
+plot_exp_combined_fil <- plot_exp_combined %>% group_by(group, category) %>% reframe(p = mean(p), 
+                                                                                     result = result, 
+                                                                                     type = type, 
+                                                                                     ratio = mean(ratio),
+                                                                                     direction = direction) %>% unique()
+
+ggplot(plot_exp_combined_fil, aes(x=reorder(group,ratio), y = type, shape = category, col = ratio, size= -log10(p)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  scale_shape_manual(values = c(15,17))+
+  new_scale(new_aes = "shape")+
+  new_scale(new_aes = "color") +
+  geom_point(data = plot_exp_combined_fil,aes(size = -log10(p), shape = category, col = result), stroke =1.5)+
+  scale_shape_manual(values = c(0,2))+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("Cox model")+
+  coord_flip()
+```
+
+#### CD4 
+
+```{r}
+sce_T_CD4 <- sce_T[, sce_T$celltype_combined_broad %in% c("CD4")]
+
+# Aggregate across cells 
+mean_sce_4 <- aggregateAcrossCells(sce_T_CD4, ids = sce_T_CD4$PID,
+                                 statistics = "mean",
+                                 use.assay.type = "min_max",
+                                 subset.row = rowData(sce_T_CD4)$CD4_cluster_channel)
+```
+
+```{r}
+# 1. MEAN
+mean_exp_df <- assay(mean_sce_4, "min_max") %>% t() %>% as.data.frame
+
+out_df <- data.frame(PID = unique(sce_T_CD4$PID))
+for(i in colnames(mean_exp_df)){
+mean_exp_new <- mean_exp_df %>% select(all_of(i)) %>% mutate(mean = mean(mean_exp_df[[i]])) %>% mutate(cat = ifelse(mean > mean_exp_df[[i]], "low", "high")) %>% rownames_to_column("PID")
+out_df[,i] <- mean_exp_new$cat[match(out_df$PID, mean_exp_new$PID)]
+}
+out_df$status_OS <- sce_T_CD4$status_OS[match(out_df$PID, sce_T_CD4$PID)]
+out_df$OS_months <- sce_T_CD4$OS_months[match(out_df$PID, sce_T_CD4$PID)]
+colnames(out_df) <- gsub("-", "_", colnames(out_df)) 
+
+# KAPLAN-MEIER ESTIMATE 
+# Extract p-values from log-rank / direction of trend
+cur_surv_out <- foreach(x = colnames(out_df %>% select(-PID, -status_OS, -OS_months)), .combine = "rbind")%do%{
+  formula <- as.formula(paste("Surv(OS_months, status_OS) ~ ", x))
+  fit <- survdiff(formula, data = out_df)
+  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[1], exp_2 = fit$exp[1], ratio = fit$obs[1]/fit$exp[1])
+}
+
+# Adjust p-values using BH 
+cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
+
+# Create output
+cur_surv_plot <- cur_surv_out %>% mutate(direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% filter(p < 0.05)
+cur_surv_plot$result <- ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p < 0.05, "UP",
+                                           ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p < 0.05, "DOWN",NA))
+mean_exp_results <- cur_surv_plot
+```
+
+```{r}
+# 2. MEDIAN
+mean_exp_df <- assay(mean_sce_4, "min_max") %>% t() %>% as.data.frame
+
+out_df <- data.frame(PID = unique(sce_T_CD4$PID))
+for(i in colnames(mean_exp_df)){
+mean_exp_new <- mean_exp_df %>% select(all_of(i)) %>% mutate(mean = median(mean_exp_df[[i]])) %>% mutate(cat = ifelse(mean > mean_exp_df[[i]], "low", "high")) %>% rownames_to_column("PID")
+out_df[,i] <- mean_exp_new$cat[match(out_df$PID, mean_exp_new$PID)]
+}
+out_df$status_OS <- sce_T_CD4$status_OS[match(out_df$PID, sce_T_CD4$PID)]
+out_df$OS_months <- sce_T_CD4$OS_months[match(out_df$PID, sce_T_CD4$PID)]
+colnames(out_df) <- gsub("-", "_", colnames(out_df)) 
+
+# KAPLAN-MEIER ESTIMATE 
+# Extract p-values from log-rank / direction of trend
+cur_surv_out <- foreach(x = colnames(out_df %>% select(-PID, -status_OS, -OS_months)), .combine = "rbind")%do%{
+  formula <- as.formula(paste("Surv(OS_months, status_OS) ~ ", x))
+  fit <- survdiff(formula, data = out_df)
+  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[1], exp_2 = fit$exp[1], ratio = fit$obs[1]/fit$exp[1])
+}
+
+# Adjust p-values using BH 
+cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
+
+# Create output
+cur_surv_plot <- cur_surv_out %>% mutate(direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% filter(p < 0.05)
+cur_surv_plot$result <- ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p < 0.05, "UP",
+                                           ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p < 0.05, "DOWN",NA))
+median_exp_results <- cur_surv_plot
+```
+
+```{r}
+# Combined visualization
+mean_exp_results$category <- "mean"
+median_exp_results$category <- "median"
+
+plot_exp_combined <- rbind(mean_exp_results, median_exp_results)
+plot_exp_combined$type <- "expression"
+both <- plot_exp_combined %>% group_by(group,direction) %>% count() %>% filter(n > 1) %>% pull(group)
+plot_exp_combined$category <- ifelse(plot_exp_combined$group %in% both, "both", plot_exp_combined$category)
+plot_exp_combined_fil <- plot_exp_combined %>% group_by(group, category) %>% reframe(p = mean(p), 
+                                                                                     result = result, 
+                                                                                     type = type, 
+                                                                                     ratio = mean(ratio),
+                                                                                     direction = direction) %>% unique()
+
+ggplot(plot_exp_combined_fil, aes(x=reorder(group,ratio), y = type, shape = category, col = ratio, size= -log10(p)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  scale_shape_manual(values = c(16,17))+
+  new_scale(new_aes = "shape")+
+  new_scale(new_aes = "color") +
+  geom_point(data = plot_exp_combined_fil,aes(size = -log10(p), shape = category, col = result), stroke =1.5)+
+  scale_shape_manual(values = c(1,2))+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("Cox model")+
+  coord_flip()
+```
+
+### PHENOTYPE 
+
+#### CD8 
+
+```{r}
+# 1. MEAN
+PID_celltype_combined <- colData(sce_T_CD8) %>% as.data.frame() %>% select(celltype_combined,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_area <- colData(sce_T_CD8) %>% as.data.frame() %>% select(tissue_area,PID) %>% unique() %>% group_by(PID) %>% mutate(mean_tissue_area = mean(tissue_area))
+PID_celltype_combined$mean_tissue_area <- PID_area$mean_tissue_area[match(PID_celltype_combined$PID, PID_area$PID)]
+  PID_celltype_combined <- PID_celltype_combined %>% group_by(PID) %>% mutate(density = Freq/(mean_tissue_area/1000000))  
+PID_metagroups <- PID_celltype_combined %>% pivot_wider(id_cols = "PID",names_from = "celltype_combined",values_from = "density") %>% column_to_rownames("PID")
+PID_metagroups <- na.omit(PID_metagroups)
+
+## MULTIVARIABLE COX MODEL
+Cox_df <- PID_metagroups
+Cox_df_mean <- foreach(i = Cox_df %>% colnames,.combine = "cbind")%do%{
+Cox_df %>% select(i) %>% mutate(mean = ifelse(Cox_df[,i] > mean(Cox_df[,i]),"B","A")) %>% pull(mean)
+}
+colnames(Cox_df_mean) <- colnames(Cox_df)
+rownames(Cox_df_mean) <- rownames(Cox_df)
+Cox_df_mean <- as.data.frame(Cox_df_mean)
+Cox_df_mean$status_OS <- sce_T_CD8$status_OS[match(rownames(Cox_df_mean),sce_T_CD8$PID)]
+Cox_df_mean$OS_months <- sce_T_CD8$OS_months[match(rownames(Cox_df_mean),sce_T_CD8$PID)]
+
+covariates <- Cox_df_mean %>% select(-status_OS,-OS_months) %>% colnames
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + ")))
+multi_model <- coxph(multi_formula, data = Cox_df_mean)
+multi_res <- summary(multi_model)
+
+plot_df_dens_mean <- data.frame(group = rownames(multi_res$coefficients),
+                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],3),
+                      HR = signif(multi_res$coefficients[,"exp(coef)"],3),
+                      CI_low = signif(multi_res$conf.int[,"lower .95"],3),
+                      CI_high = signif(multi_res$conf.int[,"upper .95"],3),
+                      wald_test = signif(multi_res$waldtest["pvalue"],3))
+```
+
+```{r}
+# 2. MEDIAN
+PID_celltype_combined <- colData(sce_T_CD8) %>% as.data.frame() %>% select(celltype_combined,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_area <- colData(sce_T_CD8) %>% as.data.frame() %>% select(tissue_area,PID) %>% unique() %>% group_by(PID) %>% mutate(mean_tissue_area = mean(tissue_area))
+PID_celltype_combined$mean_tissue_area <- PID_area$mean_tissue_area[match(PID_celltype_combined$PID, PID_area$PID)]
+  PID_celltype_combined <- PID_celltype_combined %>% group_by(PID) %>% mutate(density = Freq/(mean_tissue_area/1000000))  
+PID_metagroups <- PID_celltype_combined %>% pivot_wider(id_cols = "PID",names_from = "celltype_combined",values_from = "density") %>% column_to_rownames("PID")
+PID_metagroups <- na.omit(PID_metagroups)
+
+## MULTIVARIABLE COX MODEL
+Cox_df <- PID_metagroups
+Cox_df_median <- foreach(i = Cox_df %>% colnames,.combine = "cbind")%do%{
+Cox_df %>% select(i) %>% mutate(median = ifelse(Cox_df[,i] > median(Cox_df[,i]),"B","A")) %>% pull(median)
+}
+colnames(Cox_df_median) <- colnames(Cox_df)
+rownames(Cox_df_median) <- rownames(Cox_df)
+Cox_df_median <- as.data.frame(Cox_df_median)
+Cox_df_median$status_OS <- sce_T_CD8$status_OS[match(rownames(Cox_df_median),sce_T_CD8$PID)]
+Cox_df_median$OS_months <- sce_T_CD8$OS_months[match(rownames(Cox_df_median),sce_T_CD8$PID)]
+
+covariates <- Cox_df_median %>% select(-status_OS,-OS_months) %>% colnames
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + ")))
+multi_model <- coxph(multi_formula, data = Cox_df_median)
+multi_res <- summary(multi_model)
+
+plot_df_dens_median <- data.frame(group = rownames(multi_res$coefficients),
+                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],3),
+                      HR = signif(multi_res$coefficients[,"exp(coef)"],3),
+                      CI_low = signif(multi_res$conf.int[,"lower .95"],3),
+                      CI_high = signif(multi_res$conf.int[,"upper .95"],3),
+                      wald_test = signif(multi_res$waldtest["pvalue"],3))
+```
+
+```{r}
+# Combined visualization 
+cox_median <- plot_df_dens_median %>% mutate(sign = p_value < 0.05, result = ifelse(plot_df_dens_median$HR > 1 & plot_df_dens_median$p_value < 0.05, "UP",ifelse(plot_df_dens_median$HR < 1 & plot_df_dens_median$p_value < 0.05, "DOWN", "NOTSIG"))) %>% mutate(category = "median") %>% arrange(desc(HR))
+cox_median$group <- factor(cox_median$group, levels = cox_median$group)
+cox_mean <- plot_df_dens_mean %>% mutate(sign = p_value < 0.05, result = ifelse(plot_df_dens_mean$HR > 1 & plot_df_dens_mean$p_value < 0.05, "UP",ifelse(plot_df_dens_mean$HR < 1 & plot_df_dens_mean$p_value < 0.05, "DOWN", "NOTSIG"))) %>% mutate(category = "mean") %>% arrange(desc(HR))
+cox_mean$group <- factor(cox_mean$group, levels = cox_mean$group)
+
+plot_cox_combined <- rbind(cox_mean, cox_median)
+plot_cox_combined$type <- "phenotypes"
+plot_cox_combined_fil <- plot_cox_combined %>% filter(result != "NOTSIG")
+both <- plot_cox_combined_fil %>% group_by(group,result) %>% count() %>% filter(n > 1) %>% pull(group) %>% unfactor()
+plot_cox_combined_fil$category <- ifelse(plot_cox_combined_fil$group %in% both, "both", plot_cox_combined_fil$category)
+plot_cox_combined_fil <- plot_cox_combined_fil %>% group_by(group, category) %>% reframe(HR = mean(HR), p_value = mean(p_value), result = result, type = type) %>% unique()
+
+ggplot(plot_cox_combined_fil, aes(x=reorder(group,HR), y = type, shape = category, col = HR, size= -log10(p_value)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  scale_shape_manual(values = c(16,15,17))+
+  new_scale(new_aes = "shape")+
+  new_scale(new_aes = "color") +
+  geom_point(data = plot_cox_combined_fil,aes(size = -log10(p_value), shape = category, col = result), stroke =1.5)+
+  scale_shape_manual(values = c(1,0,2))+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("Cox model")+
+  coord_flip()
+```
+
+#### CD4
+
+```{r}
+# 1. MEAN
+PID_celltype_combined <- colData(sce_T_CD4) %>% as.data.frame() %>% select(celltype_combined,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_area <- colData(sce_T_CD4) %>% as.data.frame() %>% select(tissue_area,PID) %>% unique() %>% group_by(PID) %>% mutate(mean_tissue_area = mean(tissue_area))
+PID_celltype_combined$mean_tissue_area <- PID_area$mean_tissue_area[match(PID_celltype_combined$PID, PID_area$PID)]
+PID_celltype_combined <- PID_celltype_combined %>% group_by(PID) %>% mutate(density = Freq/(mean_tissue_area/1000000))  
+PID_metagroups <- PID_celltype_combined %>% pivot_wider(id_cols = "PID",names_from = "celltype_combined",values_from = "density") %>% column_to_rownames("PID")
+PID_metagroups <- na.omit(PID_metagroups)
+
+## MULTIVARIABLE COX MODEL
+Cox_df <- PID_metagroups
+Cox_df_mean <- foreach(i = Cox_df %>% colnames,.combine = "cbind")%do%{
+Cox_df %>% select(i) %>% mutate(mean = ifelse(Cox_df[,i] > mean(Cox_df[,i]),"B","A")) %>% pull(mean)
+}
+colnames(Cox_df_mean) <- colnames(Cox_df)
+rownames(Cox_df_mean) <- rownames(Cox_df)
+Cox_df_mean <- as.data.frame(Cox_df_mean)
+Cox_df_mean$status_OS <- sce_T_CD4$status_OS[match(rownames(Cox_df_mean),sce_T_CD4$PID)]
+Cox_df_mean$OS_months <- sce_T_CD4$OS_months[match(rownames(Cox_df_mean),sce_T_CD4$PID)]
+
+covariates <- Cox_df_mean %>% select(-status_OS,-OS_months) %>% colnames
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + ")))
+multi_model <- coxph(multi_formula, data = Cox_df_mean)
+multi_res <- summary(multi_model)
+
+plot_df_dens_mean <- data.frame(group = rownames(multi_res$coefficients),
+                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],3),
+                      HR = signif(multi_res$coefficients[,"exp(coef)"],3),
+                      CI_low = signif(multi_res$conf.int[,"lower .95"],3),
+                      CI_high = signif(multi_res$conf.int[,"upper .95"],3),
+                      wald_test = signif(multi_res$waldtest["pvalue"],3))
+```
+
+```{r}
+# 2. MEDIAN
+PID_celltype_combined <- colData(sce_T_CD4) %>% as.data.frame() %>% select(celltype_combined,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_area <- colData(sce_T_CD4) %>% as.data.frame() %>% select(tissue_area,PID) %>% unique() %>% group_by(PID) %>% mutate(mean_tissue_area = mean(tissue_area))
+PID_celltype_combined$mean_tissue_area <- PID_area$mean_tissue_area[match(PID_celltype_combined$PID, PID_area$PID)]
+PID_celltype_combined <- PID_celltype_combined %>% group_by(PID) %>% mutate(density = Freq/(mean_tissue_area/1000000))  
+PID_metagroups <- PID_celltype_combined %>% pivot_wider(id_cols = "PID",names_from = "celltype_combined",values_from = "density") %>% column_to_rownames("PID")
+PID_metagroups <- na.omit(PID_metagroups)
+
+## MULTIVARIABLE COX MODEL
+Cox_df <- PID_metagroups
+Cox_df_median <- foreach(i = Cox_df %>% colnames,.combine = "cbind")%do%{
+Cox_df %>% select(i) %>% mutate(median = ifelse(Cox_df[,i] > median(Cox_df[,i]),"B","A")) %>% pull(median)
+}
+colnames(Cox_df_median) <- colnames(Cox_df)
+rownames(Cox_df_median) <- rownames(Cox_df)
+Cox_df_median <- as.data.frame(Cox_df_median)
+Cox_df_median$status_OS <- sce_T_CD4$status_OS[match(rownames(Cox_df_median),sce_T_CD4$PID)]
+Cox_df_median$OS_months <- sce_T_CD4$OS_months[match(rownames(Cox_df_median),sce_T_CD4$PID)]
+
+covariates <- Cox_df_median %>% select(-status_OS,-OS_months) %>% colnames
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + ")))
+multi_model <- coxph(multi_formula, data = Cox_df_median)
+multi_res <- summary(multi_model)
+
+plot_df_dens_median <- data.frame(group = rownames(multi_res$coefficients),
+                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],3),
+                      HR = signif(multi_res$coefficients[,"exp(coef)"],3),
+                      CI_low = signif(multi_res$conf.int[,"lower .95"],3),
+                      CI_high = signif(multi_res$conf.int[,"upper .95"],3),
+                      wald_test = signif(multi_res$waldtest["pvalue"],3))
+```
+
+```{r}
+# Combined visualization
+cox_median <- plot_df_dens_median %>% mutate(sign = p_value < 0.05, result = ifelse(plot_df_dens_median$HR > 1 & plot_df_dens_median$p_value < 0.05, "UP",ifelse(plot_df_dens_median$HR < 1 & plot_df_dens_median$p_value < 0.05, "DOWN", "NOTSIG"))) %>% mutate(category = "median") %>% arrange(desc(HR))
+cox_median$group <- factor(cox_median$group, levels = cox_median$group)
+cox_mean <- plot_df_dens_mean %>% mutate(sign = p_value < 0.05, result = ifelse(plot_df_dens_mean$HR > 1 & plot_df_dens_mean$p_value < 0.05, "UP",ifelse(plot_df_dens_mean$HR < 1 & plot_df_dens_mean$p_value < 0.05, "DOWN", "NOTSIG"))) %>% mutate(category = "mean") %>% arrange(desc(HR))
+cox_mean$group <- factor(cox_mean$group, levels = cox_mean$group)
+
+plot_cox_combined <- rbind(cox_mean, cox_median)
+plot_cox_combined$type <- "phenotypes"
+plot_cox_combined_fil <- plot_cox_combined %>% filter(result != "NOTSIG")
+both <- plot_cox_combined_fil %>% group_by(group,result) %>% count() %>% filter(n > 1) %>% pull(group) %>% unfactor()
+plot_cox_combined_fil$category <- ifelse(plot_cox_combined_fil$group %in% both, "both", plot_cox_combined_fil$category)
+plot_cox_combined_fil <- plot_cox_combined_fil %>% group_by(group, category) %>% reframe(HR = mean(HR), p_value = mean(p_value), result = result, type = type) %>% unique()
+
+ggplot(plot_cox_combined_fil, aes(x=reorder(group,HR), y = type, shape = category, col = HR, size= -log10(p_value)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  scale_shape_manual(values = c(16,17))+
+  new_scale(new_aes = "shape")+
+  new_scale(new_aes = "color") +
+  geom_point(data = plot_cox_combined_fil,aes(size = -log10(p_value), shape = category, col = result), stroke =1.5)+
+  scale_shape_manual(values = c(1,2))+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("Cox model")+
+  coord_flip()
+```
+
+### DISTRICT
+
+```{r}
+sce_T_CD8CD4 <- sce_T[, sce_T$celltype_combined_broad %in% c("CD8", "CD4")]
+```
+
+```{r}
+# 1. MEAN
+PID_Tcell_district_names <- colData(sce_T_CD8CD4) %>% as.data.frame() %>% select(Tcell_district_names,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_area <- colData(sce_T_CD8CD4) %>% as.data.frame() %>% select(tissue_area,PID) %>% unique() %>% group_by(PID) %>% mutate(mean_tissue_area = mean(tissue_area))
+PID_Tcell_district_names$mean_tissue_area <- PID_area$mean_tissue_area[match(PID_Tcell_district_names$PID, PID_area$PID)]
+PID_Tcell_district_names <- PID_Tcell_district_names %>% group_by(PID) %>% mutate(density = Freq/(mean_tissue_area/1000000))  
+PID_metagroups <- PID_Tcell_district_names %>% pivot_wider(id_cols = "PID",names_from = "Tcell_district_names",values_from = "density") %>% column_to_rownames("PID")
+PID_metagroups <- na.omit(PID_metagroups)
+
+## MULTIVARIABLE COX MODEL
+Cox_df <- PID_metagroups
+Cox_df_mean <- foreach(i = Cox_df %>% colnames,.combine = "cbind")%do%{
+Cox_df %>% select(i) %>% mutate(mean = ifelse(Cox_df[,i] > mean(Cox_df[,i]),"B","A")) %>% pull(mean)
+}
+
+colnames(Cox_df_mean) <- colnames(Cox_df)
+rownames(Cox_df_mean) <- rownames(Cox_df)
+Cox_df_mean <- as.data.frame(Cox_df_mean)
+Cox_df_mean$status_OS <- sce_T_CD8CD4$status_OS[match(rownames(Cox_df_mean),sce_T_CD8CD4$PID)]
+Cox_df_mean$OS_months <- sce_T_CD8CD4$OS_months[match(rownames(Cox_df_mean),sce_T_CD8CD4$PID)]
+
+covariates <- Cox_df_mean %>% select(-status_OS,-OS_months) %>% colnames
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + ")))
+multi_model <- coxph(multi_formula, data = Cox_df_mean)
+multi_res <- summary(multi_model)
+
+plot_df_dens_mean <- data.frame(group = rownames(multi_res$coefficients),
+                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],3),
+                      HR = signif(multi_res$coefficients[,"exp(coef)"],3),
+                      CI_low = signif(multi_res$conf.int[,"lower .95"],3),
+                      CI_high = signif(multi_res$conf.int[,"upper .95"],3),
+                      wald_test = signif(multi_res$waldtest["pvalue"],3))
+```
+
+```{r}
+# 2. MEDIAN
+PID_Tcell_district_names <- colData(sce_T_CD8CD4) %>% as.data.frame() %>% select(Tcell_district_names,PID) %>% group_by(PID) %>% table() %>% as.data.frame
+PID_area <- colData(sce_T_CD8CD4) %>% as.data.frame() %>% select(tissue_area,PID) %>% unique() %>% group_by(PID) %>% mutate(mean_tissue_area = mean(tissue_area))
+PID_Tcell_district_names$mean_tissue_area <- PID_area$mean_tissue_area[match(PID_Tcell_district_names$PID, PID_area$PID)]
+PID_Tcell_district_names <- PID_Tcell_district_names %>% group_by(PID) %>% mutate(density = Freq/(mean_tissue_area/1000000))  
+PID_metagroups <- PID_Tcell_district_names %>% pivot_wider(id_cols = "PID",names_from = "Tcell_district_names",values_from = "density") %>% column_to_rownames("PID")
+PID_metagroups <- na.omit(PID_metagroups)
+
+## MULTIVARIABLE COX MODEL
+Cox_df <- PID_metagroups
+Cox_df_median <- foreach(i = Cox_df %>% colnames,.combine = "cbind")%do%{
+Cox_df %>% select(i) %>% mutate(median = ifelse(Cox_df[,i] > median(Cox_df[,i]),"B","A")) %>% pull(median)
+}
+colnames(Cox_df_median) <- colnames(Cox_df)
+rownames(Cox_df_median) <- rownames(Cox_df)
+Cox_df_median <- as.data.frame(Cox_df_median)
+Cox_df_median$status_OS <- sce_T_CD8CD4$status_OS[match(rownames(Cox_df_median),sce_T_CD8CD4$PID)]
+Cox_df_median$OS_months <- sce_T_CD8CD4$OS_months[match(rownames(Cox_df_median),sce_T_CD8CD4$PID)]
+
+covariates <- Cox_df_median %>% select(-status_OS,-OS_months) %>% colnames
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + ")))
+multi_model <- coxph(multi_formula, data = Cox_df_median)
+multi_res <- summary(multi_model)
+
+plot_df_dens_median <- data.frame(group = rownames(multi_res$coefficients),
+                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],3),
+                      HR = signif(multi_res$coefficients[,"exp(coef)"],3),
+                      CI_low = signif(multi_res$conf.int[,"lower .95"],3),
+                      CI_high = signif(multi_res$conf.int[,"upper .95"],3),
+                      wald_test = signif(multi_res$waldtest["pvalue"],3))
+```
+
+```{r}
+# Combined visualization
+cox_median <- plot_df_dens_median %>% mutate(sign = p_value < 0.05, result = ifelse(plot_df_dens_median$HR > 1 & plot_df_dens_median$p_value < 0.05, "UP",ifelse(plot_df_dens_median$HR < 1 & plot_df_dens_median$p_value < 0.05, "DOWN", "NOTSIG"))) %>% mutate(category = "median") %>% arrange(desc(HR))
+cox_median$group <- factor(cox_median$group, levels = cox_median$group)
+cox_mean <- plot_df_dens_mean %>% mutate(sign = p_value < 0.05, result = ifelse(plot_df_dens_mean$HR > 1 & plot_df_dens_mean$p_value < 0.05, "UP",ifelse(plot_df_dens_mean$HR < 1 & plot_df_dens_mean$p_value < 0.05, "DOWN", "NOTSIG"))) %>% mutate(category = "mean") %>% arrange(desc(HR))
+cox_mean$group <- factor(cox_mean$group, levels = cox_mean$group)
+
+plot_cox_combined <- rbind(cox_mean, cox_median)
+plot_cox_combined$type <- "districts"
+plot_cox_combined_fil <- plot_cox_combined %>% filter(result != "NOTSIG")
+both <- plot_cox_combined_fil %>% group_by(group,result) %>% count() %>% filter(n > 1) %>% pull(group) %>% unfactor()
+plot_cox_combined_fil$category <- ifelse(plot_cox_combined_fil$group %in% both, "both", plot_cox_combined_fil$category)
+plot_cox_combined_fil <- plot_cox_combined_fil %>% group_by(group, category) %>% reframe(HR = mean(HR), p_value = mean(p_value), result = result, type = type) %>% unique()
+
+ggplot(plot_cox_combined_fil, aes(x=reorder(group,HR), y = type, shape = category, col = HR, size= -log10(p_value)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#377EB8", mid = "#7dafd8", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  scale_shape_manual(values = c(16,15,17))+
+  new_scale(new_aes = "shape")+
+  new_scale(new_aes = "color") +
+  geom_point(data = plot_cox_combined_fil,aes(size = -log10(p_value), shape = category, col = result), stroke =1.5)+
+  scale_shape_manual(values = c(1,0,2))+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("Cox model")+
+  coord_flip()
+```
+
+### INTERACTION
+
+```{r}
+sce_fil <- sce_T[,!is.na(sce_T$celltype_combined)]
+
+count_T <- countInteractions(sce_fil, 
+                  group_by = "sample_id", 
+                  label = "celltype_combined", 
+                  colPairName = "neighborhood", 
+                  method = "interaction")
+
+out <- count_T
+out$cellpair <- paste0(out$from_label, "__", out$to_label)
+count_out <- out %>% as.data.frame() %>% select(group_by, cellpair, ct) %>% pivot_wider(names_from = cellpair, values_from = ct) %>% as.data.frame()
+colnames(count_out) <- gsub("-", "_", colnames(count_out)) 
+colnames(count_out) <- gsub("/", "_", colnames(count_out)) 
+count_out <- count_out %>% column_to_rownames("group_by")
+
+## Select from "T" interactions - heterotypic only
+selected_pairs_CD8 <- (str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,1], "CD8") &
+  (!str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,2], "CD8"))) & (!str_detect(colnames(count_out), "Unknown"))
+selected_pairs_CD4 <- (str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,1], "CD4") &
+  (!str_detect(str_split(colnames(count_out), "__", simplify = TRUE)[,2], "CD4"))) & (!str_detect(colnames(count_out), "Unknown"))
+
+count_out_selected <- cbind(count_out[,selected_pairs_CD8], count_out[,selected_pairs_CD4])
+count_out_selected <- count_out_selected %>% rownames_to_column("sample_id")
+count_out_selected$PID <- sce_T$PID[match(count_out_selected$sample_id, sce_T$sample_id)]
+count_out_selected_long <- count_out_selected %>% pivot_longer(cols = 2:(ncol(count_out_selected)-1), names_to = "pair", values_to = "coef")
+```
+
+```{r}
+# 1. MEAN
+out_df <- data.frame(PID = unique(sce_T$PID))
+for(i in unique(count_out_selected_long$pair)){
+count_out_loop <- count_out_selected_long %>% filter(pair == i) %>% group_by(PID) %>% mutate(mean_coef = mean(coef,na.rm = TRUE)) %>% select(PID, mean_coef) %>% unique()
+count_out_loop <- count_out_loop %>% mutate(cat = ifelse(mean_coef < mean(count_out_loop$mean_coef, na.rm = TRUE), "low", "high"))
+out_df[,i] <- count_out_loop$cat[match(out_df$PID, count_out_loop$PID)]
+}
+out_df$status_OS <- sce_T$status_OS[match(out_df$PID, sce_T$PID)]
+out_df$OS_months <- sce_T$OS_months[match(out_df$PID, sce_T$PID)]
+
+# Filter
+include <- c("PID", "status_OS", "OS_months", 
+             out_df %>% filter(!is.na(status_OS)) %>% select(-PID, -status_OS, -OS_months) %>% pivot_longer(1:ncol(.), names_to = "int", values_to = "value") %>% group_by(int) %>% dplyr::count(value) %>% dplyr::count(value) %>% mutate(sum = sum(n)) %>% filter(sum > 2) %>% pull("int") %>% unique())
+out_df <- out_df[, colnames(out_df) %in% include]
+
+# KAPLAN-MEIER ESTIMATE
+# Extract p-values from log-rank / direction of trend
+cur_surv_out <- foreach(x = colnames(out_df %>% select(-PID, -status_OS, -OS_months)), .combine = "rbind")%do%{
+  formula <- as.formula(paste("Surv(OS_months, status_OS) ~ ", x))
+  fit <- survdiff(formula, data = out_df)
+  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[1], exp_2 = fit$exp[1], ratio = fit$obs[1]/fit$exp[1])
+}
+
+# Adjust p-values using BH 
+cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
+
+# Create output
+cur_surv_plot <- cur_surv_out %>% mutate(direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% filter(p < 0.05)
+cur_surv_plot$result <- ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p < 0.05, "UP",
+                                           ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p < 0.05, "DOWN",NA))
+cur_surv_countInt_results_mean <- cur_surv_plot 
+```
+
+```{r}
+# 2. MEDIAN
+out_df <- data.frame(PID = unique(sce_T$PID))
+
+for(i in unique(count_out_selected_long$pair)){
+count_out_loop <- count_out_selected_long %>% filter(pair == i) %>% group_by(PID) %>% mutate(mean_coef = median(coef,na.rm = TRUE)) %>% select(PID, mean_coef) %>% unique()
+count_out_loop <- count_out_loop %>% mutate(cat = ifelse(mean_coef < mean(count_out_loop$mean_coef, na.rm = TRUE), "low", "high"))
+out_df[,i] <- count_out_loop$cat[match(out_df$PID, count_out_loop$PID)]
+}
+out_df$status_OS <- sce_T$status_OS[match(out_df$PID, sce_T$PID)]
+out_df$OS_months <- sce_T$OS_months[match(out_df$PID, sce_T$PID)]
+
+# Filter 
+include <- c("PID", "status_OS", "OS_months", 
+             out_df %>% filter(!is.na(status_OS)) %>% select(-PID, -status_OS, -OS_months) %>% pivot_longer(1:ncol(.), names_to = "int", values_to = "value") %>% group_by(int) %>% dplyr::count(value) %>% dplyr::count(value) %>% mutate(sum = sum(n)) %>% filter(sum > 2) %>% pull("int") %>% unique())
+
+out_df <- out_df[, colnames(out_df) %in% include]
+
+# KAPLAN-MEIER ESTIMATE
+# Extract p-values from log-rank / direction of trend
+cur_surv_out <- foreach(x = colnames(out_df %>% select(-PID, -status_OS, -OS_months)), .combine = "rbind")%do%{
+  formula <- as.formula(paste("Surv(OS_months, status_OS) ~ ", x))
+  fit <- survdiff(formula, data = out_df)
+  data.frame(group = x, p = fit$pvalue, obs_2 = fit$obs[1], exp_2 = fit$exp[1], ratio = fit$obs[1]/fit$exp[1])
+}
+
+# Adjust p-values using BH 
+cur_surv_out$p_adj <- p.adjust(cur_surv_out$p, method = "BH")
+
+# Create output
+cur_surv_plot <- cur_surv_out %>% mutate(direction = ifelse(obs_2 > exp_2, "high", "low"), type = "survival_prob") %>% filter(p < 0.05)
+cur_surv_plot$result <- ifelse(cur_surv_plot$direction == "high" & cur_surv_plot$p < 0.05, "UP",
+                                           ifelse(cur_surv_plot$direction == "low" & cur_surv_plot$p < 0.05, "DOWN",NA))
+cur_surv_countInt_results_median <- cur_surv_plot 
+```
+
+```{r}
+# Combined visualization 
+cur_surv_countInt_results_mean$category <- "mean"
+cur_surv_countInt_results_median$category <- "median"
+
+plot_int_combined <- rbind(cur_surv_countInt_results_mean, cur_surv_countInt_results_median)
+plot_int_combined$type <- "interaction"
+both <- plot_int_combined %>% group_by(group,direction) %>% count() %>% filter(n > 1) %>% pull(group)
+plot_int_combined$category <- ifelse(plot_int_combined$group %in% both, "both", plot_int_combined$category)
+plot_int_combined_fil <- plot_int_combined %>% group_by(group, category) %>% reframe(p = mean(p), 
+                                                                                     result = result, 
+                                                                                     type = type, 
+                                                                                     ratio = mean(ratio),
+                                                                                     direction = direction) %>% unique()
+
+ggplot(plot_int_combined_fil, aes(x=reorder(group,ratio), y = type, shape = category, col = ratio, size= -log10(p)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+ 
+  scale_size(range = c(2,10))+
+  scale_shape_manual(values = c(16,15,17))+
+  new_scale(new_aes = "shape")+
+  new_scale(new_aes = "color") +
+  geom_point(data = plot_int_combined_fil,aes(size = -log10(p), shape = category, col = result), stroke =1.5)+
+  scale_shape_manual(values = c(1,0,2))+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("Cox model")+
+  coord_flip()
+```
+
+# Figure S2 
+
+## S2B
+
+```{r}
+### 1. Heatmap body
+# Aggregrate across cells
+mean_sce_TU_tumor <- aggregateAcrossCells(sce_TU_tumor, ids = sce_TU_tumor$tumor_metacluster,
+                                 statistics = "mean",
+                                 use.assay.type = "min_max",
+                                 subset.row = rowData(sce_TU_tumor)$tumor_cluster)
+
+### 2. Heatmap annotation 
+### 2.1 Spatial features
+spatial <- colData(sce_TU_tumor) %>% as.data.frame %>% select(area,eccentricity,n_neighbors, tumor_metacluster)
+spatial <- spatial %>% select(-tumor_metacluster) %>% aggregate(by = list(tumor_metacluster = spatial$tumor_metacluster), FUN = mean) %>% column_to_rownames("tumor_metacluster")
+area_col <- colorRamp2(c(min(spatial$area),median(spatial$area),max(spatial$area)), c(brewer.pal(3,"Blues")[1],brewer.pal(3,"Blues")[2],brewer.pal(3,"Blues")[3]))
+eccentricity_col <- colorRamp2(c(min(spatial$eccentricity),median(spatial$eccentricity),max(spatial$eccentricity)), c(brewer.pal(3,"Purples")[1],brewer.pal(3,"Purples")[2],brewer.pal(3,"Purples")[3]))
+n_neighbors_col <- colorRamp2(c(min(spatial$n_neighbors),median(spatial$n_neighbors),max(spatial$n_neighbors)), c(brewer.pal(3,"RdPu")[1],brewer.pal(3,"RdPu")[2],brewer.pal(3,"RdPu")[3]))
+
+ha_spatial <- HeatmapAnnotation(
+    area = spatial$area,
+    eccentricity = spatial$eccentricity,
+    n_neighbors = spatial$n_neighbors, 
+    col = list(area = area_col,
+               eccentricity = eccentricity_col ,
+               n_neighbors = n_neighbors_col),
+    border = TRUE,
+    which = "row")
+
+### 2.2 Metadata features
+#Number of cells per tumor_metacluster 
+n_cells <- colData(mean_sce_TU_tumor) %>% as.data.frame %>% select(tumor_metacluster, ncells)
+
+# # Number of contributing patients (at least 5 cells)
+cluster_PID <- colData(sce_TU_tumor) %>% as.data.frame() %>% select(tumor_metacluster,PID) %>% group_by(tumor_metacluster) %>% table() %>% as.data.frame
+n_PID <- cluster_PID %>% filter(Freq>=5) %>% group_by(tumor_metacluster) %>% count(name = "n_PID") %>% column_to_rownames("tumor_metacluster")
+
+ha_meta <- HeatmapAnnotation(n_cells = anno_barplot(n_cells$ncells, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),
+                             n_PID = anno_barplot(n_PID$n_PID, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),
+                             border = TRUE, 
+                             annotation_name_rot = 90,
+                             gap = unit(1,"mm"),
+                             which = "row")
+
+### 3. Define broader categories
+anno <- colData(mean_sce_TU_tumor) %>% as.data.frame %>% select(tumor_metacluster,tumor_metacluster_names, ncells)
+
+### 4. Plot combined Heatmap
+h <- Heatmap(t(assay(mean_sce_TU_tumor, "min_max")),
+        col = viridis(100),
+        name = "min_max",
+        row_title = NULL,
+        show_row_names = TRUE, 
+        show_row_dend = TRUE,
+        row_names_side = "left",
+        show_column_names =  TRUE,
+        row_split = anno$tumor_metacluster,
+        clustering_method_rows = "ward.D2",
+        clustering_method_columns = "ward.D2",
+        cluster_row_slices = TRUE)+
+  rowAnnotation(metacluster = anno_simple(unfactor(anno$tumor_metacluster), col = metadata(sce_TU_tumor)$colors$tumor_metacluster, border = TRUE))+
+  rowAnnotation(names = anno_text(anno$tumor_metacluster_names))+
+  ha_spatial+
+  ha_meta
+
+# Draw heatmap
+draw(h)
+```
+
+## S2C
+
+```{r}
+for_district <- prop.table(table(sce_TU_tumor$tumor_district, sce_TU_tumor$tumor_metacluster_names), margin = 1)
+
+# Proportion of tumor metacluster per district
+tumor_metacluster <- colData(sce_TU_tumor) %>% as.data.frame() %>% select(tumor_district,tumor_metacluster) %>% group_by(tumor_district) %>% table() %>% as.data.frame
+tumor_metacluster <- tumor_metacluster %>% group_by(tumor_district) %>% mutate(fra = Freq/sum(Freq)) 
+tumor_metacluster <- tumor_metacluster %>% select(-Freq) %>% pivot_wider(id_cols = tumor_district,names_from = tumor_metacluster,values_from = fra) %>% column_to_rownames("tumor_district")
+col <- metadata(sce_TU_tumor)$colors$tumor_metacluster[match(colnames(tumor_metacluster), names(metadata(sce_TU_tumor)$colors$tumor_metacluster))]
+
+ha_my <- HeatmapAnnotation(
+  tumor_metacluster = anno_barplot(tumor_metacluster, width = unit(10, "mm"), gp = gpar(fill = col)),
+                            border = TRUE, 
+                            annotation_name_rot = 90,
+                            gap = unit(3,"mm"),
+                            which = "row")
+
+# Number of PID 
+n_PID <- colData(sce_TU_tumor) %>% as.data.frame() %>% select(tumor_district,PID) %>% group_by(tumor_district) %>% table() %>% as.data.frame %>% filter(Freq != 0) %>% group_by(tumor_district) %>% dplyr::count()
+ha_meta <- HeatmapAnnotation(n_PID = anno_barplot(n_PID$n, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),
+                             border = TRUE, 
+                             annotation_name_rot = 90,
+                             gap = unit(1,"mm"),
+                             which = "row")
+
+
+# Define names for districts 
+anno <- tumor_metacluster %>% rownames_to_column("district") 
+anno$district_names <- sce_TU_tumor$tumor_district_names[match(anno$district, sce_TU_tumor$tumor_district)]
+
+# Plot
+Heatmap(for_district, col = viridis(100), row_names_side = "left")+
+  ha_my+
+  ha_meta+
+  rowAnnotation(names = anno_text(anno$district_names))
+```
+
+## S2D 
+
+```{r}
+### 1. Heatmap body
+
+# Aggregate across cells with the mean
+mean_sce_MY_myeloid <- aggregateAcrossCells(sce_MY_myeloid, ids = sce_MY_myeloid$myeloid_metacluster,
+                                 statistics = "mean",
+                                 use.assay.type = "min_max",
+                                 subset.row = rowData(sce_MY_myeloid)$MY_cluster_channel)
+
+### 2. Heatmap annotation 
+### 2.1 Spatial features
+spatial <- colData(sce_MY_myeloid) %>% as.data.frame %>% select(area,eccentricity,n_neighbors, myeloid_metacluster)
+spatial <- spatial %>% select(-myeloid_metacluster) %>% aggregate(by = list(myeloid_metacluster = spatial$myeloid_metacluster), FUN = mean) %>% column_to_rownames("myeloid_metacluster")
+area_col <- colorRamp2(c(min(spatial$area),median(spatial$area),max(spatial$area)), c(brewer.pal(3,"Blues")[1],brewer.pal(3,"Blues")[2],brewer.pal(3,"Blues")[3]))
+eccentricity_col <- colorRamp2(c(min(spatial$eccentricity),median(spatial$eccentricity),max(spatial$eccentricity)), c(brewer.pal(3,"Purples")[1],brewer.pal(3,"Purples")[2],brewer.pal(3,"Purples")[3]))
+n_neighbors_col <- colorRamp2(c(min(spatial$n_neighbors),median(spatial$n_neighbors),max(spatial$n_neighbors)), c(brewer.pal(3,"RdPu")[1],brewer.pal(3,"RdPu")[2],brewer.pal(3,"RdPu")[3]))
+
+ha_spatial <- HeatmapAnnotation(
+    area = spatial$area,
+    eccentricity = spatial$eccentricity,
+    n_neighbors = spatial$n_neighbors, 
+    col = list(area = area_col,
+               eccentricity = eccentricity_col,
+               n_neighbors = n_neighbors_col),
+    border = TRUE,
+    which = "row")
+
+### 2.2 Predictions 
+## Astir cell types per cluster
+astir_anno <- colData(sce_MY_myeloid) %>% as.data.frame() %>% select(myeloid_metacluster,astir_myeloid_type) %>% group_by(myeloid_metacluster) %>% table() %>% as.data.frame
+astir_anno <- astir_anno %>% group_by(myeloid_metacluster) %>% mutate(fra = Freq/sum(Freq)) 
+astir_anno <- astir_anno %>% select(-Freq) %>% pivot_wider(id_cols = myeloid_metacluster,names_from = astir_myeloid_type,values_from = fra) %>% column_to_rownames("myeloid_metacluster")
+
+## GMM cell types per cluster
+GMM_anno <- colData(sce_MY_myeloid) %>% as.data.frame() %>% select(myeloid_metacluster,GMM_myeloid_type) %>% group_by(myeloid_metacluster) %>% table() %>% as.data.frame
+GMM_anno <- GMM_anno %>% group_by(myeloid_metacluster) %>% mutate(fra = Freq/sum(Freq)) 
+GMM_anno <- GMM_anno %>% select(-Freq) %>% pivot_wider(id_cols = myeloid_metacluster,names_from = GMM_myeloid_type,values_from = fra) %>% column_to_rownames("myeloid_metacluster")
+
+ha_GMM_astir <- HeatmapAnnotation(
+  astir_myeloid = anno_barplot(astir_anno, width = unit(10, "mm"), gp = gpar(fill = metadata(sce_MY_myeloid)$colors$my_astir_col)),
+  GMM_myeloid = anno_barplot(GMM_anno, width = unit(10, "mm"), gp = gpar(fill = metadata(sce_MY_myeloid)$colors$my_GMM_col)),
+                            border = TRUE, 
+                            annotation_name_rot = 90,
+                            gap = unit(3,"mm"),
+                            which = "row")
+
+### 2.2 Metadata features
+#Number of cells per myeloid_metacluster 
+n_cells <- colData(mean_sce_MY_myeloid) %>% as.data.frame %>% select(myeloid_metacluster, ncells)
+
+# # Number of contributing patients (at least 1 cell)
+cluster_PID <- colData(sce_MY_myeloid) %>% as.data.frame() %>% select(myeloid_metacluster,PID) %>% group_by(myeloid_metacluster) %>% table() %>% as.data.frame
+n_PID <- cluster_PID %>% filter(Freq>=5) %>% group_by(myeloid_metacluster) %>% count(name = "n_PID") %>% column_to_rownames("myeloid_metacluster")
+
+ha_meta <- HeatmapAnnotation(
+  n_cells = anno_barplot(n_cells$ncells, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),                        
+  n_PID = anno_barplot(n_PID$n_PID, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),
+  border = TRUE, 
+  annotation_name_rot = 90,
+  gap = unit(1,"mm"),
+  which = "row")
+
+### 3. Define broader categories
+anno <- colData(mean_sce_MY_myeloid) %>% as.data.frame %>% select(myeloid_metacluster, ncells)
+
+### 4. Plot combined Heatmap
+h <- Heatmap(t(assay(mean_sce_MY_myeloid, "min_max")),
+        col = viridis(100),
+        name = "min_max",
+        row_title = NULL,
+        show_row_names = TRUE, 
+        show_row_dend = TRUE,
+        row_names_side = "left",
+        show_column_names =  TRUE,
+        row_split = anno$myeloid_metacluster,
+        clustering_method_rows = "ward.D2",
+        clustering_method_columns = "ward.D2",
+        cluster_row_slices = TRUE)+
+  rowAnnotation(metacluster = anno_simple(anno$myeloid_metacluster, 
+                                          col = metadata(sce_MY_myeloid)$colors$myeloid_metacluster, border = TRUE))+
+  ha_GMM_astir+
+  ha_spatial+
+  ha_meta
+
+# Create legends for annotation 
+lgd <- Legend(title = "metacluster", at = names(metadata(sce_MY_myeloid)$colors$myeloid_metacluster), 
+               legend_gp = gpar(fill = metadata(sce_MY_myeloid)$colors$myeloid_metacluster))
+ 
+lgd_1 <- Legend(title = "astir/GMM", at = names(metadata(sce_MY_myeloid)$colors$my_astir_col), 
+               legend_gp = gpar(fill = metadata(sce_MY_myeloid)$colors$my_astir_col))
+
+# Draw heatmap
+draw(h, annotation_legend_list = list(lgd, lgd_1))
+```
+
+## S2E
+
+```{r}
+for_district <- prop.table(table(sce_MY_myeloid$myeloid_district, sce_MY_myeloid$myeloid_metacluster), margin = 1)
+
+# Proportion of myeloid metacluster per district
+myeloid_metacluster <- colData(sce_MY_myeloid) %>% as.data.frame() %>% select(myeloid_district,myeloid_metacluster) %>% group_by(myeloid_district) %>% table() %>% as.data.frame
+myeloid_metacluster <- myeloid_metacluster %>% group_by(myeloid_district) %>% mutate(fra = Freq/sum(Freq)) 
+myeloid_metacluster <- myeloid_metacluster %>% select(-Freq) %>% pivot_wider(id_cols = myeloid_district,names_from = myeloid_metacluster,values_from = fra) %>% column_to_rownames("myeloid_district")
+
+col <- metadata(sce_MY_myeloid)$colors$myeloid_metacluster[match(colnames(myeloid_metacluster), names(metadata(sce_MY_myeloid)$colors$myeloid_metacluster))]
+
+ha_my <- HeatmapAnnotation(
+  myeloid_metacluster = anno_barplot(myeloid_metacluster, width = unit(10, "mm"), gp = gpar(fill = col)),
+                            border = TRUE, 
+                            annotation_name_rot = 90,
+                            gap = unit(3,"mm"),
+                            which = "row")
+
+# Number of PID 
+n_PID <- colData(sce_MY_myeloid) %>% as.data.frame() %>% select(myeloid_district,PID) %>% group_by(myeloid_district) %>% table() %>% as.data.frame %>% filter(Freq != 0) %>% group_by(myeloid_district) %>% count()
+
+ha_meta <- HeatmapAnnotation(n_PID = anno_barplot(n_PID$n, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),
+                             border = TRUE, 
+                             annotation_name_rot = 90,
+                             gap = unit(1,"mm"),
+                             which = "row")
+
+# Define names for districts 
+anno <- myeloid_metacluster %>% rownames_to_column("district") 
+anno$district_names <- sce_MY_myeloid$myeloid_district_names[match(anno$district, sce_MY_myeloid$myeloid_district)]
+
+# Plot 
+Heatmap(for_district, col = viridis(100), row_names_side = "left", row_labels = anno$district_names)+
+  ha_my+
+  ha_meta
+```
+
+## S2F
+
+### CD8 
+
+```{r}
+### 1. Heatmap body 
+# Aggregrate across metacluster 
+mean_sce_8 <- aggregateAcrossCells(sce_T_CD8, ids = sce_T_CD8$CD8_metacluster,
+                                 statistics = "mean",
+                                 use.assay.type = "min_max",
+                                 subset.row = rowData(sce_T_CD8)$CD8_cluster_channel)  
+
+mean_CD8_CD8 <- aggregateAcrossCells(sce_T_CD8, ids = sce_T_CD8$CD8_metacluster,
+                                 statistics = "mean",
+                                 use.assay.type = "min_max",
+                                 subset.row = rowData(sce_T_CD8)$CD3CD4CD8)
+
+### 2. Heatmap annotation
+## 2.1 Spatial features
+spatial <- colData(sce_T_CD8) %>% as.data.frame %>% dplyr::select(area,eccentricity,n_neighbors, CD8_metacluster)
+spatial <- spatial %>% dplyr::select(-CD8_metacluster) %>% aggregate(by = list(CD8_metacluster = spatial$CD8_metacluster), FUN = mean) %>% column_to_rownames("CD8_metacluster")
+area_col <- colorRamp2(c(min(spatial$area),median(spatial$area),max(spatial$area)), c(brewer.pal(3,"Blues")[1],brewer.pal(3,"Blues")[2],brewer.pal(3,"Blues")[3]))
+eccentricity_col <- colorRamp2(c(min(spatial$eccentricity),median(spatial$eccentricity),max(spatial$eccentricity)), c(brewer.pal(3,"Purples")[1],brewer.pal(3,"Purples")[2],brewer.pal(3,"Purples")[3]))
+n_neighbors_col <- colorRamp2(c(min(spatial$n_neighbors),median(spatial$n_neighbors),max(spatial$n_neighbors)), c(brewer.pal(3,"RdPu")[1],brewer.pal(3,"RdPu")[2],brewer.pal(3,"RdPu")[3]))
+
+ha_spatial <- HeatmapAnnotation(
+    area = spatial$area,
+    eccentricity = spatial$eccentricity,
+    n_neighbors = spatial$n_neighbors, 
+    col = list(area = area_col,
+               eccentricity = eccentricity_col,
+               n_neighbors = n_neighbors_col),
+    border = TRUE,
+    which = "row")
+
+## 2.2 Predictions
+# Astir cell types
+astir_anno <- colData(sce_T_CD8) %>% as.data.frame() %>% dplyr::select(CD8_metacluster,astir_CD8_combined) %>% group_by(CD8_metacluster) %>% table() %>% as.data.frame
+astir_anno <- astir_anno %>% group_by(CD8_metacluster) %>% mutate(fra = Freq/sum(Freq))
+astir_anno <- astir_anno %>% dplyr::select(-Freq) %>% pivot_wider(id_cols = CD8_metacluster,names_from = astir_CD8_combined,values_from = fra) %>% column_to_rownames("CD8_metacluster")
+astir_anno_df <- astir_anno%>% as.data.frame()
+max_marker_astir <- apply(astir_anno_df, 1, function(x) names(astir_anno_df)[which.max(x)])
+
+## GMM cell types
+GMM_anno <- colData(sce_T_CD8) %>% as.data.frame() %>% dplyr::select(CD8_metacluster,GMM_CD8_combined) %>% group_by(CD8_metacluster) %>% table() %>% as.data.frame
+GMM_anno <- GMM_anno %>% group_by(CD8_metacluster) %>% mutate(fra = Freq/sum(Freq))
+GMM_anno <- GMM_anno %>% dplyr::select(-Freq) %>% pivot_wider(id_cols = CD8_metacluster,names_from = GMM_CD8_combined,values_from = fra) %>% column_to_rownames("CD8_metacluster")
+
+ha_astir_GMM <- HeatmapAnnotation(
+  astir_CD8_combined = anno_barplot(astir_anno, width = unit(10, "mm"), gp = gpar(fill = metadata(sce_T_CD8)$colors$CD8_astir_col)),
+  GMM_immune_combined = anno_barplot(GMM_anno, width = unit(10, "mm"), gp = gpar(fill = metadata(sce_T_CD8)$colors$CD8_GMM_col)),
+                            border = TRUE,
+                            annotation_name_rot = 90,
+                            gap = unit(3,"mm"),
+                            which = "row")
+
+
+## 2.3 Metadata features
+# Number of cells 
+n_cells <- colData(mean_sce_8) %>% as.data.frame %>% dplyr::select(CD8_metacluster, ncells)
+
+# Number of contributing patients (at least 5 cells)
+cluster_PID <- colData(sce_T_CD8) %>% as.data.frame() %>% dplyr::select(CD8_metacluster,PID) %>% group_by(CD8_metacluster) %>% table() %>% as.data.frame
+n_PID <- cluster_PID %>% filter(Freq>5) %>% group_by(CD8_metacluster) %>% count(name = "n_PID") %>% column_to_rownames("CD8_metacluster")
+
+ha_meta <- HeatmapAnnotation(n_cells = anno_barplot(n_cells$ncells, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),     
+                             n_PID = anno_barplot(n_PID$n_PID, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),
+                            border = TRUE, 
+                            annotation_name_rot = 90,
+                            gap = unit(1,"mm"),
+                            which = "row",
+                            annotation_name_gp = gpar(fontsize = 10))
+
+### 3. Define broader categories
+anno <- colData(mean_sce_8) %>% as.data.frame %>% dplyr::select(CD8_metacluster)
+
+### 4. Plot combined Heatmap
+h_CD8_aggregated <- Heatmap(t(assay(mean_CD8_CD8, "min_max")), 
+               name = "min_max",
+             col = viridis(100),
+             row_split = anno$CD8_metacluster,
+             clustering_method_rows = "ward.D2",
+             clustering_method_columns = "ward.D2",
+             show_row_names = FALSE)+
+  Heatmap(t(assay(mean_sce_8, "min_max")),
+        col = viridis(100),
+        name = "min_max",
+        row_title = NULL,
+        show_row_names = TRUE, 
+        show_row_dend = TRUE,
+        row_names_side = "left",
+        show_column_names =  TRUE,
+        clustering_method_rows = "ward.D2",
+             clustering_method_columns = "ward.D2",,
+        cluster_row_slices = TRUE)+
+  rowAnnotation(metacluster = anno_simple(unfactor(anno$CD8_metacluster), 
+                                          col = metadata(sce_T_CD8)$colors$CD8_metacluster, border = TRUE))+
+  ha_astir_GMM+
+  ha_spatial+
+  ha_meta
+  
+
+# Create legends for annotation
+lgd1 <- Legend(title = "Metacluster", at = names(metadata(sce_T_CD8)$colors$CD8_metacluster),
+              legend_gp = gpar(fill = metadata(sce_T_CD8)$colors$CD8_metacluster))
+lgd_2 <- Legend(title = "Astir and GMM", at = union(names(metadata(sce_T_CD8)$colors$CD8_GMM_col), names(metadata(sce_T_CD8)$colors$GMM_astir_col)),
+              legend_gp = gpar(fill = union(metadata(sce_T_CD8)$colors$CD8_GMM_col, metadata(sce_T_CD8)$colors$CD8_astir_col)))
+legend_list_agg_CD8 <- list(lgd1, lgd_2)
+
+# Draw heatmap
+draw(h_CD8_aggregated, annotation_legend_list = legend_list_agg_CD8)
+```
+
+### CD4 
+
+```{r}
+### 1. Heatmap body 
+# Aggregrate across metacluster 
+mean_sce_4 <- aggregateAcrossCells(sce_T_CD4, ids = sce_T_CD4$CD4_metacluster,
+                                 statistics = "mean",
+                                 use.assay.type = "min_max",
+                                 subset.row = rowData(sce_T_CD4)$CD4_cluster_channel)  
+
+mean_CD4_CD8 <- aggregateAcrossCells(sce_T_CD4, ids = sce_T_CD4$CD4_metacluster,
+                                 statistics = "mean",
+                                 use.assay.type = "min_max",
+                                 subset.row = rowData(sce_T_CD4)$CD3CD4CD8)
+
+### 2. Heatmap annotation
+## 2.1 Spatial features
+spatial <- colData(sce_T_CD4) %>% as.data.frame %>% dplyr::select(area,eccentricity,n_neighbors, CD4_metacluster)
+spatial <- spatial %>% dplyr::select(-CD4_metacluster) %>% aggregate(by = list(CD4_metacluster = spatial$CD4_metacluster), FUN = mean) %>% column_to_rownames("CD4_metacluster")
+area_col <- colorRamp2(c(min(spatial$area),median(spatial$area),max(spatial$area)), c(brewer.pal(3,"Blues")[1],brewer.pal(3,"Blues")[2],brewer.pal(3,"Blues")[3]))
+eccentricity_col <- colorRamp2(c(min(spatial$eccentricity),median(spatial$eccentricity),max(spatial$eccentricity)), c(brewer.pal(3,"Purples")[1],brewer.pal(3,"Purples")[2],brewer.pal(3,"Purples")[3]))
+n_neighbors_col <- colorRamp2(c(min(spatial$n_neighbors),median(spatial$n_neighbors),max(spatial$n_neighbors)), c(brewer.pal(3,"RdPu")[1],brewer.pal(3,"RdPu")[2],brewer.pal(3,"RdPu")[3]))
+
+ha_spatial <- HeatmapAnnotation(
+    area = spatial$area,
+    eccentricity = spatial$eccentricity,
+    n_neighbors = spatial$n_neighbors, 
+    col = list(area = area_col,
+               eccentricity = eccentricity_col,
+               n_neighbors = n_neighbors_col),
+    border = TRUE,
+    which = "row")
+
+## 2.2 Predictions
+# Astir cell types
+astir_anno <- colData(sce_T_CD4) %>% as.data.frame() %>% dplyr::select(CD4_metacluster,astir_CD4_combined) %>% group_by(CD4_metacluster) %>% table() %>% as.data.frame
+astir_anno <- astir_anno %>% group_by(CD4_metacluster) %>% mutate(fra = Freq/sum(Freq))
+astir_anno <- astir_anno %>% dplyr::select(-Freq) %>% pivot_wider(id_cols = CD4_metacluster,names_from = astir_CD4_combined,values_from = fra) %>% column_to_rownames("CD4_metacluster")
+astir_anno_df <- astir_anno%>% as.data.frame()
+max_marker_astir <- apply(astir_anno_df, 1, function(x) names(astir_anno_df)[which.max(x)])
+
+## GMM cell types
+GMM_anno <- colData(sce_T_CD4) %>% as.data.frame() %>% dplyr::select(CD4_metacluster,GMM_CD4_combined) %>% group_by(CD4_metacluster) %>% table() %>% as.data.frame
+GMM_anno <- GMM_anno %>% group_by(CD4_metacluster) %>% mutate(fra = Freq/sum(Freq))
+GMM_anno <- GMM_anno %>% dplyr::select(-Freq) %>% pivot_wider(id_cols = CD4_metacluster,names_from = GMM_CD4_combined,values_from = fra) %>% column_to_rownames("CD4_metacluster")
+
+ha_astir_GMM <- HeatmapAnnotation(
+  astir_CD4_combined = anno_barplot(astir_anno, width = unit(10, "mm"), gp = gpar(fill = metadata(sce_T_CD4)$colors$CD4_astir_col)),
+  GMM_immune_combined = anno_barplot(GMM_anno, width = unit(10, "mm"), gp = gpar(fill = metadata(sce_T_CD4)$colors$CD4_GMM_col)),
+                            border = TRUE,
+                            annotation_name_rot = 90,
+                            gap = unit(3,"mm"),
+                            which = "row")
+
+
+## 2.3 Metadata features
+# Number of cells 
+n_cells <- colData(mean_sce_4) %>% as.data.frame %>% dplyr::select(CD4_metacluster, ncells)
+
+# Number of contributing patients (at least 5 cells)
+cluster_PID <- colData(sce_T_CD4) %>% as.data.frame() %>% dplyr::select(CD4_metacluster,PID) %>% group_by(CD4_metacluster) %>% table() %>% as.data.frame
+n_PID <- cluster_PID %>% filter(Freq>5) %>% group_by(CD4_metacluster) %>% count(name = "n_PID") %>% column_to_rownames("CD4_metacluster")
+
+ha_meta <- HeatmapAnnotation(n_cells = anno_barplot(n_cells$ncells, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),     
+                             n_PID = anno_barplot(n_PID$n_PID, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),
+                            border = TRUE, 
+                            annotation_name_rot = 90,
+                            gap = unit(1,"mm"),
+                            which = "row",
+                            annotation_name_gp = gpar(fontsize = 10))
+
+### 3. Define broader categories
+anno <- colData(mean_sce_4) %>% as.data.frame %>% dplyr::select(CD4_metacluster)
+
+### 4. Plot combined Heatmap
+h_CD4_aggregated <- Heatmap(t(assay(mean_CD4_CD8, "min_max")), 
+               name = "min_max",
+             col = viridis(100),
+             row_split = anno$CD4_metacluster,
+             clustering_method_rows = "ward.D2",
+             clustering_method_columns = "ward.D2",
+             show_row_names = FALSE)+
+  Heatmap(t(assay(mean_sce_4, "min_max")),
+        col = viridis(100),
+        name = "min_max",
+        row_title = NULL,
+        show_row_names = TRUE, 
+        show_row_dend = TRUE,
+        row_names_side = "left",
+        show_column_names =  TRUE,
+        clustering_method_rows = "ward.D2",
+             clustering_method_columns = "ward.D2",,
+        cluster_row_slices = TRUE)+
+  rowAnnotation(metacluster = anno_simple(unfactor(anno$CD4_metacluster), 
+                                          col = metadata(sce_T_CD4)$colors$CD4_metacluster, border = TRUE))+
+  ha_astir_GMM+
+  ha_spatial+
+  ha_meta
+
+# Create legends for annotation
+lgd1 <- Legend(title = "Metacluster", at = names(metadata(sce_T_CD4)$colors$CD4_metacluster),
+              legend_gp = gpar(fill = metadata(sce_T_CD4)$colors$CD4_metacluster))
+lgd_2 <- Legend(title = "Astir and GMM", at = union(names(metadata(sce_T_CD4)$colors$CD4_GMM_col), names(metadata(sce_T_CD4)$colors$GMM_astir_col)),
+              legend_gp = gpar(fill = union(metadata(sce_T_CD4)$colors$CD4_GMM_col, metadata(sce_T_CD8)$colors$CD4_astir_col)))
+legend_list_agg_CD4 <- list(lgd1, lgd_2)
+
+# Draw heatmap
+draw(h_CD4_aggregated, annotation_legend_list = legend_list_agg_CD4)
+```
+## S2G
+
+```{r}
+for_district <- prop.table(table(sce_T_CD8CD4$Tcell_district, sce_T_CD8CD4$celltype_combined), margin = 1)
+
+# Proportion of myeloid metacluster per district
+celltype_combined <- colData(sce_T_CD8CD4) %>% as.data.frame() %>% select(Tcell_district,celltype_combined) %>% group_by(Tcell_district) %>% table() %>% as.data.frame
+celltype_combined <- celltype_combined %>% group_by(Tcell_district) %>% mutate(fra = Freq/sum(Freq)) 
+celltype_combined <- celltype_combined %>% select(-Freq) %>% pivot_wider(id_cols = Tcell_district,names_from = celltype_combined,values_from = fra) %>% column_to_rownames("Tcell_district")
+col <- metadata(sce_T_CD8CD4)$colors$celltype_combined[match(colnames(celltype_combined), names(metadata(sce_T_CD8CD4)$colors$celltype_combined))]
+
+ha_t <- HeatmapAnnotation(
+  myeloid_metacluster = anno_barplot(celltype_combined, width = unit(10, "mm"), gp = gpar(fill = col)),
+                            border = TRUE, 
+                            annotation_name_rot = 90,
+                            gap = unit(3,"mm"),
+                            which = "row")
+
+# Number of PID 
+n_PID <- colData(sce_T_CD8CD4) %>% as.data.frame() %>% select(Tcell_district,PID) %>% group_by(Tcell_district) %>% table() %>% as.data.frame %>% filter(Freq != 0) %>% group_by(Tcell_district) %>% count()
+
+ha_meta <- HeatmapAnnotation(n_PID = anno_barplot(n_PID$n, width = unit(10, "mm"),gp = gpar(fill = "#440154FF", col = 1)),
+                             border = TRUE, 
+                             annotation_name_rot = 90,
+                             gap = unit(1,"mm"),
+                             which = "row")
+
+# Define names for districts 
+anno <- celltype_combined %>% rownames_to_column("district") 
+anno$district_names <- sce_T_CD8CD4$Tcell_district_names[match(anno$district, sce_T_CD8CD4$Tcell_district)]
+
+# Plot 
+Heatmap(for_district, col = viridis(100), row_names_side = "left", row_labels = anno$district_names)+
+  ha_t+
+  ha_meta
+```
+
+# Figure S3
+
+## S3A
+
+Tumor panel data 
+
+```{r}
+### Differential abundance analysis based on edgeR
+DA <- lapply(c("ISUP_combined", "pT_combined","necrose","PDL1_score"), function(x){
+abundances <- table(unfactor(factor(sce_TU_tumor$tumor_metacluster_names)), sce_TU_tumor$PID)
+abundances <- unclass(abundances) 
+meta <- colData(sce_TU_tumor)[match(colnames(abundances), sce_TU_tumor$PID),]
+if(x %in% c("necrose","PDL1_score")){
+  meta[,x] <- relevel(x=factor(meta[,x]), ref = "0")
+}else{
+  meta[,x] <- relevel(x=factor(meta[,x]), ref = "1/2")
+}
+meta <- meta[!is.na(meta[,x]),]
+abundances <- abundances[,colnames(abundances) %in% meta$PID]
+y.ab <- DGEList(abundances, samples=meta, group = meta[,x])
+design <- model.matrix(~group, data = y.ab$samples)
+y.ab <- estimateDisp(y.ab, design, trend="none")
+fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
+res <- glmQLFTest(fit.ab, coef=ncol(design))
+DA <- res$table
+DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
+DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.05, result = ifelse(DA$logFC > 0 & DA$FDR < 0.05, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.05, "DOWN", "NOTSIG"))) %>% 
+  arrange(desc(logFC))
+DA$cluster <- factor(DA$cluster, levels = DA$cluster)
+DA$category <- x
+return(DA)
+})
+
+DA_out <- do.call(rbind, DA)
+
+# Filter
+MC_diff_abun <- DA_out %>% filter(sign == TRUE) %>% group_by(cluster, result) %>% dplyr::count() %>% filter(n >= 2) %>% pull(cluster) %>% unique() %>% unfactor()
+
+# Plot 
+DA_out$category <- factor(DA_out$category,levels = c("PDL1_score", "necrose","pT_combined","ISUP_combined"))
+DA_out_fil <- DA_out[DA_out$cluster %in% MC_diff_abun, ]
+
+ggplot(DA_out_fil, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8")+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = DA_out_fil,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("Disease progression")
+```
+
+Myeloid panel data 
+
+```{r}
+### Differential abundance analysis based on edgeR
+DA <- lapply(c("ISUP_combined", "pT_combined","necrose","PDL1_score"), function(x){
+abundances <- table(unfactor(factor(sce_MY_myeloid$myeloid_metacluster)), sce_MY_myeloid$PID)
+abundances <- unclass(abundances) 
+meta <- colData(sce_MY_myeloid)[match(colnames(abundances), sce_MY_myeloid$PID),]
+if(x %in% c("necrose","PDL1_score")){
+  meta[,x] <- relevel(x=factor(meta[,x]), ref = "0")
+}else{
+  meta[,x] <- relevel(x=factor(meta[,x]), ref = "1/2")
+}
+meta <- meta[!is.na(meta[,x]),]
+abundances <- abundances[,colnames(abundances) %in% meta$PID]
+y.ab <- DGEList(abundances, samples=meta, group = meta[,x])
+design <- model.matrix(~group, data = y.ab$samples)
+y.ab <- estimateDisp(y.ab, design, trend="none")
+fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
+res <- glmQLFTest(fit.ab, coef=ncol(design))
+DA <- res$table
+DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
+DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.05, result = ifelse(DA$logFC > 0 & DA$FDR < 0.05, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.05, "DOWN", "NOTSIG"))) %>% 
+  arrange(desc(logFC))
+DA$cluster <- factor(DA$cluster, levels = DA$cluster)
+DA$category <- x
+return(DA)
+})
+DA_out <- do.call(rbind, DA)
+
+# Filter 
+MC_diff_abun <- DA_out %>% filter(sign == TRUE) %>% group_by(cluster, result) %>% dplyr::count() %>% filter(n >= 2) %>% pull(cluster) %>% unique() %>% unfactor()
+DA_out$category <- factor(DA_out$category,levels = c("PDL1_score", "necrose","pT_combined","ISUP_combined"))
+DA_out_fil <- DA_out[DA_out$cluster %in% MC_diff_abun, ]
+
+# Plot
+ggplot(DA_out_fil, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8")+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = DA_out_fil,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("Disease progression")
+```
+
+T cell panel data 
+
+CD8 
+
+```{r}
+### Differential abundance analysis based on edgeR
+DA <- lapply(c("ISUP_combined", "pT_combined","necrose","PDL1_score"), function(x){
+abundances <- table(unfactor(factor(sce_T_CD8$celltype_combined)), sce_T_CD8$PID)
+abundances <- unclass(abundances) 
+meta <- colData(sce_T_CD8)[match(colnames(abundances), sce_T_CD8$PID),]
+if(x %in% c("necrose","PDL1_score")){
+  meta[,x] <- relevel(x=factor(meta[,x]), ref = "0")
+}else{
+  meta[,x] <- relevel(x=factor(meta[,x]), ref = "1/2")
+}
+meta <- meta[!is.na(meta[,x]),]
+abundances <- abundances[,colnames(abundances) %in% meta$PID]
+y.ab <- DGEList(abundances, samples=meta, group = meta[,x])
+design <- model.matrix(~group, data = y.ab$samples)
+y.ab <- estimateDisp(y.ab, design, trend="none")
+fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
+res <- glmQLFTest(fit.ab, coef=ncol(design))
+DA <- res$table
+DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
+DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.05, result = ifelse(DA$logFC > 0 & DA$FDR < 0.05, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.05, "DOWN", "NOTSIG"))) %>% 
+  arrange(desc(logFC))
+DA$cluster <- factor(DA$cluster, levels = DA$cluster)
+DA$category <- x
+return(DA)
+})
+DA_out <- do.call(rbind, DA)
+
+# Filter 
+MC_diff_abun <- DA_out %>% filter(sign == TRUE) %>% group_by(cluster, result) %>% dplyr::count() %>% filter(n >= 2) %>% pull(cluster) %>% unique() %>% unfactor()
+
+# Plot
+DA_out$category <- factor(DA_out$category,levels = c("PDL1_score", "necrose","pT_combined","ISUP_combined"))
+DA_out_fil <- DA_out[DA_out$cluster %in% MC_diff_abun, ]
+
+ggplot(DA_out_fil, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8")+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = DA_out_fil,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("Disease progression")
+```
+
+CD4 
+
+```{r}
+### Differential abundance analysis based on edgeR
+DA <- lapply(c("ISUP_combined", "pT_combined","necrose","PDL1_score"), function(x){
+abundances <- table(unfactor(factor(sce_T_CD4$celltype_combined)), sce_T_CD4$PID)
+abundances <- unclass(abundances) 
+meta <- colData(sce_T_CD4)[match(colnames(abundances), sce_T_CD4$PID),]
+if(x %in% c("necrose","PDL1_score")){
+  meta[,x] <- relevel(x=factor(meta[,x]), ref = "0")
+}else{
+  meta[,x] <- relevel(x=factor(meta[,x]), ref = "1/2")
+}
+meta <- meta[!is.na(meta[,x]),]
+abundances <- abundances[,colnames(abundances) %in% meta$PID]
+y.ab <- DGEList(abundances, samples=meta, group = meta[,x])
+design <- model.matrix(~group, data = y.ab$samples)
+y.ab <- estimateDisp(y.ab, design, trend="none")
+fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
+res <- glmQLFTest(fit.ab, coef=ncol(design))
+DA <- res$table
+DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
+DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.05, result = ifelse(DA$logFC > 0 & DA$FDR < 0.05, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.05, "DOWN", "NOTSIG"))) %>% 
+  arrange(desc(logFC))
+DA$cluster <- factor(DA$cluster, levels = DA$cluster)
+DA$category <- x
+return(DA)
+})
+DA_out <- do.call(rbind, DA)
+
+# Filter
+MC_diff_abun <- DA_out %>% filter(sign == TRUE) %>% group_by(cluster, result) %>% dplyr::count() %>% filter(n >= 2) %>% pull(cluster) %>% unique() %>% unfactor()
+
+# Plot
+DA_out$category <- factor(DA_out$category,levels = c("PDL1_score", "necrose","pT_combined","ISUP_combined"))
+DA_out_fil <- DA_out[DA_out$cluster %in% MC_diff_abun, ]
+
+ggplot(DA_out_fil, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8")+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = DA_out_fil,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("Disease progression")
+```
+
+## S3B
+
+Tumor panel data 
+
+```{r}
+### Differential abundance analysis based on edgeR
+DA <- lapply(c("ISUP_combined", "pT_combined","necrose","PDL1_score"), function(x){
+abundances <- table(unfactor(factor(sce_TU_tumor$tumor_district_names)), sce_TU_tumor$PID)
+abundances <- unclass(abundances) 
+abundances <- abundances[,colnames(abundances) %in% names(colSums(abundances))[colSums(abundances) != 0]]
+meta <- colData(sce_TU_tumor)[match(colnames(abundances), sce_TU_tumor$PID),]
+if(x %in% c("necrose","PDL1_score")){
+  meta[,x] <- relevel(x=factor(meta[,x]), ref = "0")
+}else{
+  meta[,x] <- relevel(x=factor(meta[,x]), ref = "1/2")
+}
+meta <- meta[!is.na(meta[,x]),]
+abundances <- abundances[,colnames(abundances) %in% meta$PID]
+y.ab <- DGEList(abundances, samples=meta, group = meta[,x])
+design <- model.matrix(~group, data = y.ab$samples)
+y.ab <- estimateDisp(y.ab, design, trend="none")
+fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
+res <- glmQLFTest(fit.ab, coef=ncol(design))
+DA <- res$table
+DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
+DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.05, result = ifelse(DA$logFC > 0 & DA$FDR < 0.05, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.05, "DOWN", "NOTSIG"))) %>% 
+  arrange(desc(logFC))
+DA$cluster <- factor(DA$cluster, levels = DA$cluster)
+DA$category <- x
+return(DA)
+})
+DA_out <- do.call(rbind, DA)
+
+# Filter
+D_diff_abun <- DA_out %>% filter(sign == TRUE) %>% group_by(cluster, result) %>% dplyr::count() %>% filter(n >= 2) %>% pull(cluster) %>% unique() %>% unfactor()
+
+# Plot
+DA_out$category <- factor(DA_out$category,levels = c("PDL1_score", "necrose","pT_combined","ISUP_combined"))
+DA_out_fil <- DA_out[DA_out$cluster %in% D_diff_abun, ] 
+
+ggplot(DA_out_fil, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8")+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = DA_out_fil,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+Myeloid panel data 
+
+```{r}
+### Differential abundance analysis based on edgeR
+DA <- lapply(c("ISUP_combined", "pT_combined","necrose","PDL1_score"), function(x){
+abundances <- table(unfactor(factor(sce_MY_myeloid$myeloid_district_names)), sce_MY_myeloid$PID)
+abundances <- unclass(abundances) 
+abundances <- abundances[,colnames(abundances) %in% names(colSums(abundances))[colSums(abundances) != 0]]
+meta <- colData(sce_MY_myeloid)[match(colnames(abundances), sce_MY_myeloid$PID),]
+if(x %in% c("necrose","PDL1_score")){
+  meta[,x] <- relevel(x=factor(meta[,x]), ref = "0")
+}else{
+  meta[,x] <- relevel(x=factor(meta[,x]), ref = "1/2")
+}
+meta <- meta[!is.na(meta[,x]),]
+abundances <- abundances[,colnames(abundances) %in% meta$PID]
+y.ab <- DGEList(abundances, samples=meta, group = meta[,x])
+design <- model.matrix(~group, data = y.ab$samples)
+y.ab <- estimateDisp(y.ab, design, trend="none")
+fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
+res <- glmQLFTest(fit.ab, coef=ncol(design))
+DA <- res$table
+DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
+DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.1, result = ifelse(DA$logFC > 0 & DA$FDR < 0.1, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.1, "DOWN", "NOTSIG"))) %>% 
+  arrange(desc(logFC))
+DA$cluster <- factor(DA$cluster, levels = DA$cluster)
+DA$category <- x
+return(DA)
+})
+DA_out <- do.call(rbind, DA)
+
+# Filter
+D_diff_abun <- DA_out %>% filter(sign == TRUE) %>% group_by(cluster, result) %>% dplyr::count() %>% filter(n >= 2) %>% pull(cluster) %>% unique() %>% unfactor() 
+  
+# Plot
+DA_out$category <- factor(DA_out$category,levels = c("PDL1_score", "necrose","pT_combined","ISUP_combined"))
+DA_out_fil <- DA_out[DA_out$cluster %in% D_diff_abun, ]
+
+ggplot(DA_out_fil, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8")+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = DA_out_fil,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("Disease progression")
+```
+
+T cell panel data 
+
+```{r}
+### Differential abundance analysis based on edgeR
+DA <- lapply(c("ISUP_combined", "pT_combined","necrose","PDL1_score"), function(x){
+abundances <- table(unfactor(factor(sce_T_CD8CD4$Tcell_district_names)), sce_T_CD8CD4$PID)
+abundances <- unclass(abundances) 
+abundances <- abundances[,colnames(abundances) %in% names(colSums(abundances))[colSums(abundances) != 0]]
+meta <- colData(sce_T_CD8CD4)[match(colnames(abundances), sce_T_CD8CD4$PID),]
+if(x %in% c("necrose","PDL1_score")){
+  meta[,x] <- relevel(x=factor(meta[,x]), ref = "0")
+}else{
+  meta[,x] <- relevel(x=factor(meta[,x]), ref = "1/2")
+}
+meta <- meta[!is.na(meta[,x]),]
+abundances <- abundances[,colnames(abundances) %in% meta$PID]
+y.ab <- DGEList(abundances, samples=meta, group = meta[,x])
+design <- model.matrix(~group, data = y.ab$samples)
+y.ab <- estimateDisp(y.ab, design, trend="none")
+fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
+res <- glmQLFTest(fit.ab, coef=ncol(design))
+DA <- res$table
+DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
+DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.05, result = ifelse(DA$logFC > 0 & DA$FDR < 0.05, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.05, "DOWN", "NOTSIG"))) %>% 
+  arrange(desc(logFC))
+DA$cluster <- factor(DA$cluster, levels = DA$cluster)
+DA$category <- x
+return(DA)
+})
+DA_out <- do.call(rbind, DA)
+
+# Filter
+D_diff_abun <- DA_out %>% filter(sign == TRUE) %>% group_by(cluster, result) %>% dplyr::count() %>% filter(n >= 2) %>% pull(cluster) %>% unique() %>% unfactor()
+
+# Plot
+DA_out$category <- factor(DA_out$category,levels = c("PDL1_score", "necrose","pT_combined","ISUP_combined"))
+DA_out_fil <- DA_out[DA_out$cluster %in% D_diff_abun, ]
+
+ggplot(DA_out_fil, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8")+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = DA_out_fil,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("Disease progression")
+```
+
+# Session Info 
+
+```{r}
+sessionInfo()
+```
