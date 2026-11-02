@@ -1,0 +1,992 @@
+---
+title: null
+author: "Lasse Meyer"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+# A spatial multi-omic portrait of survival outcome for clear cell renal cell carcinoma, Meyer et al., 2026
+
+# Figure 5 and Figure S9/S10
+
+R data analysis scripts for re-creating Figure 5 and Figure S9/S10. 
+
+# Software requirements
+
+```{r, message=FALSE,warning=FALSE}
+# Run with R version 4.3.2
+library(survival) #v.3.5-7
+library(survminer) #v.0.4.9
+library(foreach) #v.1.5.2
+library(tidyverse) #v.2.0.0
+library(conflicted) #v.1.2.0
+library(ggnewscale) #v.0.4.9
+library(scran) #v.1.30.0
+library(edgeR) #v.4.0.2
+library(ggpubr) #v.0.6.0
+library(pec) #v.2023.04.12
+library(DESeq2) #v.1.42.0
+library(tidytext) #v.0.4.3
+library(biomaRt) #v.2.58.0
+library(clusterProfiler) #v.4.10.0
+library(enrichplot) #v.1.22.0
+library(org.Hs.eg.db) #v.3.18.0
+library(ComplexHeatmap) #v.2.18.0
+library(CMScaller) #v.2.0.1
+library(RColorBrewer) #v.1.1-3
+library(dittoSeq) #v.1.14.0
+conflicts_prefer(dplyr::count)
+conflicts_prefer(dplyr::filter)
+conflicts_prefer(dplyr::select)
+conflicts_prefer(base::intersect)
+```
+
+# Read data
+
+```{r}
+# Available from Zenodo - DOI: https://doi.org/10.5281/zenodo.23661454
+# File paths ("PATH_TO") have to be adjusted by the user
+PATH_TO <- "PATH_TO"
+
+# # EXAMPLE DOWNLOAD CODE
+# dir.create(PATH_TO, showWarnings = FALSE, recursive = TRUE)
+# 
+# ## Download required files from Zenodo (skips files already present locally)
+# zenodo_files <- c(
+#   "validation_TCGAKIRC_SE.rds", "validation_TCGAKIRC_DST.rds",
+#   "validation_CPTAC_SE.rds", "validation_CPTAC_DST.rds",
+#   "discovery_blockforest_all.rds", "HE_cluster_anno.csv", "discovery_metadata.csv",
+#   "validation_genesignatures.rds", "validation_TCGAKIRC_immunedeconv.rds"
+# )
+# invisible(lapply(zenodo_files, function(f) {
+#   local_path <- file.path(PATH_TO, f)
+#   if (!file.exists(local_path)) {
+#     download.file(paste0("https://zenodo.org/records/23661454/files/", f, "?download=1"),
+#                   destfile = local_path, mode = "wb")
+#   }
+# }))
+
+## TCGA KIRC objects
+TCGA_SE <- readRDS(file.path(PATH_TO, "validation_TCGAKIRC_SE.rds"))
+TCGA_DST <- readRDS(file.path(PATH_TO, "validation_TCGAKIRC_DST.rds"))
+
+## CPTAC RCC objects
+CPTAC_SE <- readRDS(file.path(PATH_TO, "validation_CPTAC_SE.rds"))
+CPTAC_DST <- readRDS(file.path(PATH_TO, "validation_CPTAC_DST.rds"))
+
+## BlockForest objects
+blockforest_all <- readRDS(file.path(PATH_TO, "discovery_blockforest_all.rds"))
+BF_HE_HE <- blockforest_all$HE_HE
+BF_HE_IMC <- blockforest_all$HE_IMC
+BF_HE_IMC_HE <- blockforest_all$HE_IMC_HE
+
+## Other
+HE_cluster_anno <- read_csv(file.path(PATH_TO, "HE_cluster_anno.csv"))
+metadata_selected <- read_csv(file.path(PATH_TO, "discovery_metadata.csv"))
+gene_signatures <- readRDS(file.path(PATH_TO, "validation_genesignatures.rds"))
+immune_deconv <- readRDS(file.path(PATH_TO, "validation_TCGAKIRC_immunedeconv.rds"))
+TCGA_MCP <- immune_deconv$TCGA_MCP
+TCGA_quanti <- immune_deconv$TCGA_quanti
+```
+
+# Figure 5
+
+## 5B/C
+
+These analyses were performed in Python (3.10.0). See script #TODO for reproducing the plots.
+
+## 5E
+
+```{r}
+# Here we subset TCGA KIRC to patients with H&E information
+TCGA_SE_HE <- TCGA_SE[,!is.na(TCGA_SE$survival_ecotype_HE)]
+TCGA_DST_HE <- TCGA_DST[,!is.na(TCGA_DST$survival_ecotype_HE)]
+
+# Display gene signatures for survival ecotypes
+GOI_rel <- c(gene_signatures$survival_ecotype_poor, gene_signatures$survival_ecotype_favorable)
+
+# Define heatmap based on normalized counts 
+df <- t(assay(TCGA_DST_HE)[GOI_rel,]) %>% as.data.frame 
+df <- df %>% rownames_to_column("PID")
+df$survival_ecotype_HE <- TCGA_DST_HE$survival_ecotype_HE[match(df$PID, colnames(TCGA_DST_HE))]
+mat <- df %>% pivot_longer(cols = 2:(ncol(df)-1), names_to = "gene", values_to = "exprs") %>% group_by(survival_ecotype_HE, gene) %>% summarize(mean = mean(exprs)) %>% na.omit()
+ht <- mat %>% pivot_wider(names_from = "gene", values_from = "mean") %>% column_to_rownames("survival_ecotype_HE")
+
+## Create annotations
+anno <- df %>% dplyr::select(survival_ecotype_HE) %>% group_by(survival_ecotype_HE) %>% dplyr::count() %>% na.omit()
+anno <- anno[match(anno$survival_ecotype_HE, rownames(ht)),]
+ca <- data.frame(genes = colnames(ht))
+ca$cat <- ifelse(ca$genes %in% gene_signatures$survival_ecotype_poor, "Poor", "Favorable")
+gene_col <- setNames(c("#CA0020", "#0571B0"), rev(unique(ca$cat)))
+c_anno <- columnAnnotation(cat = ca$cat, col = list(cat = gene_col))
+
+## Print heatmap 
+Heatmap(scale(ht), 
+        name = "Scaled mean Z-scores", 
+        show_column_names = FALSE, 
+        bottom_annotation = c_anno)+
+  rowAnnotation(n = anno_barplot(anno$n, gp = gpar(fill = "#440154FF")))+
+  rowAnnotation(anno = anno_text(anno$survival_ecotype_HE))
+```
+
+## 5F
+
+```{r}
+# Perform nearest template prediction for survival ecotypes in full TCGA KIRC cohort
+## Step 1: Prepare expression matrix (genes x samples, log2 scale)
+tpm_mat <- assays(TCGA_SE)$tpm_unstrand 
+log2_tpm <- log2(tpm_mat + 1)
+expr_mat <- ematAdjust(log2_tpm, method = "RLE")
+rownames(expr_mat) <- rowData(TCGA_SE)$gene_name
+
+# Step 2: Create subtype templates (Gene signatures)
+POORUP <- gene_signatures$survival_ecotype_poor
+FAVUP <- gene_signatures$survival_ecotype_favorable
+names(FAVUP) <- rep("FAV", length(FAVUP))
+names(POORUP) <- rep("POOR", length(POORUP))
+keyup <- c(FAVUP, POORUP)
+template_mat <- data.frame(class = factor(names(keyup)), 
+           probe = unname(keyup))
+
+# Step 3: Run NTP classification with permutations
+set.seed(22)
+ntp_result <- ntp(
+  emat = expr_mat,           
+  template = template_mat,
+  distance = "cosine",
+  nPerm = 1000,              
+  seed = 22,                 
+  doPlot = FALSE
+)
+
+# Step 4: Convert predictions into groups
+ntp_out <- ntp_result %>% rownames_to_column("PID") %>% mutate(group_predict = ifelse(FDR < 0.01, as.character(prediction), "NOT"))
+TCGA_SE$survival_ecotype_gene <- ntp_out$group_predict[match(TCGA_SE$PID, ntp_out$PID)]
+TCGA_SE$survival_ecotype_gene[TCGA_SE$survival_ecotype_gene == "POOR"] <- "Poor"
+TCGA_SE$survival_ecotype_gene[TCGA_SE$survival_ecotype_gene == "NOT"] <- "Medium"
+TCGA_SE$survival_ecotype_gene[TCGA_SE$survival_ecotype_gene == "FAV"] <- "Favorable"
+TCGA_DST$survival_ecotype_gene <- TCGA_SE$survival_ecotype_gene[match(TCGA_DST$PID, TCGA_SE$PID)]
+
+# Step 5: Show survival trends
+surv_out <- colData(TCGA_SE) %>% as.data.frame %>% select(PID, OS_days, status_OS, survival_ecotype_gene) %>% unique()
+fit <- survfit(Surv(OS_days, status_OS) ~ survival_ecotype_gene, data = surv_out)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, 
+          risk.table.col = "strata", 
+          linetype = "strata", 
+          surv.median.line = "hv", 
+          ggtheme = theme_classic(), 
+          palette = c("#0571B0","gold3","#CA0020"),
+          conf.int = FALSE
+)
+```
+
+# Figure S9 
+
+## S9B-D
+
+These analyses were performed in Python (3.10.0). See script #TODO for reproducing the plots.
+
+## S9E
+
+```{r}
+# HE clusters per PID 
+HE_check <- HE_cluster_anno %>% group_by(cluster, PID) %>% dplyr::count() %>% ungroup() %>% group_by(PID) %>% mutate(fra = n/sum(n))
+HE_count <- HE_check %>% pivot_wider(id_cols = PID, names_from = cluster, values_from = n, values_fill = 0) %>% column_to_rownames("PID") %>% ungroup()
+HE_frac <- HE_check %>% pivot_wider(id_cols = PID, names_from = cluster, values_from = fra, values_fill = 0) %>% column_to_rownames("PID") %>% ungroup()
+
+# 1. MEAN
+## MULTIVARIABLE COX MODEL
+Cox_df <- HE_frac
+Cox_df_mean <- foreach(i = Cox_df %>% colnames,.combine = "cbind")%do%{
+Cox_df %>% select(i) %>% mutate(mean = ifelse(Cox_df[,i] > mean(Cox_df[,i]),"B","A")) %>% pull(mean)
+}
+colnames(Cox_df_mean) <- colnames(Cox_df)
+rownames(Cox_df_mean) <- rownames(Cox_df)
+Cox_df_mean <- as.data.frame(Cox_df_mean)
+Cox_df_mean$status_OS <- metadata_selected$status_OS[match(rownames(Cox_df_mean),metadata_selected$PID)]
+Cox_df_mean$OS_months <- metadata_selected$OS_months[match(rownames(Cox_df_mean),metadata_selected$PID)]
+
+covariates <- Cox_df_mean %>% select(-status_OS,-OS_months) %>% colnames
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + ")))
+multi_model <- coxph(multi_formula, data = Cox_df_mean)
+multi_res <- summary(multi_model)
+plot_df_dens_mean <- data.frame(group = rownames(multi_res$coefficients),
+                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],3),
+                      HR = signif(multi_res$coefficients[,"exp(coef)"],3),
+                      CI_low = signif(multi_res$conf.int[,"lower .95"],3),
+                      CI_high = signif(multi_res$conf.int[,"upper .95"],3),
+                      wald_test = signif(multi_res$waldtest["pvalue"],3))
+
+# 2. MEDIAN
+## MULTIVARIABLE COX MODEL
+Cox_df_median <- foreach(i = Cox_df %>% colnames,.combine = "cbind")%do%{
+Cox_df %>% select(i) %>% mutate(median = ifelse(Cox_df[,i] > median(Cox_df[,i]),"B","A")) %>% pull(median)
+}
+colnames(Cox_df_median) <- colnames(Cox_df)
+rownames(Cox_df_median) <- rownames(Cox_df)
+Cox_df_median <- as.data.frame(Cox_df_median)
+Cox_df_median$status_OS <- metadata_selected$status_OS[match(rownames(Cox_df_median),metadata_selected$PID)]
+Cox_df_median$OS_months <- metadata_selected$OS_months[match(rownames(Cox_df_median),metadata_selected$PID)]
+
+covariates <- Cox_df_median %>% select(-status_OS,-OS_months) %>% colnames
+multi_formula <- as.formula(paste("Surv(OS_months, status_OS) ~", paste(covariates, collapse = " + ")))
+multi_model <- coxph(multi_formula, data = Cox_df_median)
+multi_res <- summary(multi_model)
+plot_df_dens_median <- data.frame(group = rownames(multi_res$coefficients),
+                      p_value = signif(multi_res$coefficients[,"Pr(>|z|)"],3),
+                      HR = signif(multi_res$coefficients[,"exp(coef)"],3),
+                      CI_low = signif(multi_res$conf.int[,"lower .95"],3),
+                      CI_high = signif(multi_res$conf.int[,"upper .95"],3),
+                      wald_test = signif(multi_res$waldtest["pvalue"],3))
+
+# Combined visualization
+cox_median <- plot_df_dens_median %>% mutate(sign = p_value < 0.05, result = ifelse(plot_df_dens_median$HR > 1 & plot_df_dens_median$p_value < 0.05, "UP",ifelse(plot_df_dens_median$HR < 1 & plot_df_dens_median$p_value < 0.05, "DOWN", "NOTSIG"))) %>% mutate(category = "median") %>% arrange(desc(HR))
+cox_median$group <- factor(cox_median$group, levels = cox_median$group)
+cox_mean <- plot_df_dens_mean %>% mutate(sign = p_value < 0.05, result = ifelse(plot_df_dens_mean$HR > 1 & plot_df_dens_mean$p_value < 0.05, "UP",ifelse(plot_df_dens_mean$HR < 1 & plot_df_dens_mean$p_value < 0.05, "DOWN", "NOTSIG"))) %>% mutate(category = "mean") %>% arrange(desc(HR))
+cox_mean$group <- factor(cox_mean$group, levels = cox_mean$group)
+
+plot_cox_combined <- rbind(cox_mean, cox_median)
+plot_cox_combined$type <- "HE clusters"
+plot_cox_combined_fil <- plot_cox_combined %>% filter(result != "NOTSIG")
+both <- plot_cox_combined_fil %>% group_by(group,result) %>% dplyr::count() %>% filter(n > 1) %>% pull(group) %>% unfactor()
+plot_cox_combined_fil$category <- ifelse(plot_cox_combined_fil$group %in% both, "both", plot_cox_combined_fil$category)
+plot_cox_combined_fil <- plot_cox_combined_fil %>% group_by(group, category) %>% reframe(HR = mean(HR), p_value = mean(p_value), result = result, type = type) %>% unique()
+
+ggplot(plot_cox_combined_fil, aes(x=reorder(group,HR), y = type, shape = category, col = HR, size= -log10(p_value)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8", midpoint = 1)+
+  scale_size(range = c(2,10))+
+  scale_shape_manual(values = c(15,17))+
+  new_scale(new_aes = "shape")+
+  new_scale(new_aes = "color") +
+  geom_point(data = plot_cox_combined_fil,aes(size = -log10(p_value), shape = category, col = result), stroke =1.5)+
+  scale_shape_manual(values = c(0,2))+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("Cox model")+
+  coord_flip()
+```
+
+## S9F
+
+```{r}
+### Differential abundance analysis based on edgeR
+general_count_wide <- HE_count %>% t() 
+
+DA <- lapply(c("ISUP_combined", "pT_combined","necrose","PDL1_score"), function(x){
+abundances <- general_count_wide
+abundances <- unclass(abundances) 
+meta <- as.data.frame(metadata_selected[match(colnames(abundances), metadata_selected$PID),])
+ref_levels <- c(
+  "necrose"       = "NE0",
+  "ISUP_combined" = "G1/2",
+  "pT_combined"   = "T1/2",
+  "PDL1_score"    = "PD0"
+)
+if (x %in% names(ref_levels)) {
+  meta[, x] <- relevel(x = factor(meta[, x]), ref = ref_levels[[x]])
+}
+meta <- meta[!is.na(meta[,x]),]
+abundances <- abundances[,colnames(abundances) %in% meta$PID]
+y.ab <- DGEList(abundances, samples=meta, group = as.matrix(meta[,x]))
+design <- model.matrix(~group, data = y.ab$samples)
+y.ab <- estimateDisp(y.ab, design, trend="none")
+fit.ab <- glmQLFit(y.ab, design, robust=TRUE, abundance.trend=FALSE)
+res <- glmQLFTest(fit.ab, coef=ncol(design))
+DA <- res$table
+DA <- topTags(res, n = nrow(DA), adjust.method = "BH")$table
+DA <- DA %>% mutate(cluster = rownames(DA), sign = DA$FDR<0.05, result = ifelse(DA$logFC > 0 & DA$FDR < 0.05, "UP",ifelse(DA$logFC < 0 & DA$FDR < 0.05, "DOWN", "NOTSIG"))) %>% 
+  arrange(desc(logFC))
+DA$cluster <- factor(DA$cluster, levels = DA$cluster)
+DA$category <- x
+return(DA)
+})
+DA_out <- do.call(rbind, DA)
+
+# Filter
+HE_diff_abun <- DA_out %>% filter(sign == TRUE) %>% group_by(cluster, result) %>% dplyr::count() %>% filter(n >= 2) %>% pull(cluster) %>% unique() %>% unfactor()
+DA_out$category <- factor(DA_out$category,levels = c("PDL1_score", "necrose","pT_combined","ISUP_combined"))
+DA_out_fil <- DA_out[DA_out$cluster %in% HE_diff_abun, ]
+
+ggplot(DA_out_fil, aes(x=cluster, y = category,col = logFC, size= -log10(FDR)))+
+  geom_point()+
+  theme_classic()+
+  scale_color_gradient2(high = "#E41A1C", mid = "white", low = "#377EB8")+
+  scale_size(range = c(2,10))+
+  new_scale_colour() +
+  geom_point(data = DA_out_fil,shape = 1,aes(size = -log10(FDR), col = result), stroke =1.5)+
+  scale_color_manual(values = c("UP" = "#E41A1C",NOTSIG = "snow2", "DOWN" = "#377EB8"), name = "Direction")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  ylab("Disease progression")
+```
+
+## S9G
+
+```{r}
+# Create list from results
+cv_results_list <- list(
+  "HE" = BF_HE_HE,
+  "IMC" = BF_HE_IMC,
+  "IMC_HE" = BF_HE_IMC_HE
+)
+
+# Define colors 
+col_cv <- setNames(c("grey","firebrick1", "purple4"),
+c("HE", "IMC", "IMC_HE"))
+
+# INTEGRATED BRIER SCORE
+# Initialize list to store IBS scores for each cross-validation result
+ibs_scores_list <- list()
+ibs_scores_list <- lapply(cv_results_list, function(res_obj) {
+  sapply(res_obj, function(res) {
+    if (nrow(res$actual_surv) != nrow(res$actual_test)) {
+      stop("Row count mismatch between actual_surv and actual_test")
+    }
+    test_data <- cbind(res$actual_surv, res$actual_test)
+    times_test <- sort(unique(test_data$OS_months))
+    if(!0 %in% times_test){
+    times_test <- c(0, times_test) 
+    }
+    times_pred <- res$predictions$unique.death.times
+    time_indices <- sapply(times_test, function(t) which.min(abs(times_pred - t)))
+    aligned_surv_probs <- res$predictions$survival[, time_indices, drop = FALSE]
+    pec_obj <- pec(
+      object = list("BlockForest" = aligned_surv_probs),
+      formula = Surv(OS_months, status_OS) ~ 1,
+      cens.model = "marginal",
+      exact = TRUE,
+      data = test_data
+    )
+    IBSrange <- quantile(test_data$OS_months, 0.9)
+    crps_val <- crps(pec_obj, start = 0, times = IBSrange)
+    ibs_score <- crps_val[2] #
+    return(ibs_score)
+  })
+})
+out_ibs <- data.frame(fold = 1:10, t(do.call("rbind", ibs_scores_list))[1:10,]) %>% pivot_longer(2:ncol(.), names_to = "model", values_to = "IBS")
+
+# Plot
+ggplot(out_ibs, aes(x = reorder(model,-IBS, FUN = median), y = IBS, fill = model))+
+  geom_point(aes(color = model))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
+  theme_classic()+
+  stat_compare_means(ref.group = "HE", paired = FALSE, method = "t.test", method.args = list(alternative = "less", label = "p.format"))+
+  stat_compare_means(vjust = 1, method = "anova")+
+  scale_fill_manual(values = col_cv)+
+  scale_color_manual(values = col_cv)+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  xlab("Models")+
+  ylab("Integrated Brier Score")
+
+# CONCORDANCE
+# Initialize list to store concordance scores for each cross-validation result
+concordance_scores_list <- list()
+concordance_scores_list <- lapply(cv_results_list, function(res_obj) {
+  sapply(res_obj, function(res) {
+    out <- concordance(Surv(res$actual_surv[, 1], res$actual_surv[, 2]) ~ rowSums(res$predictions$survival), timewt = "n/G2")
+    return(out$concordance)
+  })
+})
+out_concordance <- data.frame(fold = 1:10, t(do.call("rbind", concordance_scores_list))[1:10,]) %>% pivot_longer(2:ncol(.), names_to = "model", values_to = "concordance")
+
+ggplot(out_concordance, aes(x = reorder(model,concordance, FUN = median), y = concordance, fill = model))+
+  geom_point(aes(color = model))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
+  theme_classic()+
+  stat_compare_means(ref.group = "HE", paired = FALSE, method = "t.test", method.args = list(alternative = "greater", label = "p.format"))+
+  stat_compare_means(vjust = 1, method = "anova")+
+  scale_fill_manual(values = col_cv)+
+  scale_color_manual(values = col_cv)+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  xlab("Models")+
+  ylab("Concordance (Uno)")
+```
+
+
+## S9H
+
+```{r}
+cur_surv <- colData(TCGA_SE_HE) %>% as.data.frame() %>% dplyr::select(PID, OS_days, status_OS, survival_ecotype_HE) %>% 
+  unique()
+fit <- survfit(Surv(OS_days, status_OS) ~ survival_ecotype_HE, data = cur_surv)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, 
+          risk.table.col = "strata", 
+          linetype = "strata", 
+          surv.median.line = "hv", 
+          palette = c("#0571B0", "gold3", "#CA0020"),
+          ggtheme = theme_classic())
+```
+
+## S9I
+
+```{r}
+# 1. DIFFERENTIAL EXPRESSION ANALYSIS
+# Create DESeqDataset
+ddsSE_1 <- DESeqDataSet(TCGA_SE_HE, design = ~ survival_ecotype_HE)
+# Filter genes
+## 1: Lowly expressed genes
+keep <- rowSums(counts(ddsSE_1)) >= 10
+ddsSE_1 <- ddsSE_1[keep, ]
+## 2: Filter for protein-coding genes
+ddsSE_1 <- ddsSE_1[rowData(ddsSE_1)$gene_type == "protein_coding", ]
+# Perform DESeq analysis 
+dds <- DESeq(ddsSE_1, )
+rownames(dds) <- rowData(dds)$gene_name
+
+# 2. GENE-SET ENRICHMENT ANALYSIS
+set.seed(22)
+organism <- "org.Hs.eg.db"
+
+## A. POOR
+res_ICAM_vs_MTOR <- results(dds,
+  contrast = c("survival_ecotype_HE", "Poor", "Favorable"),
+  alpha = 0.05,
+  lfcThreshold = 1
+)
+res_ICAM_vs_not_icam_vhl <- results(dds,
+  contrast = c("survival_ecotype_HE", "Poor", "Medium"),
+  alpha = 0.05,
+  lfcThreshold = 1
+)
+## Poor vs Favorable
+original_gene_list <- res_ICAM_vs_MTOR$log2FoldChange
+names(original_gene_list) <- rownames(res_ICAM_vs_MTOR)
+gene_list <- na.omit(original_gene_list)
+gene_list <- sort(gene_list, decreasing = TRUE) 
+gse_1 <- gseGO(geneList=gene_list, 
+             ont ="BP", 
+             keyType = "SYMBOL", 
+             minGSSize = 50, 
+             maxGSSize = 1000, 
+             pvalueCutoff = 0.05, 
+             verbose = TRUE, 
+             OrgDb = organism, 
+             pAdjustMethod = "BH")
+## Poor vs Medium
+original_gene_list <- res_ICAM_vs_not_icam_vhl$log2FoldChange
+names(original_gene_list) <- rownames(res_ICAM_vs_not_icam_vhl)
+gene_list <- na.omit(original_gene_list)
+gene_list <- sort(gene_list, decreasing = TRUE) 
+gse_2 <- gseGO(geneList=gene_list, 
+             ont ="BP", 
+             keyType = "SYMBOL", 
+             minGSSize = 50, 
+             maxGSSize = 1000, 
+             pvalueCutoff = 0.05, 
+             verbose = TRUE, 
+             OrgDb = organism, 
+             pAdjustMethod = "BH")
+# Shared
+out_gse_sup1 <- as.data.frame(gse_1) %>% filter(enrichmentScore > 0) %>% mutate(test = "suppVSact", category = "Poor")
+out_gse_sup2 <- as.data.frame(gse_2) %>% filter(enrichmentScore > 0) %>% mutate(test = "suppVSmedium", category = "Poor")
+shared <- intersect(out_gse_sup1$Description, out_gse_sup2$Description)
+out_gse_sup <- rbind(out_gse_sup1, out_gse_sup2) 
+out_gse_sup <- out_gse_sup %>% filter(Description %in% shared) %>%
+  group_by(ID, Description, category) %>% 
+  summarise(across(where(is.numeric), mean), .groups = "drop")
+
+## B. FAVORABLE
+res_mtor_vs_not_icam_vhl <- results(dds,
+  contrast = c("survival_ecotype_HE", "Favorable", "Medium"),
+  alpha = 0.05,
+  lfcThreshold = 1
+)
+res_mtor_vs_icam <- results(dds,
+  contrast = c("survival_ecotype_HE", "Favorable", "Poor"),
+  alpha = 0.05,
+  lfcThreshold = 1
+)
+# Favorable vs Medium
+original_gene_list <- res_mtor_vs_not_icam_vhl$log2FoldChange
+names(original_gene_list) <- rownames(res_mtor_vs_not_icam_vhl)
+gene_list <- na.omit(original_gene_list)
+gene_list <- sort(gene_list, decreasing = TRUE)
+gse_1 <- gseGO(geneList=gene_list, 
+             ont ="BP", 
+             keyType = "SYMBOL", 
+             minGSSize = 50, 
+             maxGSSize = 1000, 
+             pvalueCutoff = 0.05, 
+             verbose = TRUE, 
+             OrgDb = organism, 
+             pAdjustMethod = "BH")
+# Favorable vs Poor
+original_gene_list <- res_mtor_vs_icam $log2FoldChange
+names(original_gene_list) <- rownames(res_mtor_vs_icam )
+gene_list <- na.omit(original_gene_list)
+gene_list <- sort(gene_list, decreasing = TRUE) 
+gse_2 <- gseGO(geneList=gene_list, 
+             ont ="BP", 
+             keyType = "SYMBOL", 
+             minGSSize = 50, 
+             maxGSSize = 1000, 
+             pvalueCutoff = 0.05, 
+             verbose = TRUE, 
+             OrgDb = organism, 
+             pAdjustMethod = "BH")
+# Shared
+out_gse_act1 <- as.data.frame(gse_1) %>% filter(enrichmentScore > 0) %>% mutate(test = "actVSmedium", category = "Favorable")
+out_gse_act2 <- as.data.frame(gse_2) %>% filter(enrichmentScore > 0) %>% mutate(test = "actVSactp", category = "Favorable")
+shared <- intersect(out_gse_act1$Description, out_gse_act2$Description)
+out_gse_act <- rbind(out_gse_act1, out_gse_act2) 
+out_gse_act <- out_gse_act %>% filter(Description %in% shared) %>% 
+  group_by(ID, Description, category) %>% 
+  summarise(across(where(is.numeric), mean), .groups = "drop")
+## C. Medium
+res_not_icam_vhl_vs_ICAM <- results(dds,
+  contrast = c("survival_ecotype_HE", "Medium", "Poor"),
+  alpha = 0.05,
+  lfcThreshold = 1
+)
+res_not_icam_vs_MTOR <- results(dds,
+  contrast = c("survival_ecotype_HE", "Medium", "Favorable"),
+  alpha = 0.05,
+  lfcThreshold = 1
+)
+# Medium vs. Poor
+original_gene_list <- res_not_icam_vhl_vs_ICAM$log2FoldChange
+names(original_gene_list) <- rownames(res_not_icam_vhl_vs_ICAM)
+gene_list <- na.omit(original_gene_list)
+gene_list <- sort(gene_list, decreasing = TRUE) 
+gse_1 <- gseGO(geneList=gene_list, 
+             ont ="BP", 
+             keyType = "SYMBOL", 
+             minGSSize = 50, 
+             maxGSSize = 1000, 
+             pvalueCutoff = 0.05, 
+             verbose = TRUE, 
+             OrgDb = organism, 
+             pAdjustMethod = "BH")
+# Medium vs. Favorable
+original_gene_list <- res_not_icam_vs_MTOR$log2FoldChange
+names(original_gene_list) <- rownames(res_not_icam_vs_MTOR)
+gene_list <- na.omit(original_gene_list)
+gene_list <- sort(gene_list, decreasing = TRUE) 
+gse_2 <- gseGO(geneList=gene_list, 
+             ont ="BP", 
+             keyType = "SYMBOL", 
+             minGSSize = 50, 
+             maxGSSize = 1000, 
+             pvalueCutoff = 0.05, 
+             verbose = TRUE, 
+             OrgDb = organism, 
+             pAdjustMethod = "BH")
+# Shared
+out_gse_medium1 <- as.data.frame(gse_1) %>% filter(enrichmentScore > 0) %>% mutate(test = "mediumVSsup", category = "Medium")
+out_gse_medium2 <- as.data.frame(gse_2) %>% filter(enrichmentScore > 0) %>% mutate(test = "mediumVSact", category = "Medium")
+shared <- intersect(out_gse_medium1$Description, out_gse_medium2$Description)
+out_gse_medium <- rbind(out_gse_medium1, out_gse_medium2) 
+out_gse_medium <- out_gse_medium %>% filter(Description %in% shared) %>% 
+  group_by(ID, Description, category) %>% 
+  summarise(across(where(is.numeric), mean), .groups = "drop")
+
+# 3. COMBINE ALL RESULTS
+out_gse_all <- rbind(out_gse_act %>% arrange(p.adjust) %>% dplyr::slice(1:10), 
+                     out_gse_sup %>% arrange(p.adjust) %>% dplyr::slice(1:10), 
+                     out_gse_medium %>% arrange(p.adjust) %>% dplyr::slice(1:10))
+
+# Plot
+ggplot(out_gse_all,
+       aes(x = category,
+           y = reorder_within(Description, -p.adjust, category),
+           col = enrichmentScore,
+           size = -log10(p.adjust))) +
+  geom_point() +
+  scale_y_reordered() + 
+  facet_grid(category ~ ., scales = "free_y", space = "free_y") +
+  theme_classic() +
+  scale_color_gradient2(high = "#E41A1C", low = "white")
+```
+
+## S9J
+
+```{r}
+# Chromosomal instability signature (Carter et al)
+chrom_sig_up <- gene_signatures$chromosomal_instability_Carter
+
+# Filter for available genes
+chrom_sig_up_rel <- chrom_sig_up[chrom_sig_up %in% rownames(assay(TCGA_DST_HE))]
+df <- t(assay(TCGA_DST_HE)[chrom_sig_up_rel ,]) %>% as.data.frame
+df <- as.data.frame(scale(df))
+df$signature_sum <- rowSums(df,na.rm = TRUE)
+df$survival_ecotype_HE <- TCGA_DST_HE$survival_ecotype_HE[match(rownames(df), colnames(TCGA_DST_HE))]
+df <- df[!is.na(df$survival_ecotype_HE),]
+
+col_group <- setNames(c("#0571B0", "gold3", "#CA0020"),c("Favorable","Medium","Poor"))
+
+# Plot
+ggplot(df, aes(x = survival_ecotype_HE, y = signature_sum, fill = survival_ecotype_HE))+
+  geom_point(aes(color = survival_ecotype_HE))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
+  scale_color_manual(values = col_group)+
+  scale_fill_manual(values = col_group)+
+  theme_classic()+
+  guides(color = "none", fill = "none")+
+  ylab("Chromosomal instability (Carter et al.)")+
+  stat_compare_means()
+```
+
+# Figure S10
+
+## S10A
+
+```{r}
+# Heatmap from predictions
+gen_mat <- expr_mat[template_mat$probe,]
+
+# Annotations
+row_anno <- data.frame(gene = rownames(gen_mat))
+row_anno$cat <- template_mat$class[match(row_anno$gene, template_mat$probe)]
+gene_col <- setNames(brewer.pal(3,"Set1")[1:2], rev(unfactor(unique(row_anno$cat))))
+ra <- columnAnnotation(cat = row_anno$cat, col = list(cat = gene_col))
+col_anno <- data.frame(PID = colnames(gen_mat))
+col_anno$group <- TCGA_SE$survival_ecotype_gene[match(col_anno$PID, TCGA_SE$PID)]
+col_anno_ob <- rowAnnotation(group = col_anno$group, 
+                                col = list(group = col_group)) 
+
+Heatmap(t(gen_mat), 
+        column_split = row_anno$cat,
+        row_split = col_anno$group,
+        right_annotation = col_anno_ob, 
+        show_row_names = FALSE, 
+        show_row_dend = TRUE, 
+        show_column_dend = TRUE
+        )%v%
+  ra
+```
+
+## S10B 
+
+```{r}
+dittoBarPlot(TCGA_DST, var = "survival_ecotype_gene", group.by = "survival_ecotype_HE",retain.factor.levels = FALSE)+
+  scale_fill_manual(values = col_group)+
+  ggtitle(print(chisq.test(table(TCGA_DST$survival_ecotype_HE, TCGA_DST$survival_ecotype_gene))$p.value))
+```
+
+## S10C
+
+```{r}
+# Define GOI of interest
+GOI <- c("NFKB1", "CCND1", "MTOR", "VHL", "ICAM1", "CD44")
+GOI_rel <- GOI[GOI %in% rownames(TCGA_DST)]
+
+# Define heatmap based on normalized counts 
+df <- t(assay(TCGA_DST)[GOI_rel,]) %>% as.data.frame 
+df <- df %>% rownames_to_column("PID")
+
+## Create heatmap body 
+df$survival_ecotype_gene <- TCGA_DST$survival_ecotype_gene[match(df$PID, colnames(TCGA_DST))]
+mat <- df %>% pivot_longer(cols = 2:(ncol(df)-1), names_to = "gene", values_to = "exprs") %>% group_by(survival_ecotype_gene, gene) %>% summarize(mean = mean(exprs)) %>% na.omit()
+ht <- mat %>% pivot_wider(names_from = "gene", values_from = "mean") %>% column_to_rownames("survival_ecotype_gene")
+
+## Annotations
+anno <- df %>% dplyr::select(survival_ecotype_gene) %>% group_by(survival_ecotype_gene) %>% dplyr::count() %>% na.omit()
+anno <- anno[match(anno$survival_ecotype_gene, rownames(ht)),]
+col_anno <- data.frame(gene = colnames(ht))
+col_anno$cat <- ifelse(col_anno$gene %in% c("ICAM1", "CD44"), "poor", "good")
+cat_col_sub <- setNames(c("#0571B0", "#CA0020"), c("good", "poor"))
+
+## Print heatmap 
+Heatmap(scale(ht), name = "Scaled mean Z-scores", 
+        column_split = col_anno$cat, 
+        top_annotation = columnAnnotation(cat = anno_simple(col_anno$cat, col = cat_col_sub)), 
+        show_column_dend = FALSE)+
+  rowAnnotation(n = anno_barplot(anno$n, gp = gpar(fill = "#440154FF")))+
+  rowAnnotation(anno = anno_text(anno$survival_ecotype_gene))
+```
+
+## S10D
+
+```{r}
+# Immune cell deconvolution
+## MCP-counter
+res_MCP_1 <- TCGA_MCP %>% dplyr::select(-cell_type)
+rownames(res_MCP_1) <- TCGA_MCP$cell_type
+res_MCP_z <- as.data.frame(t(scale(t(res_MCP_1), center=TRUE, scale=TRUE)))
+res_MCP_z <- res_MCP_z %>% rownames_to_column("cell_type")
+res_MCP_plot <- res_MCP_z %>% pivot_longer(2:ncol(res_MCP_z), names_to = "PID", values_to = "score")
+res_MCP_plot$survival_ecotype_gene <- TCGA_SE$survival_ecotype_gene[match(res_MCP_plot$PID, colnames(TCGA_SE))]
+ht_MCP <- res_MCP_plot %>% group_by(survival_ecotype_gene, cell_type) %>% dplyr::summarize(mean = mean(score)) %>% na.omit() %>% pivot_wider(names_from = survival_ecotype_gene, values_from = mean) %>% column_to_rownames("cell_type") 
+
+## QuantiSeq
+res_quanti_z <- TCGA_quanti %>% filter(cell_type != "uncharacterized cell") %>% column_to_rownames("cell_type")
+res_quanti_z <- as.data.frame(t(scale(t(res_quanti_z), center=TRUE, scale=TRUE)))
+res_quanti_z <- res_quanti_z %>% rownames_to_column("cell_type")
+res_quanti_plot <- res_quanti_z %>% pivot_longer(2:ncol(res_quanti_z), names_to = "PID", values_to = "score")
+res_quanti_plot$survival_ecotype_gene <- TCGA_SE$survival_ecotype_gene[match(res_quanti_plot$PID, colnames(TCGA_SE))]
+ht_quanti <- res_quanti_plot %>% group_by(survival_ecotype_gene, cell_type) %>% dplyr::summarize(mean = mean(score)) %>% na.omit() %>% pivot_wider(names_from = survival_ecotype_gene, values_from = mean) %>% column_to_rownames("cell_type")
+
+## Combine
+decon_comb <- rbind(ht_quanti %>% rownames_to_column("celltype") %>% pivot_longer(2:4, values_to = "z_score", names_to = "ecotype") %>% mutate(method = "quanti"),
+ht_MCP %>% rownames_to_column("celltype") %>% pivot_longer(2:4, values_to = "z_score", names_to = "ecotype") %>% mutate(method = "mcp"))
+ht_comb <-decon_comb %>% group_by(celltype, ecotype) %>% mutate(mean_z = mean(z_score)) %>% dplyr::select(celltype, mean_z, ecotype) %>% unique() %>% pivot_wider(id_cols = celltype, values_from = mean_z, names_from = ecotype) %>% column_to_rownames("celltype")
+anno <- decon_comb %>% group_by(celltype, method) %>% count() %>% ungroup() %>% group_by(celltype) %>% summarise(method = paste0(method, collapse = "_"))
+anno <- anno %>% mutate(category = ifelse(anno$celltype %in% c("B cell", "NK cell", "T cell CD4+ (non-regulatory)", "T cell CD8+", 
+"T cell regulatory (Tregs)", "T cell", "cytotoxicity score"), "Lymphoid-related", ifelse(anno$celltype %in% c("Macrophage M1", "Macrophage M2", "Monocyte", "Myeloid dendritic cell", "Neutrophil", "Macrophage/Monocyte"), "Myeloid-related", "Other")))
+anno <- anno[match(rownames(ht_comb),anno$celltype),]
+col_method <- setNames(brewer.pal(3, "Blues"), c("quanti", "mcp", "mcp_quanti"))
+
+# Plot
+Heatmap(ht_comb,
+        row_split = anno$category)+
+  rowAnnotation(method = anno_simple(anno$method, col = col_method), 
+                names = anno_text(anno$celltype))
+```
+
+## S10E
+
+```{r}
+# BAP1 mutations
+df <- as.data.frame(colData(TCGA_DST)[!is.na(TCGA_DST$BAP1), c("BAP1", "survival_ecotype_gene")])
+dittoBarPlot(TCGA_DST[,!is.na(TCGA_DST$BAP1)], var = "BAP1", group.by = "survival_ecotype_gene",retain.factor.levels = FALSE)+
+  ggtitle("")+
+  scale_fill_manual(values = c("#f0e6b2","#b89b00"))+
+  ggtitle(print(fisher.test(table(df$BAP1, df$survival_ecotype_gene))))
+
+# PBRM1 mutations
+df <- as.data.frame(colData(TCGA_DST)[!is.na(TCGA_DST$PBRM1), c("PBRM1", "survival_ecotype_gene")])
+dittoBarPlot(TCGA_DST[,!is.na(TCGA_DST$PBRM1)], var = "PBRM1", group.by = "survival_ecotype_gene",retain.factor.levels = FALSE)+
+  ggtitle("")+
+  scale_fill_manual(values = c("#f0e6b2","#b89b00"))+
+  ggtitle(print(fisher.test(table(df$PBRM1, df$survival_ecotype_gene))))
+```
+
+## S10F
+
+```{r}
+# CNV arm-level events
+df_14 <- as.data.frame(colData(TCGA_DST)[!is.na(TCGA_DST$chr14_q), c("chr14_q", "survival_ecotype_gene")])
+df_8 <- as.data.frame(colData(TCGA_DST)[!is.na(TCGA_DST$chr8_q), c("chr8_q", "survival_ecotype_gene")])
+df_20 <- as.data.frame(colData(TCGA_DST)[!is.na(TCGA_DST$chr20_q), c("chr20_q", "survival_ecotype_gene")])
+df_9 <- as.data.frame(colData(TCGA_DST)[!is.na(TCGA_DST$chr9_q), c("chr9_q", "survival_ecotype_gene")])
+TCGA_DST$chr9_q <- factor(TCGA_DST$chr9_q, levels = c("chr9q_neutral/gain", "chr9q_loss"))
+TCGA_DST$chr14_q <- factor(TCGA_DST$chr14_q, levels = c("chr14q_neutral/gain", "chr14q_loss"))
+TCGA_DST$chr20_q <- factor(TCGA_DST$chr20_q, levels = c("chr20q_neutral/loss", "chr20q_gain"))
+TCGA_DST$chr8_q <- factor(TCGA_DST$chr8_q, levels = c("chr8q_neutral/loss", "chr8q_gain"))
+
+dittoBarPlot(TCGA_DST[,!is.na(TCGA_DST$chr14_q)], var = "chr14_q", group.by = "survival_ecotype_gene",retain.factor.levels = TRUE)+
+  ggtitle(print(fisher.test(table(df_14$chr14_q, df_14$survival_ecotype_gene))))+
+  scale_fill_manual(values = c("#f0e6b2","#b89b00"))+
+
+dittoBarPlot(TCGA_DST[,!is.na(TCGA_DST$chr8_q)], var = "chr8_q", group.by = "survival_ecotype_gene",retain.factor.levels = TRUE)+
+  ggtitle(print(fisher.test(table(df_8$chr8_q, df_8$survival_ecotype_gene))))+
+  scale_fill_manual(values = c("#f0e6b2","#b89b00"))+
+
+dittoBarPlot(TCGA_DST[,!is.na(TCGA_DST$chr20_q)], var = "chr20_q", group.by = "survival_ecotype_gene",retain.factor.levels = TRUE)+
+  ggtitle(print(fisher.test(table(df_20$chr20_q, df_8$survival_ecotype_gene))))+
+  scale_fill_manual(values = c("#f0e6b2","#b89b00"))+
+  
+dittoBarPlot(TCGA_DST[,!is.na(TCGA_DST$chr9_q)], var = "chr9_q", group.by = "survival_ecotype_gene",retain.factor.levels = TRUE)+
+  ggtitle(print(fisher.test(table(df_9$chr9_q, df_8$survival_ecotype_gene))))+
+  scale_fill_manual(values = c("#f0e6b2","#b89b00"))
+```
+
+## S10G
+
+```{r}
+df <- colData(TCGA_DST) %>% as.data.frame %>% select(PID, survival_ecotype_gene, CNV_burden)
+
+# CNV burden 
+ggplot(df, aes(x = survival_ecotype_gene, y = CNV_burden, fill = survival_ecotype_gene))+
+  geom_point(aes(color = survival_ecotype_gene))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
+  scale_color_manual(values = col_group)+
+  scale_fill_manual(values = col_group)+
+  theme_classic()+
+  guides(color = "none")+
+  ylab("CNV_buren")+
+  stat_compare_means()
+```
+
+## S10H
+
+```{r}
+## 1. Genomic dedifferentiation signature (Salgia et al.)
+genom_sig <- gene_signatures$genomic_dediff_Salgia
+genom_sig_rel <- genom_sig[genom_sig %in% rownames(assay(TCGA_DST))]
+df <- t(assay(TCGA_DST)[genom_sig_rel ,]) %>% as.data.frame
+df <- as.data.frame(scale(df))
+df$signature_sum <- rowSums(df,na.rm = TRUE)
+df$survival_ecotype_gene <- TCGA_DST$survival_ecotype_gene[match(rownames(df), colnames(TCGA_DST))]
+df <- df[!is.na(df$survival_ecotype_gene),]
+
+ggplot(df, aes(x = survival_ecotype_gene, y = signature_sum, fill = survival_ecotype_gene))+
+  geom_point(aes(color = survival_ecotype_gene))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
+  scale_color_manual(values = col_group)+
+  scale_fill_manual(values = col_group)+
+  theme_classic()+
+  guides(color = "none")+
+  ylab("Genomic dedifferentiation (Salgia et al.)")+
+  stat_compare_means()
+
+## 2. IM4 signature (Hu et al.)
+IM4 <- gene_signatures$IM4_Hu
+IM4_rel <- IM4[IM4 %in% rownames(assay(TCGA_DST))]
+df <- t(assay(TCGA_DST)[IM4_rel ,]) %>% as.data.frame
+df <- as.data.frame(scale(df))
+df$signature_sum <- rowSums(df,na.rm = TRUE)
+df$survival_ecotype_gene <- TCGA_DST$survival_ecotype_gene[match(rownames(df), colnames(TCGA_DST))]
+df <- df[!is.na(df$survival_ecotype_gene),]
+
+ggplot(df, aes(x = survival_ecotype_gene, y = signature_sum, fill = survival_ecotype_gene))+
+  geom_point(aes(color = survival_ecotype_gene))+
+  geom_boxplot(outlier.colour = NA, alpha = 0.8)+
+  scale_color_manual(values = col_group)+
+  scale_fill_manual(values = col_group)+
+  theme_classic()+
+  guides(color = "none")+
+  ylab("IM4 signature (Hu et al.)")+
+  stat_compare_means()
+```
+
+## S10I/J
+
+```{r}
+# Nearest template prediction for survival ecotypes in CPTAC cohort
+# Step 1: Prepare expression matrix (genes x samples, log2 scale)
+tpm_mat <- assays(CPTAC_SE)$tpm_unstrand 
+log2_tpm <- log2(tpm_mat + 1)
+expr_mat <- ematAdjust(log2_tpm, method = "RLE")
+rownames(expr_mat) <- rowData(CPTAC_SE)$gene_name
+
+# Step 2: Create subtype templates (Gene signatures)
+names(FAVUP) <- rep("FAV", length(FAVUP))
+names(POORUP) <- rep("POOR", length(POORUP))
+keyup <- c(FAVUP, POORUP)
+template_mat <- data.frame(class = factor(names(keyup)), 
+           probe = unname(keyup))
+
+# Step 3: Run NTP classification with permutations
+set.seed(22)
+ntp_result <- ntp(
+  emat = expr_mat,           
+  template = template_mat,
+  distance = "cosine",
+  nPerm = 1000,              
+  seed = 22,                 
+  doPlot = FALSE
+)
+
+# Step 4: Convert predictions into groups and display
+ntp_out <- ntp_result %>% rownames_to_column("PID") %>% mutate(group_predict = ifelse(FDR < 0.05, as.character(prediction), "NOT"))
+
+CPTAC_SE$survival_ecotype_gene <- ntp_out$group_predict[match(CPTAC_SE$PID, ntp_out$PID)]
+CPTAC_SE$survival_ecotype_gene[CPTAC_SE$survival_ecotype_gene == "POOR"] <- "Poor"
+CPTAC_SE$survival_ecotype_gene[CPTAC_SE$survival_ecotype_gene == "NOT"] <- "Medium"
+CPTAC_SE$survival_ecotype_gene[CPTAC_SE$survival_ecotype_gene == "FAV"] <- "Favorable"
+CPTAC_DST$survival_ecotype_gene <- CPTAC_SE$survival_ecotype_gene[match(CPTAC_DST$PID, CPTAC_SE$PID)]
+
+## Heatmap from predictions
+probes_val <- template_mat$probe[template_mat$probe %in% rownames(expr_mat)]
+gen_mat <- expr_mat[probes_val,]
+gen_mat <- gen_mat[complete.cases(gen_mat),]
+row_anno <- data.frame(gene = rownames(gen_mat))
+row_anno$cat <- template_mat$class[match(row_anno$gene, template_mat$probe)]
+gene_col <- setNames(brewer.pal(3,"Set1")[1:2], rev(unfactor(unique(row_anno$cat))))
+ra <- columnAnnotation(cat = row_anno$cat, col = list(cat = gene_col))
+col_anno <- data.frame(PID = colnames(gen_mat))
+col_anno$group <- CPTAC_SE$survival_ecotype_gene[match(col_anno$PID, ntp_out$PID)]
+col_anno_ob <- rowAnnotation(group = col_anno$group, 
+                                col = list(group = col_group)) 
+
+Heatmap(t(gen_mat), 
+        column_split = row_anno$cat,
+        row_split = col_anno$group,
+        right_annotation = col_anno_ob, 
+        show_row_names = FALSE, 
+        show_row_dend = TRUE, 
+        show_column_dend = TRUE
+        )%v%
+  ra
+
+# Step 5: Show survival trends
+surv_out <- colData(CPTAC_SE) %>% as.data.frame %>% select(PID, OS_days, status_OS, survival_ecotype_gene) %>% unique()
+fit <- survfit(Surv(OS_days, status_OS) ~ survival_ecotype_gene, data = surv_out)
+
+ggsurvplot(fit,
+          pval = TRUE,
+          risk.table = TRUE, 
+          risk.table.col = "strata", 
+          linetype = "strata", 
+          surv.median.line = "hv", 
+          ggtheme = theme_classic(), 
+          palette = c("#0571B0","gold3","#CA0020"),
+          conf.int = FALSE
+)
+```
+
+## S10K
+
+```{r}
+# Define GOI of interest
+GOI <- c("NFKB1", "CCND1", "MTOR", "VHL", "ICAM1", "CD44")
+GOI_rel <- GOI[GOI %in% rownames(CPTAC_DST)]
+df <- t(assay(CPTAC_DST)[GOI_rel,]) %>% as.data.frame 
+df <- df %>% rownames_to_column("PID")
+
+## Create heatmap body 
+df$survival_ecotype_gene <- CPTAC_DST$survival_ecotype_gene[match(df$PID, colnames(CPTAC_DST))]
+mat <- df %>% pivot_longer(cols = 2:(ncol(df)-1), names_to = "gene", values_to = "exprs") %>% group_by(survival_ecotype_gene, gene) %>% summarize(mean = mean(exprs))
+ht <- mat %>% pivot_wider(names_from = "gene", values_from = "mean") %>% column_to_rownames("survival_ecotype_gene")
+
+## Create annotations
+anno <- df %>% dplyr::select(survival_ecotype_gene) %>% group_by(survival_ecotype_gene) %>% dplyr::count()
+anno <- anno[match(anno$survival_ecotype_gene, rownames(ht)),]
+col_anno <- data.frame(gene = colnames(ht))
+col_anno$cat <- ifelse(col_anno$gene %in% c("ICAM1", "CD44"), "poor", "good")
+cat_col_sub <- setNames(c("#0571B0", "#CA0020"), c("good", "poor"))
+
+## Print heatmap 
+Heatmap(scale(ht), name = "Scaled mean Z-scores",
+        column_split = col_anno$cat, 
+        top_annotation = columnAnnotation(cat = anno_simple(col_anno$cat, col = cat_col_sub)), 
+        show_column_dend = FALSE)+
+  rowAnnotation(n = anno_barplot(anno$n, gp = gpar(fill = "#440154FF")))+
+  rowAnnotation(anno = anno_text(anno$survival_ecotype_gene))
+```
+
+## S10L
+
+```{r}
+# Mutation
+## BAP1
+CPTAC_SE$BAP1 <- ifelse(CPTAC_SE$BAP1_somatic_mutation == "NA", 0,1)
+df <- as.data.frame(colData(CPTAC_SE)[!is.na(CPTAC_SE$BAP1), c("BAP1", "survival_ecotype_gene")])
+CPTAC_SE$survival_ecotype_gene <- factor(CPTAC_SE$survival_ecotype_gene, levels = c("Favorable", "Medium", "Poor"))
+dittoBarPlot(CPTAC_SE[,!is.na(CPTAC_SE$BAP1)], var = "BAP1", group.by = "survival_ecotype_gene",retain.factor.levels = TRUE)+
+  scale_fill_manual(values = c("#f0e6b2","#b89b00"))+
+  ggtitle(print(fisher.test(table(df$BAP1, df$survival_ecotype_gene))))
+
+# CNV
+## chr9_loss
+df <- as.data.frame(colData(CPTAC_SE)[!is.na(CPTAC_SE$loss_chr9), c("loss_chr9", "survival_ecotype_gene")])
+CPTAC_SE$survival_ecotype_gene <- factor(CPTAC_SE$survival_ecotype_gene, levels = c("Favorable", "Medium", "Poor"))
+dittoBarPlot(CPTAC_SE[,!is.na(CPTAC_SE$loss_chr9)], var = "loss_chr9", group.by = "survival_ecotype_gene",retain.factor.levels = TRUE)+
+  scale_fill_manual(values = c("#f0e6b2","#b89b00"))+
+  ggtitle(print(fisher.test(table(df$loss_chr9, df$survival_ecotype_gene))))
+
+## chr14q_loss
+df <- as.data.frame(colData(CPTAC_SE)[!is.na(CPTAC_SE$loss_chr14q), c("loss_chr14q", "survival_ecotype_gene")])
+CPTAC_SE$survival_ecotype_gene <- factor(CPTAC_SE$survival_ecotype_gene, levels = c("Favorable", "Medium", "Poor"))
+dittoBarPlot(CPTAC_SE[,!is.na(CPTAC_SE$loss_chr14q)], var = "loss_chr14q", group.by = "survival_ecotype_gene",retain.factor.levels = TRUE)+
+  scale_fill_manual(values = c("#f0e6b2","#b89b00"))+
+  ggtitle(print(fisher.test(table(df$loss_chr14q, df$survival_ecotype_gene))))
+```
+
+# Session Info 
+
+```{r}
+sessionInfo()
+```
